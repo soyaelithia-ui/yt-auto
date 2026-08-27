@@ -1,0 +1,46 @@
+# Base de Conocimiento Técnica — yt-auto
+
+> **Estado:** OFICIAL (Índice Central)  
+> **Última actualización:** 2026-08  
+
+Índice y mapa de navegación para el sistema de producción automatizada de videos de YouTube (`yt-auto` + `review`).
+
+---
+
+## 1. Convenciones de Estado
+
+- **`OFICIAL`**: Confirmado en especificaciones y documentación de proveedores oficiales (Google, Telegram, FFmpeg, YouTube).
+- **`REPOSITORIO`**: Confirmado mediante código fuente, esquemas SQLite o suites de pruebas automatizadas.
+- **`RECOMENDACIÓN`**: Buenas prácticas operativas y de arquitectura.
+- **`HISTÓRICO`**: Registros de auditorías previas y versiones archivadas (`docs/archive/2026-08/`).
+
+---
+
+## 2. Mapa de Documentación Activa
+
+| Documento | Ámbito y Contenido Clave |
+|---|---|
+| [ARQUITECTURA](ARQUITECTURA.md) | Diseño multiformato (Shorts 9:16 y Longform 16:9), persistencia SQLite WAL y máquina de estados. |
+| [FLUJO_VIDEOS](FLUJO_VIDEOS.md) | Las 13 etapas canónicas de producción, desde la extracción hasta la publicación. |
+| [MULTICHANNEL_PIPELINE](MULTICHANNEL_PIPELINE.md) | Especificaciones visuales, perfiles de canal (`moku`, `aelithia`), márgenes y renderizado zero-copy. |
+| [OPERACION](OPERACION.md) | Manual operativo: CLI unificado (`main.py`), Systemd, Docker Compose, respaldos y recuperación. |
+| [CONFIGURACION_SECRETOS](CONFIGURACION_SECRETOS.md) | Inventario de variables de entorno `.env`, perfiles de ejecución (`prod`, `cli`, `test`) y preflight. |
+| [INTEGRACIONES_Y_SERVICIOS](INTEGRACIONES_Y_SERVICIOS.md) | Contratos de APIs externas: Telegram Bot API (servidor local 2 GB), YouTube Data API v3, Drive y FFmpeg. |
+| [AGENTES_IA_Y_POLITICA](AGENTES_IA_Y_POLITICA.md) | Política AI-First y fail-closed, arnés `agy` / SDK, modelo canónico `gemini-3.6-flash` y agentes por rol. |
+| [TROUBLESHOOTING](TROUBLESHOOTING.md) | Matriz de diagnóstico rápido de errores, causas raíz y procedimientos de mitigación. |
+| [REFERENCIAS_Y_VERSIONES](REFERENCIAS_Y_VERSIONES.md) | Versiones fijadas de binarios, dependencias de Python/Node y referencias primarias oficiales. |
+
+---
+
+## 3. Consulta Rápida por Rol
+
+- **Desarrollo y Pipeline**: [ARQUITECTURA.md](ARQUITECTURA.md) · [FLUJO_VIDEOS.md](FLUJO_VIDEOS.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [INTEGRACIONES_Y_SERVICIOS.md](INTEGRACIONES_Y_SERVICIOS.md).
+- **Operación y SysAdmin**: [OPERACION.md](OPERACION.md) · [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) · [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+- **Inteligencia Artificial**: [AGENTES_IA_Y_POLITICA.md](AGENTES_IA_Y_POLITICA.md).
+- **Auditoría y Dependencias**: [REFERENCIAS_Y_VERSIONES.md](REFERENCIAS_Y_VERSIONES.md).
+
+---
+
+## 4. Archivo Histórico
+
+Documentos de auditorías pasadas, canarios y propuestas preliminares SDD se encuentran consolidados en [`docs/archive/2026-08/`](archive/2026-08/README.md).

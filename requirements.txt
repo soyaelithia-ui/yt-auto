@@ -1,0 +1,11 @@
+-c constraints.txt
+playwright==1.61.0
+edge-tts==7.2.8
+Pillow==12.3.0
+python-dotenv==1.2.2
+google-antigravity==0.1.10
+google-api-python-client==2.198.0
+google-auth==2.56.0
+requests==2.34.2
+pytest==9.1.1
+numpy==2.5.2

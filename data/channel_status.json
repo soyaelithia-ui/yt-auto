@@ -1,0 +1,14 @@
+{
+  "terror": {
+    "name": "Historias de Terror",
+    "status": "ACTIVE",
+    "reason": null,
+    "updated_at": "2026-07-28T20:24:01.299524+00:00"
+  },
+  "aelithia": {
+    "name": "Aelithia",
+    "status": "ACTIVE",
+    "reason": null,
+    "updated_at": "2026-07-28T20:24:00.224015+00:00"
+  }
+}

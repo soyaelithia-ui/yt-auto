@@ -1,0 +1,342 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SceneManifest",
+  "description": "Canonical output contract for Agent 3 (Scene Planner / Compositor)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["2.0"]
+    },
+    "project_metadata": {
+      "type": "object",
+      "properties": {
+        "lane_id": {
+          "type": "string"
+        },
+        "target_resolution": {
+          "type": "object",
+          "properties": {
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          },
+          "required": ["width", "height"]
+        },
+        "fps": {
+          "type": "integer"
+        },
+        "total_duration_sec": {
+          "type": "number"
+        }
+      }
+    },
+    "resolution": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "fps": {
+      "type": "integer",
+      "enum": [24, 30, 60]
+    },
+    "duration_sec": {
+      "type": "number",
+      "minimum": 1.0
+    },
+    "audio": {
+      "type": "object",
+      "properties": {
+        "narration_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "music_path": {
+          "type": ["string", "null"]
+        },
+        "music_volume": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "sidechain_ducking": {
+          "type": "object",
+          "properties": {
+            "ducking_db": {
+              "type": "number",
+              "default": -18.0
+            },
+            "attack_ms": {
+              "type": "number",
+              "default": 20.0
+            },
+            "release_ms": {
+              "type": "number",
+              "default": 350.0
+            }
+          },
+          "required": [
+            "ducking_db",
+            "attack_ms",
+            "release_ms"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "narration_path",
+        "music_volume",
+        "sidechain_ducking"
+      ],
+      "additionalProperties": false
+    },
+    "safe_area": {
+      "type": "object",
+      "properties": {
+        "margin_top": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "margin_bottom": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "margin_left": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "margin_right": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "margin_top",
+        "margin_bottom",
+        "margin_left",
+        "margin_right"
+      ],
+      "additionalProperties": false
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "scene_index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "scene_id": {
+            "type": "string"
+          },
+          "start_sec": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "duration_sec": {
+            "type": "number",
+            "minimum": 0.1
+          },
+          "tension_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "hybrid_cinematic",
+              "hybrid_cinematic_ai",
+              "procedural_webgl",
+              "procedural_canvas",
+              "procedural_css"
+            ]
+          },
+          "engine_config": {
+            "type": "object",
+            "properties": {
+              "asset_path": {
+                "type": ["string", "null"]
+              },
+              "background_matte": {
+                "type": ["string", "null"]
+              },
+              "depth_map": {
+                "type": ["string", "null"]
+              },
+              "template_name": {
+                "type": ["string", "null"]
+              },
+              "shader_seed": {
+                "type": ["integer", "null"]
+              },
+              "camera_motion": {
+                "type": ["object", "null"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "start_scale": { "type": "number" },
+                  "end_scale": { "type": "number" },
+                  "easing": { "type": "string" }
+                }
+              },
+              "volumetric_lighting": {
+                "type": ["object", "null"],
+                "properties": {
+                  "shader": { "type": "string" },
+                  "intensity": { "type": "number" }
+                }
+              },
+              "particles": {
+                "type": ["object", "null"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "density": { "type": "integer" },
+                  "speed": { "type": "number" }
+                }
+              },
+              "motion": {
+                "type": ["object", "null"],
+                "properties": {
+                  "zoom_start": {
+                    "type": "number"
+                  },
+                  "zoom_end": {
+                    "type": "number"
+                  },
+                  "pan_direction": {
+                    "type": "string"
+                  },
+                  "easing": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "additionalProperties": true
+          },
+          "particle_overlay": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "dust_motes",
+                  "dense_fog",
+                  "crt_lines",
+                  "electric_embers",
+                  "none"
+                ]
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              "blend_mode": {
+                "type": "string",
+                "enum": [
+                  "screen",
+                  "addition",
+                  "overlay"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "opacity",
+              "blend_mode"
+            ],
+            "additionalProperties": false
+          },
+          "transition": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "crossfade",
+                  "dip_to_black",
+                  "chromatic_glitch",
+                  "cut",
+                  "fade",
+                  "defocus_blur"
+                ]
+              },
+              "duration_sec": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 10.0
+              }
+            },
+            "required": [
+              "type",
+              "duration_sec"
+            ],
+            "additionalProperties": false
+          },
+          "transition_in": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "duration_sec": { "type": "number" }
+            }
+          },
+          "transition_out": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "duration_sec": { "type": "number" }
+            }
+          }
+        },
+        "required": [
+          "scene_index",
+          "start_sec",
+          "duration_sec",
+          "engine",
+          "transition"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "subtitles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "resolution",
+    "fps",
+    "duration_sec",
+    "audio",
+    "safe_area",
+    "scenes"
+  ],
+  "additionalProperties": false
+}

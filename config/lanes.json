@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "defaults": {
+    "fps": 30,
+    "language": "es"
+  },
+  "lanes": [
+    {
+      "id": "moku-scp-shorts",
+      "enabled": true,
+      "channel": "moku",
+      "story_type": "scp",
+      "orientation": "vertical",
+      "duration": { "min_sec": 60, "target_sec": 150, "max_sec": 180 },
+      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "template": "shorts_creepypasta",
+      "voice_rate": "+20%",
+      "cadence": { "min_gap_seconds": 300 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": ["SCP", "SCPDeclassified", "nosleep"],
+        "listing_categories": [["hot", "day"], ["top", "week"], ["new", "all"]],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": {
+        "mode": "off",
+        "keywords": ["scp", "anomal", "contención", "fundación"]
+      },
+      "multistory_collection": false,
+      "visual_pipeline": "beats",
+      "qa_profile": "short",
+      "review_content_type": "short",
+      "padding_themes": ["pasillos metálicos", "luz de emergencia roja", "contención de hormigón"]
+    },
+    {
+      "id": "moku-horror-long",
+      "enabled": true,
+      "channel": "moku",
+      "story_type": "horror",
+      "orientation": "horizontal",
+      "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
+      "words": { "min": 2600, "max": null },
+      "template": "creepypasta",
+      "voice_rate": "+0%",
+      "cadence": { "min_gap_seconds": 1800 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": ["nosleep", "scarystories", "darktales", "libraryofshadows"],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": { "mode": "off" },
+      "multistory_collection": true,
+      "visual_pipeline": "director",
+      "qa_profile": "longform",
+      "review_content_type": "long_video",
+      "padding_themes": ["bosques niebla", "casas abandonadas", "carreteras nocturnas"]
+    },
+    {
+      "id": "aelithia-aita-long",
+      "enabled": true,
+      "channel": "aelithia",
+      "story_type": "reddit_aita",
+      "orientation": "horizontal",
+      "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
+      "words": { "min": 2600, "max": null },
+      "template": "aita",
+      "voice_rate": "+0%",
+      "cadence": { "min_gap_seconds": 1800 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": [
+          "AmItheAsshole",
+          "TrueOffMyChest",
+          "relationship_advice",
+          "Confession"
+        ],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": {
+        "mode": "off",
+        "keywords": ["aita", "wibta", "soy el malo", "familia", "boda", "herencia"]
+      },
+      "multistory_collection": true,
+      "visual_pipeline": "director",
+      "qa_profile": "longform",
+      "review_content_type": "long_video",
+      "padding_themes": ["salas de estar cálidas", "cafeterías", "oficinas al atardecer"]
+    }
+  ]
+}

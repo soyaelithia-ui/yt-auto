@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  canvas { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
+
+const vsSource = `
+  attribute vec2 position;
+  varying vec2 vUv;
+  void main() {
+    vUv = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+`;
+
+const fsSource = `
+  precision highp float;
+  varying vec2 vUv;
+  uniform vec2 u_resolution;
+  uniform float u_time;
+  uniform float u_duration;
+  uniform float u_seed;
+
+  #define PI 3.14159265359
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(27.1, 311.7) + u_seed)) * 43758.5453);
+  }
+
+  void main() {
+    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+    float phase = (u_time / u_duration) * 2.0 * PI;
+    float t_sin = sin(phase);
+    float t_cos = cos(phase);
+
+    float r = length(uv);
+    float a = atan(uv.y, uv.x);
+
+    // Deep space palette: Obsidian Navy, Deep Indigo, Cyan Starlight
+    vec3 col = vec3(0.01, 0.015, 0.035);
+
+    // Gravitational lensing warp
+    float warp_r = r + 0.15 / (r + 0.08);
+    float warp_a = a + t_sin * 0.3 + 1.2 / (r + 0.2);
+    vec2 warped = vec2(cos(warp_a), sin(warp_a)) * warp_r;
+
+    // Starfield layers with periodic warp
+    for (float i = 1.0; i <= 3.0; i += 1.0) {
+      vec2 grid = floor(warped * (30.0 * i) + vec2(t_cos * 0.4 * i, t_sin * 0.4 * i));
+      float star = hash(grid);
+      if (star > 0.96) {
+        float brightness = pow((star - 0.96) / 0.04, 3.0);
+        col += vec3(0.6, 0.85, 1.0) * brightness * (0.6 + 0.4 * sin(phase * 2.0 + star * 10.0));
+      }
+    }
+
+    // Accretion disk glow around singularity
+    float disk = exp(-pow((r - 0.32) * 14.0, 2.0));
+    vec3 diskCol = vec3(0.1, 0.45, 0.85) * (1.0 + 0.3 * cos(a * 3.0 + phase));
+    col += diskCol * disk * 1.2;
+
+    // Singularity center
+    float sing = smoothstep(0.26, 0.08, r);
+    col = mix(col, vec3(0.0, 0.0, 0.005), sing);
+
+    // Vignette
+    float vig = smoothstep(1.2, 0.3, length((gl_FragCoord.xy / u_resolution.xy) - 0.5) * 1.4);
+    col *= vig;
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+function createShader(gl, type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+    return null;
+  }
+  return s;
+}
+
+const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+const program = gl.createProgram();
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
+gl.useProgram(program);
+
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1, -1,
+   1, -1,
+  -1,  1,
+  -1,  1,
+   1, -1,
+   1,  1,
+]), gl.STATIC_DRAW);
+
+const posAttr = gl.getAttribLocation(program, 'position');
+gl.enableVertexAttribArray(posAttr);
+gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+const uResLoc = gl.getUniformLocation(program, 'u_resolution');
+const uTimeLoc = gl.getUniformLocation(program, 'u_time');
+const uDurLoc = gl.getUniformLocation(program, 'u_duration');
+const uSeedLoc = gl.getUniformLocation(program, 'u_seed');
+
+window.__setDimensions = function(w, h, seed = 42) {
+  canvas.width = w;
+  canvas.height = h;
+  gl.viewport(0, 0, w, h);
+  gl.uniform2f(uResLoc, w, h);
+  gl.uniform1f(uSeedLoc, seed);
+};
+
+window.renderSceneFrame = function(frameIndex, totalFrames, timeSec, durationSec = 8.0) {
+  gl.uniform1f(uTimeLoc, timeSec);
+  gl.uniform1f(uDurLoc, durationSec);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+};
+</script>
+</body>
+</html>

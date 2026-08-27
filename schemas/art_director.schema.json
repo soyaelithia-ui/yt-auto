@@ -1,0 +1,257 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VisualPlan",
+  "description": "Canonical output contract for Agent 2 (Art Director / Mood Visual)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["2.0"]
+    },
+    "theme_lane": {
+      "type": "string",
+      "enum": ["cosmic_horror", "creepypasta", "scp_foundation", "drama_aita"]
+    },
+    "global_color_grade": {
+      "type": "object",
+      "properties": {
+        "lut_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color_space": {
+          "type": "string",
+          "enum": ["Rec.709", "sRGB"]
+        },
+        "contrast_curve": {
+          "type": "string",
+          "enum": ["cinematic_s_curve", "crushed_low_mid", "soft_highlight_roll"]
+        },
+        "saturation_modifier": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 2.0
+        }
+      },
+      "required": [
+        "lut_profile",
+        "color_space",
+        "contrast_curve",
+        "saturation_modifier"
+      ],
+      "additionalProperties": false
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "pattern": "^scene_[0-9]{3}$"
+          },
+          "scene_index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tension_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "environment_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "palette": {
+            "type": "object",
+            "properties": {
+              "primary": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "secondary": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "accent": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "shadow": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "highlight": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              }
+            },
+            "required": [
+              "primary",
+              "secondary",
+              "accent",
+              "shadow",
+              "highlight"
+            ],
+            "additionalProperties": false
+          },
+          "lighting": {
+            "type": "object",
+            "properties": {
+              "style": {
+                "type": "string",
+                "minLength": 1
+              },
+              "color_temp_kelvin": {
+                "type": "integer",
+                "minimum": 1800,
+                "maximum": 10000
+              },
+              "key_direction": {
+                "type": "string",
+                "enum": [
+                  "top_down",
+                  "side_chiaroscuro",
+                  "backlight_silhouette",
+                  "low_ground_flicker",
+                  "under_chin_menace",
+                  "top_left",
+                  "center",
+                  "rear_rim"
+                ]
+              },
+              "volumetric_fog_density": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            },
+            "required": [
+              "style",
+              "color_temp_kelvin",
+              "key_direction",
+              "volumetric_fog_density"
+            ],
+            "additionalProperties": false
+          },
+          "atmosphere": {
+            "type": "object",
+            "properties": {
+              "weather_effect": {
+                "type": "string",
+                "enum": [
+                  "dense_fog",
+                  "airborne_spores",
+                  "rain_on_lens",
+                  "cold_breath_mist",
+                  "crt_phosphor_flicker",
+                  "floating_embers",
+                  "toxic_spores",
+                  "rain_streaks",
+                  "none"
+                ]
+              },
+              "particle_layer": {
+                "type": "string",
+                "enum": [
+                  "dust_motes",
+                  "smoke_drift",
+                  "electric_embers",
+                  "fog_mist",
+                  "none"
+                ]
+              },
+              "vignette_strength": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            },
+            "required": [
+              "weather_effect",
+              "particle_layer",
+              "vignette_strength"
+            ],
+            "additionalProperties": false
+          },
+          "camera_composition": {
+            "type": "object",
+            "properties": {
+              "shot_type": {
+                "type": "string",
+                "enum": [
+                  "extreme_wide",
+                  "wide_establishing",
+                  "medium_shot",
+                  "close_up_macro",
+                  "dutch_angle",
+                  "cinematic_wide",
+                  "claustrophobic_macro",
+                  "establishing_shot"
+                ]
+              },
+              "depth_of_field": {
+                "type": "string",
+                "enum": [
+                  "deep_focus_f8",
+                  "medium_f4",
+                  "shallow_f1.4"
+                ]
+              },
+              "focal_length_mm": {
+                "type": "integer",
+                "minimum": 14,
+                "maximum": 200
+              }
+            },
+            "required": [
+              "shot_type",
+              "depth_of_field",
+              "focal_length_mm"
+            ],
+            "additionalProperties": false
+          },
+          "image_prompts": {
+            "type": "object",
+            "properties": {
+              "positive_prompt": {
+                "type": "string",
+                "minLength": 10
+              },
+              "negative_prompt": {
+                "type": "string",
+                "minLength": 10
+              }
+            },
+            "required": [
+              "positive_prompt",
+              "negative_prompt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "scene_id",
+          "scene_index",
+          "tension_level",
+          "environment_name",
+          "palette",
+          "lighting",
+          "atmosphere",
+          "camera_composition",
+          "image_prompts"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "theme_lane",
+    "global_color_grade",
+    "scenes"
+  ],
+  "additionalProperties": false
+}

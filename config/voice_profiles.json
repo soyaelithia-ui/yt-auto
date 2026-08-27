@@ -1,0 +1,97 @@
+{
+  "editorial_profiles": {
+    "scp_documentary_es": {
+      "description": "Perfil de voz documental para expedientes SCP en español estándar",
+      "rotation_strategy": "stable_round_robin",
+      "lock_voice_per_run": true,
+      "prohibit_compositor_overrides": true,
+      "exclude_failed_voices": true,
+      "approved_voices": [
+        {
+          "id": "es-ES-AlvaroNeural",
+          "provider": "edge-tts",
+          "language": "es-ES",
+          "variant": "male_documentary",
+          "speed": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "natural",
+          "normalization": "scp_standard",
+          "post_processing_chain": [
+            "loudness_norm_lufs_-14",
+            "sidechain_ducking"
+          ],
+          "duration_range": [45.0, 300.0]
+        },
+        {
+          "id": "es-ES-ElviraNeural",
+          "provider": "edge-tts",
+          "language": "es-ES",
+          "variant": "female_documentary",
+          "speed": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "natural",
+          "normalization": "scp_standard",
+          "post_processing_chain": [
+            "loudness_norm_lufs_-14",
+            "sidechain_ducking"
+          ],
+          "duration_range": [45.0, 300.0]
+        },
+        {
+          "id": "es-MX-JorgeNeural",
+          "provider": "edge-tts",
+          "language": "es-MX",
+          "variant": "male_deep_documentary",
+          "speed": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "natural",
+          "normalization": "scp_standard",
+          "post_processing_chain": [
+            "loudness_norm_lufs_-14",
+            "sidechain_ducking"
+          ],
+          "duration_range": [45.0, 300.0]
+        }
+      ]
+    },
+    "moku_terror": {
+      "description": "Perfil inicial para historias de terror Moku (sin videos activos)",
+      "approved_voices": [
+        {
+          "id": "es-ES-AlvaroNeural",
+          "provider": "edge-tts",
+          "language": "es-ES",
+          "variant": "dark_storytelling",
+          "speed": "+0%",
+          "pitch": "-2Hz",
+          "volume": "+0%",
+          "pauses": "dramatic",
+          "normalization": "terror_standard",
+          "post_processing_chain": ["loudness_norm_lufs_-14"],
+          "duration_range": [60.0, 600.0]
+        }
+      ]
+    },
+    "aelithia_reddit": {
+      "description": "Perfil inicial para formato Reddit/AITA Aelithia (sin videos activos)",
+      "approved_voices": [
+        {
+          "id": "es-MX-DaliaNeural",
+          "provider": "edge-tts",
+          "language": "es-MX",
+          "variant": "conversational",
+          "speed": "+5%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "conversational",
+          "normalization": "reddit_standard",
+          "post_processing_chain": ["loudness_norm_lufs_-14"],
+          "duration_range": [45.0, 180.0]
+        }
+      ]
+    }
+  }
+}

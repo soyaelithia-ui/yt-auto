@@ -1,0 +1,22 @@
+[Unit]
+Description=YTAuto Telegram Review Bot (HITL gate + admin control)
+After=network.target
+
+[Service]
+Type=simple
+User=mvfhymyhqw
+WorkingDirectory=/home/mvfhymyhqw/project/prod/apps/YTAuto
+Environment=YT_PROFILE=prod
+Environment=ENABLE_TELEGRAM_CALLBACK_POLLING=1
+ExecStart=/home/mvfhymyhqw/project/prod/apps/YTAuto/.venv/bin/python deploy/tmux_review_bot.py
+# Refuerzo de recursos y anti-doble-polling (auditoría 2026-08-24)
+# Este unit es el ÚNICO poller de Telegram autorizado; los daemons lo desactivan.
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=1G
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

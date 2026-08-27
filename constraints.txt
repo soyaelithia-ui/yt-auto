@@ -1,0 +1,1 @@
+video-review-core==1.1.0

@@ -1,0 +1,26 @@
+[Unit]
+Description=YTAuto Multi-Lane Production Daemon (cadence per config/lanes.json)
+After=network.target yt-review-bot.service
+
+[Service]
+Type=simple
+User=mvfhymyhqw
+WorkingDirectory=/home/mvfhymyhqw/project/prod/apps/YTAuto
+Environment=YT_PROFILE=prod
+Environment=PYTHONUNBUFFERED=1
+Environment=YOUTUBE_AUTOMATION_DB=/home/mvfhymyhqw/project/prod/apps/YTAuto/data/shorts_queue.db
+Environment=VIDEO_REVIEW_DB_PATH=/home/mvfhymyhqw/project/prod/apps/YTAuto/data/review_state.db
+# Refuerzo de recursos y anti-doble-polling: este unit es el ÚNICO productor;
+# el poller de Telegram vive en yt-review-bot.service.
+Environment=ENABLE_TELEGRAM_CALLBACK_POLLING=0
+# Un solo proceso produce todos los carriles (shorts + longform) con hilos.
+ExecStart=/home/mvfhymyhqw/project/prod/apps/YTAuto/.venv/bin/python main.py daemon --interval 60
+Restart=always
+RestartSec=15
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=150%
+MemoryMax=6G
+
+[Install]
+WantedBy=multi-user.target

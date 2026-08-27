@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #030a04; }
+  canvas { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+window.__setDimensions = function(w, h, seed = 42) {
+  canvas.width = w;
+  canvas.height = h;
+};
+
+// 3D Icosahedron vertices & edges for classified wireframe anomaly
+const vertices = [];
+const phi = (1 + Math.sqrt(5)) / 2;
+[
+  [-1,  phi, 0], [ 1,  phi, 0], [-1, -phi, 0], [ 1, -phi, 0],
+  [ 0, -1,  phi], [ 0,  1,  phi], [ 0, -1, -phi], [ 0,  1, -phi],
+  [ phi, 0, -1], [ phi, 0,  1], [-phi, 0, -1], [-phi, 0,  1]
+].forEach(v => {
+  const len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+  vertices.push([v[0]/len, v[1]/len, v[2]/len]);
+});
+
+const edges = [];
+for (let i = 0; i < vertices.length; i++) {
+  for (let j = i + 1; j < vertices.length; j++) {
+    const d2 = Math.pow(vertices[i][0]-vertices[j][0], 2) +
+               Math.pow(vertices[i][1]-vertices[j][1], 2) +
+               Math.pow(vertices[i][2]-vertices[j][2], 2);
+    if (Math.abs(d2 - 1.05) < 0.15) {
+      edges.push([i, j]);
+    }
+  }
+}
+
+window.renderSceneFrame = function(frameIndex, totalFrames, timeSec, durationSec = 8.0) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const progress = timeSec / durationSec;
+  const angle = progress * Math.PI * 2;
+
+  // Phosphor green terminal background
+  ctx.fillStyle = '#020903';
+  ctx.fillRect(0, 0, w, h);
+
+  // Surveillance Grid
+  ctx.strokeStyle = 'rgba(20, 90, 35, 0.25)';
+  ctx.lineWidth = 1;
+  const gridSize = 60;
+  for (let x = 0; x < w; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y < h; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  // Draw 3D Rotating Anomaly Wireframe
+  const rotY = angle;
+  const rotX = Math.sin(angle) * 0.5;
+  const scale = Math.min(w, h) * 0.25;
+  const cx = w * 0.5;
+  const cy = h * 0.5;
+
+  const proj = vertices.map(v => {
+    // Rotate Y
+    let x1 = v[0] * Math.cos(rotY) + v[2] * Math.sin(rotY);
+    let y1 = v[1];
+    let z1 = -v[0] * Math.sin(rotY) + v[2] * Math.cos(rotY);
+    // Rotate X
+    let y2 = y1 * Math.cos(rotX) - z1 * Math.sin(rotX);
+    let z2 = y1 * Math.sin(rotX) + z1 * Math.cos(rotX);
+    return [cx + x1 * scale, cy + y2 * scale];
+  });
+
+  ctx.strokeStyle = '#33ff66';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#33ff66';
+  ctx.shadowBlur = 12;
+  edges.forEach(e => {
+    ctx.beginPath();
+    ctx.moveTo(proj[e[0]][0], proj[e[0]][1]);
+    ctx.lineTo(proj[e[1]][0], proj[e[1]][1]);
+    ctx.stroke();
+  });
+  ctx.shadowBlur = 0;
+
+  // Radar circular rings
+  ctx.strokeStyle = 'rgba(51, 255, 102, 0.35)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, scale * 1.35, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, scale * 1.8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Radar sweep line
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(angle * 2) * scale * 1.8, cy + Math.sin(angle * 2) * scale * 1.8);
+  ctx.strokeStyle = 'rgba(100, 255, 150, 0.6)';
+  ctx.stroke();
+
+  // CRT Scanlines
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  for (let y = 0; y < h; y += 4) {
+    ctx.fillRect(0, y, w, 2);
+  }
+
+  // Vignette & Phosphor Glow
+  const vig = ctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.3, w/2, h/2, Math.max(w,h)*0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,15,5,0.85)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+};
+</script>
+</body>
+</html>

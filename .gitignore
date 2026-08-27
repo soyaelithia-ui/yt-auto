@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases and tokens
+data/*.db
+data/*.sqlite3
+data/queue.db
+data/queue.db-*
+data/backups/
+data/worksets/*
+!data/worksets/canonical/
+!data/worksets/canonical/*.md
+*.db
+*.db*
+*.sqlite
+*.sqlite3
+*.zip
+
+secrets/
+browser_data/
+cookies/
+*.key
+.bot_home/
+*.token
+*cookies*.json
+*token*.json
+
+# Environments
+.env
+.env.*
+*.pem
+venv/
+env/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Scratch & temporary work
+scratch/
+work/
+output/
+artifacts/
+temp/
+tmp/
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Agent/Local System files
+.agents/
+.atl/
+cookies.json
+PIPELINE_STATE.json
+payload.json
+yt_auto.db
+
+# Node.js & Playwright
+node_modules/
+ts_services/node_modules/
+dist/
+
+# Heavy Assets & Media
+# AUD-05: music beds are versioned so fresh clones pass the QA gates.
+# Generated media stays ignored via the work/, output/ and data/ patterns.
+assets/scp_media/
+*.mp4
+*.wav
+*.mp3
+!assets/music/**
+!assets/music_aita/**
+*.egg-info/

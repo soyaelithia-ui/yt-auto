@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QAAuditReport",
+  "description": "Canonical output contract for Agent 4 (Visual & Audio QA Auditor)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["2.0"]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overall_pass": {
+      "type": "boolean"
+    },
+    "quality_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "tier1_audio_metrics": {
+      "type": "object",
+      "properties": {
+        "integrated_lufs": {
+          "type": "number"
+        },
+        "true_peak_dbtp": {
+          "type": "number"
+        },
+        "stereo_correlation": {
+          "type": "number"
+        },
+        "whistle_tones_detected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "integrated_lufs",
+        "true_peak_dbtp",
+        "stereo_correlation",
+        "whistle_tones_detected",
+        "passed"
+      ],
+      "additionalProperties": false
+    },
+    "tier2_visual_metrics": {
+      "type": "object",
+      "properties": {
+        "resolution": {
+          "type": "string"
+        },
+        "video_codec": {
+          "type": "string"
+        },
+        "pixel_format": {
+          "type": "string"
+        },
+        "faststart_moov_valid": {
+          "type": "boolean"
+        },
+        "avg_luminance": {
+          "type": "number"
+        },
+        "dark_ratio": {
+          "type": "number"
+        },
+        "longest_black_sec": {
+          "type": "number"
+        },
+        "freeze_detected": {
+          "type": "boolean"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resolution",
+        "video_codec",
+        "pixel_format",
+        "faststart_moov_valid",
+        "avg_luminance",
+        "dark_ratio",
+        "longest_black_sec",
+        "passed"
+      ],
+      "additionalProperties": false
+    },
+    "tier3_vision_review": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "type": "string",
+                "enum": ["low", "medium", "high"]
+              },
+              "category": {
+                "type": "string",
+                "enum": ["visual", "subtitles", "audio", "pacing", "editorial"]
+              },
+              "timecode_sec": {
+                "type": "number"
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "suggested_fix": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "severity",
+              "category",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "rejection_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "version",
+    "run_id",
+    "overall_pass",
+    "quality_score",
+    "tier1_audio_metrics",
+    "tier2_visual_metrics",
+    "rejection_reasons"
+  ],
+  "additionalProperties": false
+}

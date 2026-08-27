@@ -1,0 +1,1587 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-08-08T06:00:00Z",
+  "description": "Catálogo de Metadatos del Banco Local de Recursos Visuales para YTShort",
+  "channels": {
+    "moku": {
+      "name": "Moku - Historias de Terror",
+      "description": "Canal especializado en terror, creepypastas, SCP y misterio oscuro.",
+      "visual_style": "Oscuro, sombrío, contraste alto, viñeteado agresivo, grano de película y tono cinemático de terror",
+      "target_aspect_ratio": "9:16",
+      "target_resolution": [
+        768,
+        1360
+      ],
+      "categories": {
+        "scenery": [
+          {
+            "id": "moku_scenery_asylum",
+            "file": "abandoned_asylum.jpg",
+            "path": "assets/visual_bank/moku/scenery/abandoned_asylum.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "asylum",
+              "hallway",
+              "abandoned",
+              "spooky",
+              "corridor",
+              "indoor"
+            ],
+            "description": "Pasillo de manicomio abandonado con perspectiva sombría y sombras profundas."
+          },
+          {
+            "id": "moku_scenery_asylum_abandoned_hallway_corridor",
+            "file": "asylum_abandoned_hallway_corridor.jpg",
+            "path": "assets/visual_bank/moku/scenery/asylum_abandoned_hallway_corridor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "asylum_abandoned_hallway_corridor"
+            ],
+            "description": "Generated semantic scenery for moku: asylum abandoned hallway corridor"
+          },
+          {
+            "id": "moku_scenery_asylum_corridor_stairs_dark",
+            "file": "asylum_corridor_stairs_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/asylum_corridor_stairs_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "asylum_corridor_stairs_dark"
+            ],
+            "description": "Generated semantic scenery for moku: asylum corridor stairs dark"
+          },
+          {
+            "id": "moku_scenery_asylum_hallway_abandoned_corridor",
+            "file": "asylum_hallway_abandoned_corridor.jpg",
+            "path": "assets/visual_bank/moku/scenery/asylum_hallway_abandoned_corridor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "asylum_hallway_abandoned_corridor"
+            ],
+            "description": "Generated semantic scenery for moku: asylum hallway abandoned corridor"
+          },
+          {
+            "id": "moku_scenery_asylum_spooky_corridor_dark",
+            "file": "asylum_spooky_corridor_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/asylum_spooky_corridor_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "asylum_spooky_corridor_dark"
+            ],
+            "description": "Generated semantic scenery for moku: asylum spooky corridor dark"
+          },
+          {
+            "id": "moku_scenery_basement_cell_sotano_red_light",
+            "file": "basement_cell_sotano_red_light.jpg",
+            "path": "assets/visual_bank/moku/scenery/basement_cell_sotano_red_light.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "basement_cell_sotano_red_light"
+            ],
+            "description": "Generated semantic scenery for moku: basement cell sotano red light"
+          },
+          {
+            "id": "moku_scenery_basement_sotano_underground_dark",
+            "file": "basement_sotano_underground_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/basement_sotano_underground_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "basement_sotano_underground_dark"
+            ],
+            "description": "Generated semantic scenery for moku: basement sotano underground dark"
+          },
+          {
+            "id": "moku_scenery_basement_underground_bunker_cell",
+            "file": "basement_underground_bunker_cell.jpg",
+            "path": "assets/visual_bank/moku/scenery/basement_underground_bunker_cell.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "basement_underground_bunker_cell"
+            ],
+            "description": "Generated semantic scenery for moku: basement underground bunker cell"
+          },
+          {
+            "id": "moku_scenery_basement_underground_sinister_bunker",
+            "file": "basement_underground_sinister_bunker.jpg",
+            "path": "assets/visual_bank/moku/scenery/basement_underground_sinister_bunker.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "basement_underground_sinister_bunker"
+            ],
+            "description": "Generated semantic scenery for moku: basement underground sinister bunker"
+          },
+          {
+            "id": "moku_scenery_bunker_facility_industrial_containment",
+            "file": "bunker_facility_industrial_containment.jpg",
+            "path": "assets/visual_bank/moku/scenery/bunker_facility_industrial_containment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "bunker_facility_industrial_containment"
+            ],
+            "description": "Generated semantic scenery for moku: bunker facility industrial containment"
+          },
+          {
+            "id": "moku_scenery_bunker_lab_industrial_cell",
+            "file": "bunker_lab_industrial_cell.jpg",
+            "path": "assets/visual_bank/moku/scenery/bunker_lab_industrial_cell.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "bunker_lab_industrial_cell"
+            ],
+            "description": "Generated semantic scenery for moku: bunker lab industrial cell"
+          },
+          {
+            "id": "moku_scenery_cell_anomaly_bunker_containment",
+            "file": "cell_anomaly_bunker_containment.jpg",
+            "path": "assets/visual_bank/moku/scenery/cell_anomaly_bunker_containment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cell_anomaly_bunker_containment"
+            ],
+            "description": "Generated semantic scenery for moku: cell anomaly bunker containment"
+          },
+          {
+            "id": "moku_scenery_cell_anomaly_containment_vault",
+            "file": "cell_anomaly_containment_vault.jpg",
+            "path": "assets/visual_bank/moku/scenery/cell_anomaly_containment_vault.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cell_anomaly_containment_vault"
+            ],
+            "description": "Generated semantic scenery for moku: cell anomaly containment vault"
+          },
+          {
+            "id": "moku_scenery_cell_bunker_containment_industrial",
+            "file": "cell_bunker_containment_industrial.jpg",
+            "path": "assets/visual_bank/moku/scenery/cell_bunker_containment_industrial.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cell_bunker_containment_industrial"
+            ],
+            "description": "Generated semantic scenery for moku: cell bunker containment industrial"
+          },
+          {
+            "id": "moku_scenery_cell_containment_facility_bunker",
+            "file": "cell_containment_facility_bunker.jpg",
+            "path": "assets/visual_bank/moku/scenery/cell_containment_facility_bunker.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cell_containment_facility_bunker"
+            ],
+            "description": "Generated semantic scenery for moku: cell containment facility bunker"
+          },
+          {
+            "id": "moku_scenery_containment_cell_industrial_bunker",
+            "file": "containment_cell_industrial_bunker.jpg",
+            "path": "assets/visual_bank/moku/scenery/containment_cell_industrial_bunker.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "containment_cell_industrial_bunker"
+            ],
+            "description": "Generated semantic scenery for moku: containment cell industrial bunker"
+          },
+          {
+            "id": "moku_scenery_containment_monitor_security_facility",
+            "file": "containment_monitor_security_facility.jpg",
+            "path": "assets/visual_bank/moku/scenery/containment_monitor_security_facility.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "containment_monitor_security_facility"
+            ],
+            "description": "Generated semantic scenery for moku: containment monitor security facility"
+          },
+          {
+            "id": "moku_scenery_containment_vault_industrial_cell",
+            "file": "containment_vault_industrial_cell.jpg",
+            "path": "assets/visual_bank/moku/scenery/containment_vault_industrial_cell.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "containment_vault_industrial_cell"
+            ],
+            "description": "Generated semantic scenery for moku: containment vault industrial cell"
+          },
+          {
+            "id": "moku_scenery_corridor_dark_scary_hallway",
+            "file": "corridor_dark_scary_hallway.jpg",
+            "path": "assets/visual_bank/moku/scenery/corridor_dark_scary_hallway.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "corridor_dark_scary_hallway"
+            ],
+            "description": "Generated semantic scenery for moku: corridor dark scary hallway"
+          },
+          {
+            "id": "moku_scenery_corridor_facility_dark_bunker",
+            "file": "corridor_facility_dark_bunker.jpg",
+            "path": "assets/visual_bank/moku/scenery/corridor_facility_dark_bunker.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "corridor_facility_dark_bunker"
+            ],
+            "description": "Generated semantic scenery for moku: corridor facility dark bunker"
+          },
+          {
+            "id": "moku_scenery_corridor_industrial_facility_dark",
+            "file": "corridor_industrial_facility_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/corridor_industrial_facility_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "corridor_industrial_facility_dark"
+            ],
+            "description": "Generated semantic scenery for moku: corridor industrial facility dark"
+          },
+          {
+            "id": "moku_scenery_corridor_pasillo_facility_dark",
+            "file": "corridor_pasillo_facility_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/corridor_pasillo_facility_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "corridor_pasillo_facility_dark"
+            ],
+            "description": "Generated semantic scenery for moku: corridor pasillo facility dark"
+          },
+          {
+            "id": "moku_scenery_basement",
+            "file": "creepy_basement.jpg",
+            "path": "assets/visual_bank/moku/scenery/creepy_basement.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "basement",
+              "underground",
+              "red_light",
+              "sinister",
+              "bunker"
+            ],
+            "description": "Sótano subterráneo siniestro iluminado por luz roja tenue de emergencia."
+          },
+          {
+            "id": "moku_scenery_dark_suburban_hallway",
+            "file": "dark_suburban_hallway.jpg",
+            "path": "assets/visual_bank/moku/scenery/dark_suburban_hallway.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "dark_suburban_hallway"
+            ],
+            "description": "Generated semantic scenery for moku: dark suburban hallway"
+          },
+          {
+            "id": "moku_scenery_escalera_stairwell_dark_descent",
+            "file": "escalera_stairwell_dark_descent.jpg",
+            "path": "assets/visual_bank/moku/scenery/escalera_stairwell_dark_descent.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "escalera_stairwell_dark_descent"
+            ],
+            "description": "Generated semantic scenery for moku: escalera stairwell dark descent"
+          },
+          {
+            "id": "moku_scenery_forest_dark_woods_terror_outdoor",
+            "file": "forest_dark_woods_terror_outdoor.jpg",
+            "path": "assets/visual_bank/moku/scenery/forest_dark_woods_terror_outdoor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest_dark_woods_terror_outdoor"
+            ],
+            "description": "Generated semantic scenery for moku: forest dark woods terror outdoor"
+          },
+          {
+            "id": "moku_scenery_forest_fog_woods_creepy",
+            "file": "forest_fog_woods_creepy.jpg",
+            "path": "assets/visual_bank/moku/scenery/forest_fog_woods_creepy.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest_fog_woods_creepy"
+            ],
+            "description": "Generated semantic scenery for moku: forest fog woods creepy"
+          },
+          {
+            "id": "moku_scenery_forest_misty_scp_surveillance",
+            "file": "forest_misty_scp_surveillance.jpg",
+            "path": "assets/visual_bank/moku/scenery/forest_misty_scp_surveillance.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest_misty_scp_surveillance"
+            ],
+            "description": "Generated semantic scenery for moku: forest misty scp surveillance"
+          },
+          {
+            "id": "moku_scenery_forest_outdoor_treess_fog_dark",
+            "file": "forest_outdoor_treess_fog_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/forest_outdoor_treess_fog_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest_outdoor_treess_fog_dark"
+            ],
+            "description": "Generated semantic scenery for moku: forest outdoor treess fog dark"
+          },
+          {
+            "id": "moku_scenery_forest_woods_creepy_fog_outdoor",
+            "file": "forest_woods_creepy_fog_outdoor.jpg",
+            "path": "assets/visual_bank/moku/scenery/forest_woods_creepy_fog_outdoor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest_woods_creepy_fog_outdoor"
+            ],
+            "description": "Generated semantic scenery for moku: forest woods creepy fog outdoor"
+          },
+          {
+            "id": "moku_scenery_containment",
+            "file": "horror_containment.jpg",
+            "path": "assets/visual_bank/moku/scenery/horror_containment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "containment",
+              "scp",
+              "bunker",
+              "industrial",
+              "facility",
+              "cell",
+              "dark"
+            ],
+            "description": "Celda de contención industrial de alta seguridad con ambientación SCP."
+          },
+          {
+            "id": "moku_scenery_forest",
+            "file": "horror_forest.jpg",
+            "path": "assets/visual_bank/moku/scenery/horror_forest.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "forest",
+              "fog",
+              "dark",
+              "woods",
+              "terror",
+              "creepy",
+              "outdoor"
+            ],
+            "description": "Bosque sombrío envuelto en niebla densa y iluminación lúgubre."
+          },
+          {
+            "id": "moku_scenery_lab_facility_bunker_experiment",
+            "file": "lab_facility_bunker_experiment.jpg",
+            "path": "assets/visual_bank/moku/scenery/lab_facility_bunker_experiment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "lab_facility_bunker_experiment"
+            ],
+            "description": "Generated semantic scenery for moku: lab facility bunker experiment"
+          },
+          {
+            "id": "moku_scenery_lab_laboratorio_experiment_horror",
+            "file": "lab_laboratorio_experiment_horror.jpg",
+            "path": "assets/visual_bank/moku/scenery/lab_laboratorio_experiment_horror.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "lab_laboratorio_experiment_horror"
+            ],
+            "description": "Generated semantic scenery for moku: lab laboratorio experiment horror"
+          },
+          {
+            "id": "moku_scenery_monitors_facility_security_corridor",
+            "file": "monitors_facility_security_corridor.jpg",
+            "path": "assets/visual_bank/moku/scenery/monitors_facility_security_corridor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "monitors_facility_security_corridor"
+            ],
+            "description": "Generated semantic scenery for moku: monitors facility security corridor"
+          },
+          {
+            "id": "moku_scenery_monitors_security_camara_surveillance",
+            "file": "monitors_security_camara_surveillance.jpg",
+            "path": "assets/visual_bank/moku/scenery/monitors_security_camara_surveillance.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "monitors_security_camara_surveillance"
+            ],
+            "description": "Generated semantic scenery for moku: monitors security camara surveillance"
+          },
+          {
+            "id": "moku_scenery_scp_anomaly_cell",
+            "file": "scp_anomaly_cell.jpg",
+            "path": "assets/visual_bank/moku/scenery/scp_anomaly_cell.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "scp_anomaly_cell"
+            ],
+            "description": "Generated semantic scenery for moku: scp anomaly cell"
+          },
+          {
+            "id": "moku_scenery_scp_corridor",
+            "file": "scp_corridor.jpg",
+            "path": "assets/visual_bank/moku/scenery/scp_corridor.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "scp_corridor"
+            ],
+            "description": "Generated semantic scenery for moku: scp corridor"
+          },
+          {
+            "id": "moku_scenery_scp_dark_stairs",
+            "file": "scp_dark_stairs.jpg",
+            "path": "assets/visual_bank/moku/scenery/scp_dark_stairs.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "scp_dark_stairs"
+            ],
+            "description": "Generated semantic scenery for moku: scp dark stairs"
+          },
+          {
+            "id": "moku_scenery_scp_security_monitors",
+            "file": "scp_security_monitors.jpg",
+            "path": "assets/visual_bank/moku/scenery/scp_security_monitors.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "scp_security_monitors"
+            ],
+            "description": "Generated semantic scenery for moku: scp security monitors"
+          },
+          {
+            "id": "moku_scenery_stairs_dark_escalera_bunker",
+            "file": "stairs_dark_escalera_bunker.jpg",
+            "path": "assets/visual_bank/moku/scenery/stairs_dark_escalera_bunker.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "stairs_dark_escalera_bunker"
+            ],
+            "description": "Generated semantic scenery for moku: stairs dark escalera bunker"
+          },
+          {
+            "id": "moku_scenery_stairs_escalera_descenso_dark",
+            "file": "stairs_escalera_descenso_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/stairs_escalera_descenso_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "stairs_escalera_descenso_dark"
+            ],
+            "description": "Generated semantic scenery for moku: stairs escalera descenso dark"
+          },
+          {
+            "id": "moku_scenery_stairs_pasillo_escalera_dark",
+            "file": "stairs_pasillo_escalera_dark.jpg",
+            "path": "assets/visual_bank/moku/scenery/stairs_pasillo_escalera_dark.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "stairs_pasillo_escalera_dark"
+            ],
+            "description": "Generated semantic scenery for moku: stairs pasillo escalera dark"
+          },
+          {
+            "id": "moku_scenery_vault_dark_corridor_containment",
+            "file": "vault_dark_corridor_containment.jpg",
+            "path": "assets/visual_bank/moku/scenery/vault_dark_corridor_containment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "vault_dark_corridor_containment"
+            ],
+            "description": "Generated semantic scenery for moku: vault dark corridor containment"
+          },
+          {
+            "id": "moku_scenery_vault_underground_escalera_pasillo",
+            "file": "vault_underground_escalera_pasillo.jpg",
+            "path": "assets/visual_bank/moku/scenery/vault_underground_escalera_pasillo.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "vault_underground_escalera_pasillo"
+            ],
+            "description": "Generated semantic scenery for moku: vault underground escalera pasillo"
+          }
+        ],
+        "ambient_gifs": [
+          {
+            "id": "moku_ambient_fog",
+            "file": "creepy_fog.gif",
+            "path": "assets/visual_bank/moku/ambient_gifs/creepy_fog.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "fog",
+              "mist",
+              "motion",
+              "ambient",
+              "creepypasta"
+            ],
+            "description": "Capamóvil de niebla sutil en bucle continuo para superposición atmosférica."
+          },
+          {
+            "id": "moku_ambient_flicker",
+            "file": "light_flicker.gif",
+            "path": "assets/visual_bank/moku/ambient_gifs/light_flicker.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "light",
+              "flicker",
+              "pulse",
+              "strobe",
+              "horror_effect"
+            ],
+            "description": "Efecto de luz parpadeante errática tipo bombilla con falla eléctrica."
+          },
+          {
+            "id": "moku_ambient_static",
+            "file": "tv_static.gif",
+            "path": "assets/visual_bank/moku/ambient_gifs/tv_static.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "tv_static",
+              "glitch",
+              "noise",
+              "analog",
+              "signal_loss"
+            ],
+            "description": "Interferencia de estática analógica y ruido blanco en bucle."
+          }
+        ],
+        "overlays": [
+          {
+            "id": "moku_overlay_dark_vignette",
+            "file": "dark_vignette.png",
+            "path": "assets/visual_bank/moku/overlays/dark_vignette.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "multiply",
+            "tags": [
+              "vignette",
+              "shadow",
+              "dark_edges",
+              "framing"
+            ],
+            "description": "Viñeta radial negra con oscurecimiento denso de bordes."
+          },
+          {
+            "id": "moku_overlay_blood_vignette",
+            "file": "blood_vignette.png",
+            "path": "assets/visual_bank/moku/overlays/blood_vignette.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "overlay",
+            "tags": [
+              "blood",
+              "crimson",
+              "danger",
+              "vignette"
+            ],
+            "description": "Viñeta radial con tinte rojo carmesí sombrío para momentos de peligro."
+          },
+          {
+            "id": "moku_overlay_film_grain",
+            "file": "film_grain.png",
+            "path": "assets/visual_bank/moku/overlays/film_grain.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "screen",
+            "tags": [
+              "grain",
+              "noise",
+              "texture",
+              "vintage"
+            ],
+            "description": "Textura de grano cinematográfico fino con transparencia alpha."
+          },
+          {
+            "id": "moku_overlay_scp_frame",
+            "file": "scp_frame.png",
+            "path": "assets/visual_bank/moku/overlays/scp_frame.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "normal",
+            "tags": [
+              "scp",
+              "hud",
+              "border",
+              "corners",
+              "classification"
+            ],
+            "description": "Marco con soportes de esquina y barra de clasificación SCP en rojo de advertencia."
+          }
+        ]
+      }
+    },
+    "aelithia": {
+      "name": "Aelithia - AITA & Relatos de Drama",
+      "description": "Canal dedicado a historias de Reddit (AITA), drama social, confesiones y storytelling.",
+      "visual_style": "Cálido, moderno, cinematográfico, acogedor, enfocado en legibilidad de texto y narrativa de vida cotidiana",
+      "target_aspect_ratio": "9:16",
+      "target_resolution": [
+        768,
+        1360
+      ],
+      "categories": {
+        "scenery": [
+          {
+            "id": "aelithia_scenery_aita_kitchen_dispute",
+            "file": "aita_kitchen_dispute.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aita_kitchen_dispute.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "aita_kitchen_dispute"
+            ],
+            "description": "Generated semantic scenery for aelithia: aita kitchen dispute"
+          },
+          {
+            "id": "aelithia_scenery_aita_living_room",
+            "file": "aita_living_room.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aita_living_room.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "aita_living_room"
+            ],
+            "description": "Generated semantic scenery for aelithia: aita living room"
+          },
+          {
+            "id": "aelithia_scenery_aita_rainy_car",
+            "file": "aita_rainy_car.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aita_rainy_car.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "aita_rainy_car"
+            ],
+            "description": "Generated semantic scenery for aelithia: aita rainy car"
+          },
+          {
+            "id": "aelithia_scenery_cafe_bokeh_coffee_urban",
+            "file": "cafe_bokeh_coffee_urban.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/cafe_bokeh_coffee_urban.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cafe_bokeh_coffee_urban"
+            ],
+            "description": "Generated semantic scenery for aelithia: cafe bokeh coffee urban"
+          },
+          {
+            "id": "aelithia_scenery_cafe_coffee_bokeh_modern",
+            "file": "cafe_coffee_bokeh_modern.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/cafe_coffee_bokeh_modern.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cafe_coffee_bokeh_modern"
+            ],
+            "description": "Generated semantic scenery for aelithia: cafe coffee bokeh modern"
+          },
+          {
+            "id": "aelithia_scenery_cafe_modern_coffee_shop",
+            "file": "cafe_modern_coffee_shop.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/cafe_modern_coffee_shop.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "cafe_modern_coffee_shop"
+            ],
+            "description": "Generated semantic scenery for aelithia: cafe modern coffee shop"
+          },
+          {
+            "id": "aelithia_scenery_car_lluvia_rainy_street",
+            "file": "car_lluvia_rainy_street.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/car_lluvia_rainy_street.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "car_lluvia_rainy_street"
+            ],
+            "description": "Generated semantic scenery for aelithia: car lluvia rainy street"
+          },
+          {
+            "id": "aelithia_scenery_car_rainy_window_droplets_auto",
+            "file": "car_rainy_window_droplets_auto.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/car_rainy_window_droplets_auto.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "car_rainy_window_droplets_auto"
+            ],
+            "description": "Generated semantic scenery for aelithia: car rainy window droplets auto"
+          },
+          {
+            "id": "aelithia_scenery_car_suburban_rainy_auto",
+            "file": "car_suburban_rainy_auto.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/car_suburban_rainy_auto.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "car_suburban_rainy_auto"
+            ],
+            "description": "Generated semantic scenery for aelithia: car suburban rainy auto"
+          },
+          {
+            "id": "aelithia_scenery_coffee_shop_cafe_interior",
+            "file": "coffee_shop_cafe_interior.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/coffee_shop_cafe_interior.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "coffee_shop_cafe_interior"
+            ],
+            "description": "Generated semantic scenery for aelithia: coffee shop cafe interior"
+          },
+          {
+            "id": "aelithia_scenery_coffee_shop_modern_bokeh_cafe",
+            "file": "coffee_shop_modern_bokeh_cafe.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/coffee_shop_modern_bokeh_cafe.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "coffee_shop_modern_bokeh_cafe"
+            ],
+            "description": "Generated semantic scenery for aelithia: coffee shop modern bokeh cafe"
+          },
+          {
+            "id": "aelithia_scenery_coffee_shop_urban_bokeh",
+            "file": "coffee_shop_urban_bokeh.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/coffee_shop_urban_bokeh.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "coffee_shop_urban_bokeh"
+            ],
+            "description": "Generated semantic scenery for aelithia: coffee shop urban bokeh"
+          },
+          {
+            "id": "aelithia_scenery_courtroom_abogado_juicio_drama",
+            "file": "courtroom_abogado_juicio_drama.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_abogado_juicio_drama.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_abogado_juicio_drama"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom abogado juicio drama"
+          },
+          {
+            "id": "aelithia_scenery_courtroom",
+            "file": "courtroom_drama.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_drama.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom",
+              "drama",
+              "law",
+              "conflict",
+              "formal",
+              "interior"
+            ],
+            "description": "Interior dramático sobrio en tonos caoba y azul marino para historias de conflicto grave."
+          },
+          {
+            "id": "aelithia_scenery_courtroom_drama_law_tribunal",
+            "file": "courtroom_drama_law_tribunal.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_drama_law_tribunal.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_drama_law_tribunal"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom drama law tribunal"
+          },
+          {
+            "id": "aelithia_scenery_courtroom_hearing_juicio_abogado",
+            "file": "courtroom_hearing_juicio_abogado.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_hearing_juicio_abogado.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_hearing_juicio_abogado"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom hearing juicio abogado"
+          },
+          {
+            "id": "aelithia_scenery_courtroom_juicio_drama_court",
+            "file": "courtroom_juicio_drama_court.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_juicio_drama_court.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_juicio_drama_court"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom juicio drama court"
+          },
+          {
+            "id": "aelithia_scenery_courtroom_law_drama_tribunal",
+            "file": "courtroom_law_drama_tribunal.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_law_drama_tribunal.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_law_drama_tribunal"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom law drama tribunal"
+          },
+          {
+            "id": "aelithia_scenery_courtroom_tribunal_law_drama",
+            "file": "courtroom_tribunal_law_drama.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/courtroom_tribunal_law_drama.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "courtroom_tribunal_law_drama"
+            ],
+            "description": "Generated semantic scenery for aelithia: courtroom tribunal law drama"
+          },
+          {
+            "id": "aelithia_scenery_cozy_room",
+            "file": "cozy_living_room.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/cozy_living_room.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room",
+              "cozy",
+              "indoor",
+              "warm",
+              "home",
+              "apartment"
+            ],
+            "description": "Escena de sala acogedora con tonos cálidos de iluminación ambiental."
+          },
+          {
+            "id": "aelithia_scenery_kitchen_argument_disputa_family",
+            "file": "kitchen_argument_disputa_family.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_argument_disputa_family.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_argument_disputa_family"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen argument disputa family"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_argument_family_dispute",
+            "file": "kitchen_argument_family_dispute.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_argument_family_dispute.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_argument_family_dispute"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen argument family dispute"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_banquete_comida_disputa",
+            "file": "kitchen_banquete_comida_disputa.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_banquete_comida_disputa.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_banquete_comida_disputa"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen banquete comida disputa"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_cozy_dispute_aita",
+            "file": "kitchen_cozy_dispute_aita.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_cozy_dispute_aita.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_cozy_dispute_aita"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen cozy dispute aita"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_dispute_aita_drama_family",
+            "file": "kitchen_dispute_aita_drama_family.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_dispute_aita_drama_family.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_dispute_aita_drama_family"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen dispute aita drama family"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_drama_aita_dispute",
+            "file": "kitchen_drama_aita_dispute.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_drama_aita_dispute.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_drama_aita_dispute"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen drama aita dispute"
+          },
+          {
+            "id": "aelithia_scenery_kitchen_family_dispute_aita",
+            "file": "kitchen_family_dispute_aita.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/kitchen_family_dispute_aita.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "kitchen_family_dispute_aita"
+            ],
+            "description": "Generated semantic scenery for aelithia: kitchen family dispute aita"
+          },
+          {
+            "id": "aelithia_scenery_living_room_apartment_cozy_warm",
+            "file": "living_room_apartment_cozy_warm.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_apartment_cozy_warm.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_apartment_cozy_warm"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room apartment cozy warm"
+          },
+          {
+            "id": "aelithia_scenery_living_room_cozy_apartment_sala",
+            "file": "living_room_cozy_apartment_sala.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_cozy_apartment_sala.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_cozy_apartment_sala"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room cozy apartment sala"
+          },
+          {
+            "id": "aelithia_scenery_living_room_cozy_home_apartment",
+            "file": "living_room_cozy_home_apartment.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_cozy_home_apartment.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_cozy_home_apartment"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room cozy home apartment"
+          },
+          {
+            "id": "aelithia_scenery_living_room_family_drama_sala",
+            "file": "living_room_family_drama_sala.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_family_drama_sala.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_family_drama_sala"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room family drama sala"
+          },
+          {
+            "id": "aelithia_scenery_living_room_home_family",
+            "file": "living_room_home_family.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_home_family.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_home_family"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room home family"
+          },
+          {
+            "id": "aelithia_scenery_living_room_sala_sofa_cozy",
+            "file": "living_room_sala_sofa_cozy.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_sala_sofa_cozy.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_sala_sofa_cozy"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room sala sofa cozy"
+          },
+          {
+            "id": "aelithia_scenery_living_room_sofa_family_sala",
+            "file": "living_room_sofa_family_sala.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/living_room_sofa_family_sala.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "living_room_sofa_family_sala"
+            ],
+            "description": "Generated semantic scenery for aelithia: living room sofa family sala"
+          },
+          {
+            "id": "aelithia_scenery_coffee_shop",
+            "file": "modern_coffee_shop.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/modern_coffee_shop.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "coffee_shop",
+              "cafe",
+              "interior",
+              "bokeh",
+              "modern",
+              "aesthetic"
+            ],
+            "description": "Fondo de cafetería moderna con luces bokeh cálidas y tono acogedor."
+          },
+          {
+            "id": "aelithia_scenery_rainy_car_auto_lluvia_street",
+            "file": "rainy_car_auto_lluvia_street.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/rainy_car_auto_lluvia_street.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "rainy_car_auto_lluvia_street"
+            ],
+            "description": "Generated semantic scenery for aelithia: rainy car auto lluvia street"
+          },
+          {
+            "id": "aelithia_scenery_rainy_car_suburban_auto",
+            "file": "rainy_car_suburban_auto.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/rainy_car_suburban_auto.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "rainy_car_suburban_auto"
+            ],
+            "description": "Generated semantic scenery for aelithia: rainy car suburban auto"
+          },
+          {
+            "id": "aelithia_scenery_rainy_window_car_auto",
+            "file": "rainy_window_car_auto.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/rainy_window_car_auto.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "rainy_window_car_auto"
+            ],
+            "description": "Generated semantic scenery for aelithia: rainy window car auto"
+          },
+          {
+            "id": "aelithia_scenery_suburban_dusk",
+            "file": "suburban_dusk.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_dusk.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburbs",
+              "dusk",
+              "twilight",
+              "street",
+              "neighborhood",
+              "evening"
+            ],
+            "description": "Atardecer suburbano cinemático con degradado de atardecer en tonos púrpura y magenta."
+          },
+          {
+            "id": "aelithia_scenery_suburban_dusk_neighborhood_evening",
+            "file": "suburban_dusk_neighborhood_evening.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_dusk_neighborhood_evening.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_dusk_neighborhood_evening"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban dusk neighborhood evening"
+          },
+          {
+            "id": "aelithia_scenery_suburban_dusk_vecindario_evening",
+            "file": "suburban_dusk_vecindario_evening.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_dusk_vecindario_evening.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_dusk_vecindario_evening"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban dusk vecindario evening"
+          },
+          {
+            "id": "aelithia_scenery_suburban_evening_dusk_street",
+            "file": "suburban_evening_dusk_street.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_evening_dusk_street.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_evening_dusk_street"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban evening dusk street"
+          },
+          {
+            "id": "aelithia_scenery_suburban_neighborhood_calle_dusk",
+            "file": "suburban_neighborhood_calle_dusk.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_neighborhood_calle_dusk.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_neighborhood_calle_dusk"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban neighborhood calle dusk"
+          },
+          {
+            "id": "aelithia_scenery_suburban_street_vecindario_calle",
+            "file": "suburban_street_vecindario_calle.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_street_vecindario_calle.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_street_vecindario_calle"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban street vecindario calle"
+          },
+          {
+            "id": "aelithia_scenery_suburban_twilight_night_street",
+            "file": "suburban_twilight_night_street.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/suburban_twilight_night_street.jpg",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "jpeg",
+            "tags": [
+              "suburban_twilight_night_street"
+            ],
+            "description": "Generated semantic scenery for aelithia: suburban twilight night street"
+          }
+        ],
+        "ambient_gifs": [
+          {
+            "id": "aelithia_ambient_soft_bokeh",
+            "file": "soft_bokeh.gif",
+            "path": "assets/visual_bank/aelithia/ambient_gifs/soft_bokeh.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "bokeh",
+              "warm_lights",
+              "particles",
+              "glow",
+              "soft"
+            ],
+            "description": "Luces bokeh cálidas flotantes en movimiento suave en bucle."
+          },
+          {
+            "id": "aelithia_ambient_rain_window",
+            "file": "rain_window.gif",
+            "path": "assets/visual_bank/aelithia/ambient_gifs/rain_window.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "rain",
+              "window",
+              "droplets",
+              "cozy_rain",
+              "melancholy"
+            ],
+            "description": "Gotas de lluvia deslizándose en un cristal para pasajes melancólicos o reflexivos."
+          },
+          {
+            "id": "aelithia_ambient_dramatic_light",
+            "file": "dramatic_light.gif",
+            "path": "assets/visual_bank/aelithia/ambient_gifs/dramatic_light.gif",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "gif",
+            "looping": true,
+            "tags": [
+              "light_beam",
+              "sweep",
+              "lens_flare",
+              "dramatic",
+              "illumination"
+            ],
+            "description": "Haz de luz ambiental en movimiento oscilante sutil."
+          }
+        ],
+        "overlays": [
+          {
+            "id": "aelithia_overlay_reddit_card",
+            "file": "reddit_story_card.png",
+            "path": "assets/visual_bank/aelithia/overlays/reddit_story_card.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "normal",
+            "tags": [
+              "card",
+              "reddit",
+              "text_container",
+              "frosted_glass",
+              "ui"
+            ],
+            "description": "Tarjeta traslúcida estilo cristal esmerilado para enmarcar el texto principal del relato."
+          },
+          {
+            "id": "aelithia_overlay_soft_vignette",
+            "file": "soft_vignette.png",
+            "path": "assets/visual_bank/aelithia/overlays/soft_vignette.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "multiply",
+            "tags": [
+              "vignette",
+              "soft_shadow",
+              "subtle",
+              "border"
+            ],
+            "description": "Viñeta suave de sombras perimetrales para enfocar la atención al centro."
+          },
+          {
+            "id": "aelithia_overlay_drama_shadow",
+            "file": "drama_shadow.png",
+            "path": "assets/visual_bank/aelithia/overlays/drama_shadow.png",
+            "resolution": [
+              768,
+              1360
+            ],
+            "format": "png",
+            "blend_mode": "normal",
+            "tags": [
+              "shadow_bars",
+              "subtitles",
+              "gradient",
+              "top_bottom",
+              "legibility"
+            ],
+            "description": "Degradados de sombra en parte superior e inferior para maximizar legibilidad de subtítulos."
+          }
+        ]
+      }
+    }
+  }
+}

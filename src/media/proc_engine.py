@@ -1,0 +1,314 @@
+"""
+src/media/procedural_video_engine.py - Pure Procedural WebGL/Three.js/Canvas2D Rendering Engine.
+
+Renders deterministic, mathematical procedural scene segments with virtual time stepping,
+strict Rec.709 color matrices, and zero API costs.
+Conforms to BaseVideoCompositor interface.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import shutil
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+from src.media.interface import BaseVideoCompositor, CompositorError
+from src.core.catalog import LoopCatalogRepository, LoopRecord
+from src.log import get_logger
+from src.media.web_renderer import WebVideoRenderer, RenderSpec
+from src.scene_manifest import (
+    ProceduralConfig,
+    SceneConfig,
+    SceneManifestV2,
+    parse_scene_manifest_model,
+)
+from lib.ffmpeg import (
+    FFmpegError,
+    FFmpegExecutionError,
+    probe_media,
+    run_ffmpeg,
+)
+
+logger = get_logger("procedural_video_engine")
+
+__all__ = [
+    "ProceduralVideoEngine",
+    "ProceduralVideoError",
+]
+
+
+class ProceduralVideoError(CompositorError):
+    """Base exception for ProceduralVideoEngine operations."""
+    pass
+
+
+class ProceduralVideoEngine(BaseVideoCompositor):
+    """
+    Renders pure procedural WebGL, Three.js, and HTML5 Canvas video segments.
+    """
+
+    def __init__(
+        self,
+        renderer: Optional[WebVideoRenderer] = None,
+        catalog: Optional[LoopCatalogRepository] = None,
+    ) -> None:
+        self.renderer = renderer or WebVideoRenderer()
+        self.catalog = catalog or LoopCatalogRepository()
+
+    def render(
+        self,
+        manifest_path: Union[Path, str],
+        output_video_path: Union[Path, str],
+        **extra_kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Renders procedural scenes from a scene manifest."""
+        manifest = parse_scene_manifest_model(manifest_path)
+        out_p = Path(output_video_path).resolve()
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        width = manifest.resolution[0]
+        height = manifest.resolution[1]
+        fps = manifest.fps
+
+        logger.info(
+            "Starting Procedural Video Engine render: story=%s, scenes=%d, res=%dx%d @ %dfps",
+            manifest.story_id,
+            len(manifest.scenes),
+            width,
+            height,
+            fps,
+        )
+
+        t0 = time.time()
+        rendered_scene_paths: List[Path] = []
+
+        with tempfile.TemporaryDirectory(prefix="procedural_render_") as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+
+            for idx, scene in enumerate(manifest.scenes):
+                scene_out = tmp_dir / f"scene_{idx:03d}_{scene.scene_id}.mp4"
+                self.render_scene_segment(
+                    scene=scene,
+                    width=width,
+                    height=height,
+                    fps=fps,
+                    lane_id=manifest.lane_id,
+                    output_mp4=scene_out,
+                )
+                rendered_scene_paths.append(scene_out)
+
+            if len(rendered_scene_paths) == 1:
+                shutil.copy2(rendered_scene_paths[0], out_p)
+            else:
+                concat_list_file = tmp_dir / "concat_procedural_scenes.txt"
+                with open(concat_list_file, "w") as f:
+                    for sc_path in rendered_scene_paths:
+                        f.write(f"file '{sc_path.resolve()}'\n")
+
+                concat_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_list_file),
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    str(out_p),
+                ]
+                run_ffmpeg(concat_cmd)
+
+        elapsed = time.time() - t0
+        file_size = out_p.stat().st_size if out_p.exists() else 0
+        logger.info(
+            "Procedural Video Engine finished render in %.2fs. Output: %s (%d bytes)",
+            elapsed,
+            out_p,
+            file_size,
+        )
+
+        return {
+            "status": "success",
+            "output_path": str(out_p),
+            "file_size_bytes": file_size,
+            "render_time_sec": elapsed,
+            "scenes_count": len(manifest.scenes),
+            "engine": "pure_procedural_webgl",
+        }
+
+    def render_scene_segment(
+        self,
+        scene: SceneConfig,
+        width: int,
+        height: int,
+        fps: int,
+        lane_id: str,
+        output_mp4: Union[Path, str],
+        crf: int = 18,
+        subtitle_cues: Optional[List[Any]] = None,
+        scene_start_sec: float = 0.0,
+        subtitle_theme: Optional[Any] = None,
+        **extra_kwargs: Any,
+    ) -> Path:
+        """
+        Renders an individual procedural scene segment by repeating/looping a deterministic micro-loop
+        or rendering on demand, with optional code-level subtitle overlays.
+        """
+        out_path = Path(output_mp4).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        duration = max(0.5, float(scene.duration_sec))
+
+        cfg = scene.procedural_config or ProceduralConfig()
+        orientation = "vertical" if height > width else "horizontal"
+
+        # 1. Resolve matching category or template
+        category = self._resolve_category(scene.environment_name, cfg.template_name, lane_id)
+
+        # 2. Check catalog for pre-rendered loop
+        matching_loop = self.catalog.get_best_loop(category=category, orientation=orientation)
+        
+        loop_file: Optional[Path] = None
+        if matching_loop and Path(matching_loop.file_path).is_file():
+            loop_file = Path(matching_loop.file_path).resolve()
+        else:
+            # Synthesize micro-loop on demand (6s)
+            synth_dir = Path("assets/loops/web_procedural") / category
+            synth_dir.mkdir(parents=True, exist_ok=True)
+            synth_mp4 = synth_dir / f"proc_{category}_{orientation}_{width}x{height}_6s.mp4"
+
+            spec = RenderSpec(
+                template_name=cfg.template_name,
+                category=category,
+                orientation=orientation,
+                width=width,
+                height=height,
+                duration_sec=6.0,
+                fps=fps,
+                output_path=synth_mp4,
+                params={"seed": cfg.seed, "tension": scene.tension_level},
+            )
+
+            try:
+                loop_file = self.renderer.render_loop(spec)
+            except Exception as e:
+                logger.warning("Procedural on-demand rendering failed (%s). Using fallback procedural generator.", e)
+                loop_file = self._generate_fallback_loop(category, width, height, fps, 6.0, synth_mp4)
+
+        # 3. Stream-loop or concatenate to reach exact scene duration
+        loop_duration = 6.0
+        try:
+            probe = probe_media(loop_file)
+            if probe.primary_video and probe.primary_video.duration:
+                loop_duration = probe.primary_video.duration
+            elif probe.duration:
+                loop_duration = probe.duration
+        except Exception:
+            pass
+
+        loop_count = int(math.ceil(duration / max(0.1, loop_duration))) + 1
+        with tempfile.TemporaryDirectory(prefix=f"proc_concat_{scene.scene_id}_") as concat_dir_str:
+            concat_txt = Path(concat_dir_str) / "concat.txt"
+            with open(concat_txt, "w") as f:
+                for _ in range(loop_count):
+                    f.write(f"file '{loop_file.resolve()}'\n")
+
+            raw_seg_mp4 = Path(concat_dir_str) / "raw_seg.mp4" if subtitle_cues else out_path
+            ffmpeg_cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                "-t", f"{duration:.3f}",
+                "-c:v", "libx264",
+                "-crf", str(crf),
+                "-preset", "faster",
+                "-b:v", "4500k",
+                "-maxrate", "6000k",
+                "-bufsize", "8000k",
+                "-threads", "0",
+                "-pix_fmt", "yuv420p",
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-movflags", "+faststart",
+                str(raw_seg_mp4),
+            ]
+            run_ffmpeg(ffmpeg_cmd)
+
+            if subtitle_cues:
+                from src.media.subtitles import apply_code_subtitles_to_video
+                apply_code_subtitles_to_video(
+                    input_mp4=raw_seg_mp4,
+                    output_mp4=out_path,
+                    subtitle_cues=subtitle_cues,
+                    scene_start_sec=scene_start_sec,
+                    width=width,
+                    height=height,
+                    fps=fps,
+                    crf=crf,
+                    subtitle_theme=subtitle_theme,
+                )
+
+        return out_path
+
+    def _resolve_category(self, env_name: Optional[str], template_name: str, lane_id: str) -> str:
+        """Resolves thematic procedural category."""
+        if env_name:
+            norm = env_name.lower().replace(" ", "_").replace("-", "_")
+            for cat in ["cosmic_horror", "dark_forest", "monsters", "space_abyss", "scp", "dark_ambient", "drama_aita"]:
+                if cat in norm or norm in cat:
+                    return cat
+        if "three" in template_name.lower():
+            return "cosmic_horror"
+        if "scp" in lane_id.lower():
+            return "scp"
+        if "aita" in lane_id.lower() or "drama" in lane_id.lower():
+            return "drama_aita"
+        return "cosmic_horror"
+
+    def _generate_fallback_loop(
+        self, category: str, width: int, height: int, fps: int, duration_sec: float, out_path: Path
+    ) -> Path:
+        """Generates deterministic mathematical fallback loop video."""
+        from PIL import Image, ImageDraw
+        import numpy as np
+
+        total_frames = int(fps * duration_sec)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s", f"{width}x{height}",
+            "-r", str(fps),
+            "-i", "-",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-crf", "18",
+            "-preset", "fast",
+            "-movflags", "+faststart",
+            str(out_path),
+        ]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        for i in range(total_frames):
+            t_norm = i / float(total_frames)
+            # Create atmospheric procedural frame
+            arr = np.zeros((height, width, 3), dtype=np.uint8)
+            for y in range(0, height, 4):
+                fac = y / height
+                val = int(5 + fac * 25 + 10 * math.sin(2 * math.pi * t_norm + fac * 3))
+                arr[y:y+4, :, 0] = max(0, min(255, val // 2))
+                arr[y:y+4, :, 1] = max(0, min(255, val // 3))
+                arr[y:y+4, :, 2] = max(0, min(255, val))
+
+            proc.stdin.write(arr.tobytes())
+
+        if proc.stdin:
+            proc.stdin.flush()
+            proc.stdin.close()
+        proc.wait()
+        return out_path

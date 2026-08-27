@@ -1,0 +1,8 @@
+{
+  "_comment": "Editorial barrier — operator-extensible forbidden patterns (Python regex). APPENDED to the built-in list in src/sanitizer.py. Invalid entries are ignored with a warning.",
+  "forbidden_extra": [
+    "(?i)\\b(?:en\\s+este\\s+canal|nuestro\\s+canal|este\\s+v[íi]deo|este\\s+episodio|hoy\\s+en\\s+el\\s+canal)\\b",
+    "(?i)\\b(?:en\\s+el\\s+siguiente\\s+v[íi]deo|pr[óo]ximo\\s+episodio|continuar[áa]\\s+en\\s+la\\s+parte)\\b",
+    "(?i)\\b(?:activa\\s+la\\s+campana|comparte\\s+este\\s+v[íi]deo|d[eé]jame\\s+saber\\s+en\\s+los\\s+comentarios)\\b"
+  ]
+}
