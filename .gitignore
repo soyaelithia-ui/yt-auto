@@ -79,3 +79,8 @@ assets/scp_media/
 !assets/music/**
 !assets/music_aita/**
 *.egg-info/
+
+# Core dumps
+core
+core.*
+
