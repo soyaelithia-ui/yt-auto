@@ -8,6 +8,8 @@ from src.agents.scene_planner import ScenePlannerCompositorAgent
 from src.agents.qa_auditor import VisualAudioQAAuditorAgent
 from src.agents.investigator import StoryInvestigatorAgent, generate_story_script
 from src.agents.translator import TranslatorAgent
+from src.agents.image_auditor import ImageAuditorAgent
+from src.agents.seo_optimizer import SeoOptimizerAgent
 
 __all__ = [
     "CANONICAL_MODEL",
@@ -19,4 +21,6 @@ __all__ = [
     "StoryInvestigatorAgent",
     "generate_story_script",
     "TranslatorAgent",
+    "ImageAuditorAgent",
+    "SeoOptimizerAgent",
 ]

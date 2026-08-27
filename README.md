@@ -81,8 +81,31 @@ El sistema implementa un motor de composición visual por código y tecnologías
 
 ---
 
+## 🤖 Arnés Antigravity Multi-Agente (6 Agentes Especializados)
+
+El sistema integra un pipeline desacoplado de 6 agentes regidos por contratos JSON Schema Draft-07 bajo el CLI local `agy` (`gemini-3.7-flash`):
+1. **Agent 1: Script Curator** (`src/agents/script_curator.py`): Guión optimizado para retención con gancho en los primeros 3 segundos.
+2. **Agent 2: Art Director** (`src/agents/art_director.py`): Graduación de color Rec.709, dinámica de iluminación y partículas.
+3. **Agent 3: Scene Planner** (`src/agents/scene_planner.py`): Construcción del manifiesto canónico `SceneManifestV2`.
+4. **Agent 4: Forensic QA Auditor** (`src/agents/qa_auditor.py`): Verificación EBU R128 (-14 LUFS para shorts), luminancia y desincronización.
+5. **Agent 5: Image Auditor (Anti-Filler)** (`src/agents/image_auditor.py`): Veeduría forense estricta. Descarta toda foto de stock estática y aprueba únicamente insignias vectoriales oficiales y esquemas técnicos.
+6. **Agent 6: SEO Optimizer** (`src/agents/seo_optimizer.py`): Generador de 3 títulos virales para A/B testing, descripción estructurada con marcas de tiempo, etiquetas y conceptos de miniatura.
+
+---
+
+## 🛠️ Herramientas de Desarrollo y Diagnóstico (`dev/`)
+
+Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
+- `python3 dev/generate_scp_short.py --topic "SCP-2000"`: Genera un Short vertical completo (9:16) con los 6 agentes.
+- `python3 dev/test_pipeline_harness.py`: Diagnóstico integral Zero-Quota del arnés y contratos JSON.
+- `python3 dev/produce_batch.py --count 3`: Producción en lote multi-canal (`moku`, `aelithia`).
+- `python3 dev/run_telegram_bot.py --autopilot`: Bot interactivo en segundo plano con AutoPilot 24/7.
+- `python3 dev/audit_assets.py --topic "SCP-2000"`: Veeduría independiente de activos contra la política anti-filler.
+
+---
+
 ## 🔒 Seguridad, Revisión y Política AI-First
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
 2. **Auto-Publicación Segura**: Ventana de revisión de 6h configurable. Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
-3. **Política AI-First**: Tareas creativas (curación y estructuración) emplean agentes (`gemini-3.6-flash`) con failover a Gemini REST (`gemini-2.5-flash`) y política fail-closed. El renderizado (`LoopVideoEngine`), subtítulos y persistencia son 100% código determinista.
+3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. El renderizado procedural, subtítulos y persistencia son 100% código determinista local.

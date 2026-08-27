@@ -81,6 +81,6 @@ assets/scp_media/
 *.egg-info/
 
 # Core dumps
-core
+/core
 core.*
 

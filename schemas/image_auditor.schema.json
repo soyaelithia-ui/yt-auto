@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ImageAuditReport",
+  "description": "Canonical output contract for Agent 5 (Image Auditor Agent - Anti-Filler & Emblem Vetting)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["2.0"]
+    },
+    "topic": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel_lane": {
+      "type": "string"
+    },
+    "total_candidates": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "approved_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "discarded_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_type": {
+            "type": "string",
+            "enum": ["brand_logo", "official_emblem", "technical_schematic", "generic_filler_photo"]
+          },
+          "entity_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["APPROVED_REFERENCE", "DISCARDED_GENERIC_FILLER", "REJECTED_LOW_RELEVANCE"]
+          },
+          "confidence_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "reasoning": {
+            "type": "string",
+            "minLength": 5
+          },
+          "badge_render_type": {
+            "type": "string",
+            "enum": ["svg_vector_badge", "canvas_procedural_emblem", "none"]
+          }
+        },
+        "required": [
+          "asset_id",
+          "source_type",
+          "entity_name",
+          "verdict",
+          "confidence_score",
+          "reasoning",
+          "badge_render_type"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "topic",
+    "total_candidates",
+    "approved_count",
+    "discarded_count",
+    "verdicts"
+  ],
+  "additionalProperties": false
+}

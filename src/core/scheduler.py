@@ -225,3 +225,16 @@ class LaneScheduler:
             next_due_at=pick.fired_at + backoff,
             empty=True,
         )
+
+
+# Backward-compatible AutoPilot re-exports ported from Temp-
+from src.core.autopilot import AUTO_TOPICS, AutoPilotScheduler
+
+__all__ = [
+    "SchedulerDecision",
+    "LanePick",
+    "PersistentScheduler",
+    "LaneScheduler",
+    "AUTO_TOPICS",
+    "AutoPilotScheduler",
+]
