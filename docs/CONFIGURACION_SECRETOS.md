@@ -56,7 +56,45 @@ Inventario estructurado de variables de entorno y directivas de seguridad para `
 
 ---
 
-## 2. Validación de Configuración (Preflight)
+---
+
+## 2. Autenticación Oficial de Google (YouTube Data API v3 & Google Drive API v3)
+
+El sistema utiliza las bibliotecas oficiales de Google (`google-auth`, `google-auth-oauthlib`, `google-api-python-client`) y almacena credenciales autorizadas en formato canónico oficial (`token`, `refresh_token`, `scopes`, `token_uri`, `client_id`, `client_secret`, `expiry`).
+
+### Comandos de Autenticación CLI:
+
+1. **Login interactivo de 1-clic** (abre navegador local y guarda credenciales):
+   ```bash
+   python3 main.py auth login --channel moku
+   python3 main.py auth login --channel aelithia
+   ```
+
+2. **Generar URL de autorización (manual / headless)**:
+   ```bash
+   python3 main.py auth url --channel moku
+   ```
+
+3. **Canjear código de autorización**:
+   ```bash
+   python3 main.py auth exchange <CODIGO_OAUTH> --channel moku
+   ```
+
+4. **Diagnóstico y verificación de credenciales/permisos**:
+   ```bash
+   python3 main.py auth check --channel moku
+   python3 main.py auth check --channel aelithia
+   ```
+
+5. **Estandarizar tokens existentes al formato canónico oficial**:
+   ```bash
+   python3 main.py auth standardize --channel moku
+   python3 main.py auth standardize --channel aelithia
+   ```
+
+---
+
+## 3. Validación de Configuración (Preflight)
 
 Para comprobar que todas las dependencias y secretos requeridos estén configurados correctamente antes de iniciar producción:
 

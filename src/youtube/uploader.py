@@ -77,17 +77,10 @@ def validate_title_content_alignment(title: str, entity_id: str, script_text: st
     return True
 
 
-def _save_refreshed_credentials(token_path: str, credentials, original_data: dict) -> None:
+def _save_refreshed_credentials(token_path: str, credentials, original_data: dict | None = None) -> None:
     try:
-        updated = dict(original_data)
-        if credentials.token:
-            updated["access_token"] = credentials.token
-            updated["token"] = credentials.token
-        if credentials.refresh_token:
-            updated["refresh_token"] = credentials.refresh_token
-        if credentials.expiry:
-            updated["expiry"] = credentials.expiry.isoformat()
-        Path(token_path).write_text(json.dumps(updated, indent=2), encoding="utf-8")
+        from src.core.google_auth import save_credentials
+        save_credentials(credentials, token_path)
     except Exception as exc:
         logger.warning("Could not persist refreshed OAuth token to %s: %s", token_path, exc)
 
@@ -95,22 +88,8 @@ def _save_refreshed_credentials(token_path: str, credentials, original_data: dic
 def _youtube_service(token_path: str):
     if not token_path or not os.path.isfile(token_path):
         raise RuntimeError("El token API explícito del canal no existe")
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
-
-    token_data = json.loads(Path(token_path).read_text(encoding="utf-8"))
-    credentials = Credentials(
-        token=token_data.get("access_token") or token_data.get("token"),
-        refresh_token=token_data.get("refresh_token"),
-        token_uri=token_data.get("token_uri", "https://oauth2.googleapis.com/token"),
-        client_id=token_data.get("client_id") or GOOGLE_CLIENT_ID,
-        client_secret=token_data.get("client_secret") or GOOGLE_CLIENT_SECRET,
-    )
-    if credentials.expired and credentials.refresh_token:
-        credentials.refresh(Request())
-        _save_refreshed_credentials(token_path, credentials, token_data)
-    return build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    from src.core.google_auth import build_youtube_service
+    return build_youtube_service(token_path=token_path)
 
 
 def preflight_youtube_api(

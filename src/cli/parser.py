@@ -350,8 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
         "action",
         nargs="?",
         default="url",
-        choices=["url", "exchange"],
-        help="Acción OAuth: 'url' (generar URL) o 'exchange' (canjear código)",
+        choices=["url", "exchange", "login", "check", "standardize"],
+        help="Acción OAuth: 'url', 'exchange', 'login' (servidor local interactivo), 'check' (validar estado), 'standardize' (normalizar formato)",
     )
     auth_parser.add_argument(
         "code",
@@ -372,6 +372,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Código de autorización OAuth (flag opcional)",
+    )
+    auth_parser.add_argument(
+        "--port",
+        type=int,
+        default=8585,
+        help="Puerto local para flujo interactivo 'auth login' (predeterminado: 8585)",
     )
 
     # 7. backup

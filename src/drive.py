@@ -57,22 +57,7 @@ def _gcloud_credentials():
 
 
 def _credentials(sa_key_path: str | None, token_path: str | None):
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-
-    def _oauth_credentials(file_path: str | Path) -> Credentials:
-        data = json.loads(Path(file_path).read_text(encoding="utf-8"))
-        credentials = Credentials(
-            token=data.get("access_token") or data.get("token"),
-            refresh_token=data.get("refresh_token"),
-            token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
-            client_id=data.get("client_id"),
-            client_secret=data.get("client_secret"),
-            scopes=[DRIVE_SCOPE],
-        )
-        if credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-        return credentials
+    from src.core.google_auth import load_authorized_user_credentials
 
     if _gcloud_enabled():
         return _gcloud_credentials()
@@ -85,11 +70,11 @@ def _credentials(sa_key_path: str | None, token_path: str | None):
                 sa_key_path,
                 scopes=[DRIVE_SCOPE],
             )
-        if data.get("refresh_token"):
-            return _oauth_credentials(sa_key_path)
+        if data.get("refresh_token") or data.get("token") or data.get("access_token"):
+            return load_authorized_user_credentials(sa_key_path, scopes=[DRIVE_SCOPE])
         raise AuthenticationError("DRIVE_KEY_PATH no es ni service account ni token OAuth")
     if token_path and Path(token_path).is_file():
-        return _oauth_credentials(token_path)
+        return load_authorized_user_credentials(token_path, scopes=[DRIVE_SCOPE])
     raise AuthenticationError(
         "Drive requiere DRIVE_KEY_PATH o un token OAuth elegido explícitamente"
     )

@@ -143,15 +143,18 @@ def test_main_lock_release_channel_mismatch_bug():
 
 
 def test_http_timeout_in_exchange_code():
-    """Verify urllib timeout when OAuth endpoint drops/stalls connection."""
+    """Verify timeout handling when OAuth endpoint drops/stalls connection."""
     import unittest.mock as mock
     with mock.patch.object(auth_yt, "CLIENT_ID", "test_client_id"), \
          mock.patch.object(auth_yt, "CLIENT_SECRET", "test_client_secret"), \
-         mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError(socket.timeout("timed out"))) as mock_urlopen:
-        with pytest.raises(urllib.error.URLError) as exc_info:
+         mock.patch("src.youtube.auth.create_oauth_flow") as mock_flow_factory:
+        mock_flow = mock.MagicMock()
+        mock_flow.fetch_token.side_effect = TimeoutError("timed out")
+        mock_flow_factory.return_value = mock_flow
+        with pytest.raises((TimeoutError, Exception)) as exc_info:
             auth_yt.exchange_code("fake_code", token_path="/tmp/fake_token.json")
-    
-    assert "timed out" in str(exc_info.value) or isinstance(exc_info.value.reason, socket.timeout)
+
+    assert "timed out" in str(exc_info.value)
 
 
 def test_sidechain_ducking_ffmpeg_execution(tmp_path):

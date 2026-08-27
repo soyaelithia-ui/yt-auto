@@ -61,7 +61,11 @@ python3 main.py loop list
 python3 main.py loop generate -c cosmic_horror -o vertical -n 2
 python3 main.py loop audit
 
-# 7. Daemon continuo multi-carril autónomo (cadencia por config/lanes.json)
+# 7. Autenticación y diagnóstico oficial de Google (YouTube Data API v3 & Drive)
+python3 main.py auth check --channel moku
+python3 main.py auth login --channel moku
+
+# 8. Daemon continuo multi-carril autónomo (cadencia por config/lanes.json)
 python3 main.py daemon --interval 60
 ```
 

@@ -27,17 +27,17 @@ Cuando `TELEGRAM_USE_LOCAL_FILES=1`, el bot no sube el archivo por red; envía l
 
 ---
 
-## 2. YouTube Data API v3 & Subida Híbrida
-
-1. **Subida Primaria (API v3)**: Utiliza `google-api-python-client` con el endpoint `videos.insert` y tokens OAuth2 específicos por canal.
-2. **Subida Secundaria (Playwright TS)**: En caso de agotamiento de cuota diaria de API (HTTP 403 `quotaExceeded`), el sistema conmuta a subida automatizada vía navegador con sesiones seguras.
+## 2. YouTube Data API v3 & Autenticación Oficial
+- **SDK Oficial**: Utiliza `google-auth`, `google-auth-oauthlib` (`InstalledAppFlow`) y `google-api-python-client` (`build("youtube", "v3", ...)`).
+- **Subida Primaria (API v3)**: Endpoint `videos.insert` con soporte de subida reanudable (`MediaFileUpload(resumable=True)`).
+- **Control y Mutaciones (`src/youtube/control.py`)**: Endpoints `videos.delete`, `videos.update` (privacidad) y estadísticas `videos.list`, verificando la propiedad del canal (`expected_youtube_channel_id`) antes de cualquier mutación.
+- **Subida Secundaria (Playwright)**: En caso de agotamiento de cuota diaria de API (HTTP 403 `quotaExceeded`), el sistema conmuta a subida automatizada vía navegador con cookies descifradas de sesión.
 
 ---
 
-## 3. Google Drive API v3 (Respaldo en la Nube)
-
-- Respalda videos aprobados, miniaturas y metadatos estructurados en carpetas organizadas por canal.
-- Calcula y valida la huella criptográfica SHA-256 (`DriveProof`) para confirmar la integridad del archivo transferido.
+## 3. Google Drive API v3 (Respaldo en la Nube y Verificación)
+- **SDK Oficial**: Factoría `build("drive", "v3", ...)` con soporte unificado para tokens de usuario OAuth (`Credentials`), Service Accounts (`drive_key.json`) o credenciales en memoria de `gcloud auth`.
+- **Idempotencia y Respaldo Verificado**: Asocia la propiedad `yt_backup_key` en `appProperties` para evitar duplicados en la nube y valida la huella (`DriveProof`) antes de dar por completado el respaldo.
 
 ---
 
