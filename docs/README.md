@@ -43,4 +43,4 @@
 
 ## 4. Archivo Histórico
 
-Documentos de auditorías pasadas, canarios y propuestas preliminares SDD se encuentran consolidados en [`docs/archive/2026-08/`](archive/2026-08/README.md).
+Documentos de auditorías pasadas, canarios y propuestas preliminares se encuentran consolidados en la documentación técnica oficial.

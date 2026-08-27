@@ -168,11 +168,10 @@ def generate_scp_short(
     manifest_file = work_dir / "scene_manifest.json"
     manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # 7. Renderizado (Mock / Full Engine)
+    # 7. Renderizado (Mock / Full Realtime Procedural Engine)
     video_path = work_dir / "final_short_1080x1920.mp4"
     if mock_render:
         logger.info("Paso 7: Renderizado en modo MOCK FAST (generando video representativo)...")
-        # Generar un video sintético breve con FFmpeg
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=5",
@@ -185,10 +184,20 @@ def generate_scp_short(
         import subprocess
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     else:
-        logger.info("Paso 7: Renderizado completo con Dual-Engine Compositor...")
-        from src.media.compositor import MultiSceneCompositor
-        compositor = MultiSceneCompositor()
-        compositor.render_manifest(manifest_file, video_path)
+        logger.info("Paso 7: Renderizado completo con RealtimeVideoEngine 1080x1920 procedural...")
+        from src.media.realtime_video_engine import RealtimeVideoEngine
+        engine = RealtimeVideoEngine(work_dir=work_dir)
+        engine.render_procedural_video(
+            topic=topic,
+            output_mp4=video_path,
+            manifest=manifest,
+            scenic_loop=scenic_loop,
+            width=1080,
+            height=1920,
+            duration_sec=duration_sec,
+            audio_path=audio_wav,
+            clean_temp=True,
+        )
 
     # 8. Agente 4: Auditor QA Forense Audiovisual
     logger.info("Paso 8: Auditoría forense de calidad audiovisual con Agent 4...")

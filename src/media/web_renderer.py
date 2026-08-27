@@ -151,18 +151,25 @@ class WebVideoRenderer:
             str(target_mp4),
         ]
 
+        from src.media.realtime_video_engine import resolve_chrome_executable
+        chrome_exec = resolve_chrome_executable()
+
+        launch_kwargs: Dict[str, Any] = {
+            "headless": True,
+            "args": [
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--hide-scrollbars",
+            ],
+        }
+        if chrome_exec:
+            launch_kwargs["executable_path"] = chrome_exec
+
         start_t = time.time()
         with subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--disable-gpu",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--hide-scrollbars",
-                    ],
-                )
+                browser = p.chromium.launch(**launch_kwargs)
                 page = browser.new_page(
                     viewport={"width": spec.width, "height": spec.height},
                     device_scale_factor=1.0,
@@ -229,14 +236,20 @@ class WebVideoRenderer:
     def render_preview_image(self, category: str, output_image_path: str | Path, orientation: str = "vertical", seed: int = 42) -> Path:
         """Renders a single high-quality PNG preview thumbnail for terminal or UI inspection."""
         from playwright.sync_api import sync_playwright
+        from src.media.realtime_video_engine import resolve_chrome_executable
 
         template_path = self.resolve_template_path(category)
         w, h = (1920, 1080) if orientation in ("horizontal", "16:9") else (1080, 1920)
         out_p = Path(output_image_path).resolve()
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
+        chrome_exec = resolve_chrome_executable()
+        launch_kwargs: Dict[str, Any] = {"headless": True, "args": ["--no-sandbox", "--disable-dev-shm-usage"]}
+        if chrome_exec:
+            launch_kwargs["executable_path"] = chrome_exec
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            browser = p.chromium.launch(**launch_kwargs)
             page = browser.new_page(viewport={"width": w, "height": h})
             page.goto(f"file://{template_path.resolve()}")
             page.evaluate("([w, h, s]) => { if (window.__setDimensions) window.__setDimensions(w, h, s); }", [w, h, seed])

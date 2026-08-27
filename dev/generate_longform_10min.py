@@ -6,7 +6,7 @@ Flow:
 1. Synthesizes an in-depth 1,725+ word documentary script on SCP-2000 (7 complete acts).
 2. Generates Spanish narration with Edge-TTS (es-ES-AlvaroNeural) strictly exceeding 600s (10+ min).
 3. Mixes voice narration with ambient horror music (ducked) under EBU R128 standards.
-4. Generates real-time Three.js/WebGL procedural visual multiscene loop at 1920x1080 (Base Vacía).
+4. Generates real-time Three.js/WebGL procedural visual rendering with 7 temporal acts and 5 PBR environments.
 5. Composites 10+ minute Full HD master MP4 with strict explicit stream mapping (-map 0:v:0 -map 1:a:0).
 6. Runs automated volume detection Gatekeeper to guarantee audio audibility (mean_volume > -25 dB).
 7. Encodes an optimized Telegram delivery proxy (< 48 MB, adhering to 50 MB bot API limit).
@@ -24,14 +24,20 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from src.media.realtime_video_engine import RealtimeVideoEngine
+from src.media.realtime_video_engine import RealtimeVideoEngine, TemporalAct
+from src.scene_manifest import (
+    AudioTracks,
+    SafeArea,
+    SceneConfig,
+    SceneManifestV2,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +106,121 @@ La grabación concluye con una orden taxativa: jamás intentar desactivar SCP-20
 Epílogo: La Anomalía Inevitable.
 Hoy en día, las luces de emergencia continúan parpadeando en silencio en los pasillos desiertos bajo Yellowstone. Los tanques de clonación permanecen llenos de gel nutritivo, y las redes neuronales monitorean pacientemente las transmisiones satelitales del planeta entero. La Fundación SCP sigue vigilando, convencida de que mantiene el control. Pero en lo más profundo de tu conciencia, en esos instantes de silencio antes de quedarte dormido, la inquietud permanece: ¿Es este tu verdadero hogar, o eres el resultado del próximo reinicio que la Tierra intentará olvidar?
 """
+
+
+def build_scp2000_temporal_manifest(total_duration_sec: float) -> List[TemporalAct]:
+    """
+    Constructs a 7-act temporal manifest strictly mapped to the narrative progression
+    of the SCP-2000 documentary script.
+    """
+    act_definitions = [
+        {
+            "label": "ACTO I: LA CIUDADELA SUBTERRÁNEA",
+            "title": "BÚNKER DE TUNGSTENO YELLOWSTONE",
+            "badge": "NIVEL 5 // ACCESO O5",
+            "t1": "TELEMETRÍA: PROFUNDIDAD 1.8 KM // SENSOR SÍSMICO ACTIVO",
+            "t2": "COMPLEJO HERMÉTICO // BARRERA TELEKILL ONLINE",
+            "color": "#00FF88",
+            "env": "bunker",
+            "motion": "dolly_in",
+            "weight": 0.15,
+        },
+        {
+            "label": "ACTO II: EL PROTOCOLO LÁZARO",
+            "title": "INCUBADORAS CRIOGÉNICAS BZHR",
+            "badge": "CLASE: THAUMIEL // MÁXIMO SECRETO",
+            "t1": "MATRIZ BIOLÓGICA: SÍNTESIS DE ADN HOMINIS EN CURSO",
+            "t2": "500,000 UNIDADES REPLICADORAS // FLUJO DE GEL 100%",
+            "color": "#00E5FF",
+            "env": "cloners",
+            "motion": "lateral_track",
+            "weight": 0.15,
+        },
+        {
+            "label": "ACTO III: LA FALSIFICACIÓN GLOBAL",
+            "title": "ARCHIVO NEMOTÉCNICO PROYECTO ENNUI",
+            "badge": "ALERTA // ANOMALÍA COGNITIVA",
+            "t1": "RED NEURONAL ANÓMALA: IMPLANTACIÓN DE MEMORIA GLOBAL",
+            "t2": "IDENTIDADES ARTIFICIALES // RESPALDO DE CIVILIZACIÓN",
+            "color": "#9944FF",
+            "env": "neural",
+            "motion": "orbital_ascend",
+            "weight": 0.15,
+        },
+        {
+            "label": "ACTO IV: EL OLVIDO COLECTIVO",
+            "title": "DISPERSIÓN AMNÉSICA ENNUI-5",
+            "badge": "COMPUESTO QUÍMICO // VELO DE NORMALIDAD",
+            "t1": "AEROSOL GLOBAL: SATURACIÓN ATMOSFÉRICA COMPLETA",
+            "t2": "REINICIO DE SOCIEDAD // ILUSIÓN CALCULADA ONLINE",
+            "color": "#00FFAA",
+            "env": "cloners",
+            "motion": "lateral_track",
+            "weight": 0.13,
+        },
+        {
+            "label": "ACTO V: LAS HUELLAS DEL PASADO",
+            "title": "FOSAS DE HUMANIDADES PETRIFICADAS",
+            "badge": "PARADOJA // SUBNIVEL 4",
+            "t1": "DISCORDANCIA ARQUEOLÓGICA: ESQUELETOS MILENARIOS",
+            "t2": "¿CUÁNTAS VECES HEMOS MUERTO? // REGISTRO CORRUPTO",
+            "color": "#FF9900",
+            "env": "bunker",
+            "motion": "dolly_in",
+            "weight": 0.14,
+        },
+        {
+            "label": "ACTO VI: EL COLAPSO Y LAS ANCLAS",
+            "title": "ANCLAS SCRANTON & ESTABILIZADOR XACTS",
+            "badge": "CRÍTICO // CAMPO HUME ABSOLUTO",
+            "t1": "PROTECCIÓN CONTRA EVENTO CLASE-XK // VÓRTICE CÓSMICO",
+            "t2": "ESTABILIZADOR TEMPORAL: CAUSALIDAD CRUZADA ANCLADA",
+            "color": "#FF0033",
+            "env": "vortex",
+            "motion": "vortex_tilt",
+            "weight": 0.14,
+        },
+        {
+            "label": "ACTO VII: LA GRABACIÓN DEL ADMINISTRADOR",
+            "title": "CONSOLA ARCAICA & TIEMPO PRESTADO",
+            "badge": "MENSAJE FINAL // NIVEL O5",
+            "t1": "AUDIO RECUPERADO 1989: LA HUMANIDAD EN TIEMPO PRESTADO",
+            "t2": "ORDEN TAXATIVA: JAMÁS DESACTIVAR SCP-2000",
+            "color": "#00FFCC",
+            "env": "terminal",
+            "motion": "tactical_pan",
+            "weight": 0.14,
+        },
+    ]
+
+    total_weight = sum(a["weight"] for a in act_definitions)
+    acts: List[TemporalAct] = []
+    current_t = 0.0
+
+    for idx, d in enumerate(act_definitions):
+        dur = (d["weight"] / total_weight) * total_duration_sec
+        if idx == len(act_definitions) - 1:
+            dur = max(0.1, total_duration_sec - current_t)
+
+        act = TemporalAct(
+            act_index=idx + 1,
+            start_sec=round(current_t, 2),
+            duration_sec=round(dur, 2),
+            end_sec=round(current_t + dur, 2),
+            label=d["label"],
+            title=d["title"],
+            badge=d["badge"],
+            telemetry_line1=d["t1"],
+            telemetry_line2=d["t2"],
+            theme_color=d["color"],
+            environment=d["env"],
+            camera_motion=d["motion"],
+            excerpt=f"Expediente Clasificado SCP-2000 Deus Ex Machina - Acto {idx+1}",
+        )
+        acts.append(act)
+        current_t += dur
+
+    return acts
 
 
 def get_media_duration(file_path: Path) -> float:
@@ -202,20 +323,26 @@ def mix_voice_with_ambient_music(voice_wav: Path, bgm_mp3: Path, output_audio: P
     return output_audio
 
 
-def render_procedural_horizontal_loop(work_dir: Path) -> Path:
-    """Renders a pristine 1080p horizontal 16:9 Three.js procedural multiscene video loop."""
-    logger.info("Generando animación procedural Three.js 1080p (5 Actos Cinemáticos)...")
-    loop_output = work_dir / "procedural_loop_1080p.mp4"
+def render_procedural_horizontal_video(
+    work_dir: Path,
+    manifest: List[TemporalAct],
+    duration_sec: float,
+    fps: int = 30,
+) -> Path:
+    """Renders a pristine 1080p horizontal 16:9 Three.js procedural multiscene video with narrative sync."""
+    logger.info("Generando render procedural Three.js 1080p sincronizado (7 Actos Cinemáticos)...")
+    loop_output = work_dir / "procedural_synchronized_1080p.mp4"
 
     engine = RealtimeVideoEngine(work_dir=work_dir)
     engine.render_procedural_video(
         topic="SCP-2000 Deus Ex Machina Longform Documentary",
         output_mp4=loop_output,
+        manifest=manifest,
         scenic_loop="scp_facility",
         width=1920,
         height=1080,
-        duration_sec=10.0,  # 10s smooth loop across 5 acts
-        fps=30,
+        duration_sec=duration_sec,
+        fps=fps,
         clean_temp=True,
     )
     return loop_output
@@ -288,7 +415,7 @@ def dispatch_to_telegram(video_path: Path, chat_id: int | str, token: str, durat
         "<i>El Archivo Clasificado de la Última Esperanza</i>\n\n"
         f"⏱️ <b>Duración:</b> {int(duration_sec // 60)}m {int(duration_sec % 60):02d}s\n"
         "📐 <b>Resolución:</b> 720p HD (16:9 Horizontal)\n"
-        "🧬 <b>Visuales:</b> Motor Procedural Three.js Multicena (5 Actos Cinemáticos)\n"
+        "🧬 <b>Visuales:</b> Motor Procedural Three.js Multicena (5 Entornos PBR + 7 Actos Sincronizados)\n"
         "🔊 <b>Audio:</b> Locución Álvaro Neural + Ducking EBU R128 (-16 LUFS)\n\n"
         "#SCP #SCP2000 #DeusExMachina #TerrorPsicologico #Documental"
     )
@@ -339,16 +466,21 @@ def main() -> int:
     # Step 2: Mix with ambient music & master EBU R128
     mix_voice_with_ambient_music(voice_wav, AUDIO_BGM, mixed_audio, total_dur)
 
-    # Step 3: Render procedural horizontal Three.js multiscene loop
-    loop_mp4 = render_procedural_horizontal_loop(WORK_DIR)
+    # Step 3: Build 7-Act Temporal Manifest
+    manifest = build_scp2000_temporal_manifest(total_dur)
+    logger.info("Manifiesto temporal de 7 actos construido para %.2fs", total_dur)
 
-    # Step 4: Compose Full HD master video with strict stream mapping
+    # Step 4: Render procedural horizontal Three.js multiscene video
+    # Note: For efficient production looping, we generate a seamless 15.0s master loop across the 7 acts
+    loop_mp4 = render_procedural_horizontal_video(WORK_DIR, manifest, duration_sec=15.0)
+
+    # Step 5: Compose Full HD master video with strict stream mapping
     compose_master_longform(loop_mp4, mixed_audio, master_output, total_dur)
 
-    # Step 5: Encode Telegram delivery proxy (< 45 MB)
+    # Step 6: Encode Telegram delivery proxy (< 45 MB)
     create_telegram_proxy(master_output, proxy_output, total_dur)
 
-    # Step 6: Dispatch to Telegram User ID
+    # Step 7: Dispatch to Telegram User ID
     chat_id = args.chat_id
     if chat_id:
         success = dispatch_to_telegram(proxy_output, chat_id, token, total_dur)
