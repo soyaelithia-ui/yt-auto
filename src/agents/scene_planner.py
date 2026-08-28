@@ -9,8 +9,9 @@ scene_manifest.json. Validates output with schemas/scene_manifest.schema.json.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import jsonschema
 
@@ -46,6 +47,171 @@ class ScenePlannerCompositorAgent:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
 
+    @staticmethod
+    def _resolve_scene_archetype(
+        env_name: str,
+        tension: int,
+        dramatic_role: str = "",
+        lane_id: str = "",
+        scene_idx: int = 1,
+        excluded_archetypes: Optional[set[str]] = None,
+    ) -> Tuple[str, str, Dict[str, Any]]:
+        """
+        Universally resolves the visual archetype, template name, and dynamic custom parameters
+        based on rich bilingual semantic context (Spanish & English), dramatic role, and tension.
+        Guarantees variety and eliminates arbitrary cycle looping.
+        """
+        text = f"{env_name} {dramatic_role}".lower()
+        words = set(re.findall(r'[a-zA-Z0-9_áéíóúüñ]+', text))
+        lane_l = lane_id.lower()
+        excluded = excluded_archetypes or set()
+
+        # AITA / Drama Lane override
+        if "aita" in lane_l or "drama" in lane_l or "confession" in lane_l:
+            return (
+                "drama_aita",
+                "drama_waves_canvas.html",
+                {"waveSpeed": round(0.8 + 0.2 * tension, 2), "glowIntensity": 1.0},
+            )
+
+        # 1. Classified / Terminal / Intel / Radar / Logs / Surveillance / Protocol / Telemetry / Archive
+        terminal_keywords = {
+            "terminal", "radar", "registro", "clasificado", "expediente", "consola", "pantalla",
+            "senhal", "señal", "telemetria", "telemetría", "protocolo", "archivo", "dossier", "hud", "vigilancia", "alerta",
+            "monitor", "monitors", "computer", "computers",
+            "terminal", "log", "logs", "archive", "archives", "classified", "dossier", "hud", "radar", "protocol", "intel", "surveillance"
+        }
+        if "classified_terminal" not in excluded and (
+            words.intersection(terminal_keywords)
+            or any(k in text for k in ("terminal", "clasificado", "radar", "dossier", "expediente", "registro", "archive", "classified", "monitor"))
+        ):
+            return (
+                "classified_terminal",
+                "archetype_classified_terminal.html",
+                {
+                    "docTitle": "REGISTRO CLASIFICADO // EXPEDIENTE",
+                    "alertLevel": f"NIVEL DE ALERTA {tension} // ACTIVO",
+                    "glowIntensity": round(0.85 + 0.15 * tension, 2),
+                },
+            )
+
+        # 2. Synaptic / Consciousness / Neural / Mind / Brain / Telepathy / Memory
+        synaptic_keywords = {
+            "mente", "cerebro", "neuronal", "sinapsis", "conciencia", "telepatia", "telepatía",
+            "recuerdo", "memoria", "psiquico", "psíquico", "red", "matriz", "psicologico", "psicológico",
+            "brain", "mind", "neural", "synapse", "synaptic", "consciousness", "cyber", "digital", "data", "matrix", "psycho", "psychological", "pneuma"
+        }
+        if "synaptic_network" not in excluded and (
+            words.intersection(synaptic_keywords)
+            or any(k in text for k in ("mente", "cerebro", "neural", "conciencia", "sinap", "mind", "psychological"))
+        ):
+            return (
+                "synaptic_network",
+                "archetype_synaptic_network.html",
+                {
+                    "nodeDensity": 24 + 6 * tension,
+                    "pulseSpeed": round(0.85 + 0.2 * tension, 2),
+                },
+            )
+
+        # 3. Cosmic Singularity / Black Hole / Vortex / Relativistic Abyss / Space / Void
+        cosmic_keywords = {
+            "singularidad", "agujero negro", "vortice", "vórtice", "espacio", "cosmico", "cósmico",
+            "gravedad", "lente", "galaxia", "universo", "horizonte", "sucesos", "vacio", "vacío",
+            "singularity", "void", "black_hole", "rift", "portal", "abyss", "cosmic", "space", "vortex", "dimension", "event horizon"
+        }
+        if "cosmic_singularity" not in excluded and (
+            words.intersection(cosmic_keywords)
+            or any(k in text for k in ("singularidad", "vortice", "vórtice", "espacio", "agujero negro", "singularity", "black hole", "rift", "cosmic", "event horizon"))
+        ):
+            return (
+                "cosmic_singularity",
+                "archetype_cosmic_singularity.html",
+                {
+                    "swirlSpeed": round(0.85 + 0.2 * tension, 2),
+                    "singularityScale": round(0.95 + 0.08 * tension, 2),
+                },
+            )
+
+        # 4. Anomaly Silhouette / Monster / Beast / Breach / Creature / Colossus / Titan
+        anomaly_keywords = {
+            "criatura", "monstruo", "titan", "coloso", "bestia", "anomalia", "anomalía",
+            "demonio", "ojos", "garra", "fauce", "devorar", "emerger", "despertar",
+            "monster", "monsters", "creature", "creatures", "beast", "breach", "rampage",
+            "threat", "chaos", "climax", "confrontation", "colossus", "titan", "cataclysmic"
+        }
+        if "anomaly_silhouette" not in excluded and (
+            words.intersection(anomaly_keywords)
+            or any(k in text for k in ("criatura", "monstruo", "coloso", "anomal", "monster", "beast", "devor", "rampage", "cataclysm"))
+            or (tension >= 4 and dramatic_role in ("climax_confrontation", "climax_manifestation"))
+        ):
+            return (
+                "anomaly_silhouette",
+                "archetype_anomaly_silhouette.html",
+                {
+                    "threatLevel": tension,
+                    "emberCount": 35 + 10 * tension,
+                },
+            )
+
+        # 5. Atmospheric Landscape / Wasteland / Steppe / Monoliths / Lighthouse / Coast / Ocean
+        landscape_keywords = {
+            "paramo", "páramo", "estepa", "ceniza", "cenizas", "monolito", "monolitos", "desierto",
+            "llanura", "montana", "montaña", "ruinas", "caminante", "faro", "costa", "mar", "oceano",
+            "océano", "fosa", "playa", "marino", "tormenta", "olas", "ola", "isla", "niebla",
+            "wasteland", "steppe", "monolith", "desert", "ruins", "ash", "landscape", "lighthouse", "ocean", "sea", "coast"
+        }
+        if "atmospheric_landscape" not in excluded and (
+            words.intersection(landscape_keywords)
+            or any(k in text for k in ("paramo", "páramo", "monolito", "faro", "costa", "ceniza", "estepa", "mar ", "oceano", "océano", "wasteland", "desert", "monolith"))
+        ):
+            is_marine = any(k in text for k in ("faro", "mar", "costa", "oceano", "océano", "fosa", "ola", "lighthouse", "ocean", "sea"))
+            return (
+                "atmospheric_landscape",
+                "archetype_atmospheric_landscape.html",
+                {
+                    "silhouetteType": "lighthouse" if is_marine else "monolith",
+                    "stormType": "mist" if is_marine else ("ash" if tension >= 3 else "mist"),
+                    "accentColor": "#00e5a3" if is_marine else "#22b8ff",
+                },
+            )
+
+        # 6. Tactical Chamber / Bunker / Vault / Facility / Corridor / Containment / Laboratory
+        chamber_keywords = {
+            "bunker", "búnker", "camara", "cámara", "pasillo", "laboratorio", "instalacion",
+            "instalación", "puerta", "bloqueo", "estroboscopio", "confinamiento", "estructura",
+            "acero", "cimiento", "subterraneo", "subterráneo", "oficina",
+            "chamber", "bunker", "corridor", "hall", "vault", "facility", "conclave", "subterranean", "room", "containment", "concrete"
+        }
+        if "tactical_chamber" not in excluded and (
+            words.intersection(chamber_keywords)
+            or any(k in text for k in ("bunker", "búnker", "camara", "cámara", "pasillo", "laboratorio", "acero", "cimiento", "vault", "containment"))
+        ):
+            return (
+                "tactical_chamber",
+                "archetype_tactical_chamber.html",
+                {
+                    "chamberType": "corridor" if tension <= 3 else "vault",
+                    "strobeSpeed": round(0.75 + 0.25 * tension, 2),
+                    "fogDensity": round(0.35 + 0.12 * tension, 2),
+                },
+            )
+
+        # 7. Dynamic Fallback: Choose the next available distinct archetype
+        all_archetypes = [
+            ("atmospheric_landscape", "archetype_atmospheric_landscape.html", {"silhouetteType": "monolith", "stormType": "ash"}),
+            ("classified_terminal", "archetype_classified_terminal.html", {"docTitle": "ARCHIVO CONFIDENCIAL", "alertLevel": f"NIVEL {tension}"}),
+            ("tactical_chamber", "archetype_tactical_chamber.html", {"chamberType": "corridor"}),
+            ("anomaly_silhouette", "archetype_anomaly_silhouette.html", {"threatLevel": tension}),
+            ("synaptic_network", "archetype_synaptic_network.html", {"nodeDensity": 26}),
+            ("cosmic_singularity", "archetype_cosmic_singularity.html", {"swirlSpeed": 1.0}),
+        ]
+        
+        available = [a for a in all_archetypes if a[0] not in excluded]
+        if available:
+            return available[scene_idx % len(available)]
+        return all_archetypes[scene_idx % len(all_archetypes)]
+
     def plan_manifest(
         self,
         script: Dict[str, Any],
@@ -53,6 +219,7 @@ class ScenePlannerCompositorAgent:
         story_id: str,
         narration_path: str,
         music_path: Optional[str] = None,
+        music_volume: Optional[float] = None,
         lane_id: Optional[str] = None,
         channel_name: str = "moku",
         resolution: Optional[List[int]] = None,
@@ -78,7 +245,10 @@ class ScenePlannerCompositorAgent:
         # Flatten script scenes and visual plan scenes
         script_scenes: List[Dict[str, Any]] = []
         for act in script.get("acts", []):
+            act_role = act.get("dramatic_role", "")
             for sc in act.get("scenes", []):
+                if not sc.get("dramatic_role") and act_role:
+                    sc["dramatic_role"] = act_role
                 script_scenes.append(sc)
 
         plan_scenes_map: Dict[str, Dict[str, Any]] = {
@@ -119,6 +289,9 @@ class ScenePlannerCompositorAgent:
         pan_directions = ["center_to_top", "left_to_right", "right_to_left", "center_to_bottom"]
         camera_motion_types = ["ken_burns_3d", "parallax_drift", "zoom_in", "zoom_out", "pan_left", "pan_right"]
 
+        used_archetypes_short: set[str] = set()
+        prev_archetype: Optional[str] = None
+
         for idx, sc_script in enumerate(script_scenes):
             sc_id_base = sc_script.get("scene_id", f"scene_{idx+1:03d}")
             sc_plan = plan_scenes_map.get(sc_id_base, {})
@@ -141,19 +314,30 @@ class ScenePlannerCompositorAgent:
                 pan_dir = pan_directions[global_scene_idx % len(pan_directions)]
                 motion_type = camera_motion_types[global_scene_idx % len(camera_motion_types)]
 
-                # Alternating Engine & Template Selection
-                # Interleave procedural 3D oceanic and classified SCP terminal for rich cinematic variety
-                is_procedural = (tension >= 4 or global_scene_idx % 2 == 1 or "waves" in env_name.lower() or "abyss" in env_name.lower())
+                # Engine & Template Selection
+                # Use pure_procedural_webgl with dynamic universal visual archetypes for all scenes
+                is_procedural = True
                 
                 if is_procedural:
                     engine_type = "pure_procedural_webgl"
                     palette_data = sc_plan.get("palette", {})
+                    dram_role = sc_script.get("dramatic_role", "")
+                    narration_snippet = sc_script.get("narration_text", "") or sc_script.get("scene_text", "")
 
-                    # Switch between 3D Oceanic Abyss and SCP Terminal HUD
-                    if "scp" in lane.lower() and (global_scene_idx % 4 == 2 or "terminal" in env_name.lower() or "log" in env_name.lower()):
-                        template_name = "scp_terminal_css.html"
-                    else:
-                        template_name = "cosmic_horror_three.html"
+                    # For Shorts: exclude all previously used archetypes to guarantee 100% distinct scenes
+                    # For Longform: exclude the immediate previous archetype to prevent static back-to-back loops
+                    excluded = set(used_archetypes_short) if not is_longform else ({prev_archetype} if prev_archetype else set())
+
+                    category, template_name, custom_params = self._resolve_scene_archetype(
+                        env_name=f"{env_name} {narration_snippet}",
+                        tension=tension,
+                        dramatic_role=dram_role,
+                        lane_id=lane,
+                        scene_idx=global_scene_idx,
+                        excluded_archetypes=excluded,
+                    )
+                    used_archetypes_short.add(category)
+                    prev_archetype = category
 
                     proc_config = {
                         "template_name": template_name,
@@ -168,6 +352,7 @@ class ScenePlannerCompositorAgent:
                             "u_speed": round(0.85 + 0.18 * tension, 2),
                             "u_distortion": round(0.35 + 0.12 * tension, 2),
                             "u_glow_intensity": round(0.8 + 0.1 * tension, 2),
+                            **custom_params,
                         },
                     }
                     hybrid_config = None
@@ -260,7 +445,7 @@ class ScenePlannerCompositorAgent:
             "audio_tracks": {
                 "narration_path": narration_path,
                 "music_path": music_path or "",
-                "music_volume": 0.12,
+                "music_volume": float(music_volume if music_volume is not None else 0.04),
                 "ducking": {
                     "enabled": True,
                     "threshold": 0.035,

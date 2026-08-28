@@ -45,13 +45,15 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "duration": {"min_sec": 60, "target_sec": 150, "max_sec": 180},
         "words": {"min": 160, "max": 340, "recondense_max": 300},
         "template": "shorts_creepypasta",
-        "voice_rate": "+20%",
+        "voice_rate": "+0%",
+        "voice_profile": "scp_documentary_es",
         "cadence": {"min_gap_seconds": 300},
         "sources": {
             "kind": "reddit",
             "subreddits": ["SCP", "SCPDeclassified", "nosleep"],
             "listing_categories": [["hot", "day"], ["top", "week"], ["new", "all"]],
         },
+        "background_audio": {"enabled": True, "volume": 0.04, "mode": "auto", "theme": "scp"},
     },
     {
         "id": "moku-horror-long",
@@ -62,6 +64,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "words": {"min": 2600, "max": None},
         "template": "creepypasta",
         "voice_rate": "+0%",
+        "voice_profile": "moku_terror",
         "cadence": {"min_gap_seconds": 1800},
         "sources": {
             "kind": "reddit",
@@ -69,6 +72,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         },
         "multistory_collection": True,
         "visual_pipeline": "director",
+        "background_audio": {"enabled": True, "volume": 0.04, "mode": "auto", "theme": "cosmic_horror"},
     },
     {
         "id": "aelithia-aita-long",
@@ -78,7 +82,8 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "duration": {"min_sec": 600, "target_sec": 600, "max_sec": 1800},
         "words": {"min": 2600, "max": None},
         "template": "aita",
-        "voice_rate": "+0%",
+        "voice_rate": "+6%",
+        "voice_profile": "aelithia_reddit",
         "cadence": {"min_gap_seconds": 1800},
         "sources": {
             "kind": "reddit",
@@ -91,6 +96,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         },
         "multistory_collection": True,
         "visual_pipeline": "director",
+        "background_audio": {"enabled": True, "volume": 0.04, "mode": "auto", "theme": "drama"},
     },
 )
 
@@ -102,6 +108,15 @@ class LaneSources:
     listing_categories: tuple[tuple[str, str], ...] = (("hot", "day"), ("top", "week"))
     limit_per_fetch: int = 25
     queue_target_pending: int = 25
+
+
+@dataclass(frozen=True)
+class LaneBackgroundAudioConfig:
+    enabled: bool = True
+    volume: float = 0.04
+    mode: str = "auto"
+    theme: str = "default"
+    ducking_db: float = -18.0
 
 
 @dataclass(frozen=True)
@@ -122,6 +137,7 @@ class LaneProfile:
     voice_rate: str
     cadence_min_gap_seconds: int
     sources: LaneSources = field(default_factory=LaneSources)
+    background_audio: LaneBackgroundAudioConfig = field(default_factory=LaneBackgroundAudioConfig)
     enabled: bool = True
     multistory_collection: bool = False
     visual_pipeline: str = "beats"
@@ -269,6 +285,15 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
         ),
     )
 
+    bg_audio_raw = raw.get("background_audio") or {}
+    bg_audio = LaneBackgroundAudioConfig(
+        enabled=bool(bg_audio_raw.get("enabled", True)),
+        volume=float(bg_audio_raw.get("volume", 0.04)),
+        mode=str(bg_audio_raw.get("mode", "auto")).strip().lower(),
+        theme=str(bg_audio_raw.get("theme", story_type)).strip().lower(),
+        ducking_db=float(bg_audio_raw.get("ducking_db", -18.0)),
+    )
+
     return LaneProfile(
         id=lane_id,
         channel=canonical_channel(channel_key),
@@ -284,6 +309,7 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
         voice_rate=str(raw.get("voice_rate", "+0%")).strip(),
         cadence_min_gap_seconds=gap,
         sources=sources,
+        background_audio=bg_audio,
         enabled=bool(raw.get("enabled", True)),
         multistory_collection=bool(raw.get("multistory_collection", False)),
         visual_pipeline=visual_pipeline,
@@ -459,13 +485,13 @@ def load_voice_profiles(
     return result
 
 
-def resolve_voice_for_lane(
+def resolve_voice_profile_for_lane(
     lane: LaneProfile | str | None = None,
     channel: str | CanonicalChannel | None = None,
     *,
     voice_profiles_path: str | os.PathLike[str] | None = None,
-) -> str:
-    """Resolve the preferred TTS voice ID for a lane or channel based on config/voice_profiles.json."""
+) -> dict[str, Any]:
+    """Resolve the full voice profile configuration dictionary for a lane or channel."""
     profiles = load_voice_profiles(voice_profiles_path).get("editorial_profiles", {})
 
     profile_name = None
@@ -487,7 +513,7 @@ def resolve_voice_for_lane(
         else:
             resolved_lane = get_lane(lane)
             if resolved_lane:
-                return resolve_voice_for_lane(
+                return resolve_voice_profile_for_lane(
                     resolved_lane, channel, voice_profiles_path=voice_profiles_path
                 )
             if "scp" in lane.lower():
@@ -514,8 +540,40 @@ def resolve_voice_for_lane(
         and isinstance(approved[0], dict)
         and approved[0].get("id")
     ):
-        return str(approved[0]["id"])
+        res = dict(approved[0])
+        res["profile_name"] = profile_name
+        return res
 
     if ch_key == "aelithia":
-        return os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural")
-    return os.environ.get("MOKU_TTS_VOICE", "es-MX-JorgeNeural")
+        fallback_voice = os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural")
+        return {
+            "id": fallback_voice,
+            "speed": "+6%",
+            "pitch": "+0Hz",
+            "volume": "+0%",
+            "pauses": "conversational",
+            "profile_name": profile_name,
+        }
+    fallback_voice = os.environ.get("MOKU_TTS_VOICE", "es-ES-AlvaroNeural")
+    return {
+        "id": fallback_voice,
+        "speed": "+0%",
+        "pitch": "-2Hz" if profile_name == "moku_terror" else "+0Hz",
+        "volume": "+0%",
+        "pauses": "clinical" if profile_name == "scp_documentary_es" else "dramatic",
+        "profile_name": profile_name,
+    }
+
+
+def resolve_voice_for_lane(
+    lane: LaneProfile | str | None = None,
+    channel: str | CanonicalChannel | None = None,
+    *,
+    voice_profiles_path: str | os.PathLike[str] | None = None,
+) -> str:
+    """Resolve the preferred TTS voice ID for a lane or channel based on config/voice_profiles.json."""
+    prof = resolve_voice_profile_for_lane(
+        lane, channel, voice_profiles_path=voice_profiles_path
+    )
+    return str(prof.get("id") or "es-ES-AlvaroNeural")
+

@@ -299,6 +299,23 @@ class ProgrammaticAgent:
 
         last_exc: Optional[Exception] = None
         cli_env = dict(os.environ)
+
+        # AUD-SESSION-ISOLATION: Isolate agy runtime to .bot_home so automated agent
+        # invocations never pollute the developer's interactive ~/.gemini/antigravity-cli sessions.
+        bot_home = PROJECT_ROOT / ".bot_home"
+        bot_appdata = bot_home / ".gemini" / "antigravity-cli"
+        bot_appdata.mkdir(parents=True, exist_ok=True)
+        host_appdata = Path.home() / ".gemini" / "antigravity-cli"
+        for item in ["antigravity-oauth-token", "settings.json", "bin", "builtin"]:
+            src = host_appdata / item
+            dst = bot_appdata / item
+            if src.exists() and not dst.exists():
+                try:
+                    dst.symlink_to(src)
+                except Exception:
+                    pass
+
+        cli_env["HOME"] = str(bot_home)
         cli_env["ANTIGRAVITY_APP_DATA_DIR"] = str(self.app_data_dir)
         cli_env["AGY_APP_DATA_DIR"] = str(self.app_data_dir)
         self.app_data_dir.mkdir(parents=True, exist_ok=True)
@@ -346,6 +363,7 @@ class ProgrammaticAgent:
         conversation_id: Optional[str] = None
         usage: Optional[dict[str, Any]] = None
         structured_output: Optional[Any] = None
+        duration_seconds: Optional[float] = None
 
         if self.circuit_breaker.is_open():
             error = (

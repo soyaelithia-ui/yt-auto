@@ -171,3 +171,51 @@ def test_realtime_engine_initialization_and_chrome_resolve(tmp_path: Path) -> No
     chrome_path = resolve_chrome_executable()
     if chrome_path:
         assert Path(chrome_path).is_file()
+
+
+def test_composite_with_explicit_audio_stream_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies that _composite_with_explicit_audio uses stream copy (-c:v copy) when no subtitles are passed."""
+    engine = RealtimeVideoEngine(work_dir=tmp_path)
+    v_in = tmp_path / "raw.mp4"
+    a_in = tmp_path / "audio.wav"
+    v_out = tmp_path / "out.mp4"
+    v_in.write_bytes(b"dummy_video")
+    a_in.write_bytes(b"dummy_audio")
+
+    captured_cmds: List[List[str]] = []
+
+    def mock_run(cmd: List[str], check: bool = True) -> Any:
+        captured_cmds.append(cmd)
+        return None
+
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    # 1. No subtitles -> should use -c:v copy
+    engine._composite_with_explicit_audio(
+        video_input=v_in,
+        audio_input=a_in,
+        output_final=v_out,
+        subtitles_ass_path=None,
+        duration_sec=10.0,
+    )
+    assert len(captured_cmds) == 1
+    assert "-c:v" in captured_cmds[0]
+    idx_v = captured_cmds[0].index("-c:v")
+    assert captured_cmds[0][idx_v + 1] == "copy"
+    assert "-c:a" in captured_cmds[0]
+
+    # 2. With subtitles -> should use -c:v libx264
+    sub_file = tmp_path / "sub.ass"
+    sub_file.write_text("[Script Info]\nTitle: Test", encoding="utf-8")
+    engine._composite_with_explicit_audio(
+        video_input=v_in,
+        audio_input=a_in,
+        output_final=v_out,
+        subtitles_ass_path=sub_file,
+        duration_sec=10.0,
+    )
+    assert len(captured_cmds) == 2
+    idx_v2 = captured_cmds[1].index("-c:v")
+    assert captured_cmds[1][idx_v2 + 1] == "libx264"
+

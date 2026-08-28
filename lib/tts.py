@@ -23,11 +23,12 @@ from src.core.errors import TTSSynthesisError
 logger = logging.getLogger(__name__)
 
 
-def _tts_cache_key(text: str, voice: str, rate: str) -> str:
+def _tts_cache_key(text: str, voice: str, rate: str, pitch: str = "+0Hz") -> str:
     """SHA-256 cache key over the exact synthesis inputs (post-sanitization)."""
     import hashlib
 
-    return hashlib.sha256(f"{voice}|{rate}|{text}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{voice}|{rate}|{pitch}|{text}".encode("utf-8")).hexdigest()
+
 
 
 def _tts_cache_enabled() -> bool:
@@ -372,6 +373,7 @@ def _synthesize_chunk(
     chunk_text: str,
     voice: str,
     rate: str,
+    pitch: str = "+0Hz",
 ) -> tuple[bytes, list[dict]]:
     """Synthesize ONE chunk in memory; boundaries are relative to chunk start."""
     import edge_tts
@@ -380,7 +382,7 @@ def _synthesize_chunk(
     words: list[dict] = []
 
     async def _stream():
-        comm = edge_tts.Communicate(chunk_text, voice, rate=rate)
+        comm = edge_tts.Communicate(chunk_text, voice, rate=rate, pitch=pitch)
         async for chunk in comm.stream():
             if chunk.get("type") == "audio":
                 mp3_buf.write(chunk["data"])
@@ -406,6 +408,7 @@ def synthesize_chunked_mp3(
     text: str,
     voice: str,
     rate: str,
+    pitch: str = "+0Hz",
     *,
     max_chars: int = 1800,
 ) -> tuple[bytes, list[dict]]:
@@ -434,7 +437,13 @@ def synthesize_chunked_mp3(
         while attempt < _CHUNK_MAX_RETRIES:
             attempt += 1
             try:
-                data, words = _synthesize_chunk(chunk_text, voice, rate)
+                try:
+                    data, words = _synthesize_chunk(chunk_text, voice, rate, pitch=pitch)
+                except TypeError as te:
+                    if "pitch" in str(te) or "unexpected keyword" in str(te):
+                        data, words = _synthesize_chunk(chunk_text, voice, rate)
+                    else:
+                        raise
                 break
             except Exception as exc:  # noqa: BLE001 - retry per chunk only
                 last_error = exc
@@ -498,22 +507,42 @@ def generate_audio(
         text = DEFAULT_FALLBACK_TEXT
 
     from src.branding import resolve_channel_key
-    from src.core.lanes import resolve_voice_for_lane
+    from src.core.lanes import resolve_voice_for_lane, resolve_voice_profile_for_lane
 
     lane_arg = kwargs.get("lane") or kwargs.get("lane_profile") or kwargs.get("lane_id")
+    profile_dict: dict = {}
+    try:
+        profile_dict = resolve_voice_profile_for_lane(lane_arg, channel=channel)
+    except Exception:
+        pass
+
     target_voice = kwargs.get("voice")
     if not target_voice:
-        target_voice = resolve_voice_for_lane(lane_arg, channel=channel)
+        target_voice = profile_dict.get("id") or resolve_voice_for_lane(lane_arg, channel=channel)
 
-    # Content-addressed narration cache (R10): identical (voice, rate, text)
-    # reuses the previous synthesis — retry/re-render runs skip the network
-    # entirely and get byte-identical audio. Bypassed in TEST_MODE / TTS_CACHE=0.
+    target_rate = kwargs.get("rate")
+    if not target_rate:
+        if hasattr(lane_arg, "voice_rate") and lane_arg.voice_rate:
+            target_rate = str(lane_arg.voice_rate)
+        elif isinstance(lane_arg, dict) and lane_arg.get("voice_rate"):
+            target_rate = str(lane_arg["voice_rate"])
+        elif profile_dict.get("speed"):
+            target_rate = str(profile_dict["speed"])
+        elif target_duration_sec and float(target_duration_sec) >= 600.0:
+            target_rate = "+0%"
+        else:
+            target_rate = "+0%"
+
+    target_pitch = kwargs.get("pitch")
+    if not target_pitch:
+        if profile_dict.get("pitch"):
+            target_pitch = str(profile_dict["pitch"])
+        else:
+            target_pitch = "+0Hz"
+
+    cache_key = None
     if _tts_cache_enabled():
-        effective_rate = kwargs.get(
-            "rate",
-            "+0%" if (target_duration_sec and float(target_duration_sec) >= 600.0) else "+20%",
-        )
-        cache_key = _tts_cache_key(text, target_voice, str(effective_rate))
+        cache_key = _tts_cache_key(text, target_voice, str(target_rate), str(target_pitch))
         cached = _tts_cache_load(cache_key, out_path)
         if cached is not None:
             logger.info("TTS cache hit for key %s", cache_key[:12])
@@ -565,7 +594,10 @@ def generate_audio(
                     target_duration_sec=chunk_target_sec,
                     channel=channel,
                     voice=target_voice,
-                    **{k: v for k, v in kwargs.items() if k not in ("script", "script_text", "output_audio_path", "target_duration_sec")},
+                    rate=target_rate,
+                    pitch=target_pitch,
+                    lane=lane_arg,
+                    **{k: v for k, v in kwargs.items() if k not in ("script", "script_text", "output_audio_path", "target_duration_sec", "voice", "rate", "pitch", "lane", "lane_profile", "lane_id")},
                 )
                 chunk_paths.append(chunk_out)
                 all_chunk_words.append(seg_res.get("word_timestamps", []))
@@ -584,6 +616,8 @@ def generate_audio(
                 "word_timestamps": shifted_timestamps,
                 "provider": "edge-tts-with-pauses" if not is_test else "synthetic-test-pcm-with-pauses",
                 "voice": target_voice,
+                "rate": target_rate,
+                "pitch": target_pitch,
                 "boundary_type": "WordBoundary",
             }
             if _tts_cache_enabled() and cache_key:
@@ -625,6 +659,8 @@ def generate_audio(
             "word_timestamps": _word_timestamps_for(text, duration_sec),
             "provider": "synthetic-test-pcm",
             "voice": target_voice,
+            "rate": target_rate,
+            "pitch": target_pitch,
             "boundary_type": "WordBoundary",
         }
 
@@ -638,8 +674,7 @@ def generate_audio(
             tmp_wav = str(out_path) + ".tmp.wav"
             tracked_temp_files.add(mp3_tmp)
             tracked_temp_files.add(tmp_wav)
-            rate = kwargs.get("rate", "+0%" if (target_duration_sec and float(target_duration_sec) >= 600.0) else "+20%")
-            mp3_bytes, words = synthesize_chunked_mp3(text, target_voice, rate)
+            mp3_bytes, words = synthesize_chunked_mp3(text, target_voice, target_rate, pitch=target_pitch)
             with open(mp3_tmp, "wb") as f:
                 f.write(mp3_bytes)
             _run_subproc(
@@ -658,6 +693,8 @@ def generate_audio(
                 "word_timestamps": words,
                 "provider": "edge-tts",
                 "voice": target_voice,
+                "rate": target_rate,
+                "pitch": target_pitch,
                 "boundary_type": "WordBoundary",
             }
             if _tts_cache_enabled() and cache_key:
@@ -672,11 +709,7 @@ def generate_audio(
                 tmp_wav = str(out_path) + ".tmp.wav"
                 tracked_temp_files.add(mp3_tmp)
                 tracked_temp_files.add(tmp_wav)
-                if target_duration_sec and float(target_duration_sec) >= 600.0:
-                    target_rate = kwargs.get("rate", "+0%")
-                else:
-                    target_rate = kwargs.get("rate", "+20%")
-                comm = edge_tts.Communicate(text, target_voice, rate=target_rate)
+                comm = edge_tts.Communicate(text, target_voice, rate=target_rate, pitch=target_pitch)
                 words: list[dict] = []
                 with open(mp3_tmp, "wb") as f:
                     async for chunk in comm.stream():
@@ -707,6 +740,8 @@ def generate_audio(
                 "word_timestamps": word_timestamps,
                 "provider": "edge-tts",
                 "voice": target_voice,
+                "rate": target_rate,
+                "pitch": target_pitch,
                 "boundary_type": "WordBoundary",
             }
             if _tts_cache_enabled() and cache_key:
@@ -721,11 +756,7 @@ def generate_audio(
                     tmp_wav = str(out_path) + f".tmp.{attempt}.wav"
                     tracked_temp_files.add(mp3_tmp)
                     tracked_temp_files.add(tmp_wav)
-                    if target_duration_sec and float(target_duration_sec) >= 600.0:
-                        target_rate = kwargs.get("rate", "+0%")
-                    else:
-                        target_rate = kwargs.get("rate", "+20%")
-                    comm = edge_tts.Communicate(text, target_voice, rate=target_rate)
+                    comm = edge_tts.Communicate(text, target_voice, rate=target_rate, pitch=target_pitch)
                     
                     async def _stream_to_file(file_path):
                         ret_words: list[dict] = []
@@ -760,6 +791,8 @@ def generate_audio(
                             "word_timestamps": words,
                             "provider": "edge-tts",
                             "voice": target_voice,
+                            "rate": target_rate,
+                            "pitch": target_pitch,
                             "boundary_type": "WordBoundary",
                         }
                         if _tts_cache_enabled() and cache_key:

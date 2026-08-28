@@ -36,6 +36,45 @@ class VisualAudioQAAuditorAgent:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
 
+    def audit_thumbnail(self, thumbnail_path: Union[Path, str]) -> Tuple[bool, List[str]]:
+        """Audits thumbnail for minimum resolution, non-default bitmap font, and high contrast."""
+        from PIL import Image, ImageStat
+        errors: List[str] = []
+        p = Path(thumbnail_path).resolve()
+        if not p.is_file():
+            return False, [f"Thumbnail file not found: {p}"]
+        try:
+            img = Image.open(p).convert("RGB")
+            w, h = img.size
+            if w < 1280 or h < 720:
+                errors.append(f"Thumbnail resolution too low: {w}x{h} (expected >= 1280x720)")
+            stat = ImageStat.Stat(img)
+            # Check color dynamic range / contrast standard deviation
+            std_devs = stat.stddev
+            if max(std_devs) < 18.0:
+                errors.append(f"Thumbnail has critically low contrast/visual dynamic range: max stddev {max(std_devs):.1f} < 18.0")
+            # Check file size
+            sz_kb = p.stat().st_size / 1024
+            if sz_kb < 20.0:
+                errors.append(f"Thumbnail file size suspiciously small: {sz_kb:.1f} KB (likely blank or unrendered text)")
+        except Exception as exc:
+            errors.append(f"Failed opening/auditing thumbnail: {exc}")
+        return len(errors) == 0, errors
+
+    def audit_description_timestamps(self, description: str, video_duration_sec: float) -> Tuple[bool, List[str]]:
+        """Audits description timestamps to ensure none exceed total video duration."""
+        import re
+        errors: List[str] = []
+        ts_matches = re.findall(r"\b(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\b", description)
+        for h, m, s in ts_matches:
+            hrs = int(h) if h else 0
+            mins = int(m)
+            secs = int(s)
+            ts_in_seconds = hrs * 3600 + mins * 60 + secs
+            if ts_in_seconds > video_duration_sec + 0.5:
+                errors.append(f"Description timestamp {h+':' if h else ''}{mins:02d}:{secs:02d} ({ts_in_seconds}s) exceeds video duration ({video_duration_sec:.1f}s)")
+        return len(errors) == 0, errors
+
     def audit_video(
         self,
         video_path: Union[Path, str],
@@ -43,6 +82,8 @@ class VisualAudioQAAuditorAgent:
         target_resolution: Optional[str] = None,
         max_black_sec: float = 3.0,
         min_avg_luminance: float = 22.0,
+        thumbnail_path: Optional[Union[Path, str]] = None,
+        description_text: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Executes complete Tier 1, Tier 2, and Tier 3 quality evaluation.
@@ -168,13 +209,33 @@ class VisualAudioQAAuditorAgent:
 
         # Validate Audio-Video Stream Synchronization
         a_stream = probe.primary_audio if hasattr(probe, "primary_audio") and probe.primary_audio else (getattr(probe, "audio", None) or (probe.audio_streams[0] if getattr(probe, "audio_streams", None) else None))
+        total_media_dur = 0.0
         if v_stream and a_stream and hasattr(probe, "duration"):
             v_dur = float(getattr(v_stream, "duration", probe.duration) or probe.duration or 0)
             a_dur = float(getattr(a_stream, "duration", probe.duration) or probe.duration or 0)
+            total_media_dur = max(v_dur, a_dur)
             if abs(v_dur - a_dur) > 1.5:
                 t2_passed = False
                 quality_score -= 25
                 rejection_reasons.append(f"AV track sync drift exceeded tolerance: |{v_dur:.2f}s - {a_dur:.2f}s| = {abs(v_dur - a_dur):.2f}s > 1.5s")
+        elif hasattr(probe, "duration") and probe.duration:
+            total_media_dur = float(probe.duration)
+
+        # Audit Thumbnail if provided
+        if thumbnail_path:
+            t_pass, t_errs = self.audit_thumbnail(thumbnail_path)
+            if not t_pass:
+                quality_score -= 20
+                for err in t_errs:
+                    rejection_reasons.append(f"Thumbnail audit defect: {err}")
+
+        # Audit Description Timestamps if provided
+        if description_text and total_media_dur > 0:
+            ts_pass, ts_errs = self.audit_description_timestamps(description_text, total_media_dur)
+            if not ts_pass:
+                quality_score -= 15
+                for err in ts_errs:
+                    rejection_reasons.append(f"SEO metadata defect: {err}")
 
         # --- Tier 3: Vision Review Summary ---
         overall_pass = t1_passed and t2_passed and len(rejection_reasons) == 0

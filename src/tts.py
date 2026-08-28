@@ -1,2 +1,2 @@
-"""Re-exporting TTS functionality from lib."""
+"""Thin backward-compatibility re-export for lib.tts."""
 from lib.tts import *

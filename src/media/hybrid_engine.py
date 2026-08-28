@@ -192,34 +192,31 @@ class HybridVideoEngine(BaseVideoCompositor):
         # 3. Pre-generate particle system state
         particle_system = self._init_particle_system(particles, width, height, tension)
 
-        # 4. Render frames using parallel workers or direct batch pipe
-        with tempfile.TemporaryDirectory(prefix=f"frames_sc_{scene.scene_id}_") as frame_dir_str:
-            frame_dir = Path(frame_dir_str)
-            
-            # Pipe raw RGB frames directly to FFmpeg for maximum throughput
-            ffmpeg_cmd = [
-                "ffmpeg", "-y",
-                "-f", "rawvideo",
-                "-pix_fmt", "rgb24",
-                "-s", f"{width}x{height}",
-                "-r", str(fps),
-                "-i", "-",
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-colorspace", "bt709",
-                "-color_primaries", "bt709",
-                "-color_trc", "bt709",
-                "-crf", str(crf),
-                "-preset", "faster",
-                "-b:v", "4500k",
-                "-maxrate", "6000k",
-                "-bufsize", "8000k",
-                "-threads", "0",
-                "-movflags", "+faststart",
-                str(out_path),
-            ]
+        # 4. Render frames using direct batch pipe to FFmpeg
+        threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-f", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s", f"{width}x{height}",
+            "-r", str(fps),
+            "-i", "-",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-crf", str(crf),
+            "-preset", "faster",
+            "-b:v", "4500k",
+            "-maxrate", "6000k",
+            "-bufsize", "8000k",
+            "-threads", threads_val,
+            "-movflags", "+faststart",
+            str(out_path),
+        ]
 
-            process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Precompute god rays overlay once per scene segment
         god_rays_overlay = None

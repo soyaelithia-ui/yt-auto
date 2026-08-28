@@ -18,6 +18,7 @@ from src.audio_processor import (
     shift_word_timestamps_with_pauses,
     apply_sidechain_ducking,
     normalize_narration_lufs,
+    master_audio_track,
 )
 from lib.tts import get_audio_duration, validate_word_boundaries
 
@@ -269,3 +270,37 @@ def test_standardized_master_loudness_14_lufs(tmp_path):
     assert res == str(norm_audio)
     assert os.path.exists(norm_audio)
     assert os.path.getsize(norm_audio) > 1000
+
+
+def test_master_audio_track_single_pass_integrated(tmp_path):
+    speech = tmp_path / "speech.wav"
+    music = tmp_path / "music.wav"
+    out_master = tmp_path / "mastered_single_pass.wav"
+
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+        "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", str(speech)
+    ], check=True, capture_output=True)
+
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=220:duration=6",
+        "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", str(music)
+    ], check=True, capture_output=True)
+
+    res = master_audio_track(
+        narration_path=speech,
+        music_path=music,
+        output_path=out_master,
+        target_lufs=-14.0,
+        ducking_db=-18.0,
+        music_volume=0.05,
+    )
+
+    assert res == str(out_master)
+    assert out_master.exists()
+    assert out_master.stat().st_size > 1000
+
+    # Ensure no lingering intermediate temporary files in target directory
+    lingering_tmps = list(tmp_path.glob("*.tmp.*"))
+    assert len(lingering_tmps) == 0
+

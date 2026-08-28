@@ -1081,21 +1081,29 @@ class RealtimeVideoEngine:
 
         if filter_complex:
             cmd += ["-filter_complex", ";".join(filter_complex), "-map", f"[{video_map}]", "-map", "1:a:0"]
+            cmd += [
+                "-t", str(duration_sec),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-crf", "18",
+                "-preset", "fast",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-movflags", "+faststart",
+                str(output_final),
+            ]
         else:
             cmd += ["-map", "0:v:0", "-map", "1:a:0"]
-
-        cmd += [
-            "-t", str(duration_sec),
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "-crf", "18",
-            "-preset", "fast",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-ar", "44100",
-            "-movflags", "+faststart",
-            str(output_final),
-        ]
+            cmd += [
+                "-t", str(duration_sec),
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-movflags", "+faststart",
+                str(output_final),
+            ]
 
         subprocess.run(cmd, check=True)
 

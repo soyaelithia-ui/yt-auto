@@ -229,6 +229,7 @@ class TestDualEnginesAndCompositor:
             resolution=[1280, 720],
             fps=30,
         )
+        manifest_data["scenes"] = manifest_data["scenes"][:2]
         for s in manifest_data["scenes"]:
             s["duration_sec"] = 0.3
         manifest_data["total_duration_sec"] = len(manifest_data["scenes"]) * 0.3
@@ -248,4 +249,101 @@ class TestDualEnginesAndCompositor:
         assert res["status"] == "success"
         assert out_master.exists()
         assert out_master.stat().st_size > 1000
+
+    def test_multi_scene_compositor_default_preset_and_bounded_threads(self, tmp_path):
+        import inspect, wave, struct, math
+        comp = MultiSceneCompositor()
+        sig = inspect.signature(comp.render)
+        assert sig.parameters["preset"].default == "faster"
+
+        speech_wav = tmp_path / "speech_threads.wav"
+        with wave.open(str(speech_wav), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(44100)
+            for i in range(44100):
+                val = int(32767.0 * 0.3 * math.sin(2.0 * math.pi * 440.0 * i / 44100.0))
+                wf.writeframes(struct.pack("<h", val))
+
+        curator = CinematicScriptCuratorAgent()
+        script = curator.curate(
+            "Un faro ancestral en el abismo.",
+            title="Prueba Hilos",
+            channel_lane="moku-horror-long",
+        )
+        art = ArtDirectorMoodAgent()
+        vplan = art.plan_visuals(script, theme_lane="cosmic_horror")
+        planner = ScenePlannerCompositorAgent()
+        manifest_data = planner.plan_manifest(
+            script=script,
+            visual_plan=vplan,
+            story_id="test_threads_001",
+            narration_path=str(speech_wav),
+            resolution=[1280, 720],
+            fps=30,
+        )
+        manifest_data["scenes"] = manifest_data["scenes"][:1]
+        for s in manifest_data["scenes"]:
+            s["duration_sec"] = 0.2
+        manifest_data["total_duration_sec"] = len(manifest_data["scenes"]) * 0.2
+
+        manifest_file = tmp_path / "manifest_threads.json"
+        manifest_file.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+        out_p = tmp_path / "out_threads.mp4"
+
+        captured_threads = []
+        orig_render = comp.procedural_engine.render_scene_segment
+
+        def mock_render_segment(*args, **kwargs):
+            captured_threads.append(kwargs.get("threads"))
+            seg_out = kwargs.get("output_mp4")
+            if seg_out:
+                import subprocess
+                subprocess.run(
+                    ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=0.2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "0.2", str(seg_out)],
+                    check=True,
+                    capture_output=True,
+                )
+
+        comp.procedural_engine.render_scene_segment = mock_render_segment
+        res = comp.render(manifest_path=manifest_file, output_video_path=out_p, crf=28, preset="ultrafast")
+        assert res["status"] == "success"
+        assert len(captured_threads) >= 1
+        for t in captured_threads:
+            assert isinstance(t, int)
+            assert t >= 1
+
+    def test_procedural_engine_subtitled_single_pass_rendering(self, tmp_path):
+        from src.scene_manifest import SceneConfig
+        from src.media.subtitles import CodeSubtitleDrawer
+        engine = ProceduralVideoEngine()
+        sc = SceneConfig(
+            scene_index=1,
+            scene_id="sc_proc_sub",
+            start_sec=0.0,
+            duration_sec=0.4,
+            tension_level=2,
+            engine_type="pure_procedural_webgl",
+        )
+        words = [
+            {"word": "ENTIDAD", "start": 0.0, "end": 0.2},
+            {"word": "DETECTADA", "start": 0.2, "end": 0.4},
+        ]
+        cues = CodeSubtitleDrawer.parse_word_timestamps(words, words_per_cue=2)
+        out_sub = tmp_path / "proc_sub_scene.mp4"
+        engine.render_scene_segment(
+            scene=sc,
+            width=320,
+            height=180,
+            fps=30,
+            lane_id="moku-horror-long",
+            output_mp4=out_sub,
+            crf=28,
+            subtitle_cues=cues,
+            scene_start_sec=0.0,
+            threads=2,
+        )
+        assert out_sub.exists()
+        assert out_sub.stat().st_size > 500
+
 

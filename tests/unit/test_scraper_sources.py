@@ -1,16 +1,28 @@
 """Unit tests for multi-source scraping, subreddit rotation, and SCP wiki scraper."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.core.lanes import parse_lane
 from src.core.repository import connect, migrate_database
-from src.scraper import ensure_queue_depth, fetch_reddit_stories
+from src.scraper import (
+    async_ensure_queue_depth,
+    async_fetch_reddit_stories,
+    async_replenish_queue,
+    ensure_queue_depth,
+    fetch_reddit_stories,
+    replenish_queue,
+)
 from src.scraper_scp import (
     DEFAULT_LICENSE,
     CANONICAL_SCP_STORIES,
+    async_fetch_scp_by_item,
+    async_fetch_top_scp_articles,
+    async_fetch_top_scp_from_crom,
+    async_scrape_and_enqueue_scp,
     fetch_scp_by_item,
     fetch_top_scp_articles,
+    fetch_top_scp_from_crom,
     parse_scp_text,
     parse_scp_wikidot_html,
     scrape_and_enqueue_scp,
@@ -147,6 +159,38 @@ class TestSCPScraper:
                 assert row["status"] == "PENDING"
 
 
+class TestAsyncSCPScraper:
+    @pytest.mark.anyio
+    async def test_async_fetch_scp_by_item(self):
+        item_096 = await async_fetch_scp_by_item("SCP-096")
+        assert item_096 is not None
+        assert item_096["item_number"] == "SCP-096"
+        assert item_096["object_class"] == "Euclid"
+        assert item_096["source_license"] == "CC BY-SA 3.0"
+
+        item_173 = await async_fetch_scp_by_item("173")
+        assert item_173 is not None
+        assert item_173["item_number"] == "SCP-173"
+
+    @pytest.mark.anyio
+    async def test_async_fetch_top_scp_articles_canonical_fallback(self):
+        articles = await async_fetch_top_scp_articles(limit=3)
+        assert len(articles) == 3
+        for art in articles:
+            assert art["source_license"] == "CC BY-SA 3.0"
+            assert art["item_number"].startswith("SCP-")
+
+    @pytest.mark.anyio
+    async def test_async_scrape_and_enqueue_scp(self, test_db):
+        count = await async_scrape_and_enqueue_scp(limit=2, db_path=test_db, lane_id="moku-scp-shorts", channel="moku")
+        assert count == 2
+        with connect(test_db, read_only=True) as conn:
+            rows = conn.execute("SELECT story_id, source_license, status FROM stories").fetchall()
+            assert len(rows) == 2
+            assert all(r["status"] == "PENDING" for r in rows)
+            assert all(r["source_license"] == "CC BY-SA 3.0" for r in rows)
+
+
 class TestEnsureQueueDepth:
     def test_ensure_queue_depth_already_satisfied(self, test_db, scp_lane):
         # Pre-seed database with 5 pending stories
@@ -212,3 +256,59 @@ class TestEnsureQueueDepth:
                 assert len(rows) >= 3
                 for row in rows:
                     assert row["source_license"] == "CC BY-SA 3.0"
+
+
+class TestAsyncEnsureQueueDepth:
+    @pytest.mark.anyio
+    async def test_async_ensure_queue_depth_already_satisfied(self, test_db, scp_lane):
+        await async_scrape_and_enqueue_scp(limit=5, db_path=test_db, lane_id=scp_lane.id, channel="moku")
+        with patch("src.scraper.async_fetch_reddit_stories") as mock_fetch:
+            depth = await async_ensure_queue_depth(scp_lane, db_path=test_db)
+            assert depth == 5
+            mock_fetch.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_async_ensure_queue_depth_reddit_rotation(self, test_db, aita_lane):
+        mock_posts = [
+            {
+                "id": "aita_async_001",
+                "title": "AITA for refusing to share inheritance with ex?",
+                "content": "My ex demanded half of the inheritance my family left me.",
+                "url": "https://reddit.com/r/AmItheAsshole/comments/aita_async_001",
+                "score": 2000,
+                "upvote_ratio": 0.96,
+                "num_comments": 300,
+            },
+        ]
+        with patch("src.scraper.async_fetch_reddit_stories", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = mock_posts
+            depth = await async_ensure_queue_depth(aita_lane, db_path=test_db)
+            assert depth >= 1
+            with connect(test_db, read_only=True) as conn:
+                row = conn.execute("SELECT story_id, score, num_comments FROM stories WHERE story_id = 'aita_async_001'").fetchone()
+                assert row is not None
+                assert row["score"] == 2000
+                assert row["num_comments"] == 300
+
+    @pytest.mark.anyio
+    async def test_async_replenish_queue(self, test_db):
+        mock_posts = [
+            {
+                "id": "terror_rep_001",
+                "title": "The Old Abandoned Cellar",
+                "content": "I found a hidden door in my basement leading to a concrete chamber that wasn't on the house blueprint.",
+                "url": "https://reddit.com/r/nosleep/comments/terror_rep_001",
+                "score": 1200,
+                "upvote_ratio": 0.98,
+                "num_comments": 150,
+            }
+        ]
+        with patch("src.scraper.async_fetch_reddit_stories", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = mock_posts
+            updated = await async_replenish_queue(channel="terror", min_stories=1, db_path=test_db)
+            assert updated >= 1
+            with connect(test_db, read_only=True) as conn:
+                row = conn.execute("SELECT story_id, channel FROM stories WHERE story_id = 'terror_rep_001'").fetchone()
+                assert row is not None
+                assert row["channel"] in ("terror", "moku")
+

@@ -67,3 +67,12 @@ def offline_provider_guard(monkeypatch, request):
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(time, "sleep", lambda secs: None)
     yield
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Teardown hook: automatically clean test artifacts under work/test."""
+    try:
+        from src.cleaner import clean_test_artifacts
+        clean_test_artifacts(min_age_seconds=0, dry_run=False)
+    except Exception:
+        pass

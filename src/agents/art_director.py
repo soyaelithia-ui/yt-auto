@@ -146,15 +146,17 @@ class ArtDirectorMoodAgent:
                 dof = "medium_f4"
                 focal = 50
 
-            # Image prompts
+            # Image prompts (Universal Adaptive Premium Art Direction)
             pos_prompt = (
-                f"Masterpiece 8k cinematic matte painting, {env_name}, {light_style}, "
-                f"volumetric lighting, photorealistic depth, color palette {theme_data['accent']} and {theme_data['secondary']}, "
-                f"high contrast chiaroscuro, 35mm photograph, shot on Arri Alexa."
+                f"Masterpiece 8k cinematic atmospheric matte painting, {env_name}, {light_style}, "
+                f"striking high-contrast 2D/3D silhouette composition, volumetric fog, rim lighting, "
+                f"chiaroscuro shadows, minimalist elegance, color palette accents {theme_data['accent']} "
+                f"against deep dark void {theme_data['shadow']}, 35mm photograph, shot on Arri Alexa."
             )
             neg_prompt = (
-                "noisy grain, coarse dithering, blurry, low resolution, cartoon, 3d render plastic, "
-                "deformed, ugly, text, watermark, mutated, neon clownish colors, oversaturated."
+                "wireframe polygon, 3d geometric cage, rotating solids, flat 2d vector icon, "
+                "cheap clipart, distorted grotesque anatomy, cartoon, low resolution, white background, "
+                "cluttered mess, noisy grain, coarse dithering, deformed, ugly, watermark, neon clownish colors."
             )
 
             sc_plan = {

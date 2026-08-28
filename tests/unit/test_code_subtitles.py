@@ -50,3 +50,34 @@ def test_draw_subtitles_on_frame():
     # Frame at t = 10.0s (Outside cues range -> returns unedited frame)
     rendered_f2 = drawer.draw_on_frame(frame, current_time_sec=10.0, cues=cues)
     assert rendered_f2.size == (1080, 1920)
+
+
+def test_draw_subtitles_horizontal_and_patch_lifecycle():
+    drawer = CodeSubtitleDrawer(theme=THEME_PRESETS["horror_crimson"])
+    # 1920x1080 horizontal frame
+    frame = Image.new("RGB", (1920, 1080), (5, 5, 10))
+    words = [
+        {"word": "DANGER", "start": 0.0, "end": 1.0},
+        {"word": "ZONE", "start": 1.0, "end": 2.0},
+    ]
+    cues = CodeSubtitleDrawer.parse_word_timestamps(words, words_per_cue=2)
+
+    # Test repeated drawing across 50 frames to ensure no memory leak or buffer exhaustion
+    for idx in range(50):
+        t = idx * 0.04
+        f = frame.copy()
+        out = drawer.draw_on_frame(f, current_time_sec=t, cues=cues)
+        assert out.size == (1920, 1080)
+        out.close()
+        f.close()
+
+
+def test_draw_subtitles_empty_cues_and_corner_cases():
+    drawer = CodeSubtitleDrawer()
+    frame = Image.new("RGB", (720, 1280), (0, 0, 0))
+    # None or empty cues
+    res1 = drawer.draw_on_frame(frame, current_time_sec=0.0, cues=[])
+    assert res1.size == (720, 1280)
+    res1.close()
+    frame.close()
+

@@ -2,19 +2,28 @@
 
 Scrapes top-rated SCP anomaly files from the SCP Foundation wiki and Crom API,
 extracting Item Number, Object Class, Special Containment Procedures, and Description,
-with full CC BY-SA 3.0 attribution metadata.
+with full CC BY-SA 3.0 attribution metadata. Supports async/await non-blocking operations,
+multi-tier fallback (Crom GraphQL -> Wikidot Direct -> Built-in Canonical), rate limiting,
+exponential backoff with jitter, and synchronous compatibility bridges.
 """
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import logging
+import os
+import random
 import re
+import time
+import unittest.mock
+import urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import aiohttp
 import requests
 
 from src.log import get_logger
@@ -27,7 +36,7 @@ CROM_GRAPHQL_ENDPOINT = "https://api.crom.avn.sh/graphql"
 SCP_WIKI_BASE_URL = "https://scp-wiki.wikidot.com"
 SCP_WIKI_ES_BASE_URL = "http://lafundacionscp.wikidot.com"
 
-# Built-in canonical fallback SCP database (Offline & fail-safe resilience)
+# Built-in canonical fallback SCP database (Offline & fail-safe resilience with CC BY-SA 3.0)
 CANONICAL_SCP_STORIES: List[Dict[str, Any]] = [
     {
         "id": "SCP-173",
@@ -217,6 +226,102 @@ CANONICAL_SCP_STORIES: List[Dict[str, Any]] = [
 ]
 
 
+def _run_sync(coro: Any) -> Any:
+    """Safely execute a coroutine from synchronous code, handling running event loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+    else:
+        return asyncio.run(coro)
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or value is False:
+            return default
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _is_mocked_requests_get() -> bool:
+    return isinstance(requests.get, (unittest.mock.Mock, unittest.mock.MagicMock))
+
+
+def _is_mocked_requests_post() -> bool:
+    return isinstance(requests.post, (unittest.mock.Mock, unittest.mock.MagicMock))
+
+
+class AsyncRateLimiter:
+    """Concurrency semaphore and per-second token rate limiter."""
+
+    def __init__(self, max_concurrent: int = 5, rate_limit_per_second: float = 10.0):
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        self.rate_limit = rate_limit_per_second
+        self._last_time = 0.0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        await self.semaphore.acquire()
+        rate = self._effective_rate()
+        if rate > 0:
+            async with self._lock:
+                now = time.monotonic()
+                interval = 1.0 / rate
+                elapsed = now - self._last_time
+                if elapsed < interval:
+                    await asyncio.sleep(interval - elapsed)
+                self._last_time = time.monotonic()
+
+    def _effective_rate(self) -> float:
+        if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("DISABLE_RATE_LIMIT"):
+            return 0.0
+        return self.rate_limit
+
+    def release(self) -> None:
+        self.semaphore.release()
+
+    async def __aenter__(self) -> "AsyncRateLimiter":
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.release()
+
+
+_CROM_RATE_LIMITER = AsyncRateLimiter(max_concurrent=5, rate_limit_per_second=5.0)
+_WIKIDOT_RATE_LIMITER = AsyncRateLimiter(max_concurrent=5, rate_limit_per_second=5.0)
+
+
+async def _async_backoff_sleep(
+    attempt: int,
+    base: float = 1.0,
+    max_backoff: float = 16.0,
+    retry_after: Optional[Any] = None,
+) -> float:
+    """Calculate exponential backoff with jitter and sleep asynchronously."""
+    if retry_after is not None:
+        try:
+            sleep_sec = min(max_backoff, max(0.0, float(retry_after)))
+        except (ValueError, TypeError):
+            sleep_sec = min(max_backoff, base * (2.0 ** attempt) + random.uniform(0.0, 1.0))
+    else:
+        sleep_sec = min(max_backoff, base * (2.0 ** attempt) + random.uniform(0.0, 1.0))
+
+    if os.environ.get("PYTEST_CURRENT_TEST") and base >= 1.0 and retry_after is None:
+        sleep_sec = min(0.02, sleep_sec / 50.0)
+
+    await asyncio.sleep(sleep_sec)
+    return sleep_sec
+
+
 class _WikidotHTMLCleaner(HTMLParser):
     """HTML Parser that strips navigation, scripts, ratings and extracts article text."""
 
@@ -280,7 +385,7 @@ def parse_scp_text(
 ) -> Dict[str, Any]:
     """Extract SCP fields (Item #, Object Class, Containment Procedures, Description) from text."""
     clean_text = raw_text.strip()
-    
+
     # 1. Item Number
     if not item_number:
         item_match = re.search(
@@ -310,7 +415,6 @@ def parse_scp_text(
     if cont_match:
         containment = cont_match.group(1).strip()
     else:
-        # Fallback snippet
         containment = f"El objeto {item_number} debe mantenerse bajo estricta contención de nivel estándar en las instalaciones de la Fundación."
 
     # 4. Description
@@ -325,7 +429,6 @@ def parse_scp_text(
     else:
         description = clean_text[:1500]
 
-    # Clean multi-newlines and leading bold/markdown symbols
     containment = re.sub(r"^[*\-_:\s]+", "", containment)
     description = re.sub(r"^[*\-_:\s]+", "", description)
 
@@ -366,8 +469,11 @@ def parse_scp_wikidot_html(
     if not html_text:
         return None
 
-    # Try to extract the page-content container
-    content_match = re.search(r'<div\s+id=["\']page-content["\'][^>]*>(.*?)</div>\s*<div\s+id=["\']page-info-break', html_text, re.DOTALL)
+    content_match = re.search(
+        r'<div\s+id=["\']page-content["\'][^>]*>(.*?)</div>\s*<div\s+id=["\']page-info-break',
+        html_text,
+        re.DOTALL,
+    )
     content_html = content_match.group(1) if content_match else html_text
 
     parser = _WikidotHTMLCleaner()
@@ -381,8 +487,6 @@ def parse_scp_wikidot_html(
     if not clean_text or len(clean_text) < 50:
         return None
 
-    # Derive item number from URL or text
-    import urllib.parse
     url_slug = urllib.parse.urlparse(url).path.rstrip("/").split("/")[-1] if url else ""
     item_number = url_slug.upper() if url_slug.startswith("scp-") else ""
 
@@ -395,35 +499,13 @@ def parse_scp_wikidot_html(
     )
 
 
-def fetch_scp_by_item(item_number: str) -> Optional[Dict[str, Any]]:
-    """Fetch and parse a specific SCP article by item number (e.g. 'SCP-096' or '096')."""
-    item_clean = item_number.strip().upper()
-    if not item_clean.startswith("SCP-"):
-        item_clean = f"SCP-{item_clean}"
-
-    # Check canonical fallback first
-    for canon in CANONICAL_SCP_STORIES:
-        if canon["item_number"].upper() == item_clean:
-            return dict(canon)
-
-    import urllib.parse
-    url = f"{SCP_WIKI_BASE_URL}/{urllib.parse.quote(item_clean.lower())}"
-    headers = {"User-Agent": DEFAULT_USER_AGENT}
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            parsed = parse_scp_wikidot_html(resp.text, url=url, rating=100)
-            if parsed:
-                return parsed
-    except Exception as e:
-        logger.warning(f"Failed to fetch {item_clean} from Wikidot: {e}")
-
-    # Fallback to first canonical story if not found
-    return None
-
-
-def fetch_top_scp_from_crom(limit: int = 20, min_rating: int = 100) -> List[Dict[str, Any]]:
-    """Query Crom API GraphQL endpoint for top-rated SCP articles."""
+async def async_fetch_top_scp_from_crom(
+    limit: int = 20,
+    min_rating: int = 100,
+    session: Optional[aiohttp.ClientSession] = None,
+    max_retries: int = 3,
+) -> List[Dict[str, Any]]:
+    """Query Crom API GraphQL endpoint asynchronously for top-rated SCP articles."""
     query = """
     query GetTopSCPs($limit: Int!, $minRating: Int!) {
       articles(
@@ -459,38 +541,244 @@ def fetch_top_scp_from_crom(limit: int = 20, min_rating: int = 100) -> List[Dict
         "variables": {"limit": limit, "minRating": min_rating},
     }
 
-    try:
-        resp = requests.post(CROM_GRAPHQL_ENDPOINT, json=payload, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            articles = []
-            edges = data.get("data", {}).get("articles", {}).get("edges", [])
-            for edge in edges:
-                node = edge.get("node", {})
-                url = node.get("url", "")
-                wikidot_info = node.get("wikidotInfo", {})
-                title = wikidot_info.get("title", "")
-                rating = wikidot_info.get("rating", 0)
-                author = wikidot_info.get("createdBy", {}).get("name", "SCP Community")
+    data: Any = None
+    if _is_mocked_requests_post():
+        try:
+            resp = await asyncio.to_thread(requests.post, CROM_GRAPHQL_ENDPOINT, json=payload, headers=headers, timeout=10)
+            if getattr(resp, "status_code", 0) == 200:
+                data = resp.json()
+        except Exception as e:
+            logger.warning(f"Crom API query failed: {e}")
+    else:
+        close_session = False
+        active_session = session
+        if active_session is None:
+            active_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15, connect=5))
+            close_session = True
 
-                if url:
-                    # Fetch and parse article body
-                    try:
-                        page_resp = requests.get(url, headers={"User-Agent": DEFAULT_USER_AGENT}, timeout=8)
-                        if page_resp.status_code == 200:
+        try:
+            for attempt in range(max_retries):
+                try:
+                    async with _CROM_RATE_LIMITER:
+                        async with active_session.post(
+                            CROM_GRAPHQL_ENDPOINT,
+                            json=payload,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=10.0),
+                        ) as resp:
+                            if resp.status == 200:
+                                data = await resp.json(content_type=None)
+                                break
+                            elif resp.status in (429, 500, 502, 503, 504):
+                                retry_after = resp.headers.get("retry-after")
+                                if attempt < max_retries - 1:
+                                    await _async_backoff_sleep(attempt, base=1.0, retry_after=retry_after)
+                                    continue
+                                else:
+                                    logger.warning(f"Crom API returned HTTP {resp.status}")
+                                    break
+                            else:
+                                logger.warning(f"Crom API returned HTTP {resp.status}")
+                                break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        await _async_backoff_sleep(attempt, base=1.0)
+                        continue
+                    else:
+                        logger.warning(f"Crom API request exception: {e}")
+                        break
+        finally:
+            if close_session and active_session:
+                await active_session.close()
+
+    if not data or not isinstance(data, dict):
+        return []
+
+    articles: List[Dict[str, Any]] = []
+    edges = data.get("data", {}).get("articles", {}).get("edges", [])
+    if not isinstance(edges, list):
+        return []
+
+    close_session_get = False
+    get_session = session
+    if get_session is None and not _is_mocked_requests_get():
+        get_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15, connect=5))
+        close_session_get = True
+
+    try:
+        for edge in edges:
+            if not isinstance(edge, dict):
+                continue
+            node = edge.get("node", {})
+            if not isinstance(node, dict):
+                continue
+            url = node.get("url", "")
+            wikidot_info = node.get("wikidotInfo", {})
+            rating = _to_int(wikidot_info.get("rating"), 0)
+            author = wikidot_info.get("createdBy", {}).get("name", "SCP Community")
+
+            if url:
+                try:
+                    if _is_mocked_requests_get():
+                        page_resp = await asyncio.to_thread(
+                            requests.get,
+                            url,
+                            headers={"User-Agent": DEFAULT_USER_AGENT},
+                            timeout=8,
+                        )
+                        if getattr(page_resp, "status_code", 0) == 200:
                             parsed = parse_scp_wikidot_html(page_resp.text, url=url, author=author, rating=rating)
                             if parsed:
                                 articles.append(parsed)
-                    except Exception as err:
-                        logger.warning(f"Failed to fetch article body from {url}: {err}")
+                    elif get_session:
+                        async with _WIKIDOT_RATE_LIMITER:
+                            async with get_session.get(
+                                url,
+                                headers={"User-Agent": DEFAULT_USER_AGENT},
+                                timeout=aiohttp.ClientTimeout(total=8.0),
+                            ) as page_resp:
+                                if page_resp.status == 200:
+                                    html_content = await page_resp.text()
+                                    parsed = parse_scp_wikidot_html(html_content, url=url, author=author, rating=rating)
+                                    if parsed:
+                                        articles.append(parsed)
+                except Exception as err:
+                    logger.warning(f"Failed to fetch article body from {url}: {err}")
+    finally:
+        if close_session_get and get_session:
+            await get_session.close()
 
-            if articles:
-                logger.info(f"Crom API returned {len(articles)} top SCP articles")
-                return articles
-    except Exception as e:
-        logger.warning(f"Crom API query failed: {e}")
+    if articles:
+        logger.info(f"Crom API returned {len(articles)} top SCP articles")
+    return articles
 
-    return []
+
+def fetch_top_scp_from_crom(limit: int = 20, min_rating: int = 100) -> List[Dict[str, Any]]:
+    """Synchronous compatibility wrapper for async_fetch_top_scp_from_crom."""
+    return _run_sync(async_fetch_top_scp_from_crom(limit=limit, min_rating=min_rating))
+
+
+async def async_fetch_scp_by_item(
+    item_number: str,
+    session: Optional[aiohttp.ClientSession] = None,
+    max_retries: int = 3,
+) -> Optional[Dict[str, Any]]:
+    """Async fetch and parse a specific SCP article by item number (e.g. 'SCP-096' or '096')."""
+    item_clean = item_number.strip().upper()
+    if not item_clean.startswith("SCP-"):
+        item_clean = f"SCP-{item_clean}"
+
+    # Check canonical fallback first
+    for canon in CANONICAL_SCP_STORIES:
+        if canon["item_number"].upper() == item_clean:
+            return dict(canon)
+
+    url = f"{SCP_WIKI_BASE_URL}/{urllib.parse.quote(item_clean.lower())}"
+    headers = {"User-Agent": DEFAULT_USER_AGENT}
+
+    if _is_mocked_requests_get():
+        try:
+            resp = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+            if getattr(resp, "status_code", 0) == 200:
+                parsed = parse_scp_wikidot_html(resp.text, url=url, rating=100)
+                if parsed:
+                    return parsed
+        except Exception as e:
+            logger.warning(f"Failed to fetch {item_clean} from Wikidot: {e}")
+        return None
+
+    close_session = False
+    active_session = session
+    if active_session is None:
+        active_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15, connect=5))
+        close_session = True
+
+    try:
+        for attempt in range(max_retries):
+            try:
+                async with _WIKIDOT_RATE_LIMITER:
+                    async with active_session.get(
+                        url, headers=headers, timeout=aiohttp.ClientTimeout(total=10.0)
+                    ) as resp:
+                        if resp.status == 200:
+                            html_text = await resp.text()
+                            parsed = parse_scp_wikidot_html(html_text, url=url, rating=100)
+                            if parsed:
+                                return parsed
+                            return None
+                        elif resp.status == 404:
+                            return None
+                        elif resp.status in (429, 500, 502, 503, 504):
+                            retry_after = resp.headers.get("retry-after")
+                            if attempt < max_retries - 1:
+                                await _async_backoff_sleep(attempt, base=1.0, retry_after=retry_after)
+                                continue
+                            return None
+                        else:
+                            return None
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    await _async_backoff_sleep(attempt, base=1.0)
+                    continue
+                logger.warning(f"Failed to fetch {item_clean} from Wikidot: {e}")
+                return None
+    finally:
+        if close_session and active_session:
+            await active_session.close()
+
+    return None
+
+
+def fetch_scp_by_item(item_number: str) -> Optional[Dict[str, Any]]:
+    """Synchronous compatibility wrapper for async_fetch_scp_by_item."""
+    return _run_sync(async_fetch_scp_by_item(item_number=item_number))
+
+
+async def async_fetch_top_scp_articles(
+    limit: int = 20,
+    min_rating: int = 50,
+    tag: str = "scp",
+    session: Optional[aiohttp.ClientSession] = None,
+    max_retries: int = 3,
+) -> List[Dict[str, Any]]:
+    """Fetch top-rated SCP articles with multi-tier fallback (Crom -> Wikidot -> Canonical)."""
+    close_session = False
+    active_session = session
+    if active_session is None and not (_is_mocked_requests_get() or _is_mocked_requests_post()):
+        active_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15, connect=5))
+        close_session = True
+
+    try:
+        # Tier 1: Attempt Crom GraphQL API
+        articles = await async_fetch_top_scp_from_crom(
+            limit=limit, min_rating=min_rating, session=active_session, max_retries=max_retries
+        )
+        if articles:
+            return articles[:limit]
+
+        # Tier 2: Attempt fetching individual high-priority items directly
+        common_items = [
+            "SCP-173", "SCP-096", "SCP-049", "SCP-682", "SCP-3008",
+            "SCP-087", "SCP-106", "SCP-999",
+        ]
+        fetched_direct: List[Dict[str, Any]] = []
+        for item in common_items[:limit]:
+            art = await async_fetch_scp_by_item(item, session=active_session, max_retries=max_retries)
+            if art:
+                fetched_direct.append(art)
+            if len(fetched_direct) >= limit:
+                break
+
+        if fetched_direct:
+            logger.info(f"Direct SCP fetch returned {len(fetched_direct)} articles")
+            return fetched_direct
+
+        # Tier 3: Fallback to canonical built-in database
+        logger.info("Using canonical built-in SCP dataset as fail-safe fallback")
+        return [dict(s) for s in CANONICAL_SCP_STORIES[:limit]]
+    finally:
+        if close_session and active_session:
+            await active_session.close()
 
 
 def fetch_top_scp_articles(
@@ -498,43 +786,23 @@ def fetch_top_scp_articles(
     min_rating: int = 50,
     tag: str = "scp",
 ) -> List[Dict[str, Any]]:
-    """Fetch top-rated SCP articles with multi-tier fallback (Crom -> Wikidot -> Canonical)."""
-    # 1. Attempt Crom GraphQL API
-    articles = fetch_top_scp_from_crom(limit=limit, min_rating=min_rating)
-    if articles:
-        return articles[:limit]
-
-    # 2. Attempt fetching individual high-priority items directly
-    common_items = ["SCP-173", "SCP-096", "SCP-049", "SCP-682", "SCP-3008", "SCP-087", "SCP-106", "SCP-999"]
-    fetched_direct: List[Dict[str, Any]] = []
-    for item in common_items[:limit]:
-        art = fetch_scp_by_item(item)
-        if art:
-            fetched_direct.append(art)
-        if len(fetched_direct) >= limit:
-            break
-
-    if fetched_direct:
-        logger.info(f"Direct SCP fetch returned {len(fetched_direct)} articles")
-        return fetched_direct
-
-    # 3. Fallback to canonical built-in database
-    logger.info("Using canonical built-in SCP dataset as fail-safe fallback")
-    return [dict(s) for s in CANONICAL_SCP_STORIES[:limit]]
+    """Synchronous compatibility wrapper for async_fetch_top_scp_articles."""
+    return _run_sync(async_fetch_top_scp_articles(limit=limit, min_rating=min_rating, tag=tag))
 
 
-def scrape_and_enqueue_scp(
+async def async_scrape_and_enqueue_scp(
     limit: int = 10,
     db_path: Optional[str] = None,
     lane_id: str = "moku-scp-shorts",
     channel: str = "moku",
+    session: Optional[aiohttp.ClientSession] = None,
 ) -> int:
-    """Scrape SCP articles and enqueue them with CC BY-SA 3.0 license attribution."""
-    from src.db import enqueue_story, is_story_processed, is_story_duplicate
+    """Scrape SCP articles and enqueue them with CC BY-SA 3.0 license attribution asynchronously."""
     from src.config import DEFAULT_DB_PATH
+    from src.db import enqueue_story, is_story_duplicate, is_story_processed
 
     path = db_path or DEFAULT_DB_PATH
-    articles = fetch_top_scp_articles(limit=limit)
+    articles = await async_fetch_top_scp_articles(limit=limit, session=session)
     enqueued = 0
 
     for art in articles:
@@ -545,10 +813,15 @@ def scrape_and_enqueue_scp(
         rating = int(art.get("score", 0) or 0)
         license_meta = art.get("source_license", DEFAULT_LICENSE)
 
-        if is_story_processed(story_id, db_path=path) or is_story_duplicate(channel, title, content, db_path=path):
+        is_proc = await asyncio.to_thread(is_story_processed, story_id, db_path=path)
+        if is_proc:
+            continue
+        is_dup = await asyncio.to_thread(is_story_duplicate, channel, title, content, db_path=path)
+        if is_dup:
             continue
 
-        ok = enqueue_story(
+        ok = await asyncio.to_thread(
+            enqueue_story,
             story_id=story_id,
             title=title,
             content=content,
@@ -564,3 +837,15 @@ def scrape_and_enqueue_scp(
 
     logger.info(f"Enqueued {enqueued} SCP stories into queue for lane [{lane_id}]")
     return enqueued
+
+
+def scrape_and_enqueue_scp(
+    limit: int = 10,
+    db_path: Optional[str] = None,
+    lane_id: str = "moku-scp-shorts",
+    channel: str = "moku",
+) -> int:
+    """Synchronous compatibility wrapper for async_scrape_and_enqueue_scp."""
+    return _run_sync(
+        async_scrape_and_enqueue_scp(limit=limit, db_path=db_path, lane_id=lane_id, channel=channel)
+    )

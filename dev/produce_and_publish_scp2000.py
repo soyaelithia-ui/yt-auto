@@ -51,7 +51,8 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or getattr(SETTINGS, "tele
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or getattr(SETTINGS, "telegram_chat_id", "")
 OUTPUT_DIR = ROOT_DIR / "output"
 WORK_DIR = ROOT_DIR / "work" / "scp2000_production"
-AUDIO_BGM = ROOT_DIR / "assets" / "music" / "horror_ambient.mp3"
+from src.asset_manager import get_asset_manager
+AUDIO_BGM = Path(get_asset_manager().resolve_or_create_background_audio("scp", "creepypasta", duration_sec=600.0, work_dir=WORK_DIR))
 
 
 SCP2000_SCRIPT = """
@@ -104,18 +105,23 @@ No sentimos culpa por lo que hacemos aquí abajo, porque la alternativa es la na
 """.strip()
 
 
+from src.audio_processor import sanitize_script_for_tts
+from src.media.thumbnail_engine import ResilientThumbnailEngine
+
+
 async def synthesize_voice_narration(output_wav: Path) -> float:
-    """Synthesizes high-quality Spanish neural narration using Edge-TTS."""
+    """Synthesizes high-quality neutral Spanish neural narration using Edge-TTS with sanitized script."""
     import edge_tts
-    logger.info("🎤 Sintetizando narración neural en español neutro (es-ES-AlvaroNeural)...")
-    voice = "es-ES-AlvaroNeural"
+    logger.info("🎤 Sintetizando narración neural en español neutro (es-MX-JorgeNeural)...")
+    voice = "es-MX-JorgeNeural"
     temp_mp3 = output_wav.with_suffix(".mp3")
     
+    clean_text = sanitize_script_for_tts(SCP2000_SCRIPT)
     communicate = edge_tts.Communicate(
-        text=SCP2000_SCRIPT,
+        text=clean_text,
         voice=voice,
-        rate="+0%",
-        pitch="-2Hz",
+        rate="-2%",
+        pitch="-1Hz",
     )
     await communicate.save(str(temp_mp3))
 
@@ -144,7 +150,7 @@ def mix_master_audio(voice_wav: Path, bgm_path: Path, output_audio: Path, total_
     logger.info("🎛️ Masterizando audio EBU R128 con sidechain ducking (-18 dB)...")
     filter_complex = (
         f"[0:a]aresample=48000,asplit=2[voice_sc][voice_mix];"
-        f"[1:a]aresample=48000,lowpass=f=11000,volume=0.22[bgm_in];"
+        f"[1:a]aresample=48000,lowpass=f=11000,volume=0.20[bgm_in];"
         f"[bgm_in][voice_sc]sidechaincompress=threshold=0.035:ratio=8.0:attack=20.0:release=350.0:makeup=1[bgm_ducked];"
         f"[voice_mix][bgm_ducked]amix=inputs=2:duration=first:normalize=0[amixed];"
         f"[amixed]loudnorm=I=-14.0:TP=-1.5:LRA=11.0,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
@@ -167,59 +173,18 @@ def mix_master_audio(voice_wav: Path, bgm_path: Path, output_audio: Path, total_
 
 
 def generate_custom_thumbnail(output_thumb: Path) -> Path:
-    """Creates a high-impact 1920x1080 cinematic thumbnail."""
-    logger.info("🎨 Generando miniatura cinematográfica 1920x1080...")
-    w, h = 1920, 1080
-    img = Image.new("RGB", (w, h), color=(3, 10, 16))
-    draw = ImageDraw.Draw(img)
-
-    # Draw gradient background
-    for y in range(h):
-        r = int(3 + (y / h) * 8)
-        g = int(10 + (y / h) * 20)
-        b = int(16 + (y / h) * 35)
-        draw.line([(0, y), (w, y)], fill=(r, g, b))
-
-    # Draw geometric containment grid and radar circle
-    cx, cy = int(w * 0.72), int(h * 0.52)
-    for rad in [140, 240, 360, 480]:
-        draw.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], outline=(0, 229, 163, 60), width=2)
-    draw.line([(cx - 500, cy), (cx + 500, cy)], fill=(0, 229, 163, 70), width=2)
-    draw.line([(cx, cy - 500), (cx, cy + 500)], fill=(0, 229, 163, 70), width=2)
-
-    # Try loading custom fonts or fallback
-    try:
-        font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 108)
-        font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
-        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-    except Exception:
-        font_main = ImageFont.load_default()
-        font_sub = ImageFont.load_default()
-        font_badge = ImageFont.load_default()
-
-    # Classification Badge Box
-    draw.rectangle([80, 80, 720, 140], fill=(180, 20, 30), outline=(255, 60, 70), width=3)
-    draw.text((105, 90), "NIVEL 4 // TOP SECRET // CLASIFICADO", fill=(255, 255, 255), font=font_badge)
-
-    # Main Title with Glow effect
-    draw.text((84, 214), "SCP-2000", fill=(0, 80, 55), font=font_main)
-    draw.text((80, 210), "SCP-2000", fill=(0, 229, 163), font=font_main)
-
-    # Subtitle with strong contrast
-    draw.text((84, 354), "DEUS EX MACHINA", fill=(0, 40, 70), font=font_sub)
-    draw.text((80, 350), "DEUS EX MACHINA", fill=(255, 255, 255), font=font_sub)
-
-    # Lower Highlight
-    draw.rectangle([80, 440, 940, 520], fill=(0, 30, 20, 220), outline=(0, 229, 163), width=2)
-    draw.text((105, 455), "EL REINICIO DE LA HUMANIDAD", fill=(0, 255, 180), font=font_sub)
-
-    # Lower Box Details
-    draw.text((80, 880), "• ARCHIVO CONFIDENCIAL FUNDACIÓN SCP", fill=(180, 220, 210), font=font_badge)
-    draw.text((80, 930), "• INSTALACIÓN SECRETA DE YELLOWSTONE", fill=(180, 220, 210), font=font_badge)
-
-    img.save(str(output_thumb), quality=95)
-    logger.info("✅ Miniatura HD generada: %s (%.2f KB)", output_thumb.name, output_thumb.stat().st_size / 1024)
-    return output_thumb
+    """Creates a high-impact 1920x1080 cinematic thumbnail using ResilientThumbnailEngine."""
+    logger.info("🎨 Generando miniatura cinematográfica 1920x1080 con ResilientThumbnailEngine...")
+    engine = ResilientThumbnailEngine()
+    return engine.generate(
+        output_path=output_thumb,
+        title_main="SCP-2000",
+        title_sub="DEUS EX MACHINA",
+        highlight_box="EL REINICIO DE LA HUMANIDAD",
+        badge_text="NIVEL 5 // CLASIFICADO // TOP SECRET",
+        accent_color=(0, 255, 180),
+        subtitle_color=(255, 255, 255),
+    )
 
 
 def compose_master_video(shader_loop_mp4: Path, master_audio: Path, output_master: Path, total_dur: float) -> Path:
@@ -308,28 +273,34 @@ def main() -> int:
     # Step 5: Generate Custom HD Thumbnail
     generate_custom_thumbnail(thumb_output)
 
-    # Step 6: SEO Metadata Optimization via Agent 6
+    # Step 6: SEO Metadata Optimization via Agent 6 with strictly synchronized timestamps
     seo_agent = SeoOptimizerAgent()
-    seo_data = seo_agent.optimize(
-        topic="SCP-2000: Deus Ex Machina y el Secreto de Yellowstone",
-        target_format="longform",
-        use_agent=False,
-    )
     video_title = "SCP-2000: El Secreto Oculto de Yellowstone y el Reinicio de la Humanidad"
+    
+    # Calculate exact timestamp intervals proportional to total duration
+    act_titles = [
+        "Introducción: El Búnker Más Protegido de la Tierra",
+        "La Ciudadela Olvidada y las Unidades BZHR",
+        "El Protocolo Lázaro y la Clonación Masiva",
+        "La Gran Falsificación de la Historia",
+        "Ennui-5 y la Inyección del Olvido Colectivo",
+        "Las Huellas del Pasado: ¿Cuántas Veces Hemos Muerto?",
+        "Anclas de Realidad Scranton y Estabilizador XACTS",
+        "La Grabación del Administrador",
+    ]
+    sec_per_act = total_dur / len(act_titles)
+    acts_manifest = [
+        {"start_sec": i * sec_per_act, "title": title}
+        for i, title in enumerate(act_titles)
+    ]
+    synced_timestamps = SeoOptimizerAgent.build_synchronized_timestamps(acts_manifest, total_dur)
+
     video_description = (
         f"{video_title}\n\n"
         "Bajo el Parque Nacional de Yellowstone se oculta el mayor secreto de la Fundación SCP: "
         "la instalación de contención SCP-2000 (Deus Ex Machina). Capaz de clonar a miles de millones de seres "
         "humanos, reconstruir ciudades enteras y reescribir la memoria colectiva tras un escenario de fin del mundo de Clase-XK.\n\n"
-        "TIMESTAMPS:\n"
-        "00:00 - Introducción: El Búnker Más Protegido de la Tierra\n"
-        "01:45 - Acto 1: La Ciudadela Olvidada y las Unidades BZHR\n"
-        "03:30 - Acto 2: El Protocolo Lázaro y la Clonación Masiva\n"
-        "05:15 - Acto 3: La Gran Falsificación de la Historia\n"
-        "07:00 - Acto 4: Ennui-5 y la Inyección del Olvido Colectivo\n"
-        "08:45 - Acto 5: Las Huellas del Pasado: ¿Cuántas Veces Hemos Muerto?\n"
-        "10:30 - Acto 6: Anclas de Realidad Scranton y Estabilizador XACTS\n"
-        "12:15 - Acto 7: La Grabación del Administrador\n\n"
+        f"{synced_timestamps}\n\n"
         "🔔 Suscríbete para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
         "#SCP #SCP2000 #DeusExMachina #FundacionSCP #TerrorPsicologico #Yellowstone #Documental"
     )
@@ -340,12 +311,18 @@ def main() -> int:
         "Anomalias Clasificadas", "Consejo O5", "Protocolo Ennui"
     ]
 
-    # Step 7: Forensic QA Visual & Audio Audit via Agent 4
+    # Step 7: Forensic QA Visual & Audio Audit via Agent 4 (with thumbnail and timestamp check)
     qa_agent = VisualAudioQAAuditorAgent()
-    qa_report = qa_agent.audit_video(master_output, run_id="scp2000_master_run", target_resolution="1920x1080")
-    logger.info("🔍 Auditoría QA Completada (Score: %d/100, Res: %s, Luminancia: %.1f)",
+    qa_report = qa_agent.audit_video(
+        master_output,
+        run_id="scp2000_master_run",
+        target_resolution="1920x1080",
+        thumbnail_path=thumb_output,
+        description_text=video_description,
+    )
+    logger.info("🔍 Auditoría QA Completada (Score: %d/100, Res: %s, Luminancia: %.1f, Overall Pass: %s)",
                 qa_report["quality_score"], qa_report["tier2_visual_metrics"]["resolution"],
-                qa_report["tier2_visual_metrics"]["avg_luminance"])
+                qa_report["tier2_visual_metrics"]["avg_luminance"], qa_report["overall_pass"])
 
     # Step 8: Encode Proxy and Dispatch to Telegram
     proxy_path = create_telegram_proxy(master_output, proxy_output)

@@ -53,6 +53,39 @@ class SeoOptimizerAgent:
         if self._schema:
             jsonschema.validate(instance=metadata, schema=self._schema)
 
+    @staticmethod
+    def build_synchronized_timestamps(acts: List[Dict[str, Any]], total_duration_sec: float) -> str:
+        """Generates synchronized description timestamps that are strictly within the video length."""
+        if not acts:
+            return "00:00 - Introducción"
+        lines = ["TIMESTAMPS:"]
+        for act in acts:
+            start = float(act.get("start_sec", 0))
+            if start >= total_duration_sec:
+                continue
+            mm = int(start // 60)
+            ss = int(start % 60)
+            label = act.get("title") or act.get("label") or "Sección"
+            # Clean editorial markers from label
+            label = re.sub(r"(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9]+[:\.\-–—]\s*", "", label).strip()
+            lines.append(f"{mm:02d}:{ss:02d} - {label}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def validate_description_timestamps(description: str, total_duration_sec: float) -> Tuple[bool, List[str]]:
+        """Validates that all timestamp markers in description are valid and within video duration."""
+        errors: List[str] = []
+        # Match mm:ss or hh:mm:ss timestamps
+        ts_matches = re.findall(r"\b(?:(\d{1,2}):)?(\d{1,2}):(\d{2})\b", description)
+        for h, m, s in ts_matches:
+            hrs = int(h) if h else 0
+            mins = int(m)
+            secs = int(s)
+            ts_in_seconds = hrs * 3600 + mins * 60 + secs
+            if ts_in_seconds > total_duration_sec + 0.5:
+                errors.append(f"Timestamp {h+':' if h else ''}{mins:02d}:{secs:02d} ({ts_in_seconds}s) exceeds video duration ({total_duration_sec:.1f}s)")
+        return len(errors) == 0, errors
+
     def optimize(
         self,
         topic: str,

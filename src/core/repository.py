@@ -107,7 +107,7 @@ MIGRATION_001 = (
     """
     CREATE TABLE IF NOT EXISTS runs (
         run_id TEXT PRIMARY KEY,
-        channel TEXT NOT NULL CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL,
         story_id TEXT,
         mode TEXT NOT NULL DEFAULT 'publish',
         status TEXT NOT NULL,
@@ -123,7 +123,7 @@ MIGRATION_001 = (
     """
     CREATE TABLE IF NOT EXISTS leases (
         job_id TEXT PRIMARY KEY,
-        channel TEXT NOT NULL UNIQUE CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL UNIQUE,
         owner TEXT NOT NULL,
         run_id TEXT NOT NULL UNIQUE,
         acquired_at INTEGER NOT NULL,
@@ -139,9 +139,19 @@ MIGRATION_001 = (
         story_id TEXT NOT NULL,
         position INTEGER NOT NULL,
         PRIMARY KEY(run_id, story_id),
-        UNIQUE(run_id, position),
         FOREIGN KEY(run_id) REFERENCES runs(run_id) ON DELETE CASCADE,
-        FOREIGN KEY(story_id) REFERENCES stories(story_id)
+        FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE RESTRICT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS stage_logs (
+        log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        stage_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        detail TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES runs(run_id) ON DELETE CASCADE
     )
     """,
     """
@@ -179,6 +189,33 @@ MIGRATION_001 = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS stories (
+        story_id TEXT PRIMARY KEY,
+        channel TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        raw_content TEXT NOT NULL,
+        score REAL NOT NULL DEFAULT 0.0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        discovered_at TEXT NOT NULL,
+        next_attempt_at INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(channel, source_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS metrics (
+        metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT,
+        name TEXT NOT NULL,
+        value REAL NOT NULL,
+        unit TEXT,
+        recorded_at TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES runs(run_id) ON DELETE SET NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS publications (
         publication_id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id TEXT NOT NULL UNIQUE,
@@ -186,7 +223,7 @@ MIGRATION_001 = (
         provider TEXT NOT NULL,
         video_id TEXT NOT NULL UNIQUE,
         url TEXT NOT NULL UNIQUE,
-        channel TEXT NOT NULL CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL,
         visibility TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -201,7 +238,7 @@ MIGRATION_001 = (
         fingerprint_id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id TEXT,
         story_id TEXT,
-        channel TEXT NOT NULL CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL,
         kind TEXT NOT NULL,
         sha256 TEXT NOT NULL,
         normalized_text TEXT,
@@ -213,7 +250,7 @@ MIGRATION_001 = (
     """,
     """
     CREATE TABLE IF NOT EXISTS channel_controls (
-        channel TEXT PRIMARY KEY CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT PRIMARY KEY,
         paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0, 1)),
         reason TEXT,
         updated_at TEXT NOT NULL
@@ -222,7 +259,7 @@ MIGRATION_001 = (
     """
     CREATE TABLE IF NOT EXISTS scheduler_state (
         scheduler_id INTEGER PRIMARY KEY CHECK(scheduler_id = 1),
-        next_channel TEXT NOT NULL CHECK(next_channel IN ('moku', 'aelithia')),
+        next_channel TEXT NOT NULL,
         next_run_at INTEGER NOT NULL,
         last_run_at INTEGER,
         updated_at TEXT NOT NULL
@@ -288,7 +325,7 @@ MIGRATION_005 = (
     CREATE TABLE IF NOT EXISTS lane_leases (
         job_id TEXT PRIMARY KEY,
         lane_id TEXT NOT NULL UNIQUE,
-        channel TEXT NOT NULL CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL,
         owner TEXT NOT NULL,
         run_id TEXT NOT NULL UNIQUE,
         acquired_at INTEGER NOT NULL,
@@ -430,6 +467,23 @@ def connect(db_path: str | os.PathLike[str], *, read_only: bool = False) -> Iter
         yield conn
     finally:
         conn.close()
+
+
+def wal_checkpoint_passive(db_path: str | os.PathLike[str] | Path) -> tuple[int, int, int]:
+    """Safely run PRAGMA wal_checkpoint(PASSIVE) without blocking concurrent readers/writers.
+
+    Returns:
+        tuple[int, int, int]: (busy, log_pages, checkpointed_pages) where busy is 0 if non-blocked.
+    """
+    path = Path(db_path)
+    if not path.exists():
+        return (0, 0, 0)
+    with connect(path) as conn:
+        row = conn.execute("PRAGMA wal_checkpoint(PASSIVE);").fetchone()
+        if row is None:
+            return (0, 0, 0)
+        return (int(row[0]), int(row[1]), int(row[2]))
+
 
 
 def _ensure_legacy_stories(conn: sqlite3.Connection) -> None:
@@ -665,6 +719,20 @@ class QueueRepository:
 
     def initialize(self) -> MigrationReport:
         return migrate_database(self.db_path)
+
+    def wal_checkpoint_passive(self) -> tuple[int, int, int]:
+        """Safely run PRAGMA wal_checkpoint(PASSIVE) for this repository's database."""
+        return wal_checkpoint_passive(self.db_path)
+
+    def checkpoint_wal(self, mode: str = "PASSIVE") -> tuple[int, int, int]:
+        """Safely checkpoint WAL frames back to the database file without blocking writers."""
+        valid_modes = {"PASSIVE", "FULL", "RESTART", "TRUNCATE"}
+        selected_mode = mode.upper() if mode.upper() in valid_modes else "PASSIVE"
+        with connect(self.db_path) as conn:
+            row = conn.execute(f"PRAGMA wal_checkpoint({selected_mode});").fetchone()
+            if row is None:
+                return (0, 0, 0)
+            return (int(row[0]), int(row[1]), int(row[2]))
 
     @staticmethod
     def _holds_lease(
@@ -1240,47 +1308,52 @@ class QueueRepository:
         story_key: str | None = None,
     ) -> None:
         with connect(self.db_path) as conn:
-            # Ensure a parent record exists in `runs` to satisfy foreign key constraint
-            channel = "aelithia" if (story_key and "aelithia" in story_key) else "moku"
-            now = _utc_now()
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO runs(
-                    run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at
-                ) VALUES (?, ?, NULL, 'publish', 'PROCESSING', 'checkpoint', ?, ?)
-                """,
-                (run_id, channel, now, now),
-            )
-            conn.execute(
-                """
-                INSERT INTO artifacts(
-                    run_id, kind, local_path, remote_provider, remote_id,
-                    remote_name, size_bytes, sha256, verified_at, created_at, story_key
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(run_id, kind, local_path) DO UPDATE SET
-                    remote_provider = excluded.remote_provider,
-                    remote_id = excluded.remote_id,
-                    remote_name = excluded.remote_name,
-                    size_bytes = excluded.size_bytes,
-                    sha256 = excluded.sha256,
-                    verified_at = excluded.verified_at,
-                    story_key = excluded.story_key
-                """,
-                (
-                    run_id,
-                    kind,
-                    local_path,
-                    remote_provider,
-                    remote_id,
-                    remote_name,
-                    size_bytes,
-                    sha256,
-                    now if verified else None,
-                    now,
-                    story_key,
-                ),
-            )
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                # Ensure a parent record exists in `runs` to satisfy foreign key constraint
+                channel = "aelithia" if (story_key and "aelithia" in story_key) else "moku"
+                now = _utc_now()
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO runs(
+                        run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at
+                    ) VALUES (?, ?, NULL, 'publish', 'PROCESSING', 'checkpoint', ?, ?)
+                    """,
+                    (run_id, channel, now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO artifacts(
+                        run_id, kind, local_path, remote_provider, remote_id,
+                        remote_name, size_bytes, sha256, verified_at, created_at, story_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(run_id, kind, local_path) DO UPDATE SET
+                        remote_provider = excluded.remote_provider,
+                        remote_id = excluded.remote_id,
+                        remote_name = excluded.remote_name,
+                        size_bytes = excluded.size_bytes,
+                        sha256 = excluded.sha256,
+                        verified_at = excluded.verified_at,
+                        story_key = excluded.story_key
+                    """,
+                    (
+                        run_id,
+                        kind,
+                        local_path,
+                        remote_provider,
+                        remote_id,
+                        remote_name,
+                        size_bytes,
+                        sha256,
+                        now if verified else None,
+                        now,
+                        story_key,
+                    ),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     def record_youtube_upload_id(
         self,
@@ -1412,6 +1485,7 @@ class QueueRepository:
         if calc_simhash is None and normalized_text:
             calc_simhash = compute_simhash_64(normalized_text)
         with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
             now = _utc_now()
             conn.execute(
                 """
@@ -1544,37 +1618,42 @@ class QueueRepository:
         error_detail: str | None = None,
     ) -> None:
         with connect(self.db_path) as conn:
-            attempt_no = int(
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                attempt_no = int(
+                    conn.execute(
+                        """
+                        SELECT COALESCE(MAX(attempt_no), 0) + 1
+                        FROM provider_attempts
+                        WHERE run_id = ? AND provider = ? AND operation = ?
+                        """,
+                        (run_id, provider, operation),
+                    ).fetchone()[0]
+                )
+                now = _utc_now()
                 conn.execute(
                     """
-                    SELECT COALESCE(MAX(attempt_no), 0) + 1
-                    FROM provider_attempts
-                    WHERE run_id = ? AND provider = ? AND operation = ?
+                    INSERT INTO provider_attempts(
+                        run_id, provider, operation, attempt_no, started_at,
+                        finished_at, outcome, error_code, error_detail
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (run_id, provider, operation),
-                ).fetchone()[0]
-            )
-            now = _utc_now()
-            conn.execute(
-                """
-                INSERT INTO provider_attempts(
-                    run_id, provider, operation, attempt_no, started_at,
-                    finished_at, outcome, error_code, error_detail
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    provider,
-                    operation,
-                    attempt_no,
-                    now,
-                    now,
-                    outcome,
-                    error_code,
-                    error_detail,
-                ),
-            )
-            conn.commit()
+                    (
+                        run_id,
+                        provider,
+                        operation,
+                        attempt_no,
+                        now,
+                        now,
+                        outcome,
+                        error_code,
+                        error_detail,
+                    ),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     def finish_run(
         self,
@@ -1716,18 +1795,23 @@ class QueueRepository:
     ) -> None:
         channel_key = canonical_channel(channel).value
         with connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT INTO channel_controls(channel, paused, reason, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(channel) DO UPDATE SET
-                    paused = excluded.paused,
-                    reason = excluded.reason,
-                    updated_at = excluded.updated_at
-                """,
-                (channel_key, int(paused), reason, _utc_now()),
-            )
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO channel_controls(channel, paused, reason, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(channel) DO UPDATE SET
+                        paused = excluded.paused,
+                        reason = excluded.reason,
+                        updated_at = excluded.updated_at
+                    """,
+                    (channel_key, int(paused), reason, _utc_now()),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     def queue_summary(self) -> dict[str, Any]:
         with connect(self.db_path, read_only=True) as conn:
@@ -1947,29 +2031,34 @@ class QueueRepository:
             default=str,
         )
         with connect(self.db_path) as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO system_events(
-                    ts, level, event_type, run_id, story_id, channel,
-                    component, stage, error_code, message, details_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    _utc_now(),
-                    normalized_level,
-                    str(event_type),
-                    run_id,
-                    story_id,
-                    channel,
-                    component,
-                    stage,
-                    error_code,
-                    message,
-                    payload,
-                ),
-            )
-            conn.commit()
-            return int(cursor.lastrowid)
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO system_events(
+                        ts, level, event_type, run_id, story_id, channel,
+                        component, stage, error_code, message, details_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        _utc_now(),
+                        normalized_level,
+                        str(event_type),
+                        run_id,
+                        story_id,
+                        channel,
+                        component,
+                        stage,
+                        error_code,
+                        message,
+                        payload,
+                    ),
+                )
+                conn.commit()
+                return int(cursor.lastrowid)
+            except Exception:
+                conn.rollback()
+                raise
 
     def query_system_events(
         self,
@@ -2508,11 +2597,17 @@ def touch_daemon_liveness(db_path, *, now=None):
     """Record the daemon liveness heartbeat consumed by healthcheck.py (AUD-08)."""
     stamp = int(now) if now is not None else int(time.time())
     with connect(db_path) as conn:
-        conn.execute(
-            "INSERT INTO daemon_liveness(id, heartbeat_at) VALUES (1, ?) "
-            "ON CONFLICT(id) DO UPDATE SET heartbeat_at = excluded.heartbeat_at",
-            (stamp,),
-        )
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                "INSERT INTO daemon_liveness(id, heartbeat_at) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET heartbeat_at = excluded.heartbeat_at",
+                (stamp,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def read_daemon_heartbeat(db_path):

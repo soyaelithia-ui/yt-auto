@@ -31,32 +31,50 @@ __all__ = [
 ]
 
 THEMATIC_TEMPLATES: dict[str, str] = {
-    "cosmic_horror": "cosmic_horror_three.html",
-    "dark_ambient": "cosmic_horror_three.html",
-    "dark_forest": "dark_forest_canvas.html",
-    "monsters": "monsters_creepy_canvas.html",
-    "space_abyss": "space_abyss_three.html",
-    "scp": "scp_terminal_css.html",
+    "classified_terminal": "archetype_classified_terminal.html",
+    "atmospheric_landscape": "archetype_atmospheric_landscape.html",
+    "tactical_chamber": "archetype_tactical_chamber.html",
+    "synaptic_network": "archetype_synaptic_network.html",
+    "anomaly_silhouette": "archetype_anomaly_silhouette.html",
+    "cosmic_singularity": "archetype_cosmic_singularity.html",
+    "cosmic_horror": "archetype_cosmic_singularity.html",
+    "dark_ambient": "archetype_atmospheric_landscape.html",
+    "dark_forest": "archetype_atmospheric_landscape.html",
+    "monsters": "archetype_anomaly_silhouette.html",
+    "space_abyss": "archetype_cosmic_singularity.html",
+    "scp": "archetype_classified_terminal.html",
     "drama_aita": "drama_waves_canvas.html",
 }
 
 CATEGORY_TECH_MAP: dict[str, str] = {
-    "cosmic_horror": "webgl_shader",
-    "dark_ambient": "webgl_shader",
+    "classified_terminal": "canvas2d",
+    "atmospheric_landscape": "canvas2d",
+    "tactical_chamber": "canvas2d",
+    "synaptic_network": "canvas2d",
+    "anomaly_silhouette": "canvas2d",
+    "cosmic_singularity": "canvas2d",
+    "cosmic_horror": "canvas2d",
+    "dark_ambient": "canvas2d",
     "dark_forest": "canvas2d",
     "monsters": "canvas2d",
-    "space_abyss": "webgl_shader",
-    "scp": "css_motion",
+    "space_abyss": "canvas2d",
+    "scp": "canvas2d",
     "drama_aita": "canvas2d",
 }
 
 CATEGORY_TAGS_MAP: dict[str, list[str]] = {
-    "cosmic_horror": ["void", "black_hole", "nebula", "vortex", "cosmic", "purple"],
+    "classified_terminal": ["terminal", "crt", "classified", "hud", "radar", "surveillance", "green", "amber", "red"],
+    "atmospheric_landscape": ["landscape", "fog", "wanderer", "ruins", "dystopian", "storm", "sky", "wasteland"],
+    "tactical_chamber": ["bunker", "chamber", "corridor", "vault", "emergency", "strobe", "containment", "brutalist"],
+    "synaptic_network": ["neural", "synapse", "consciousness", "mind", "bioluminescent", "data", "cyan", "purple"],
+    "anomaly_silhouette": ["anomaly", "creature", "monster", "colossus", "shadow", "embers", "silhouette", "fire"],
+    "cosmic_singularity": ["void", "singularity", "black_hole", "vortex", "cosmic", "abyss", "rift", "purple", "cyan"],
+    "cosmic_horror": ["void", "singularity", "black_hole", "vortex", "cosmic", "purple"],
     "dark_ambient": ["ambient", "darkness", "minimal", "void", "calm"],
     "dark_forest": ["trees", "fog", "spores", "nature", "night", "organic", "green"],
     "monsters": ["creepy", "eyes", "tentacles", "shadows", "blood", "red", "darkness"],
     "space_abyss": ["space", "stars", "singularity", "accretion_disk", "cyan", "blue"],
-    "scp": ["terminal", "crt", "wireframe", "classified", "hud", "containment", "green"],
+    "scp": ["terminal", "crt", "classified", "hud", "containment"],
     "drama_aita": ["waves", "neon", "gradient", "minimal", "modern", "audio_react"],
 }
 
@@ -159,7 +177,7 @@ class WebVideoRenderer:
             "ffmpeg", "-y",
             "-v", "error",
             "-f", "image2pipe",
-            "-vcodec", "png",
+            "-vcodec", "mjpeg",
             "-r", str(spec.fps),
             "-i", "-",
             "-c:v", "libx264",
@@ -177,7 +195,10 @@ class WebVideoRenderer:
         launch_kwargs: Dict[str, Any] = {
             "headless": True,
             "args": [
-                "--disable-gpu",
+                "--use-gl=angle",
+                "--use-angle=swiftshader",
+                "--enable-webgl",
+                "--ignore-gpu-blocklist",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--hide-scrollbars",
@@ -196,21 +217,23 @@ class WebVideoRenderer:
                 )
                 page.goto(f"file://{template_path.resolve()}")
                 page.evaluate(
-                    "([w, h, s]) => { if (window.__setDimensions) window.__setDimensions(w, h, s); }",
-                    [spec.width, spec.height, spec.seed],
+                    "([w, h, s, p]) => { if (window.__setDimensions) window.__setDimensions(w, h, s, p); if (window.__setParams) window.__setParams(p); }",
+                    [spec.width, spec.height, spec.seed, spec.custom_params],
                 )
-
-                canvas_elem = page.locator("#c")
 
                 for frame_idx in range(total_frames):
                     time_sec = frame_idx / float(spec.fps)
-                    page.evaluate(
-                        "([f, total, t, dur]) => { if (window.renderSceneFrame) window.renderSceneFrame(f, total, t, dur); }",
+                    data_url = page.evaluate(
+                        """([f, total, t, dur]) => {
+                            if (window.renderSceneFrame) window.renderSceneFrame(f, total, t, dur);
+                            const canvas = document.getElementById('c');
+                            return canvas ? canvas.toDataURL('image/jpeg', 0.95) : null;
+                        }""",
                         [frame_idx, total_frames, time_sec, spec.duration_sec],
                     )
-                    # Extract PNG frame bytes from canvas
-                    frame_png = canvas_elem.screenshot(type="png")
-                    proc.stdin.write(frame_png)
+                    if data_url and "," in data_url:
+                        frame_bytes = base64.b64decode(data_url.split(",", 1)[1])
+                        proc.stdin.write(frame_bytes)
 
                 browser.close()
 

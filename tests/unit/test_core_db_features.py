@@ -26,6 +26,8 @@ from src.core.repository import (
     is_simhash_duplicate,
     migrate_database,
     simhash_hamming_distance,
+    to_signed_64,
+    to_unsigned_64,
 )
 from src.db import is_story_duplicate
 
@@ -131,6 +133,14 @@ class TestSimHashDeduplication:
         # Completely different story -> not duplicate
         assert not is_story_duplicate("moku", "Finanzas Sanas", story_diff, db_path=db_path)
 
+    def test_signed_unsigned_sqlite_roundtrip(self):
+        """Test signed vs unsigned 64-bit integer conversion for SQLite storage."""
+        for val in [0, 1, 0x7FFFFFFFFFFFFFFF, 0x8000000000000000, 0xFFFFFFFFFFFFFFFF]:
+            signed = to_signed_64(val)
+            unsigned = to_unsigned_64(signed)
+            assert unsigned == val
+            assert -(1 << 63) <= signed < (1 << 63)
+
 
 class TestIdempotentLeases:
     def test_lane_lease_on_conflict_idempotency(self, repo):
@@ -158,6 +168,53 @@ class TestIdempotentLeases:
             row = conn.execute("SELECT owner, expires_at FROM lane_leases WHERE job_id = 's-lease-1'").fetchone()
             assert row["owner"] == "worker-renewed"
             assert row["expires_at"] == 2000
+
+    def test_queue_score_priority_ordering(self, repo, monkeypatch):
+        """Verify claim() prioritizes higher score stories by default."""
+        repo.enqueue("low_score", "Low Score Story", "Low Content", "https://x/low", "moku", score=100)
+        repo.enqueue("high_score", "High Score Story", "High Content", "https://x/high", "moku", score=950)
+        repo.enqueue("mid_score", "Mid Score Story", "Mid Content", "https://x/mid", "moku", score=500)
+
+        # Default: orders by score DESC
+        job = repo.claim("moku", "worker-score-test")
+        assert job is not None
+        assert job["story_id"] == "high_score"
+
+        # FIFO mode when QUEUE_RANK_BY_SCORE="0"
+        monkeypatch.setenv("QUEUE_RANK_BY_SCORE", "0")
+        # Enqueue another low and high
+        repo.enqueue("fifo_1", "FIFO 1", "Content 1", "https://x/f1", "aelithia", score=10)
+        repo.enqueue("fifo_2", "FIFO 2", "Content 2", "https://x/f2", "aelithia", score=999)
+        job_fifo = repo.claim("aelithia", "worker-fifo-test")
+        assert job_fifo is not None
+        assert job_fifo["story_id"] == "fifo_1"
+
+    def test_dual_tier_lease_fencing_and_recovery(self, repo):
+        """Test fencing across channel leases and lane leases."""
+        repo.enqueue("story-ch", "Story Channel", "Content", "https://x/ch1", "moku")
+        repo.enqueue("story-lane", "Story Lane", "Content", "https://x/lane1", "moku", lane_id="moku-scp-shorts")
+
+        claimed_ch = repo.claim("moku", "worker-ch", lease_seconds=10, now=100)
+        assert claimed_ch is not None
+        run_ch = claimed_ch["run_id"]
+
+        claimed_lane = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-lane", lease_seconds=10, now=100)
+        # Note: channel lease active blocks lane lease claim for same channel in claim_for_lane
+        # Release or let channel lease expire
+        assert repo.recover_expired_leases(now=120) == 1
+
+        # Now lane claim succeeds
+        claimed_lane2 = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-lane", lease_seconds=10, now=125)
+        assert claimed_lane2 is not None
+        run_lane = claimed_lane2["run_id"]
+
+        # Heartbeat lane lease
+        assert repo.heartbeat_lane_lease(run_lane, "worker-lane", lease_seconds=50, now=130) is True
+        # Imposter heartbeat rejected
+        assert repo.heartbeat_lane_lease(run_lane, "worker-imposter", lease_seconds=50, now=130) is False
+
+        # Recover lane leases
+        assert repo.recover_expired_lane_leases(now=200) == 1
 
 
 class TestLanesCLIAndVoiceProfiles:
@@ -204,3 +261,4 @@ class TestLanesCLIAndVoiceProfiles:
         assert "moku-scp-shorts" in lane_ids
         assert "moku-horror-long" in lane_ids
         assert "aelithia-aita-long" in lane_ids
+

@@ -165,8 +165,9 @@ class ProceduralVideoEngine(BaseVideoCompositor):
         # 1. Resolve matching category or template
         category = self._resolve_category(scene.environment_name, cfg.template_name, lane_id)
 
-        # 2. Check catalog for pre-rendered loop
-        matching_loop = self.catalog.get_best_loop(category=category, orientation=orientation)
+        # 2. Check catalog for pre-rendered loop only if template_name is not an explicit archetype
+        is_archetype_template = bool(cfg.template_name and "archetype_" in cfg.template_name)
+        matching_loop = None if is_archetype_template else self.catalog.get_best_loop(category=category, orientation=orientation)
         
         loop_file: Optional[Path] = None
         if matching_loop and Path(matching_loop.file_path).is_file():
@@ -175,7 +176,20 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             # Synthesize micro-loop on demand (6s)
             synth_dir = Path("assets/loops/web_procedural") / category
             synth_dir.mkdir(parents=True, exist_ok=True)
-            synth_mp4 = synth_dir / f"proc_{category}_{orientation}_{width}x{height}_6s.mp4"
+            synth_mp4 = synth_dir / f"proc_{category}_{orientation}_{width}x{height}_s{cfg.seed}_6s.mp4"
+
+            pal_accent = getattr(getattr(cfg, "palette", None), "accent", "#00ff66")
+            pal_mid = getattr(getattr(cfg, "palette", None), "mid_tone", "#052b12")
+            pal_dark = getattr(getattr(cfg, "palette", None), "base_dark", "#020604")
+
+            render_params = {
+                "seed": cfg.seed,
+                "tension": scene.tension_level,
+                "accentColor": pal_accent,
+                "secondaryColor": pal_mid,
+                "shadowDark": pal_dark,
+                **(cfg.uniforms if hasattr(cfg, "uniforms") and isinstance(cfg.uniforms, dict) else {}),
+            }
 
             spec = RenderSpec(
                 template_name=cfg.template_name,
@@ -186,7 +200,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 duration_sec=6.0,
                 fps=fps,
                 output_path=synth_mp4,
-                params={"seed": cfg.seed, "tension": scene.tension_level},
+                params=render_params,
             )
 
             try:
@@ -214,57 +228,113 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 for _ in range(loop_count):
                     f.write(f"file '{loop_file.resolve()}'\n")
 
-            raw_seg_mp4 = Path(concat_dir_str) / "raw_seg.mp4" if subtitle_cues else out_path
-            ffmpeg_cmd = [
-                "ffmpeg", "-y",
-                "-f", "concat", "-safe", "0", "-i", str(concat_txt),
-                "-t", f"{duration:.3f}",
-                "-c:v", "libx264",
-                "-crf", str(crf),
-                "-preset", "faster",
-                "-b:v", "4500k",
-                "-maxrate", "6000k",
-                "-bufsize", "8000k",
-                "-threads", "0",
-                "-pix_fmt", "yuv420p",
-                "-colorspace", "bt709",
-                "-color_primaries", "bt709",
-                "-color_trc", "bt709",
-                "-movflags", "+faststart",
-                str(raw_seg_mp4),
-            ]
-            run_ffmpeg(ffmpeg_cmd)
+            threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
 
             if subtitle_cues:
-                from src.media.subtitles import apply_code_subtitles_to_video
-                apply_code_subtitles_to_video(
-                    input_mp4=raw_seg_mp4,
-                    output_mp4=out_path,
-                    subtitle_cues=subtitle_cues,
-                    scene_start_sec=scene_start_sec,
-                    width=width,
-                    height=height,
-                    fps=fps,
-                    crf=crf,
-                    subtitle_theme=subtitle_theme,
-                )
+                from PIL import Image
+                from src.media.subtitles import CodeSubtitleDrawer
+                drawer = CodeSubtitleDrawer(theme=subtitle_theme)
+
+                read_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-f", "rawvideo", "-pix_fmt", "rgb24",
+                    "-s", f"{width}x{height}",
+                    "-r", str(fps),
+                    "-",
+                ]
+                write_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
+                    "-i", "-",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-colorspace", "bt709",
+                    "-color_primaries", "bt709",
+                    "-color_trc", "bt709",
+                    "-crf", str(crf),
+                    "-preset", "faster",
+                    "-b:v", "4500k",
+                    "-maxrate", "6000k",
+                    "-bufsize", "8000k",
+                    "-threads", threads_val,
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+                frame_size = width * height * 3
+                proc_in = subprocess.Popen(read_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                proc_out = subprocess.Popen(write_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                frame_idx = 0
+                while True:
+                    raw_bytes = proc_in.stdout.read(frame_size) if proc_in.stdout else b""
+                    if not raw_bytes or len(raw_bytes) < frame_size:
+                        break
+                    img = Image.frombytes("RGB", (width, height), raw_bytes)
+                    t_sec = scene_start_sec + (frame_idx / float(fps))
+                    img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
+                    if proc_out.stdin:
+                        proc_out.stdin.write(img.tobytes())
+                    frame_idx += 1
+
+                if proc_in.stdout:
+                    proc_in.stdout.close()
+                proc_in.wait()
+                if proc_out.stdin:
+                    proc_out.stdin.flush()
+                    proc_out.stdin.close()
+                proc_out.wait()
+            else:
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-c:v", "libx264",
+                    "-crf", str(crf),
+                    "-preset", "faster",
+                    "-b:v", "4500k",
+                    "-maxrate", "6000k",
+                    "-bufsize", "8000k",
+                    "-threads", threads_val,
+                    "-pix_fmt", "yuv420p",
+                    "-colorspace", "bt709",
+                    "-color_primaries", "bt709",
+                    "-color_trc", "bt709",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+                run_ffmpeg(ffmpeg_cmd)
 
         return out_path
 
     def _resolve_category(self, env_name: Optional[str], template_name: str, lane_id: str) -> str:
-        """Resolves thematic procedural category."""
+        """Resolves thematic procedural category or universal archetype."""
+        if template_name:
+            t_norm = template_name.lower().replace(".html", "").replace("archetype_", "")
+            for arch in [
+                "classified_terminal", "atmospheric_landscape", "tactical_chamber",
+                "synaptic_network", "anomaly_silhouette", "cosmic_singularity",
+                "drama_waves_canvas", "cosmic_horror_three", "space_abyss_three"
+            ]:
+                if arch in t_norm:
+                    return arch
         if env_name:
             norm = env_name.lower().replace(" ", "_").replace("-", "_")
-            for cat in ["cosmic_horror", "dark_forest", "monsters", "space_abyss", "scp", "dark_ambient", "drama_aita"]:
+            for cat in [
+                "classified_terminal", "atmospheric_landscape", "tactical_chamber",
+                "synaptic_network", "anomaly_silhouette", "cosmic_singularity",
+                "cosmic_horror", "dark_forest", "monsters", "space_abyss", "scp", "dark_ambient", "drama_aita"
+            ]:
                 if cat in norm or norm in cat:
                     return cat
         if "three" in template_name.lower():
-            return "cosmic_horror"
+            return "cosmic_singularity"
         if "scp" in lane_id.lower():
-            return "scp"
+            return "classified_terminal"
         if "aita" in lane_id.lower() or "drama" in lane_id.lower():
             return "drama_aita"
-        return "cosmic_horror"
+        return "atmospheric_landscape"
 
     def _generate_fallback_loop(
         self, category: str, width: int, height: int, fps: int, duration_sec: float, out_path: Path

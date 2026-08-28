@@ -526,8 +526,8 @@ def _resolve_local_scene_images(
 # ---------------------------------------------------------------------------
 
 def build_audio_chain(
-    ambient_volume: float = 0.1,
-    music_volume: float = 0.12,
+    ambient_volume: float = 0.04,
+    music_volume: float = 0.04,
     lowpass_freq: int = 14000,
     audio_idx: int = 1,
     **kwargs,
@@ -641,6 +641,7 @@ def generate_pil_thumbnail(
     style: str | None = None,
     template: str | None = None,
     style_preset: Any | None = None,
+    **kwargs,
 ) -> str:
     """Render a YouTube thumbnail with Pillow (pure local)."""
     if not _HAS_PIL:
@@ -826,7 +827,7 @@ def create_video_thumbnail(
     strict_official_sdk: bool = False,
     **kwargs,
 ) -> str:
-    """Create a video thumbnail strictly locally using PIL/SVG templates (zero network calls)."""
+    """Create a high-CTR video thumbnail using ThumbnailEngine (extracting climax frame & chiaroscuro grading)."""
     v_mode = kwargs.get(
         "video_mode",
         "short" if style == "short" or kwargs.get("video_mode") == "short" else "longform",
@@ -838,19 +839,50 @@ def create_video_thumbnail(
         or kwargs.get("background_image_path")
         or kwargs.get("background_path")
     )
-    template = kwargs.get("template")
-    style_preset = kwargs.get("style_preset")
+    video_path = kwargs.get("video_path")
+    manifest_path = kwargs.get("manifest_path") or kwargs.get("scene_manifest_path")
+    channel_id = kwargs.get("channel_id") or kwargs.get("channel_name") or style or "moku"
 
-    return generate_pil_thumbnail(
-        title=title,
-        output_path=output_path,
-        bg_image_path=bg_image_path,
-        width=target_w,
-        height=target_h,
-        style=style,
-        template=template,
-        style_preset=style_preset,
-    )
+    if is_test_environment() and not (video_path or manifest_path or bg_image_path):
+        return generate_pil_thumbnail(
+            title=title,
+            output_path=output_path,
+            bg_image_path=bg_image_path,
+            width=target_w,
+            height=target_h,
+            style=style,
+            **kwargs,
+        )
+
+    try:
+        from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
+        engine = ThumbnailEngine()
+        cfg = ThumbnailConfig(
+            title=title,
+            channel_id=str(channel_id),
+            output_path=output_path,
+            width=target_w,
+            height=target_h,
+        )
+        res = engine.generate(
+            config=cfg,
+            video_path=video_path,
+            manifest_path=manifest_path,
+            base_image_path=bg_image_path,
+        )
+        return str(res)
+    except Exception as e:
+        logger.warning("ThumbnailEngine failed (%s), falling back to PIL basic: %s", e, output_path)
+        return generate_pil_thumbnail(
+            title=title,
+            output_path=output_path,
+            bg_image_path=bg_image_path,
+            width=target_w,
+            height=target_h,
+            style=style,
+            template=kwargs.get("template"),
+            style_preset=kwargs.get("style_preset"),
+        )
 
 
 # ---------------------------------------------------------------------------

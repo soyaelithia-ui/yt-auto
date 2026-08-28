@@ -442,6 +442,9 @@ TEMPLATES_DIR = os.environ.get("TEMPLATES_DIR", str(BASE_DIR / "assets" / "templ
 DEFAULT_BACKGROUND = os.environ.get(
     "DEFAULT_BACKGROUND", str(BASE_DIR / "assets" / "background.jpg")
 )
+DEFAULT_BACKGROUND_AUDIO_VOLUME = float(os.environ.get("BACKGROUND_AUDIO_VOLUME", "0.04"))
+DEFAULT_BACKGROUND_AUDIO_MODE = os.environ.get("BACKGROUND_AUDIO_MODE", "auto")
+DEFAULT_BACKGROUND_AUDIO_ENABLED = os.environ.get("BACKGROUND_AUDIO_ENABLED", "1") == "1"
 DEFAULT_LANG = "es"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")

@@ -20,6 +20,7 @@ from src.cli.handlers import (
     handle_lanes,
     handle_loop,
     handle_migrate,
+    handle_profile,
     handle_queue,
     handle_run,
     handle_service,
@@ -41,6 +42,8 @@ CANONICAL_SUBCOMMANDS = {
     "service",
     "lanes",
     "loop",
+    "profile",
+    "benchmark",
 }
 
 
@@ -530,6 +533,82 @@ def build_parser() -> argparse.ArgumentParser:
         help="Salida en formato JSON estructurado",
     )
 
+    # 12. profile / benchmark (Diagnostics, Profiling & Telemetry - R1)
+    for p_name, p_help in [
+        ("profile", "Diagnóstico, benchmarking y auditoría de rendimiento por fase (R1)"),
+        ("benchmark", "Ejecutar ciclos de benchmarking y pruebas de carga por fase (R1)"),
+    ]:
+        profile_parser = subparsers.add_parser(
+            p_name,
+            parents=[subparser_parent],
+            help=p_help,
+        )
+        profile_parser.add_argument(
+            "-c",
+            "--channel",
+            type=str,
+            default="moku",
+            help="Canal objetivo ('moku', 'aelithia', 'all')",
+        )
+        profile_parser.add_argument(
+            "-l",
+            "--lane",
+            type=str,
+            default=None,
+            help="Carril específico a perfilar",
+        )
+        profile_parser.add_argument(
+            "-n",
+            "--iterations",
+            type=int,
+            default=1,
+            help="Número de ciclos de benchmarking a ejecutar (default: 1)",
+        )
+        profile_parser.add_argument(
+            "--mock",
+            action="store_true",
+            default=True,
+            help="Ejecutar benchmarking sobre arneses simulados sin costo de API/GPU",
+        )
+        profile_parser.add_argument(
+            "--no-mock",
+            dest="mock",
+            action="store_false",
+            help="Ejecutar profiling sobre el pipeline real",
+        )
+        profile_parser.add_argument(
+            "--stages",
+            nargs="+",
+            default=None,
+            help="Filtrar etapas específicas (ej. 5_tts_synthesis 9_video_rendering)",
+        )
+        profile_parser.add_argument(
+            "--export-json",
+            "-o",
+            type=str,
+            default=None,
+            help="Ruta para exportar el reporte consolidado en JSON",
+        )
+        profile_parser.add_argument(
+            "--history",
+            action="store_true",
+            default=False,
+            help="Consultar métricas históricas de profiling desde SQLite",
+        )
+        profile_parser.add_argument(
+            "--since",
+            type=str,
+            default="24h",
+            help="Ventana de tiempo para histórico (ej. '1h', '24h', '7d')",
+        )
+        profile_parser.add_argument(
+            "-j",
+            "--json",
+            action="store_true",
+            default=False,
+            help="Salida en formato JSON estructurado",
+        )
+
     return parser
 
 
@@ -796,6 +875,8 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_lanes(args, parser)
     if subcommand == "loop":
         return handle_loop(args, parser)
+    if subcommand in ("profile", "benchmark"):
+        return handle_profile(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

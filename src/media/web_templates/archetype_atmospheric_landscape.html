@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #020408; }
+  canvas { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
+
+const vsSource = `
+  attribute vec2 position;
+  varying vec2 vUv;
+  void main() {
+    vUv = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+`;
+
+const fsSource = `
+  precision highp float;
+  varying vec2 vUv;
+  uniform vec2 u_resolution;
+  uniform float u_time;
+  uniform float u_duration;
+  uniform float u_seed;
+  uniform vec3 u_accent_color;
+
+  #define PI 3.14159265359
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7) + u_seed)) * 43758.5453123);
+  }
+
+  float hash3(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+
+  float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(cos(0.52), sin(0.52), -sin(0.52), cos(0.52));
+    for (int i = 0; i < 5; ++i) {
+      v += a * noise(p);
+      p = rot * p * 2.05;
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    float aspect = u_resolution.x / u_resolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float t = u_time * 0.25;
+
+    // 1. Sky & Volumetric Atmosphere Gradients (Deep Indigo to Cold Horizon Amber/Teal)
+    vec3 sky_zenith = vec3(0.015, 0.025, 0.045);
+    vec3 sky_horizon = vec3(0.12, 0.16, 0.22);
+    vec3 sky = mix(sky_horizon, sky_zenith, smoothstep(0.4, 0.95, uv.y));
+
+    // Dynamic Volumetric Storm Clouds in Sky
+    vec2 cloud_uv = vec2(p.x * 0.8 + t * 0.1, p.y * 1.5 - t * 0.04);
+    float cloud_fbm = fbm(cloud_uv * 3.0);
+    float cloud_mask = smoothstep(0.45, 0.85, cloud_fbm) * smoothstep(0.35, 0.8, uv.y);
+    sky = mix(sky, vec3(0.04, 0.06, 0.09), cloud_mask * 0.85);
+
+    // Eerie Distant Anamorphic Moon / Horizon Glow
+    vec2 moon_pos = vec2(0.25 * aspect, 0.28);
+    float moon_dist = length(p - moon_pos);
+    float moon_glow = exp(-moon_dist * 4.5) * 0.45 + exp(-moon_dist * 20.0) * 0.9;
+    sky += vec3(0.6, 0.75, 0.9) * moon_glow;
+
+    // 2. Multi-Layered Mountain Ridges (Raymarched Horizon Silhouette)
+    // Layer 1: Distant Jagged Mountains
+    float mtn1_h = 0.48 + 0.18 * fbm(vec2(p.x * 1.2, 2.5)) + 0.08 * sin(p.x * 3.5);
+    float mtn1 = smoothstep(0.005, 0.0, uv.y - mtn1_h);
+    vec3 col_mtn1 = mix(vec3(0.06, 0.09, 0.13), sky_horizon * 0.6, 0.4);
+
+    // Layer 2: Mid-ground Rugged Crags & Wasteland Ridge
+    float mtn2_h = 0.38 + 0.14 * fbm(vec2(p.x * 2.4 + 10.0, 5.0)) + 0.05 * cos(p.x * 6.0);
+    float mtn2 = smoothstep(0.004, 0.0, uv.y - mtn2_h);
+    vec3 col_mtn2 = vec3(0.025, 0.04, 0.06);
+
+    // Layer 3: Foreground Desolate Plateau
+    float fg_h = 0.26 + 0.06 * fbm(vec2(p.x * 4.5 + 20.0, 8.0));
+    float fg = smoothstep(0.004, 0.0, uv.y - fg_h);
+    vec3 col_fg = vec3(0.008, 0.012, 0.018);
+
+    // 3. Volumetric Fog Blankets Between Mountain Layers
+    float fog_drift = fbm(vec2(p.x * 2.0 + t * 0.6, uv.y * 8.0));
+    float fog1 = smoothstep(0.32, 0.46, uv.y) * smoothstep(0.55, 0.42, uv.y) * fog_drift;
+    float fog2 = smoothstep(0.20, 0.32, uv.y) * smoothstep(0.38, 0.28, uv.y) * fbm(vec2(p.x * 3.0 - t * 0.4, uv.y * 10.0));
+
+    // Combine Background & Mountains
+    vec3 scene = sky;
+    scene = mix(scene, col_mtn1, mtn1);
+    scene += vec3(0.18, 0.24, 0.32) * fog1 * 0.65;
+    scene = mix(scene, col_mtn2, mtn2);
+    scene += vec3(0.22, 0.28, 0.36) * fog2 * 0.8;
+    scene = mix(scene, col_fg, fg);
+
+    // 4. Iconic Monolith / Lighthouse Silhouette with Volumetric Light Beam
+    vec2 mono_pos = vec2(-0.05 * aspect, 0.28);
+    vec2 d_mono = abs(p - mono_pos);
+    float in_monolith = step(d_mono.x, 0.035 * (1.0 - (p.y - 0.28) * 0.3)) * step(p.y, 0.48) * step(0.18, p.y);
+    float mono_rim = smoothstep(0.04, 0.025, d_mono.x) * in_monolith;
+    scene = mix(scene, vec3(0.004, 0.006, 0.01), in_monolith);
+    scene += vec3(0.4, 0.65, 0.95) * mono_rim * 0.8 * moon_glow; // Rim light
+
+    // Rotating Volumetric Lighthouse Searchlight Beam (Sweeping Across Storm)
+    vec2 light_origin = mono_pos + vec2(0.0, 0.18);
+    vec2 beam_dir = p - light_origin;
+    float beam_angle = atan(beam_dir.y, beam_dir.x);
+    float sweep = mod(t * 1.8, 2.0 * PI) - PI;
+    float angle_diff = mod(beam_angle - sweep, 2.0 * PI);
+    float lighthouse_beam = exp(-angle_diff * 14.0) * smoothstep(0.02, 0.15, length(beam_dir)) * exp(-length(beam_dir) * 0.8);
+    scene += vec3(0.9, 0.95, 1.0) * lighthouse_beam * 2.2;
+
+    // Monolith energy rune fissure / Lighthouse beacon core
+    float rune_x = smoothstep(0.003, 0.0, abs(p.x - mono_pos.x)) * in_monolith * step(p.y, 0.46) * step(0.24, p.y);
+    float rune_pulse = 0.5 + 0.5 * sin(t * 12.0 + p.y * 30.0);
+    scene += u_accent_color * rune_x * rune_pulse * 2.5;
+
+    // 5. Ash / Mist Storm Swirling Particles
+    float ash = 0.0;
+    for (int i = 0; i < 20; i++) {
+      float fi = float(i);
+      vec2 part_pos = vec2(
+        fract(sin(fi * 14.53 + u_seed) + t * (0.15 + fi * 0.02)) * 2.0 - 1.0,
+        fract(cos(fi * 23.81 + u_seed) - t * (0.08 + fi * 0.01)) * 1.4 - 0.7
+      );
+      float p_dist = length(p - part_pos * vec2(aspect, 1.0));
+      ash += exp(-p_dist * 80.0) * (0.3 + 0.7 * sin(t * 5.0 + fi));
+    }
+    scene += vec3(0.8, 0.85, 0.95) * ash * 0.6;
+
+    // 6. Optical Vignette & 35mm Analog Film Grain
+    float vignette = smoothstep(1.3, 0.3, length((uv - 0.5) * vec2(aspect, 1.0)) * 1.35);
+    scene *= vignette;
+
+    float grain = hash3(vec3(gl_FragCoord.xy * 0.6, fract(u_time * 8.41 + u_seed)));
+    scene += (grain - 0.5) * 0.038;
+
+    scene = clamp(scene, 0.0, 1.0);
+    gl_FragColor = vec4(scene, 1.0);
+  }
+`;
+
+function createShader(gl, type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+    gl.deleteShader(s);
+    return null;
+  }
+  return s;
+}
+
+const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+const program = gl.createProgram();
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
+gl.useProgram(program);
+
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1, -1,  1, -1, -1,  1,
+  -1,  1,  1, -1,  1,  1,
+]), gl.STATIC_DRAW);
+
+const posAttr = gl.getAttribLocation(program, 'position');
+gl.enableVertexAttribArray(posAttr);
+gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+const uResLoc = gl.getUniformLocation(program, 'u_resolution');
+const uTimeLoc = gl.getUniformLocation(program, 'u_time');
+const uDurLoc = gl.getUniformLocation(program, 'u_duration');
+const uSeedLoc = gl.getUniformLocation(program, 'u_seed');
+const uAccentLoc = gl.getUniformLocation(program, 'u_accent_color');
+
+let accentRGB = [0.2, 0.7, 1.0];
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  hex = hex.replace('#', '');
+  if (hex.length === 6) {
+    return [
+      parseInt(hex.substring(0, 2), 16) / 255.0,
+      parseInt(hex.substring(2, 4), 16) / 255.0,
+      parseInt(hex.substring(4, 6), 16) / 255.0
+    ];
+  }
+  return null;
+}
+
+window.__setDimensions = function(w, h, seed = 42, params = {}) {
+  canvas.width = w;
+  canvas.height = h;
+  gl.viewport(0, 0, w, h);
+  gl.uniform2f(uResLoc, w, h);
+  gl.uniform1f(uSeedLoc, seed);
+  if (params && params.accentColor) {
+    const parsed = hexToRgb(params.accentColor);
+    if (parsed) accentRGB = parsed;
+  }
+  gl.uniform3f(uAccentLoc, accentRGB[0], accentRGB[1], accentRGB[2]);
+};
+
+window.__setParams = function(params) {
+  if (params && params.accentColor) {
+    const parsed = hexToRgb(params.accentColor);
+    if (parsed) {
+      accentRGB = parsed;
+      gl.uniform3f(uAccentLoc, accentRGB[0], accentRGB[1], accentRGB[2]);
+    }
+  }
+};
+
+window.renderSceneFrame = function(frameIndex, totalFrames, timeSec, durationSec = 8.0) {
+  gl.uniform1f(uTimeLoc, timeSec);
+  gl.uniform1f(uDurLoc, durationSec);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+};
+</script>
+</body>
+</html>

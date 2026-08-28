@@ -406,11 +406,49 @@ def normalize_narration_lufs(
 # Sidechain Ducking Filter Graph
 # ============================================================================
 
+DEFAULT_BACKGROUND_AUDIO_VOLUME: float = 0.04
+DEFAULT_DUCKING_DB: float = -18.0
+
+
+def build_sidechain_ducking_filter_graph(
+    speech_label: str = "0:a",
+    music_label: str = "1:a",
+    out_label: str = "aout",
+    music_volume: float = DEFAULT_BACKGROUND_AUDIO_VOLUME,
+    ducking_threshold: float = 0.035,
+    ducking_ratio: float = 8.0,
+    ducking_attack_ms: float = 20.0,
+    ducking_release_ms: float = 350.0,
+    lowpass_freq: Optional[float] = 12000.0,
+    master_loudness: bool = False,
+    target_lufs: float = -14.0,
+    max_tp: float = -1.5,
+    lra: float = 11.0,
+) -> str:
+    """
+    Constructs a standardized FFmpeg sidechain ducking filter graph.
+    Ducks background music below speech narration with smooth release.
+    """
+    lp_clause = f",lowpass=f={lowpass_freq}" if lowpass_freq and lowpass_freq > 0 else ""
+    graph_parts = [
+        f"[{music_label}]aresample=48000{lp_clause},volume={music_volume:.4f}[music_in];",
+        f"[{speech_label}]aresample=48000,asplit=2[speech_sc][speech_mix];",
+        f"[music_in][speech_sc]sidechaincompress=threshold={ducking_threshold:.4f}:ratio={ducking_ratio}:attack={ducking_attack_ms}:release={ducking_release_ms}:makeup=1[music_ducked];",
+        f"[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed]",
+    ]
+    if master_loudness:
+        graph_parts.append(f";[amixed]loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[{out_label}]")
+    else:
+        graph_parts.append(f";[amixed]aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[{out_label}]")
+    return "".join(graph_parts)
+
+
 def apply_sidechain_ducking(
     narration_path: str | os.PathLike | None = None,
     music_path: str | os.PathLike | None = None,
     output_path: str | os.PathLike | None = None,
-    ducking_db: float = -18.0,
+    ducking_db: float = DEFAULT_DUCKING_DB,
+    music_volume: float = DEFAULT_BACKGROUND_AUDIO_VOLUME,
 ) -> str:
     """Duck background music below narration using sidechain compression (-18dB, 350ms release)."""
     if not _looks_like_real_input(narration_path):
@@ -430,13 +468,18 @@ def apply_sidechain_ducking(
 
     out_cmd = out_target + ".tmp.duck.wav" if use_tmp else out_target
 
-    # threshold derived from ducking_db (linear gain target)
     threshold = max(0.001, 10 ** (max(ducking_db, -60) / 20))
-    filtergraph = (
-        "[1:a]aresample=48000,volume=1[music_in];"
-        "[0:a]aresample=48000[speech];"
-        f"[music_in][speech]sidechaincompress=threshold={threshold:.4f}:ratio=8:attack=20:release=350:makeup=1[ducked];"
-        "[speech][ducked]amix=inputs=2:duration=first:normalize=0[aout]"
+    filtergraph = build_sidechain_ducking_filter_graph(
+        speech_label="0:a",
+        music_label="1:a",
+        out_label="aout",
+        music_volume=music_volume,
+        ducking_threshold=threshold,
+        ducking_ratio=8.0,
+        ducking_attack_ms=20.0,
+        ducking_release_ms=350.0,
+        lowpass_freq=12000.0,
+        master_loudness=False,
     )
     try:
         try:
@@ -472,25 +515,76 @@ def master_audio_track(
     music_path: str | os.PathLike | None = None,
     output_path: str | os.PathLike | None = None,
     target_lufs: float = -14.0,
-    ducking_db: float = -18.0,
+    ducking_db: float = DEFAULT_DUCKING_DB,
+    music_volume: float = DEFAULT_BACKGROUND_AUDIO_VOLUME,
     lowpass_freq: float = 12000.0,
 ) -> str:
-    """Full mastering chain: duck music under narration, then loudness normalize to -14 LUFS."""
+    """Full mastering chain: duck music under narration and loudness normalize to -14 LUFS in a single pass."""
     if not _looks_like_real_input(narration_path):
         return str(output_path or narration_path or "")
-    out = str(output_path or narration_path)
-    ducked = apply_sidechain_ducking(
-        narration_path=narration_path,
-        music_path=music_path,
-        output_path=out,
-        ducking_db=ducking_db,
-    )
-    if ducked and Path(ducked).exists():
+    out_target = str(output_path or narration_path)
+    Path(out_target).parent.mkdir(parents=True, exist_ok=True)
+
+    if not _looks_like_real_input(music_path):
         return normalize_narration_lufs(
-            input_path=ducked,
-            output_path=out,
+            input_path=narration_path,
+            output_path=out_target,
             target_lufs=target_lufs,
             apply_lowpass=bool(lowpass_freq and lowpass_freq > 0),
             lowpass_freq=lowpass_freq or 12000.0,
         )
-    return out
+
+    use_tmp = False
+    try:
+        out_res = Path(out_target).resolve()
+        if Path(narration_path).resolve() == out_res or Path(music_path).resolve() == out_res:
+            use_tmp = True
+    except Exception:
+        use_tmp = (str(narration_path) == str(out_target) or str(music_path) == str(out_target))
+
+    out_cmd = out_target + ".tmp.master.wav" if use_tmp else out_target
+
+    threshold = max(0.001, 10 ** (max(ducking_db, -60) / 20))
+    filtergraph = build_sidechain_ducking_filter_graph(
+        speech_label="0:a",
+        music_label="1:a",
+        out_label="aout",
+        music_volume=music_volume,
+        ducking_threshold=threshold,
+        ducking_ratio=8.0,
+        ducking_attack_ms=20.0,
+        ducking_release_ms=350.0,
+        lowpass_freq=lowpass_freq if (lowpass_freq and lowpass_freq > 0) else None,
+        master_loudness=True,
+        target_lufs=target_lufs,
+        max_tp=-1.5,
+        lra=11.0,
+    )
+
+    try:
+        try:
+            _ffmpeg_run(
+                ["ffmpeg", "-y", "-i", str(narration_path), "-stream_loop", "-1", "-i", str(music_path),
+                 "-filter_complex", filtergraph, "-map", "[aout]", "-ar", "48000", "-ac", "2", out_cmd],
+                check=True,
+            )
+        except Exception as exc:
+            logger.error("FFmpeg single-pass master audio track failed: %s", exc, exc_info=True)
+            raise FFmpegExecutionError(
+                f"Master audio track failed for narration '{narration_path}' and music '{music_path}': {exc}"
+            ) from exc
+
+        if not _looks_like_real_input(out_cmd):
+            logger.error("Output audio artifact %s missing or empty after mastering", out_cmd)
+            raise AudioProcessingError(f"Output audio artifact {out_cmd} is missing or empty after mastering")
+
+        if use_tmp:
+            os.replace(out_cmd, out_target)
+    finally:
+        if use_tmp and os.path.exists(out_cmd):
+            try:
+                os.remove(out_cmd)
+            except OSError:
+                pass
+
+    return out_target

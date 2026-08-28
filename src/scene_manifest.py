@@ -55,7 +55,7 @@ class SFXCue(BaseModel):
 class AudioTracks(BaseModel):
     narration_path: str
     music_path: Optional[str] = ""
-    music_volume: float = Field(0.12, ge=0.0, le=1.0)
+    music_volume: float = Field(0.04, ge=0.0, le=1.0)
     ducking: Optional[DuckingConfig] = Field(default_factory=DuckingConfig)
     sfx_cues: Optional[List[SFXCue]] = Field(default_factory=list)
 
@@ -384,7 +384,7 @@ def parse_scene_manifest_model(
         audio_tracks=AudioTracks(
             narration_path=audio_meta.get("narration_path", ""),
             music_path=audio_meta.get("music_path", ""),
-            music_volume=float(audio_meta.get("music_volume", 0.12)),
+            music_volume=float(audio_meta.get("music_volume", 0.04)),
             ducking=DuckingConfig(),
         ),
         safe_area=SafeArea(
@@ -432,7 +432,7 @@ def build_scene_manifest_v2(
     total_duration_sec: float,
     narration_path: Union[Path, str],
     music_path: Optional[Union[Path, str]] = None,
-    music_volume: float = 0.12,
+    music_volume: float = 0.04,
     scenes: Optional[List[Dict[str, Any]]] = None,
     subtitles: Optional[List[Dict[str, Any]]] = None,
     resolution: Tuple[int, int] = (1920, 1080),
@@ -631,7 +631,7 @@ def build_scene_manifest(
         "audio": {
             "narration_path": str(narration_path),
             "music_path": str(music_path) if music_path else "",
-            "music_volume": 0.12,
+            "music_volume": 0.04,
         },
         "story": {
             "story_id": scp_id,
@@ -658,6 +658,7 @@ def build_scene_manifest(
         },
     }
 
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest_data, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("Saved legacy scene_manifest.json at %s (%d scenes)", manifest_path, len(scenes))
     validate_scene_manifest(manifest_path)

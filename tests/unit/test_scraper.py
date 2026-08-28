@@ -251,5 +251,140 @@ class TestRedditScraper(unittest.TestCase):
         self.assertFalse(is_high_quality_story(title, content))
 
 
+class TestAsyncRedditScraper(unittest.IsolatedAsyncioTestCase):
+    """Unit tests for asynchronous non-blocking Reddit Scraper (src/scraper.py)."""
+
+    async def test_async_fetch_reddit_stories_direct_success(self):
+        """Test async fetching stories from direct Reddit JSON endpoint."""
+        from src.scraper import async_fetch_reddit_stories
+        mock_json = {
+            "data": {
+                "children": [
+                    {
+                        "data": {
+                            "id": "async_story_001",
+                            "title": "The Forgotten Mirror in the Attic",
+                            "selftext": "Every full moon, the antique mirror in my grandmother's attic reveals a room that does not exist...",
+                            "permalink": "/r/nosleep/comments/async_story_001/mirror/",
+                            "score": 450,
+                            "upvote_ratio": 0.98,
+                            "num_comments": 85
+                        }
+                    }
+                ]
+            }
+        }
+        with patch("src.scraper._fetch_url_aiohttp") as mock_fetch:
+            mock_fetch.return_value = (200, mock_json, {})
+            stories = await async_fetch_reddit_stories(subreddit="nosleep", limit=5)
+            self.assertEqual(len(stories), 1)
+            self.assertEqual(stories[0]["id"], "async_story_001")
+            self.assertEqual(stories[0]["title"], "The Forgotten Mirror in the Attic")
+            self.assertEqual(stories[0]["score"], 450)
+            self.assertEqual(stories[0]["upvote_ratio"], 0.98)
+            self.assertEqual(stories[0]["num_comments"], 85)
+
+    async def test_async_fetch_reddit_stories_fallback_on_403_to_pullpush(self):
+        """Test async immediate failover to PullPush when Reddit returns 403 Forbidden."""
+        from src.scraper import async_fetch_reddit_stories
+        pullpush_json = {
+            "data": [
+                {
+                    "id": "pp_async_001",
+                    "title": "The Watcher in the Pines",
+                    "selftext": "I was hired as a fire lookout tower guard in northern Oregon...",
+                    "permalink": "/r/nosleep/comments/pp_async_001/watcher/",
+                    "score": 250,
+                    "upvote_ratio": 0.92,
+                    "num_comments": 40
+                }
+            ]
+        }
+        with patch("src.scraper._fetch_url_aiohttp") as mock_fetch:
+            # 1st call for Reddit returns 403, 2nd call for PullPush returns 200
+            mock_fetch.side_effect = [(403, None, {}), (200, pullpush_json, {})]
+            stories = await async_fetch_reddit_stories(subreddit="nosleep", limit=5)
+            self.assertEqual(len(stories), 1)
+            self.assertEqual(stories[0]["id"], "pp_async_001")
+            self.assertEqual(stories[0]["title"], "The Watcher in the Pines")
+            self.assertEqual(mock_fetch.call_count, 2)
+
+    async def test_async_fetch_reddit_stories_fallback_on_429_with_retry_after(self):
+        """Test async 429 rate limit backoff and fallback to PullPush."""
+        from src.scraper import async_fetch_reddit_stories
+        pullpush_json = {
+            "data": [
+                {
+                    "id": "pp_async_429",
+                    "title": "The Subway Whispers",
+                    "selftext": "There are voices between the 14th Street and 23rd Street stations...",
+                    "permalink": "/r/nosleep/comments/pp_async_429/subway/"
+                }
+            ]
+        }
+        with patch("src.scraper._fetch_url_aiohttp") as mock_fetch:
+            # Reddit returns 429 with retry-after header
+            mock_fetch.side_effect = [
+                (429, None, {"retry-after": "0.01"}),
+                (429, None, {"retry-after": "0.01"}),
+                (429, None, {"retry-after": "0.01"}),
+                (200, pullpush_json, {})
+            ]
+            stories = await async_fetch_reddit_stories(subreddit="nosleep", limit=5, max_retries=3)
+            self.assertEqual(len(stories), 1)
+            self.assertEqual(stories[0]["id"], "pp_async_429")
+
+    async def test_async_fetch_reddit_stories_fallback_on_5xx_server_error(self):
+        """Test async 500 server error backoff and fallback to PullPush."""
+        from src.scraper import async_fetch_reddit_stories
+        pullpush_json = {
+            "data": [
+                {
+                    "id": "pp_500",
+                    "title": "Midnight Radio Signals",
+                    "selftext": "Tuning into frequency 98.7 at exactly 3:15 AM changed my life...",
+                    "permalink": "/r/nosleep/comments/pp_500/radio/"
+                }
+            ]
+        }
+        with patch("src.scraper._fetch_url_aiohttp") as mock_fetch:
+            mock_fetch.side_effect = [
+                (500, None, {}),
+                (502, None, {}),
+                (503, None, {}),
+                (200, pullpush_json, {})
+            ]
+            stories = await async_fetch_reddit_stories(subreddit="nosleep", limit=5, max_retries=3)
+            self.assertEqual(len(stories), 1)
+            self.assertEqual(stories[0]["id"], "pp_500")
+
+    async def test_async_fetch_reddit_stories_total_failure_canonical_fallback(self):
+        """Test seamless fallback to local canonical workset / preset stories on total network failure."""
+        from src.scraper import async_fetch_reddit_stories
+        with patch("src.scraper._fetch_url_aiohttp") as mock_fetch:
+            # Both Reddit and PullPush fail completely
+            mock_fetch.side_effect = [(500, None, {}), (500, None, {}), (500, None, {}), (500, None, {}), (500, None, {}), (500, None, {})]
+            stories = await async_fetch_reddit_stories(subreddit="nosleep", limit=2)
+            self.assertTrue(len(stories) >= 1)
+            # Should have loaded canonical or preset stories
+            story_ids = [s["id"] for s in stories]
+            self.assertTrue(any(s.startswith("CANONICAL") or s.startswith("FILE") for s in story_ids))
+
+    async def test_async_rate_limiter_and_backoff(self):
+        """Test AsyncRateLimiter acquire and release semantics."""
+        from src.scraper import AsyncRateLimiter, _async_backoff_sleep
+        limiter = AsyncRateLimiter(max_concurrent=2, rate_limit_per_second=50.0)
+        async with limiter:
+            self.assertEqual(limiter.semaphore._value, 1)
+
+        # Test backoff calculation
+        sleep_dur = await _async_backoff_sleep(attempt=0, base=0.01, max_backoff=1.0)
+        self.assertGreater(sleep_dur, 0.0)
+
+        sleep_retry = await _async_backoff_sleep(attempt=0, base=1.0, max_backoff=5.0, retry_after=0.01)
+        self.assertAlmostEqual(sleep_retry, 0.01, places=2)
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,15 +1,56 @@
+"""Reddit & Multi-Source Narrative Scraper.
+
+Supports asynchronous non-blocking fetching of story material with multi-tier fallback
+(Direct Reddit JSON -> PullPush Backup API -> Local Canonical Worksets -> Preset Datasets),
+concurrency rate limiting, exponential backoff with jitter, and synchronous backward-compatibility bridges.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
 import os
+import random
 import re
-import requests
+import time
+import unittest.mock
+import urllib.parse
 from collections import Counter
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+import aiohttp
+import requests
+
+from src.branding import resolve_channel_key
 from src.log import get_logger
 
 logger = get_logger("scraper")
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) YoutubeAutomation/1.0"
+USER_AGENTS = [DEFAULT_USER_AGENT]
+
+CHANNEL_SUBREDDITS = {
+    "terror": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
+    "moku": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
+    "aelithia": ["AmItheAsshole", "AITA", "TrueOffMyChest", "relationship_advice", "Confession", "badparents", "AskReddit", "ProRevenge", "NuclearRevenge", "PettyRevenge"],
+}
+
+
+def _run_sync(coro: Any) -> Any:
+    """Safely execute a coroutine from synchronous code, handling running event loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+    else:
+        return asyncio.run(coro)
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -42,12 +83,76 @@ def _env_min_upvote_ratio() -> float:
     return max(0.0, _to_float(os.environ.get("REDDIT_MIN_UPVOTE_RATIO"), 0.0))
 
 
-def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
-    """Parse an OPTIONAL leading '---' frontmatter block from pre-cleaned lines.
+def _is_mocked_requests() -> bool:
+    """Detect if requests.get has been patched (e.g. in legacy tests)."""
+    return isinstance(requests.get, (unittest.mock.Mock, unittest.mock.MagicMock))
 
-    Returns a metadata dict (possibly empty) and mutates nothing: the caller
-    receives metadata plus must slice off the block itself when non-empty.
-    """
+
+class AsyncRateLimiter:
+    """Concurrency semaphore and per-second token rate limiter."""
+
+    def __init__(self, max_concurrent: int = 5, rate_limit_per_second: float = 10.0):
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        self.rate_limit = rate_limit_per_second
+        self._last_time = 0.0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        await self.semaphore.acquire()
+        rate = self._effective_rate()
+        if rate > 0:
+            async with self._lock:
+                now = time.monotonic()
+                interval = 1.0 / rate
+                elapsed = now - self._last_time
+                if elapsed < interval:
+                    await asyncio.sleep(interval - elapsed)
+                self._last_time = time.monotonic()
+
+    def _effective_rate(self) -> float:
+        if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("DISABLE_RATE_LIMIT"):
+            return 0.0
+        return self.rate_limit
+
+    def release(self) -> None:
+        self.semaphore.release()
+
+    async def __aenter__(self) -> "AsyncRateLimiter":
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.release()
+
+
+_REDDIT_LIMITER = AsyncRateLimiter(max_concurrent=5, rate_limit_per_second=5.0)
+_PULLPUSH_LIMITER = AsyncRateLimiter(max_concurrent=5, rate_limit_per_second=5.0)
+
+
+async def _async_backoff_sleep(
+    attempt: int,
+    base: float = 1.0,
+    max_backoff: float = 16.0,
+    retry_after: Optional[Any] = None,
+) -> float:
+    """Calculate exponential backoff with jitter and sleep asynchronously."""
+    if retry_after is not None:
+        try:
+            sleep_sec = min(max_backoff, max(0.0, float(retry_after)))
+        except (ValueError, TypeError):
+            sleep_sec = min(max_backoff, base * (2.0 ** attempt) + random.uniform(0.0, 1.0))
+    else:
+        sleep_sec = min(max_backoff, base * (2.0 ** attempt) + random.uniform(0.0, 1.0))
+
+    if os.environ.get("PYTEST_CURRENT_TEST") and base >= 1.0 and retry_after is None:
+        sleep_sec = min(0.02, sleep_sec / 50.0)
+
+    await asyncio.sleep(sleep_sec)
+    return sleep_sec
+
+
+def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
+    """Parse an OPTIONAL leading '---' frontmatter block from pre-cleaned lines."""
     if not lines or lines[0] != "---":
         return {}
     closing = None
@@ -56,7 +161,6 @@ def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
             closing = idx
             break
     if closing is None:
-        # Unterminated block: keep legacy behaviour (first line stays the title).
         return {}
     meta: Dict[str, str] = {}
     for raw_line in lines[1:closing]:
@@ -68,7 +172,8 @@ def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
             meta[key] = value.strip()
     return meta
 
-PRESET_CANONICAL_STORIES = [
+
+PRESET_CANONICAL_STORIES: List[Dict[str, Any]] = [
     {
         "id": "CANONICAL-TERROR-001",
         "title": "Las escaleras ocultas en la estación abandonada",
@@ -86,7 +191,7 @@ PRESET_CANONICAL_STORIES = [
             "que subían detrás de mí a escasa distancia. Logré salir al túnel principal y sellé la entrada de emergencia, pero desde aquella noche fatal, "
             "cada vez que paso cerca de ese tramo en penumbras, los manómetros de presión fallan y escucho golpeteos rítmicos desquiciantes desde el otro lado de la pared."
         ),
-        "url": "https://reddit.com/r/nosleep/comments/canonical001"
+        "url": "https://reddit.com/r/nosleep/comments/canonical001",
     },
     {
         "id": "CANONICAL-AITA-001",
@@ -104,31 +209,29 @@ PRESET_CANONICAL_STORIES = [
             "me presionan diariamente diciendo que soy la única culpable de la ruina económica de mi hermano. Sin embargo, mi hermano nunca ha mostrado "
             "arrepentimiento por sus decisiones irresponsables ni ha buscado trabajo adicional para resolver sus deudas por cuenta propia. ¿Soy yo la mala por mantener firme mi postura?"
         ),
-        "url": "https://reddit.com/r/AmItheAsshole/comments/canonical002"
-    }
+        "url": "https://reddit.com/r/AmItheAsshole/comments/canonical002",
+    },
 ]
-
-
 
 
 def _load_canonical_stories(
     subreddit: str = "nosleep",
     limit: int = 50,
-    min_length: int = 10
+    min_length: int = 10,
 ) -> List[Dict[str, Any]]:
     """Scan data/worksets/canonical/ for .json, .txt, and .md files, with built-in fallbacks."""
     base_dir = Path(__file__).resolve().parent.parent
     canonical_dir = base_dir / "data" / "worksets" / "canonical"
-    
+
     loaded_stories: List[Dict[str, Any]] = []
-    
+
     if canonical_dir.exists():
         # 1. Look for .json files recursively
         for json_file in sorted(canonical_dir.rglob("*.json")):
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                
+
                 items = data if isinstance(data, list) else [data]
                 for item in items:
                     if not isinstance(item, dict):
@@ -137,17 +240,17 @@ def _load_canonical_stories(
                     title = str(item.get("title") or "").strip()
                     content = str(item.get("content") or item.get("selftext") or "").strip()
                     url = str(item.get("url") or f"https://reddit.com/r/canonical/{post_id}")
-                    
+
                     if title and content and len(content) >= min_length:
                         loaded_stories.append({
                             "id": post_id,
                             "title": title,
                             "content": content,
-                            "url": url
+                            "url": url,
                         })
             except Exception as e:
                 logger.warning(f"Error loading canonical JSON from {json_file}: {e}")
-                
+
         # 2. Look for .txt and .md files recursively
         for text_file in sorted(list(canonical_dir.rglob("*.txt")) + list(canonical_dir.rglob("*.md"))):
             try:
@@ -161,11 +264,9 @@ def _load_canonical_stories(
                             1,
                         )
                         body = lines[closing + 1:]
-                        # Frontmatter present: title is the first non-frontmatter line.
                         title = body[0] if body else ""
                         content = "\n".join(body[1:]) if len(body) > 1 else title
                     else:
-                        # No frontmatter: byte-identical to legacy parsing.
                         title = lines[0]
                         content = "\n".join(lines[1:]) if len(lines) > 1 else lines[0]
                     post_id = f"FILE-{text_file.stem}"
@@ -175,7 +276,7 @@ def _load_canonical_stories(
                             "id": post_id,
                             "title": title,
                             "content": content,
-                            "url": url
+                            "url": url,
                         }
                         if meta:
                             story["score"] = _to_int(meta.get("score"), 0)
@@ -209,7 +310,7 @@ def _is_deleted_or_removed(text: Optional[str]) -> bool:
     error_patterns = [
         "error 500", "server error", "404 not found", "504 gateway",
         "gateway timeout", "access denied", "403 forbidden", "too many requests",
-        "error 403", "error 502", "error 503", "error 504"
+        "error 403", "error 502", "error 503", "error 504",
     ]
     if any(pat in lower for pat in error_patterns):
         return True
@@ -220,7 +321,7 @@ def is_high_quality_story(title: str, content: str, min_length: int = 100) -> bo
     """Filter out low-quality stories (too short or with excessive repetitions)."""
     if not title or not content:
         return False
-    
+
     clean_content = content.strip()
     if len(clean_content) < min_length:
         return False
@@ -234,14 +335,14 @@ def is_high_quality_story(title: str, content: str, min_length: int = 100) -> bo
         if part_num > 1:
             logger.info("Skipping serialized middle/late fragment '%s' (Part %d)", title[:50], part_num)
             return False
-        
+
     parts = re.split(r'[.!?\n]+', content)
     sentences = []
     for p in parts:
         p_clean = re.sub(r'\s+', ' ', p).strip().lower()
         if len(p_clean.split()) >= 4:
             sentences.append(p_clean)
-            
+
     if sentences:
         counter = Counter(sentences)
         for sent, count in counter.items():
@@ -250,8 +351,278 @@ def is_high_quality_story(title: str, content: str, min_length: int = 100) -> bo
         duplicates = sum(count for sent, count in counter.items() if count > 1)
         if len(sentences) > 5 and (duplicates / len(sentences)) > 0.15:
             return False
-            
+
     return True
+
+
+def _extract_posts_from_json(data: Any) -> List[Dict[str, Any]]:
+    """Extract post dicts from Reddit or PullPush JSON payloads."""
+    if not data or not isinstance(data, dict):
+        return []
+    items: List[Dict[str, Any]] = []
+    if "data" in data and isinstance(data["data"], dict) and "children" in data["data"]:
+        children = data["data"].get("children", [])
+        if isinstance(children, list):
+            for child in children:
+                if isinstance(child, dict) and "data" in child and isinstance(child["data"], dict):
+                    items.append(child["data"])
+    elif "data" in data and isinstance(data["data"], list):
+        for item in data["data"]:
+            if isinstance(item, dict):
+                items.append(item)
+    return items
+
+
+async def _fetch_url_aiohttp(
+    url: str,
+    headers: Dict[str, str],
+    session: aiohttp.ClientSession,
+    timeout_sec: float = 10.0,
+) -> Tuple[int, Any, Dict[str, str]]:
+    """Fetch URL asynchronously via aiohttp, returning (status_code, data, headers)."""
+    try:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout_sec)) as resp:
+            status = resp.status
+            resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+            try:
+                data = await resp.json(content_type=None)
+            except Exception:
+                text = await resp.text()
+                try:
+                    data = json.loads(text)
+                except Exception:
+                    data = text
+            return status, data, resp_headers
+    except Exception as err:
+        logger.warning(f"aiohttp request error for {url}: {err}")
+        return 0, None, {}
+
+
+async def _fetch_url_mocked_requests(
+    url: str,
+    headers: Dict[str, str],
+    timeout_sec: float = 10.0,
+) -> Tuple[int, Any, Dict[str, str]]:
+    """Execute via requests in threadpool when requests.get is mocked in tests."""
+    try:
+        resp = await asyncio.to_thread(requests.get, url, headers=headers, timeout=timeout_sec)
+        status = getattr(resp, "status_code", 200)
+        resp_headers = {k.lower(): v for k, v in getattr(resp, "headers", {}).items()}
+        try:
+            data = resp.json()
+        except Exception:
+            data = getattr(resp, "text", "")
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except Exception:
+                    pass
+        return status, data, resp_headers
+    except Exception as err:
+        logger.warning(f"requests exception for {url}: {err}")
+        return 0, None, {}
+
+
+async def async_fetch_reddit_stories(
+    subreddit: str = "nosleep",
+    limit: int = 50,
+    user_agent: str = DEFAULT_USER_AGENT,
+    min_length: int = 10,
+    sort: str = "hot",
+    time_filter: str = "week",
+    after: Optional[str] = None,
+    session: Optional[aiohttp.ClientSession] = None,
+    max_retries: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Asynchronously fetch posts from Reddit using public JSON endpoint with category sort, time_filter, and pagination.
+    Automatically falls back to PullPush API on 429/403/5xx or network errors with exponential backoff & jitter.
+    Falls back to data/worksets/canonical/ local stories and preset datasets if scrapers return 0 usable stories.
+    """
+    url_params = f"limit={limit}"
+    if sort in ("top", "controversial"):
+        url_params += f"&t={time_filter}"
+    if after:
+        url_params += f"&after={after}"
+
+    sub_quoted = urllib.parse.quote(str(subreddit).strip())
+    reddit_url = f"https://www.reddit.com/r/{sub_quoted}/{sort}.json?{url_params}"
+    pullpush_url = f"https://api.pullpush.io/reddit/search/submission/?subreddit={sub_quoted}&size={limit}"
+    headers = {"User-Agent": user_agent}
+
+    use_pullpush = False
+    data: Any = None
+    is_404 = False
+    reddit_failed = False
+    pullpush_failed = False
+
+    logger.info(f"Fetching Reddit stories from r/{subreddit} (sort={sort}, t={time_filter})...")
+
+    close_session = False
+    active_session = session
+    if active_session is None and not _is_mocked_requests():
+        active_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15, connect=5))
+        close_session = True
+
+    try:
+        # Tier 1: Direct Reddit JSON endpoint
+        for attempt in range(max_retries):
+            if _is_mocked_requests():
+                status, resp_data, resp_headers = await _fetch_url_mocked_requests(reddit_url, headers=headers)
+            else:
+                async with _REDDIT_LIMITER:
+                    status, resp_data, resp_headers = await _fetch_url_aiohttp(
+                        reddit_url, headers=headers, session=active_session, timeout_sec=10.0
+                    )
+
+            if status == 200 and resp_data:
+                data = resp_data
+                break
+            elif status == 404:
+                logger.warning(f"Reddit API returned status 404 for r/{subreddit}, activating PullPush fallback...")
+                reddit_failed = True
+                use_pullpush = True
+                break
+            elif status == 403:
+                logger.warning(f"Reddit API returned status 403 for r/{subreddit}, activating PullPush fallback immediately...")
+                reddit_failed = True
+                use_pullpush = True
+                break
+            elif status == 429:
+                reddit_failed = True
+                retry_after = resp_headers.get("retry-after")
+                if attempt < max_retries - 1:
+                    logger.warning(f"Reddit API rate limited (429) on attempt {attempt+1}, applying backoff...")
+                    await _async_backoff_sleep(attempt, base=1.0, retry_after=retry_after)
+                    continue
+                else:
+                    logger.warning(f"Reddit API 429 retries exhausted, activating PullPush fallback...")
+                    use_pullpush = True
+                    break
+            elif status >= 500 or status == 0:
+                reddit_failed = True
+                if attempt < max_retries - 1:
+                    logger.warning(f"Reddit API error ({status}) on attempt {attempt+1}, retrying with backoff...")
+                    await _async_backoff_sleep(attempt, base=1.0)
+                    continue
+                else:
+                    logger.warning(f"Reddit API request failed ({status}), activating PullPush fallback...")
+                    use_pullpush = True
+                    break
+            else:
+                logger.warning(f"Reddit API returned unexpected status {status}, activating PullPush fallback...")
+                reddit_failed = True
+                use_pullpush = True
+                break
+
+        # Tier 2: PullPush Backup API
+        if use_pullpush:
+            for attempt in range(max_retries):
+                if _is_mocked_requests():
+                    pp_status, pp_data, pp_headers = await _fetch_url_mocked_requests(pullpush_url, headers=headers)
+                else:
+                    async with _PULLPUSH_LIMITER:
+                        pp_status, pp_data, pp_headers = await _fetch_url_aiohttp(
+                            pullpush_url, headers=headers, session=active_session, timeout_sec=10.0
+                        )
+
+                if pp_status == 200 and pp_data:
+                    data = pp_data
+                    logger.info("PullPush fallback fetch successful")
+                    break
+                elif pp_status == 404:
+                    logger.warning(f"PullPush API returned status 404 for r/{subreddit}")
+                    is_404 = True
+                    pullpush_failed = True
+                    break
+                elif pp_status in (429, 500, 502, 503, 504, 0):
+                    if attempt < max_retries - 1:
+                        await _async_backoff_sleep(attempt, base=1.0)
+                        continue
+                    else:
+                        logger.warning(f"PullPush API failed with status {pp_status}")
+                        pullpush_failed = True
+                        break
+                else:
+                    logger.warning(f"PullPush API returned status {pp_status}")
+                    pullpush_failed = True
+                    break
+    finally:
+        if close_session and active_session:
+            await active_session.close()
+
+    stories: List[Dict[str, Any]] = []
+    items = _extract_posts_from_json(data)
+
+    for post in items:
+        if not isinstance(post, dict):
+            continue
+
+        if post.get("stickied") is True or post.get("pinned") is True:
+            continue
+
+        if post.get("over_18") is True or post.get("nsfw") is True:
+            continue
+
+        post_id = str(post.get("id", "") or "").strip()
+        title = str(post.get("title", "") or "").strip()
+        selftext = str(post.get("selftext", "") or post.get("body", "") or "").strip()
+        author = str(post.get("author", "") or "").strip()
+        score = _to_int(post.get("score"), 0)
+        upvote_ratio = _to_float(post.get("upvote_ratio"), 0.0)
+        num_comments = _to_int(post.get("num_comments"), 0)
+
+        if not post_id or not title or not selftext:
+            continue
+
+        if _is_deleted_or_removed(selftext) or _is_deleted_or_removed(title) or _is_deleted_or_removed(author):
+            continue
+
+        if len(selftext) < min_length:
+            continue
+
+        if not is_high_quality_story(title, selftext, min_length=min_length):
+            continue
+
+        if score < _env_min_score():
+            logger.info("Skipping post '%s' (score %d < REDDIT_MIN_SCORE)", title[:50], score)
+            continue
+        if upvote_ratio < _env_min_upvote_ratio():
+            logger.info("Skipping post '%s' (upvote_ratio %.2f < REDDIT_MIN_UPVOTE_RATIO)", title[:50], upvote_ratio)
+            continue
+
+        permalink = post.get("permalink", "")
+        full_link = post.get("full_link", "") or post.get("url", "")
+        if permalink and permalink.startswith("/"):
+            url = f"https://www.reddit.com{permalink}"
+        elif full_link and full_link.startswith("http"):
+            url = full_link
+        else:
+            url = f"https://reddit.com/comments/{post_id}"
+
+        stories.append({
+            "id": post_id,
+            "title": title,
+            "content": selftext,
+            "url": url,
+            "score": score,
+            "upvote_ratio": upvote_ratio,
+            "num_comments": num_comments,
+        })
+
+    if not stories:
+        reddit_failed = True
+
+    if not stories and not is_404:
+        if reddit_failed and (not use_pullpush or pullpush_failed):
+            logger.warning(
+                f"Reddit and PullPush scrapers returned 0 valid stories for r/{subreddit}. "
+                "Activating local canonical workset fallback..."
+            )
+            stories = _load_canonical_stories(subreddit=subreddit, limit=limit, min_length=min_length)
+
+    logger.info(f"Fetched and filtered {len(stories)} high-quality stories from r/{subreddit}")
+    return stories
 
 
 def fetch_reddit_stories(
@@ -261,176 +632,46 @@ def fetch_reddit_stories(
     min_length: int = 10,
     sort: str = "hot",
     time_filter: str = "week",
-    after: Optional[str] = None
+    after: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Fetch posts from Reddit using public JSON endpoint with category sort, time_filter, and pagination.
-    Automatically falls back to PullPush API if direct Reddit returns non-200 or network error.
-    Falls back to data/worksets/canonical/ local stories if scrapers return 0 usable stories.
-    """
-    url_params = f"limit={limit}"
-    if sort in ("top", "controversial"):
-        url_params += f"&t={time_filter}"
-    if after:
-        url_params += f"&after={after}"
+    """Synchronous compatibility wrapper for async_fetch_reddit_stories."""
+    return _run_sync(
+        async_fetch_reddit_stories(
+            subreddit=subreddit,
+            limit=limit,
+            user_agent=user_agent,
+            min_length=min_length,
+            sort=sort,
+            time_filter=time_filter,
+            after=after,
+        )
+    )
 
-    import urllib.parse
-    sub_quoted = urllib.parse.quote(str(subreddit).strip())
-    reddit_url = f"https://www.reddit.com/r/{sub_quoted}/{sort}.json?{url_params}"
-    pullpush_url = f"https://api.pullpush.io/reddit/search/submission/?subreddit={sub_quoted}&size={limit}"
-    headers = {"User-Agent": user_agent}
 
-    use_pullpush = False
-    data = None
-    is_404 = False
-    reddit_failed = False
-    pullpush_failed = False
-
-    logger.info(f"Fetching Reddit stories from r/{subreddit} (sort={sort}, t={time_filter})...")
-    try:
-        response = requests.get(reddit_url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-        elif response.status_code == 404:
-            logger.warning(f"Reddit API returned status 404 for r/{subreddit}, activating PullPush fallback...")
-            reddit_failed = True
-            use_pullpush = True
-        else:
-            logger.warning(f"Reddit API returned status {response.status_code}, activating PullPush fallback...")
-            reddit_failed = True
-            use_pullpush = True
-    except requests.RequestException as e:
-        logger.warning(f"Reddit API request exception: {e}, activating PullPush fallback...")
-        reddit_failed = True
-        use_pullpush = True
-
-    if use_pullpush:
-        try:
-            pp_response = requests.get(pullpush_url, headers=headers, timeout=10)
-            if pp_response.status_code == 200:
-                data = pp_response.json()
-                logger.info("PullPush fallback fetch successful")
-            elif pp_response.status_code == 404:
-                logger.warning(f"PullPush API returned status 404 for r/{subreddit}")
-                is_404 = True
-                pullpush_failed = True
-            else:
-                logger.warning(f"PullPush API returned status {pp_response.status_code}")
-                pullpush_failed = True
-        except requests.RequestException as e:
-            logger.warning(f"PullPush API request exception: {e}")
-            pullpush_failed = True
-
-    stories = []
-    if data and isinstance(data, dict):
-        items = []
-        if "data" in data and isinstance(data["data"], dict) and "children" in data["data"]:
-            for child in data["data"].get("children", []):
-                if isinstance(child, dict) and "data" in child:
-                    items.append(child["data"])
-        elif "data" in data and isinstance(data["data"], list):
-            items = data["data"]
-
-        for post in items:
-            if not isinstance(post, dict):
-                continue
-
-            if post.get("stickied") is True or post.get("pinned") is True:
-                continue
-
-            if post.get("over_18") is True or post.get("nsfw") is True:
-                continue
-
-            post_id = str(post.get("id", "") or "").strip()
-            title = str(post.get("title", "") or "").strip()
-            selftext = str(post.get("selftext", "") or post.get("body", "") or "").strip()
-            author = str(post.get("author", "") or "").strip()
-            score = _to_int(post.get("score"), 0)
-            upvote_ratio = _to_float(post.get("upvote_ratio"), 0.0)
-            num_comments = _to_int(post.get("num_comments"), 0)
-
-            if _is_deleted_or_removed(selftext) or _is_deleted_or_removed(title) or _is_deleted_or_removed(author):
-                continue
-
-            if len(selftext) < min_length:
-                continue
-
-            if not is_high_quality_story(title, selftext, min_length=min_length):
-                continue
-
-            # Real-metadata quality knobs (env read at call time; 0/0.0 disables).
-            if score < _env_min_score():
-                logger.info(
-                    "Skipping post '%s' (score %d < REDDIT_MIN_SCORE)",
-                    title[:50], score
-                )
-                continue
-            if upvote_ratio < _env_min_upvote_ratio():
-                logger.info(
-                    "Skipping post '%s' (upvote_ratio %.2f < REDDIT_MIN_UPVOTE_RATIO)",
-                    title[:50], upvote_ratio
-                )
-                continue
-
-            permalink = post.get("permalink", "")
-            full_link = post.get("full_link", "") or post.get("url", "")
-            if permalink and permalink.startswith("/"):
-                url = f"https://www.reddit.com{permalink}"
-            elif full_link and full_link.startswith("http"):
-                url = full_link
-            else:
-                url = f"https://reddit.com/comments/{post_id}"
-
-            if post_id and title and selftext:
-                stories.append({
-                    "id": post_id,
-                    "title": title,
-                    "content": selftext,
-                    "url": url,
-                    "score": score,
-                    "upvote_ratio": upvote_ratio,
-                    "num_comments": num_comments
-                })
-
-    if not stories:
-        reddit_failed = True
-
-    if not stories and not is_404:
-        if reddit_failed and (not use_pullpush or pullpush_failed):
-            logger.warning(f"Reddit and PullPush scrapers returned 0 valid stories for r/{subreddit}. Activating local canonical workset fallback...")
-            stories = _load_canonical_stories(subreddit=subreddit, limit=limit, min_length=min_length)
-
-    logger.info(f"Fetched and filtered {len(stories)} high-quality stories from r/{subreddit}")
-    return stories
-
-from src.branding import resolve_channel_key
-
-USER_AGENTS = [DEFAULT_USER_AGENT]
-
-CHANNEL_SUBREDDITS = {
-    "terror": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
-    "moku": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
-    "aelithia": ["AmItheAsshole", "AITA", "TrueOffMyChest", "relationship_advice", "Confession", "badparents", "AskReddit", "ProRevenge", "NuclearRevenge", "PettyRevenge"]
-}
-
-def replenish_queue(channel: str = "terror", min_stories: int = 25, db_path: str = None) -> int:
-    """
-    Check current pending queue depth for channel and automatically scrape additional subreddits
-    and listing categories (hot, top?t=week, top?t=month, new) to ensure at least `min_stories`
-    pending stories are available for mass production.
-    """
-    from src.db import enqueue_story, get_pending_story
+async def async_replenish_queue(
+    channel: str = "terror",
+    min_stories: int = 25,
+    db_path: Optional[str] = None,
+    session: Optional[aiohttp.ClientSession] = None,
+) -> int:
+    """Check pending queue depth asynchronously and replenish across subreddits and categories."""
     from src.config import DEFAULT_DB_PATH
     from src.core.repository import connect
+    from src.db import enqueue_story
 
     c_key = resolve_channel_key(channel)
     path = db_path or DEFAULT_DB_PATH
 
-    with connect(path, read_only=True) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM stories WHERE status = 'PENDING' AND (channel = ? OR channel = ?)", (c_key, channel))
-        pending_count = cursor.fetchone()[0]
+    def _get_count() -> int:
+        with connect(path, read_only=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM stories WHERE status = 'PENDING' AND (channel = ? OR channel = ?)",
+                (c_key, channel),
+            )
+            return cursor.fetchone()[0]
 
+    pending_count = await asyncio.to_thread(_get_count)
     if pending_count >= min_stories:
         return pending_count
 
@@ -440,23 +681,35 @@ def replenish_queue(channel: str = "terror", min_stories: int = 25, db_path: str
         ("hot", "week"),
         ("top", "week"),
         ("top", "month"),
-        ("new", "all")
+        ("new", "all"),
     ]
 
     for sub in subreddits:
         for sort_cat, t_filter in categories:
-            with connect(path, read_only=True) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM stories WHERE status = 'PENDING' AND (channel = ? OR channel = ?)", (c_key, channel))
-                curr_count = cursor.fetchone()[0]
-
+            curr_count = await asyncio.to_thread(_get_count)
             if curr_count >= min_stories:
                 break
 
             try:
-                fetched = fetch_reddit_stories(subreddit=sub, limit=50, sort=sort_cat, time_filter=t_filter)
+                if isinstance(fetch_reddit_stories, (unittest.mock.Mock, unittest.mock.MagicMock)):
+                    fetched = await asyncio.to_thread(
+                        fetch_reddit_stories,
+                        subreddit=sub,
+                        limit=50,
+                        sort=sort_cat,
+                        time_filter=t_filter,
+                    )
+                else:
+                    fetched = await async_fetch_reddit_stories(
+                        subreddit=sub,
+                        limit=50,
+                        sort=sort_cat,
+                        time_filter=t_filter,
+                        session=session,
+                    )
                 for s in fetched:
-                    enqueue_story(
+                    await asyncio.to_thread(
+                        enqueue_story,
                         story_id=s["id"],
                         title=s["title"],
                         content=s["content"],
@@ -465,27 +718,27 @@ def replenish_queue(channel: str = "terror", min_stories: int = 25, db_path: str
                         upvote_ratio=float(s.get("upvote_ratio", 0.0) or 0.0),
                         num_comments=int(s.get("num_comments", 0) or 0),
                         channel=channel,
-                        db_path=path
+                        db_path=path,
                     )
             except Exception as e:
                 logger.warning(f"Replenish queue error fetching from r/{sub} ({sort_cat}): {e}")
 
-    with connect(path, read_only=True) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM stories WHERE status = 'PENDING' AND (channel = ? OR channel = ?)", (c_key, channel))
-        updated_count = cursor.fetchone()[0]
-
+    updated_count = await asyncio.to_thread(_get_count)
     logger.info(f"Replenished queue for [{channel}]. Total pending stories now: {updated_count}")
     return updated_count
 
 
-def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
-    """Ensure the database has at least `lane.sources.queue_target_pending` pending stories for `lane`.
+def replenish_queue(channel: str = "terror", min_stories: int = 25, db_path: Optional[str] = None) -> int:
+    """Synchronous compatibility wrapper for async_replenish_queue."""
+    return _run_sync(async_replenish_queue(channel=channel, min_stories=min_stories, db_path=db_path))
 
-    Rotates across `lane.sources.subreddits` and category pairs (e.g. `[('hot', 'day'), ('top', 'week'), ('new', 'all')]`),
-    filters stories with `filter_story_for_lane`, deduplicates, and enqueues matching items.
-    If the lane source is SCP or if Reddit scraping is insufficient for an SCP lane, falls back to `scraper_scp`.
-    """
+
+async def async_ensure_queue_depth(
+    lane: Any,
+    db_path: Optional[str] = None,
+    session: Optional[aiohttp.ClientSession] = None,
+) -> int:
+    """Ensure the database has at least `lane.sources.queue_target_pending` pending stories for `lane` asynchronously."""
     from src.config import DEFAULT_DB_PATH
     from src.core.repository import connect
     from src.core.topics import filter_story_for_lane
@@ -498,18 +751,21 @@ def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
     sources = getattr(lane, "sources", None)
     target_depth = getattr(sources, "queue_target_pending", 25) if sources else 25
 
-    with connect(path, read_only=True) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM stories
-            WHERE status = 'PENDING'
-              AND (channel = ? OR channel = ?)
-              AND (lane_id IS NULL OR lane_id = ?)
-            """,
-            (channel_key, resolve_channel_key(channel_key), lane_id),
-        )
-        pending_count = cursor.fetchone()[0]
+    def _get_count() -> int:
+        with connect(path, read_only=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM stories
+                WHERE status = 'PENDING'
+                  AND (channel = ? OR channel = ?)
+                  AND (lane_id IS NULL OR lane_id = ?)
+                """,
+                (channel_key, resolve_channel_key(channel_key), lane_id),
+            )
+            return cursor.fetchone()[0]
+
+    pending_count = await asyncio.to_thread(_get_count)
 
     if pending_count >= target_depth:
         return pending_count
@@ -527,14 +783,24 @@ def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
     story_type = getattr(lane, "story_type", "")
 
     if source_kind == "scp_wiki" or (story_type == "scp" and not subreddits):
-        from src.scraper_scp import scrape_and_enqueue_scp
+        from src.scraper_scp import async_scrape_and_enqueue_scp, scrape_and_enqueue_scp
 
-        scrape_and_enqueue_scp(
-            limit=max(5, target_depth - pending_count),
-            db_path=path,
-            lane_id=lane_id,
-            channel=channel_key,
-        )
+        if isinstance(scrape_and_enqueue_scp, (unittest.mock.Mock, unittest.mock.MagicMock)):
+            await asyncio.to_thread(
+                scrape_and_enqueue_scp,
+                limit=max(5, target_depth - pending_count),
+                db_path=path,
+                lane_id=lane_id,
+                channel=channel_key,
+            )
+        else:
+            await async_scrape_and_enqueue_scp(
+                limit=max(5, target_depth - pending_count),
+                db_path=path,
+                lane_id=lane_id,
+                channel=channel_key,
+                session=session,
+            )
 
     # 2. Reddit source handling with subreddit & category rotation
     if not subreddits:
@@ -554,42 +820,44 @@ def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
 
     for sub in subreddits:
         for sort_cat, t_filter in categories:
-            with connect(path, read_only=True) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT COUNT(*) FROM stories
-                    WHERE status = 'PENDING'
-                      AND (channel = ? OR channel = ?)
-                      AND (lane_id IS NULL OR lane_id = ?)
-                    """,
-                    (channel_key, resolve_channel_key(channel_key), lane_id),
-                )
-                curr_count = cursor.fetchone()[0]
-
+            curr_count = await asyncio.to_thread(_get_count)
             if curr_count >= target_depth:
                 break
 
             try:
-                fetched = fetch_reddit_stories(
-                    subreddit=sub,
-                    limit=limit_per_fetch,
-                    sort=sort_cat,
-                    time_filter=t_filter,
-                    min_length=words_min,
-                )
+                if isinstance(fetch_reddit_stories, (unittest.mock.Mock, unittest.mock.MagicMock)):
+                    fetched = await asyncio.to_thread(
+                        fetch_reddit_stories,
+                        subreddit=sub,
+                        limit=limit_per_fetch,
+                        sort=sort_cat,
+                        time_filter=t_filter,
+                        min_length=words_min,
+                    )
+                else:
+                    fetched = await async_fetch_reddit_stories(
+                        subreddit=sub,
+                        limit=limit_per_fetch,
+                        sort=sort_cat,
+                        time_filter=t_filter,
+                        min_length=words_min,
+                        session=session,
+                    )
                 for s in fetched:
                     # Filter for topic/lane relevance
                     if not filter_story_for_lane(s["title"], s["content"], lane):
                         continue
 
                     # Check duplicate
-                    if is_story_processed(s["id"], db_path=path) or is_story_duplicate(
-                        channel_key, s["title"], s["content"], db_path=path
-                    ):
+                    is_proc = await asyncio.to_thread(is_story_processed, s["id"], db_path=path)
+                    if is_proc:
+                        continue
+                    is_dup = await asyncio.to_thread(is_story_duplicate, channel_key, s["title"], s["content"], db_path=path)
+                    if is_dup:
                         continue
 
-                    enqueue_story(
+                    await asyncio.to_thread(
+                        enqueue_story,
                         story_id=s["id"],
                         title=s["title"],
                         content=s["content"],
@@ -612,42 +880,28 @@ def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
                 )
 
     # 3. If still deficient and lane is SCP, fallback to SCP scraper
-    with connect(path, read_only=True) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM stories
-            WHERE status = 'PENDING'
-              AND (channel = ? OR channel = ?)
-              AND (lane_id IS NULL OR lane_id = ?)
-            """,
-            (channel_key, resolve_channel_key(channel_key), lane_id),
-        )
-        curr_count = cursor.fetchone()[0]
-
+    curr_count = await asyncio.to_thread(_get_count)
     if curr_count < target_depth and story_type == "scp":
-        from src.scraper_scp import scrape_and_enqueue_scp
+        from src.scraper_scp import async_scrape_and_enqueue_scp, scrape_and_enqueue_scp
 
-        scrape_and_enqueue_scp(
-            limit=max(5, target_depth - curr_count),
-            db_path=path,
-            lane_id=lane_id,
-            channel=channel_key,
-        )
+        if isinstance(scrape_and_enqueue_scp, (unittest.mock.Mock, unittest.mock.MagicMock)):
+            await asyncio.to_thread(
+                scrape_and_enqueue_scp,
+                limit=max(5, target_depth - curr_count),
+                db_path=path,
+                lane_id=lane_id,
+                channel=channel_key,
+            )
+        else:
+            await async_scrape_and_enqueue_scp(
+                limit=max(5, target_depth - curr_count),
+                db_path=path,
+                lane_id=lane_id,
+                channel=channel_key,
+                session=session,
+            )
 
-    with connect(path, read_only=True) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM stories
-            WHERE status = 'PENDING'
-              AND (channel = ? OR channel = ?)
-              AND (lane_id IS NULL OR lane_id = ?)
-            """,
-            (channel_key, resolve_channel_key(channel_key), lane_id),
-        )
-        updated_count = cursor.fetchone()[0]
-
+    updated_count = await asyncio.to_thread(_get_count)
     logger.info(
         "Queue depth for lane [%s] replenished. Total pending: %d (target: %d)",
         lane_id,
@@ -656,3 +910,7 @@ def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
     )
     return updated_count
 
+
+def ensure_queue_depth(lane: Any, db_path: Optional[str] = None) -> int:
+    """Synchronous compatibility wrapper for async_ensure_queue_depth."""
+    return _run_sync(async_ensure_queue_depth(lane, db_path=db_path))

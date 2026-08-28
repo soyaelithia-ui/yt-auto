@@ -116,3 +116,23 @@ def test_adapter_marks_only_verified_youtube_result(monkeypatch, tmp_path):
     mark.assert_called_once_with(
         str(video), published_id="yt-1", published_url="https://youtu.be/yt-1"
     )
+
+
+def test_retention_helper_functions(tmp_path):
+    work, run_dir, _, marker = _run(tmp_path)
+    assert retention.is_run_retention_satisfied(run_dir) is False
+    meta = retention.get_run_metadata(run_dir)
+    assert meta is not None
+    assert meta["run_id"] == "run-1"
+
+    marker.write_text(
+        json.dumps({"run_id": "run-1", "active": False, "retention_satisfied": True}),
+        encoding="utf-8",
+    )
+    assert retention.is_run_retention_satisfied(run_dir) is True
+    meta = retention.get_run_metadata(run_dir)
+    assert meta["retention_satisfied"] is True
+
+    # Missing directory
+    assert retention.is_run_retention_satisfied(tmp_path / "missing") is False
+    assert retention.get_run_metadata(tmp_path / "missing") is None

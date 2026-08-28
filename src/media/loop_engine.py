@@ -406,7 +406,7 @@ class LoopVideoEngine(BaseVideoCompositor):
     def build_audio_filter(
         self,
         has_music: bool = True,
-        music_volume: float = 0.12,
+        music_volume: float = 0.04,
         ducking_threshold: float = 0.035,
         ducking_ratio: float = 8.0,
         ducking_attack_ms: float = 20.0,
@@ -488,7 +488,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         )
         audio_filter = self.build_audio_filter(
             has_music=has_music,
-            music_volume=kwargs.get("music_volume", 0.12),
+            music_volume=kwargs.get("music_volume", 0.04),
             ducking_threshold=kwargs.get("ducking_threshold", 0.035),
             ducking_ratio=kwargs.get("ducking_ratio", 8.0),
             ducking_attack_ms=kwargs.get("ducking_attack_ms", 20.0),
@@ -605,7 +605,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         fps: int = 30,
         crf: int = 23,
         preset: str = "ultrafast",
-        music_volume: float = 0.12,
+        music_volume: float = 0.04,
         ducking_threshold: float = 0.035,
         ducking_ratio: float = 8.0,
         ducking_attack_ms: float = 20.0,

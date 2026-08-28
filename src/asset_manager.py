@@ -4,7 +4,8 @@ and ambient audio files for video generation pipelines.
 """
 import os
 import random
-from typing import List, Dict, Optional, Any
+from pathlib import Path
+from typing import List, Dict, Optional, Any, Union
 from src.config import BASE_DIR, BACKGROUNDS_DIR, MUSIC_DIR, DEFAULT_BACKGROUND
 from src.log import get_logger
 
@@ -269,6 +270,57 @@ class AssetManager:
             return fallback_pool[0]
 
         return ""
+
+    def resolve_or_create_background_audio(
+        self,
+        category: str = "horror",
+        style: str = "creepypasta",
+        duration_sec: float = 30.0,
+        work_dir: Optional[Union[str, os.PathLike]] = None,
+        mode: str = "auto",
+        seed: Optional[int] = None,
+    ) -> str:
+        """
+        Resolves background audio track by choosing from local catalog or synthesizing procedurally.
+        - mode 'auto': searches asset bank, falls back to procedural generation if missing.
+        - mode 'choose': searches asset bank only.
+        - mode 'create': directly synthesizes procedural ambient audio.
+        - mode 'off': returns empty string (no background audio).
+        """
+        mode_clean = str(mode or "auto").lower().strip()
+        if mode_clean in ("off", "none", "disabled", "false", "0"):
+            return ""
+
+        if mode_clean in ("auto", "choose"):
+            track = self.get_music(category=category, style=style) or self.get_ambient(category=category, style=style)
+            if track and os.path.exists(track) and os.path.getsize(track) > 0:
+                return str(track)
+            if mode_clean == "choose":
+                return ""
+
+        # Procedural synthesis fallback / mode 'create'
+        from src.media.procedural_audio import get_procedural_audio_engine
+        engine = get_procedural_audio_engine()
+
+        theme_tag = category or style or "default"
+        if work_dir and os.path.exists(work_dir):
+            out_path = Path(work_dir) / f"procedural_ambient_{theme_tag}.wav"
+        else:
+            out_dir = Path(self.root_dir) / "music"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"procedural_ambient_{theme_tag}.wav"
+
+        try:
+            res_path = engine.generate_ambient_track(
+                output_path=out_path,
+                theme=theme_tag,
+                duration_sec=min(60.0, max(1.0, duration_sec)),
+                seed=seed,
+            )
+            return str(res_path)
+        except Exception as exc:
+            logger.warning("Procedural audio generation failed: %s; returning empty background track", exc)
+            return ""
 
 
 # Global singleton instance

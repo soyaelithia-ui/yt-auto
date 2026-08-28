@@ -58,13 +58,14 @@ class PersistentScheduler:
                 conn.rollback()
                 return None
 
-            preferred = CanonicalChannel(row["next_channel"])
+            pref_raw = row["next_channel"]
+            preferred = CanonicalChannel(pref_raw) if pref_raw in ("moku", "aelithia") else CanonicalChannel.MOKU
             alternate = (
                 CanonicalChannel.AELITHIA
                 if preferred is CanonicalChannel.MOKU
                 else CanonicalChannel.MOKU
             )
-            chosen: CanonicalChannel | None = None
+            chosen: Optional[CanonicalChannel] = None
             for candidate in (preferred, alternate):
                 control = conn.execute(
                     "SELECT paused FROM channel_controls WHERE channel = ?",

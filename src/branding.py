@@ -210,6 +210,28 @@ def resolve_channel_key(channel: Optional[str]) -> str:
 
 
 def get_channel_branding(channel: str) -> ChannelBranding:
-    """Return branding for an explicitly selected canonical channel or input alias."""
-    key = resolve_channel_key(channel)
-    return _CHANNEL_BRANDING_REGISTRY[key]
+    """Return branding dynamically populated from ChannelProfileRegistry."""
+    from src.core.channel_profile import ChannelProfileRegistry
+    prof = ChannelProfileRegistry.get_channel(channel)
+    cid = prof.id
+    ed = prof.editorial
+    vis = prof.visual
+    aud = prof.audio
+
+    return ChannelBranding(
+        channel_key=cid,
+        display_name=ed.public_name,
+        handle=ed.handle,
+        channel_url=ed.channel_url,
+        voice_name=aud.default_voice_profile,
+        default_title_fallback=ed.default_title_fallback,
+        narration_style=ed.tone,
+        intro_hook_template="Una presencia inexplicable comienza a manifestarse...",
+        outro_cta_template="",
+        tags=list(ed.tags),
+        category_id=ed.category_id,
+        primary_color=vis.palette.primary,
+        accent_color=vis.palette.accent,
+        watermark_text=vis.watermark_text or ed.handle,
+        watermark_position={"x": 20, "y": 40, "opacity": 0.65},
+    )

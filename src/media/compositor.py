@@ -67,7 +67,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
         manifest_path: Union[Path, str],
         output_video_path: Union[Path, str],
         crf: int = 18,
-        preset: str = "slow",
+        preset: str = "faster",
         **extra_kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -104,6 +104,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
 
         import concurrent.futures
 
+        worker_count = min(4, len(manifest.scenes)) if manifest.scenes else 1
+        cpu_count = os.cpu_count() or 4
+        threads_per_worker = max(1, cpu_count // max(1, worker_count))
+
         with tempfile.TemporaryDirectory(prefix="multiscene_render_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
 
@@ -112,13 +116,14 @@ class MultiSceneCompositor(BaseVideoCompositor):
                 idx, scene = item
                 sc_out = tmp_dir / f"scene_{idx:03d}_{scene.scene_id}.mp4"
                 logger.info(
-                    "Rendering Scene %d/%d (id=%s, engine=%s, dur=%.2fs, tension=%d)",
+                    "Rendering Scene %d/%d (id=%s, engine=%s, dur=%.2fs, tension=%d, threads=%d)",
                     idx + 1,
                     len(manifest.scenes),
                     scene.scene_id,
                     scene.engine_type,
                     scene.duration_sec,
                     scene.tension_level,
+                    threads_per_worker,
                 )
 
                 if scene.engine_type == "hybrid_cinematic_ai":
@@ -132,6 +137,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
                         subtitle_cues=subtitle_cues,
                         scene_start_sec=scene.start_sec,
                         subtitle_theme=subtitle_theme,
+                        threads=threads_per_worker,
                     )
                 else:
                     self.procedural_engine.render_scene_segment(
@@ -145,10 +151,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
                         subtitle_cues=subtitle_cues,
                         scene_start_sec=scene.start_sec,
                         subtitle_theme=subtitle_theme,
+                        threads=threads_per_worker,
                     )
                 return (idx, scene, sc_out)
 
-            worker_count = min(4, len(manifest.scenes))
             with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
                 parallel_results = list(executor.map(_render_scene_worker, enumerate(manifest.scenes)))
 
@@ -318,7 +324,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
             "-b:a", "192k",
             "-ar", "48000",
             "-ac", "2",
-            "-threads", "0",
+            "-threads", str(max(1, min(os.cpu_count() or 4, 8))),
             "-movflags", "+faststart",
             str(output_mp4),
         ])

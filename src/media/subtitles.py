@@ -230,16 +230,23 @@ class CodeSubtitleDrawer:
         pill_rect = (box_x, box_y, box_x + box_w, box_y + box_h)
         patch = frame.crop(pill_rect).convert("RGBA")
         patch_pill = Image.new("RGBA", patch.size, (0, 0, 0, 0))
-        patch_draw = ImageDraw.Draw(patch_pill)
-        patch_draw.rounded_rectangle(
-            [0, 0, box_w, box_h],
-            radius=theme.bg_pill_radius,
-            fill=theme.bg_pill_color,
-            outline=theme.bg_pill_border,
-            width=2 if theme.bg_pill_border else 0,
-        )
-        patch = Image.alpha_composite(patch, patch_pill)
-        frame.paste(patch.convert("RGB"), (box_x, box_y))
+        try:
+            patch_draw = ImageDraw.Draw(patch_pill)
+            patch_draw.rounded_rectangle(
+                [0, 0, box_w, box_h],
+                radius=theme.bg_pill_radius,
+                fill=theme.bg_pill_color,
+                outline=theme.bg_pill_border,
+                width=2 if theme.bg_pill_border else 0,
+            )
+            composited_patch = Image.alpha_composite(patch, patch_pill)
+            try:
+                frame.paste(composited_patch.convert("RGB"), (box_x, box_y))
+            finally:
+                composited_patch.close()
+        finally:
+            patch.close()
+            patch_pill.close()
 
         draw = ImageDraw.Draw(frame)
         cursor_x = box_x + pad_x
@@ -327,10 +334,13 @@ def apply_code_subtitles_to_video(
         if not raw_bytes or len(raw_bytes) < frame_size:
             break
         img = Image.frombytes("RGB", (width, height), raw_bytes)
-        t_sec = scene_start_sec + (frame_idx / float(fps))
-        img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
-        if proc_out.stdin:
-            proc_out.stdin.write(img.tobytes())
+        try:
+            t_sec = scene_start_sec + (frame_idx / float(fps))
+            img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
+            if proc_out.stdin:
+                proc_out.stdin.write(img.tobytes())
+        finally:
+            img.close()
         frame_idx += 1
 
     if proc_in.stdout:

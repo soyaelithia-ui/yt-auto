@@ -140,6 +140,105 @@ class TestTTS(unittest.TestCase):
         self.assertIn("equalizer=f=120", filter_str)
         self.assertIn("loudnorm=I=-14", filter_str)
 
+    def test_tts_cache_key_incorporates_pitch_and_rate(self):
+        """Test _tts_cache_key produces distinct SHA-256 digests when pitch or rate changes."""
+        from lib.tts import _tts_cache_key
+
+        key_default = _tts_cache_key("texto de prueba", "es-ES-AlvaroNeural", "+0%", "+0Hz")
+        key_pitch_shift = _tts_cache_key("texto de prueba", "es-ES-AlvaroNeural", "+0%", "-2Hz")
+        key_rate_shift = _tts_cache_key("texto de prueba", "es-ES-AlvaroNeural", "+6%", "+0Hz")
+        key_diff_text = _tts_cache_key("otro texto", "es-ES-AlvaroNeural", "+0%", "+0Hz")
+
+        self.assertNotEqual(key_default, key_pitch_shift)
+        self.assertNotEqual(key_default, key_rate_shift)
+        self.assertNotEqual(key_default, key_diff_text)
+        self.assertEqual(len(key_default), 64)
+
+    def test_lane_voice_profile_resolution_and_calibration(self):
+        """Test voice, rate, and pitch resolution across the 3 calibrated production lanes."""
+        from src.core.lanes import resolve_voice_for_lane, resolve_voice_profile_for_lane, get_lane
+
+        # 1. moku-scp-shorts
+        lane_scp = get_lane("moku-scp-shorts")
+        self.assertIsNotNone(lane_scp)
+        self.assertEqual(lane_scp.voice_rate, "+0%")
+        prof_scp = resolve_voice_profile_for_lane(lane_scp)
+        self.assertEqual(prof_scp.get("speed"), "+0%")
+        self.assertEqual(prof_scp.get("pitch"), "+0Hz")
+        self.assertEqual(prof_scp.get("pauses"), "clinical")
+        voice_scp = resolve_voice_for_lane(lane_scp)
+        self.assertIn(voice_scp, ("es-ES-AlvaroNeural", "es-ES-ElviraNeural", "es-MX-JorgeNeural"))
+
+        # 2. moku-horror-long
+        lane_horror = get_lane("moku-horror-long")
+        self.assertIsNotNone(lane_horror)
+        self.assertEqual(lane_horror.voice_rate, "+0%")
+        prof_horror = resolve_voice_profile_for_lane(lane_horror)
+        self.assertEqual(prof_horror.get("speed"), "+0%")
+        self.assertIn(prof_horror.get("pitch"), ("-2Hz", "-3Hz"))
+        self.assertEqual(prof_horror.get("pauses"), "dramatic")
+        voice_horror = resolve_voice_for_lane(lane_horror)
+        self.assertIn(voice_horror, ("es-ES-AlvaroNeural", "es-MX-JorgeNeural"))
+
+        # 3. aelithia-aita-long
+        lane_aita = get_lane("aelithia-aita-long")
+        self.assertIsNotNone(lane_aita)
+        self.assertEqual(lane_aita.voice_rate, "+6%")
+        prof_aita = resolve_voice_profile_for_lane(lane_aita)
+        self.assertEqual(prof_aita.get("speed"), "+6%")
+        self.assertEqual(prof_aita.get("pitch"), "+0Hz")
+        self.assertEqual(prof_aita.get("pauses"), "conversational")
+        voice_aita = resolve_voice_for_lane(lane_aita)
+        self.assertEqual(voice_aita, "es-MX-DaliaNeural")
+
+    def test_generate_audio_forwards_pitch_and_rate_in_test_mode(self):
+        """Test generate_audio populates pitch and rate correctly in synthetic/test mode."""
+        from src.core.lanes import get_lane
+
+        audio_path = os.path.join(self.temp_dir.name, "test_params.wav")
+        lane_horror = get_lane("moku-horror-long")
+        info = generate_audio(
+            "Texto de prueba para horror",
+            audio_path,
+            lane=lane_horror,
+            channel="moku",
+        )
+        self.assertEqual(info["pitch"], "-2Hz")
+        self.assertEqual(info["rate"], "+0%")
+
+        audio_path_aita = os.path.join(self.temp_dir.name, "test_aita.wav")
+        lane_aita = get_lane("aelithia-aita-long")
+        info_aita = generate_audio(
+            "Texto de prueba para AITA",
+            audio_path_aita,
+            lane=lane_aita,
+            channel="aelithia",
+        )
+        self.assertEqual(info_aita["pitch"], "+0Hz")
+        self.assertEqual(info_aita["rate"], "+6%")
+
+    def test_edge_tts_communicate_receives_pitch_and_rate(self):
+        """Test edge_tts.Communicate is invoked with pitch and rate arguments when synthesizing."""
+        mock_edge_tts = MagicMock()
+        mock_comm = MagicMock()
+
+        async def _mock_stream():
+            yield {"type": "audio", "data": b"mock_mp3_data"}
+            yield {"type": "WordBoundary", "text": "hola", "offset": 1000000, "duration": 5000000}
+
+        mock_comm.stream = _mock_stream
+        mock_edge_tts.Communicate.return_value = mock_comm
+
+        with patch.dict(sys.modules, {"edge_tts": mock_edge_tts}):
+            from lib.tts import _synthesize_chunk
+            data, words = _synthesize_chunk("Texto de prueba", "es-ES-AlvaroNeural", rate="+6%", pitch="-2Hz")
+            self.assertEqual(data, b"mock_mp3_data")
+            self.assertEqual(len(words), 1)
+            mock_edge_tts.Communicate.assert_called_once_with(
+                "Texto de prueba", "es-ES-AlvaroNeural", rate="+6%", pitch="-2Hz"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+

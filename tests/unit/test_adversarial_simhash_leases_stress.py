@@ -1,10 +1,12 @@
 """Adversarial stress test for 64-bit SimHash deduplication and lease concurrency."""
 
+import asyncio
 import concurrent.futures
 import time
 from pathlib import Path
 import pytest
 
+from src.core.domain import JobStatus
 from src.core.repository import (
     QueueRepository,
     compute_simhash_64,
@@ -14,7 +16,13 @@ from src.core.repository import (
     to_unsigned_64,
     connect,
 )
-from src.db import is_story_duplicate
+from src.db import (
+    async_enqueue_story,
+    async_get_pending_story,
+    async_is_story_duplicate,
+    enqueue_story,
+    is_story_duplicate,
+)
 
 
 @pytest.mark.unit
@@ -71,6 +79,16 @@ class TestSimHashAdversarialStress:
         assert is_simhash_duplicate(h_base, h_swap, max_distance=3) is True
         assert is_simhash_duplicate(h_base, h_punct, max_distance=3) is True
         assert is_simhash_duplicate(h_base, h_ws, max_distance=3) is True
+
+    def test_simhash_hamming_boundary_thresholds(self):
+        """Verify strict boundary behavior: distance <= 3 is True, distance >= 4 is False."""
+        # 3 bits diff: 0b111 vs 0b000
+        assert simhash_hamming_distance(0b111, 0b000) == 3
+        assert is_simhash_duplicate(0b111, 0b000, max_distance=3) is True
+
+        # 4 bits diff: 0b1111 vs 0b0000
+        assert simhash_hamming_distance(0b1111, 0b0000) == 4
+        assert is_simhash_duplicate(0b1111, 0b0000, max_distance=3) is False
 
     def test_simhash_completely_different_texts(self):
         """Completely different story topics should yield Hamming distance > 3 bits (typically 20-40 bits)."""
@@ -303,3 +321,58 @@ class TestLeaseConcurrencyStress:
             now=now_base + 25,
         )
         assert lease2 is not None
+
+    def test_concurrent_multi_lane_claims_same_channel(self, tmp_path):
+        """Verify parallel multi-lane claims (moku-scp-shorts & moku-horror-long) operate concurrently."""
+        db_file = tmp_path / "test_lanes_concurrent.db"
+        repo = QueueRepository(str(db_file))
+        repo.initialize()
+
+        repo.enqueue("story_scp_1", "SCP Story 1", "SCP Content 1", "https://x/scp1", "moku", lane_id="moku-scp-shorts")
+        repo.enqueue("story_horror_1", "Horror Story 1", "Horror Content 1", "https://x/h1", "moku", lane_id="moku-horror-long")
+
+        # Claim lane 1
+        claim_scp = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-scp", lease_seconds=600)
+        assert claim_scp is not None
+        assert claim_scp["story_id"] == "story_scp_1"
+
+        # Claim lane 2 (concurrently active on the same channel 'moku')
+        claim_horror = repo.claim_for_lane("moku-horror-long", "moku", "worker-horror", lease_seconds=600)
+        assert claim_horror is not None
+        assert claim_horror["story_id"] == "story_horror_1"
+
+    def test_async_concurrent_enqueues_and_claims(self, tmp_path):
+        """Verify 30 concurrent async tasks enqueuing and claiming simultaneously without database locks."""
+        db_file = str(tmp_path / "async_stress.db")
+        repo = QueueRepository(db_file)
+        repo.initialize()
+
+        num_tasks = 30
+
+        async def async_worker(worker_id: int):
+            story_id = f"async_stress_{worker_id}"
+            enq_ok = await async_enqueue_story(
+                story_id=story_id,
+                title=f"Async Stress Story {worker_id}",
+                content=f"Content for stress story {worker_id}",
+                url=f"https://x/async/{worker_id}",
+                channel="moku",
+                score=100 + worker_id,
+                db_path=db_file,
+            )
+            # Worker attempts claim
+            claim = await async_get_pending_story(db_path=db_file, claim=True, channel="moku")
+            return enq_ok, claim
+
+        async def run_all():
+            tasks = [async_worker(i) for i in range(num_tasks)]
+            return await asyncio.gather(*tasks)
+
+        results = asyncio.run(run_all())
+        assert len(results) == num_tasks
+        assert all(r[0] is True for r in results)
+
+        with connect(db_file, read_only=True) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM stories").fetchone()[0]
+            assert count == num_tasks
+

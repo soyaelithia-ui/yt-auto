@@ -14,7 +14,8 @@
       "duration": { "min_sec": 60, "target_sec": 150, "max_sec": 180 },
       "words": { "min": 160, "max": 340, "recondense_max": 300 },
       "template": "shorts_creepypasta",
-      "voice_rate": "+20%",
+      "voice_rate": "+0%",
+      "voice_profile": "scp_documentary_es",
       "cadence": { "min_gap_seconds": 300 },
       "sources": {
         "kind": "reddit",
@@ -31,7 +32,13 @@
       "visual_pipeline": "beats",
       "qa_profile": "short",
       "review_content_type": "short",
-      "padding_themes": ["pasillos metálicos", "luz de emergencia roja", "contención de hormigón"]
+      "padding_themes": ["pasillos metálicos", "luz de emergencia roja", "contención de hormigón"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "scp"
+      }
     },
     {
       "id": "moku-horror-long",
@@ -43,6 +50,7 @@
       "words": { "min": 2600, "max": null },
       "template": "creepypasta",
       "voice_rate": "+0%",
+      "voice_profile": "moku_terror",
       "cadence": { "min_gap_seconds": 1800 },
       "sources": {
         "kind": "reddit",
@@ -55,7 +63,13 @@
       "visual_pipeline": "director",
       "qa_profile": "longform",
       "review_content_type": "long_video",
-      "padding_themes": ["bosques niebla", "casas abandonadas", "carreteras nocturnas"]
+      "padding_themes": ["bosques niebla", "casas abandonadas", "carreteras nocturnas"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "cosmic_horror"
+      }
     },
     {
       "id": "aelithia-aita-long",
@@ -66,7 +80,8 @@
       "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
       "words": { "min": 2600, "max": null },
       "template": "aita",
-      "voice_rate": "+0%",
+      "voice_rate": "+6%",
+      "voice_profile": "aelithia_reddit",
       "cadence": { "min_gap_seconds": 1800 },
       "sources": {
         "kind": "reddit",
@@ -87,7 +102,13 @@
       "visual_pipeline": "director",
       "qa_profile": "longform",
       "review_content_type": "long_video",
-      "padding_themes": ["salas de estar cálidas", "cafeterías", "oficinas al atardecer"]
+      "padding_themes": ["salas de estar cálidas", "cafeterías", "oficinas al atardecer"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "drama"
+      }
     }
   ]
 }

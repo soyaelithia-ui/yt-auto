@@ -1,32 +1,63 @@
-# yt-auto Test Infrastructure & Zero-Quota Framework
+# E2E Test Infra: yt-auto Architecture Optimization
 
-Especificación de la infraestructura de pruebas automatizadas y diagnóstico para el sistema `yt-auto`.
+## Test Philosophy
+- Opaque-box, requirement-driven, and regression-free.
+- Systematic 4-tier + 1 adversarial tier approach (Feature Coverage, Boundary/Corner, Pairwise/Combinatorial, Real-World Workload, and Adversarial White-Box Coverage).
+- Pass criteria: 100% test pass rate on all active test suites (`pytest`), zero SQLite lock errors under multi-lane concurrency, verifiable disk footprint reduction, zero audio/video quality regressions.
 
-## 🧪 Estrategia de Pruebas Zero-Quota
+## Feature Inventory Mapping
+| # | Feature | Source (Requirement) | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
+|---|---------|----------------------|:------:|:------:|:------:|:------:|
+| F-01 | Granular Phase Profiling Framework | R1 | 5 | 5 | ✓ | ✓ |
+| F-02 | Pipeline Stage Instrumentation | R1 | 5 | 5 | ✓ | ✓ |
+| F-03 | Profiling Benchmark CLI | R1 | 5 | 5 | ✓ | ✓ |
+| F-04 | Deep Recursive Storage Sweep | R2 | 5 | 5 | ✓ | ✓ |
+| F-05 | Intermediate Buffer & Audio Purge | R2 | 5 | 5 | ✓ | ✓ |
+| F-06 | Bounded LRU & TTL Caches | R2 | 5 | 5 | ✓ | ✓ |
+| F-07 | Safe Disk Reclaim & Master Preservation | R2 | 5 | 5 | ✓ | ✓ |
+| F-08 | Automated Post-Render & Daemon Hooks | R2 | 5 | 5 | ✓ | ✓ |
+| F-09 | Test Suite Artifact Auto-Teardown | R2 | 5 | 5 | ✓ | ✓ |
+| F-10 | Single-Pass Realtime Video & Audio Muxing | R3 | 5 | 5 | ✓ | ✓ |
+| F-11 | Streamlined Subtitle Encoding Pipeline | R3 | 5 | 5 | ✓ | ✓ |
+| F-12 | Balanced FFmpeg Thread Allocation & Presets | R3 | 5 | 5 | ✓ | ✓ |
+| F-13 | Single-Pass Audio Mastering Folding | R3 | 5 | 5 | ✓ | ✓ |
+| F-14 | RAM & Frame Buffer Optimization | R4 | 5 | 5 | ✓ | ✓ |
+| F-15 | SQLite WAL Concurrency & Lock-Free Leases | R4 | 5 | 5 | ✓ | ✓ |
+| F-16 | End-to-End Regression & Adversarial Hardening | R1-R4 | 5 | 5 | ✓ | ✓ |
+| F-17 | Multi-Scene Orchestration & Composition | Architecture Doc 02 | 5 | 5 | ✓ | ✓ |
+| F-18 | Dual Rendering Engines (Procedural & Hybrid) | Architecture Doc 01 | 5 | 5 | ✓ | ✓ |
+| F-19 | Script Curation & Editorial Guardrails | Architecture Doc 03 | 5 | 5 | ✓ | ✓ |
+| F-20 | Zero-Quota Testing Framework | Architecture Doc 05 | 5 | 5 | ✓ | ✓ |
+| F-21 | EBU R128 Loudness Compliance | Architecture Doc 04 | 5 | 5 | ✓ | ✓ |
+| F-22 | Rec.709 Color Grade & Theme Matrices | Architecture Doc 01 | 5 | 5 | ✓ | ✓ |
+| F-23 | SimHash Visual & Textual Deduplication | Architecture Doc 03 | 5 | 5 | ✓ | ✓ |
+| F-24 | Automated Drive Backup & Metadata Registry | Architecture Doc 02 | 5 | 5 | ✓ | ✓ |
 
-La infraestructura de pruebas está estratificada en niveles para validar el sistema de forma determinista y sin consumo de cuotas LLM ni APIs externas:
+## Test Architecture
+- Test Runner: `pytest` with `pytest-asyncio` and `pytest-xdist`.
+- Primary test execution commands:
+  - Core requirements suite: `pytest -v tests/e2e/test_r1_r4_e2e.py`
+  - Architectural documentation & schema suite: `pytest -v tests/unit/test_architectural_specs.py`
+  - Cleaner & retention unit tests: `pytest -v tests/unit/test_cleaner.py tests/unit/test_retention.py`
+  - Media & FFmpeg unit tests: `pytest -v tests/unit/test_loop_video_engine.py tests/unit/test_realtime_engine.py tests/unit/test_code_subtitles.py`
+  - Full suite: `pytest -q`
+- Directory layout:
+  - `tests/unit/`: Component-level unit tests
+  - `tests/integration/`: Cross-module integration tests
+  - `tests/e2e/`: End-to-end pipeline and multi-lane concurrency tests
 
-- **F-01**: Multi-Lane Architecture isolation tests.
-- **F-02**: SQLite WAL Persistence and transactional rollback tests.
-- **F-03**: 13-Stage State Machine workflow progression tests.
-- **F-04**: Edge-TTS Voice Synthesis duration and frequency tests.
-- **F-05**: EBU R128 Audio Mastering and sidechain ducking tests.
-- **F-06**: Real-Time Procedural Engine Three.js multiscene render tests.
-- **F-07**: Dual-Engine Compositor seamless assembly tests.
-- **F-08**: Dynamic Safe Area ASS Subtitles karaoke alignment tests.
-- **F-09**: Agent 1: Script Curator schema and retention hook tests.
-- **F-10**: Agent 2: Art Director Rec.709 color matrix tests.
-- **F-11**: Agent 3: Scene Planner canonical manifest builder tests.
-- **F-12**: Agent 4: Forensic QA Auditor audiovisual gatekeeper tests.
-- **F-13**: Agent 5: Image Auditor Anti-Filler policy enforcement tests.
-- **F-14**: Agent 6: SEO Optimizer viral title and hashtag tests.
-- **F-15**: Telegram Interactive Bot callback and delivery tests.
-- **F-16**: Drive Backup & Verification preflight tests.
-- **F-17**: YouTube Data API v3 Upload payload contract tests.
-- **F-18**: AutoPilot Autonomous Scheduler interval timing tests.
-- **F-19**: Scenic Loop Detector classification heuristics tests.
-- **F-20**: Playwright Headless Renderer deterministic capture tests.
-- **F-21**: Zero-Quota Testing Framework local fixture tests.
-- **F-22**: Draft-07 JSON Schema Contracts strict validation tests.
-- **F-23**: Unified CLI Interface parameter parsing tests.
-- **F-24**: Self-Healing Recovery retryable failure handling tests.
+## Real-World Application Scenarios (Tier 4)
+| # | Scenario | Features Exercised | Complexity |
+|---|----------|--------------------|------------|
+| 1 | Full Procedural Realtime Video Render with Audio & Subtitles | F-01, F-02, F-10, F-12, F-13, F-14 | High |
+| 2 | Multi-Lane Parallel Daemon Processing with Concurrency Locks | F-01, F-08, F-15 | High |
+| 3 | Heavy Storage Accumulation & Automated Deep Clean Cycle | F-04, F-05, F-06, F-07, F-08 | Medium |
+| 4 | Longform Multi-Scene Composition with Loudnorm Mastering | F-01, F-02, F-11, F-12, F-13 | High |
+| 5 | End-to-End Ingest-to-Publish Pipeline with Telemetry Capture | F-01, F-02, F-03, F-07, F-08, F-15, F-16 | High |
+
+## Coverage Thresholds
+- Tier 1: ≥5 per feature
+- Tier 2: ≥5 per feature (boundary and corner cases)
+- Tier 3: Pairwise combinations across storage, media, profiling, and database modules
+- Tier 4: ≥5 realistic end-to-end workload scenarios
+- Tier 5: Adversarial white-box gap testing and memory limit validation

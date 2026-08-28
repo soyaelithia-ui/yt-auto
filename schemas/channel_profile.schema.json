@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ChannelProfile",
+  "description": "Schema de validación para perfiles de canal declarativos en yt-auto.",
+  "type": "object",
+  "required": ["id", "enabled", "editorial", "visual", "audio", "auth"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "enabled": { "type": "boolean" },
+    "editorial": {
+      "type": "object",
+      "required": ["public_name", "handle", "topic", "tone", "channel_url", "persona_system_prompt"],
+      "properties": {
+        "public_name": { "type": "string" },
+        "handle": { "type": "string" },
+        "topic": { "type": "string" },
+        "tone": { "type": "string" },
+        "channel_url": { "type": "string", "format": "uri" },
+        "persona_system_prompt": { "type": "string" },
+        "language": { "type": "string", "default": "es" },
+        "category_id": { "type": "string", "default": "24" },
+        "title_prefix": { "type": "string", "default": "" },
+        "title_suffix": { "type": "string", "default": "" },
+        "default_title_fallback": { "type": "string", "default": "Relato" },
+        "description_summary_template": { "type": "string" },
+        "community_question": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "shorts_hashtags": { "type": "array", "items": { "type": "string" } },
+        "thematic_scoring_keywords": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "required": ["style_id", "palette"],
+      "properties": {
+        "style_id": { "type": "string" },
+        "palette": {
+          "type": "object",
+          "required": ["primary", "secondary", "accent", "shadow", "highlight"],
+          "properties": {
+            "primary": { "type": "string" },
+            "secondary": { "type": "string" },
+            "accent": { "type": "string" },
+            "shadow": { "type": "string" },
+            "highlight": { "type": "string" },
+            "kelvin": { "type": "integer", "default": 5600 },
+            "lut_profile": { "type": "string", "default": "standard_rec709" },
+            "contrast_curve": { "type": "string", "default": "cinematic_s_curve" },
+            "saturation_modifier": { "type": "number", "default": 1.0 }
+          }
+        },
+        "typography": {
+          "type": "object",
+          "properties": {
+            "font_bold": { "type": "string" },
+            "font_regular": { "type": "string" },
+            "font_subtitles": { "type": "string" },
+            "subtitle_font_size": { "type": "integer" },
+            "subtitle_primary_color": { "type": "string" },
+            "subtitle_secondary_color": { "type": "string" },
+            "subtitle_outline_color": { "type": "string" },
+            "subtitle_back_color": { "type": "string" },
+            "subtitle_outline_width": { "type": "integer" },
+            "subtitle_shadow_depth": { "type": "integer" },
+            "subtitle_alignment": { "type": "integer" },
+            "subtitle_margin_v": { "type": "integer" }
+          }
+        },
+        "default_weather_effect": { "type": "string" },
+        "default_particle_layer": { "type": "string" },
+        "default_camera_motion": { "type": "string" },
+        "vignette_default_strength": { "type": "number" },
+        "watermark_text": { "type": "string" },
+        "prompt_style_prefix": { "type": "string" },
+        "prompt_style_suffix": { "type": "string" },
+        "negative_prompt": { "type": "string" },
+        "archetype_mappings": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "required": ["default_voice_profile"],
+      "properties": {
+        "default_voice_profile": { "type": "string" },
+        "default_tts_provider": { "type": "string", "default": "edge-tts" },
+        "speech_volume": { "type": "number", "default": 1.0 },
+        "music_volume": { "type": "number", "default": 0.04 },
+        "ambient_volume": { "type": "number", "default": 0.10 },
+        "ducking_db": { "type": "number", "default": -18.0 },
+        "default_bg_theme": { "type": "string", "default": "default" }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["expected_youtube_channel_id", "source_feed"],
+      "properties": {
+        "cookies_path": { "type": "string" },
+        "youtube_token_path": { "type": "string" },
+        "expected_youtube_channel_id": { "type": "string" },
+        "source_feed": { "type": "string" }
+      }
+    }
+  }
+}

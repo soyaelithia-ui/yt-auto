@@ -59,7 +59,8 @@ def _assets(tmp_path):
         get_background=lambda **kwargs: str(img),
         get_background_sequence=lambda count, **kwargs: [str(img)] * count,
         get_music=lambda **kwargs: "",
-        get_ambient=lambda **kwargs: ""
+        get_ambient=lambda **kwargs: "",
+        resolve_or_create_background_audio=lambda **kwargs: "",
     )
 
 

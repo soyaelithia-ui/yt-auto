@@ -51,30 +51,55 @@ class AudioProcessor:
         self,
         narration_path: str,
         output_path: str,
-        ambient_volume: float = 0.12,
+        ambient_volume: float = 0.04,
         ambient_track_path: Optional[str] = None,
         ducking_db: float = -18.0,
+        theme: str = "horror",
     ) -> str:
         """
-        Mixes subtle dark facility rumble/ambient hum with automatic voice sidechain ducking (-18dB, 350ms release).
+        Mixes subtle ambient audio bed with automatic voice sidechain ducking (-18dB, 350ms release).
         During dramatic pauses in speech, the ambient audio naturally rises to fill the silence.
         """
         try:
             track = ambient_track_path
             if not track or not os.path.exists(track):
-                default_track = Path(__file__).resolve().parent.parent / "assets" / "music" / "horror_ambient.mp3"
-                if default_track.exists():
-                    track = str(default_track)
+                from src.asset_manager import get_asset_manager
+                track = get_asset_manager().get_ambient(category=theme)
+
+            if not track or not os.path.exists(track):
+                # Synthesize on-the-fly procedural ambient bed
+                from src.media.procedural_audio import get_procedural_audio_engine
+                from lib.ffmpeg import probe_media
+                try:
+                    probe = probe_media(narration_path)
+                    dur = max(5.0, float(probe.duration or 30.0))
+                except Exception:
+                    dur = 30.0
+                gen_path = Path(output_path).parent / f"procedural_ambient_{theme}.wav"
+                get_procedural_audio_engine().generate_ambient_track(
+                    output_path=gen_path,
+                    theme=theme,
+                    duration_sec=dur,
+                )
+                if gen_path.is_file():
+                    track = str(gen_path)
 
             if not track or not os.path.exists(track):
                 return narration_path
 
+            from lib.audio import build_sidechain_ducking_filter_graph
             threshold = max(0.001, 10 ** (max(ducking_db, -60) / 20))
-            filter_complex = (
-                "[0:a]asplit=2[narr1][narr2];"
-                f"[1:a]volume={ambient_volume:.2f}[bg];"
-                f"[bg][narr1]sidechaincompress=threshold={threshold:.4f}:ratio=8:attack=20:release=350:level_in=1:level_sc=1[ducked];"
-                "[narr2][ducked]amix=inputs=2:duration=first:weights=1.0 0.8[aout]"
+            filter_complex = build_sidechain_ducking_filter_graph(
+                speech_label="0:a",
+                music_label="1:a",
+                out_label="aout",
+                music_volume=ambient_volume,
+                ducking_threshold=threshold,
+                ducking_ratio=8.0,
+                ducking_attack_ms=20.0,
+                ducking_release_ms=350.0,
+                lowpass_freq=12000.0,
+                master_loudness=False,
             )
             cmd = [
                 "ffmpeg", "-y",
@@ -216,3 +241,29 @@ class AudioProcessor:
             raise RuntimeError(f"Audio concatenation failed to produce output artifact at {output_path}")
 
         return (output_path, scene_durations)
+
+
+def sanitize_script_for_tts(raw_text: str) -> str:
+    """
+    Cleans script for TTS synthesis:
+    1. Removes editorial chapter/act headings (e.g. "Acto Uno: ...", "Capítulo 1: ...", "Parte 2: ...").
+    2. Formats technical acronyms phonetically for clear neutral Spanish TTS.
+    3. Normalizes punctuation spacing.
+    """
+    import re
+    if not raw_text:
+        return ""
+    # Strip line-leading Act/Chapter labels
+    cleaned = re.sub(r"(?im)^\s*(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9]+[:\.\-–—]\s*", "", raw_text)
+    # Strip inline Act/Chapter announcements
+    cleaned = re.sub(r"(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+(?:uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|\d+)[:\.\-–—]\s*", "", cleaned)
+    # Acronym phonetic formatting
+    cleaned = re.sub(r"\bSCP-(\d+)\b", r"S-C-P \1", cleaned)
+    cleaned = re.sub(r"\bSCP\b", r"S-C-P", cleaned)
+    cleaned = re.sub(r"\bBZHR\b", r"B-Z-H-R", cleaned)
+    cleaned = re.sub(r"\bXACTS\b", r"X-ACTS", cleaned)
+    cleaned = re.sub(r"\bO5\b", r"O-5", cleaned)
+    cleaned = re.sub(r"\bXK\b", r"X-K", cleaned)
+    # Clean redundant blank lines
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()

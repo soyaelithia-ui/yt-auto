@@ -6,6 +6,7 @@ from src.cli.handlers.daemon import handle_daemon
 from src.cli.handlers.lanes import handle_lanes
 from src.cli.handlers.loop import handle_loop
 from src.cli.handlers.migrate import handle_migrate
+from src.cli.handlers.profile import handle_profile
 from src.cli.handlers.queue import handle_queue
 from src.cli.handlers.run import handle_run
 from src.cli.handlers.service import handle_service
@@ -23,5 +24,6 @@ __all__ = [
     "handle_service",
     "handle_lanes",
     "handle_loop",
+    "handle_profile",
 ]
 
