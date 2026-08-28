@@ -96,6 +96,25 @@ class TestTakeDueLanes:
         picks = scheduler.take_due_lanes(now=int(time.time()), max_picks=5)
         assert all(pick.lane_id != "ghost-lane" for pick in picks)
 
+    def test_seconds_until_due_returns_earliest_wait(self, db_path, lanes):
+        scheduler = _make(db_path, lanes)
+        now = int(time.time())
+        # All fresh lanes due now -> wait is 0
+        assert scheduler.seconds_until_due(now=now) == 0
+
+        # Fire all lanes
+        picks = scheduler.take_due_lanes(now=now, max_picks=5)
+        for pick in picks:
+            scheduler.commit_fire(pick, run_id=f"r-{pick.lane_id}")
+
+        # Shortest gap is shorts (300s)
+        wait = scheduler.seconds_until_due(now=now)
+        assert wait == 300
+
+        # Filtered to only aelithia-aita-long (1800s gap)
+        wait_ael = scheduler.seconds_until_due(now=now, lanes_filter={"aelithia-aita-long"})
+        assert wait_ael == 1800
+
 
 class TestCommitSemantics:
     def test_commit_fire_zeroes_empty_streak(self, db_path, lanes):

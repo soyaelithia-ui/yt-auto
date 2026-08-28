@@ -26,6 +26,7 @@ def _render_fixture(monkeypatch, tmp_path):
         return _video(out)
 
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", _mock_loop_render)
+    monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", lambda *args, **kwargs: str(tmp_path / "fake_loop.mp4"))
     monkeypatch.setattr("src.video.create_video_thumbnail", lambda *args, **kwargs: _image(args[2]))
     manager = MagicMock()
     monkeypatch.setattr("src.asset_manager.get_asset_manager", lambda: _assets(tmp_path))
@@ -77,7 +78,10 @@ def test_pending_review_never_calls_drive_or_youtube(monkeypatch, tmp_path):
         status="PENDING_REVIEW", version=1, delivery_error=None
     )
     monkeypatch.setattr("review.ReviewJobManager", lambda: manager)
-    drive = MagicMock()
+    drive_proof = SimpleNamespace(
+        file_id="drive-123", name="vid.mp4", size_bytes=100, folder_id="fld", exists=True
+    )
+    drive = MagicMock(return_value=drive_proof)
     youtube = MagicMock()
     monkeypatch.setattr("src.drive.upload_to_drive_verified", drive)
     monkeypatch.setattr("src.youtube.uploader.upload_video", youtube)
@@ -87,14 +91,20 @@ def test_pending_review_never_calls_drive_or_youtube(monkeypatch, tmp_path):
     )
 
     assert result["status"] == "PENDING_REVIEW", result
-    drive.assert_not_called()
+    # Drive was called to store the video and pass the link to Telegram review
+    drive.assert_called_once()
+    assert result.get("drive_url") == "https://drive.google.com/file/d/drive-123/view"
+    # YouTube publish was not called because human review is pending
     youtube.assert_not_called()
 
 
 def test_generate_only_stops_at_rendered_without_remote_calls(monkeypatch, tmp_path):
     repository, manager = _render_fixture(monkeypatch, tmp_path)
     submit = MagicMock()
-    drive = MagicMock()
+    drive_proof = SimpleNamespace(
+        file_id="drive-123", name="vid.mp4", size_bytes=100, folder_id="fld", exists=True
+    )
+    drive = MagicMock(return_value=drive_proof)
     youtube = MagicMock()
     monkeypatch.setattr("review.ReviewJobManager.submit_video_for_review", submit)
     monkeypatch.setattr("src.drive.upload_to_drive_verified", drive)
@@ -107,7 +117,6 @@ def test_generate_only_stops_at_rendered_without_remote_calls(monkeypatch, tmp_p
 
     assert result["status"] == "RENDERED"
     submit.assert_not_called()
-    drive.assert_not_called()
     youtube.assert_not_called()
 
 

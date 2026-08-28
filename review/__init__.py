@@ -113,8 +113,10 @@ class BaseReviewPublicationAdapter:
                 "original_path_basename": os.path.basename(str(original_video_path)),
                 "upload_timestamp": datetime.now(timezone.utc).isoformat(),
             }
+            work_dir = os.path.dirname(str(original_video_path))
+            target_dir = work_dir if os.path.isdir(work_dir) else (getattr(settings, "work_root", "") or "/tmp")
             manifest_path = os.path.join(
-                getattr(settings, "work_root", "") or "/tmp",
+                target_dir,
                 f"{project_name}:{job_id}:metadata.json",
             )
             with open(manifest_path, "w", encoding="utf-8") as mf:

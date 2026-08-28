@@ -60,6 +60,45 @@ def test_review_message_never_leaks_local_paths(tmp_path):
     assert str(tmp_path) not in msg
 
 
+def test_review_message_includes_drive_url_when_provided():
+    from review.telegram_bot import _review_message
+
+    msg = _review_message(
+        title="Mi historia",
+        review_window_hours=6,
+        drive_url="https://drive.google.com/file/d/abc/view",
+    )
+    assert "Drive: https://drive.google.com/file/d/abc/view" in msg
+
+
+def test_send_video_review_caption_is_clean_and_noise_free(tmp_path, monkeypatch):
+    from review.telegram_bot import TelegramReviewBot
+
+    video = tmp_path / "sample.mp4"
+    video.write_bytes(b"dummy")
+    monkeypatch.setattr("lib.video.is_test_environment", lambda: False)
+    bot = TelegramReviewBot(token="tok", chat_id="123")
+
+    with patch("review.telegram_bot.requests.post") as mock_post:
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {"ok": True, "result": {"message_id": 99}}
+        res = bot.send_video_review(
+            video_path=str(video),
+            caption="Vídeo Asombroso",
+            job_id="job-100",
+            drive_url="https://drive.google.com/file/d/xyz123/view",
+        )
+
+    assert res.ok
+    sent_caption = mock_post.call_args.kwargs["data"]["caption"]
+    assert "Vídeo Asombroso" in sent_caption
+    assert "⏱️ Duración:" in sent_caption
+    assert "📁 Drive: https://drive.google.com/file/d/xyz123/view" in sent_caption
+    # Noise must be absent
+    assert "Cobertura:" not in sent_caption
+    assert "Generado:" not in sent_caption
+
+
 def test_oversize_video_fails_closed_without_sending_a_fallback(tmp_path, monkeypatch):
     from review.telegram_bot import TelegramReviewBot
 

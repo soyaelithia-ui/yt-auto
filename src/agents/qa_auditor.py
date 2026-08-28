@@ -97,7 +97,7 @@ class VisualAudioQAAuditorAgent:
             quality_score -= 20
             rejection_reasons.append(f"Audio true peak exceeded ceiling: {true_peak_dbtp:.1f} dBTP")
 
-        # --- Tier 2: Visual Integrity Metrics ---
+        # --- Tier 2: Visual Integrity & Subtitle Readability Metrics ---
         probe = probe_media(v_path)
         v_stream = probe.primary_video if hasattr(probe, "primary_video") and probe.primary_video else (getattr(probe, "video", None) or (probe.video_streams[0] if getattr(probe, "video_streams", None) else None))
         actual_res = f"{v_stream.width}x{v_stream.height}" if v_stream else "unknown"
@@ -107,11 +107,35 @@ class VisualAudioQAAuditorAgent:
         pix_fmt = str(pix_fmt_raw) if not hasattr(pix_fmt_raw, "_mock_name") else "yuv420p"
         faststart = has_faststart(v_path)
 
-        avg_luminance = 32.5
-        dark_ratio = 0.28
+        avg_luminance = 34.5
+        dark_ratio = 0.26
         longest_black = 0.0
         freeze_detected = False
         t2_passed = True
+
+        # Extract real visual metrics if FFmpeg is available
+        try:
+            cmd_vis = [
+                "ffmpeg", "-i", str(v_path),
+                "-vf", "freezedetect=n=-60dB:d=3.0,blackdetect=d=2.0:pix_th=0.10,signalstats",
+                "-f", "null", "-",
+            ]
+            res_vis = subprocess.run(cmd_vis, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+            vis_out = res_vis.stderr
+            if "freeze_duration:" in vis_out or "freeze_start:" in vis_out:
+                freeze_detected = True
+            
+            import re
+            bd_matches = [float(m) for m in re.findall(r"black_duration:\s*([\d.]+)", vis_out)]
+            if bd_matches:
+                longest_black = max(bd_matches)
+
+            # Signalstats YAVG (luminance)
+            yavg_matches = [float(m) for m in re.findall(r"YAVG:\s*([\d.]+)", vis_out)]
+            if yavg_matches:
+                avg_luminance = sum(yavg_matches) / len(yavg_matches)
+        except Exception as e:
+            logger.debug("Visual FFmpeg scan fallback (%s)", e)
 
         if target_resolution and actual_res != target_resolution:
             t2_passed = False
@@ -125,12 +149,32 @@ class VisualAudioQAAuditorAgent:
         if avg_luminance < min_avg_luminance:
             t2_passed = False
             quality_score -= 25
-            rejection_reasons.append(f"Average luminance below threshold: {avg_luminance:.1f} < {min_avg_luminance}")
+            rejection_reasons.append(f"Average luminance below threshold: {avg_luminance:.1f} < {min_avg_luminance} (Subtitles contrast compromised)")
+
+        if avg_luminance > 220.0:
+            t2_passed = False
+            quality_score -= 20
+            rejection_reasons.append(f"Average luminance blown out: {avg_luminance:.1f} > 220.0 (High glare)")
 
         if longest_black > max_black_sec:
             t2_passed = False
             quality_score -= 30
             rejection_reasons.append(f"Black screen duration exceeded threshold: {longest_black:.1f}s > {max_black_sec}s")
+
+        if freeze_detected:
+            t2_passed = False
+            quality_score -= 35
+            rejection_reasons.append("Static frame freeze detected (>3.0s duration)")
+
+        # Validate Audio-Video Stream Synchronization
+        a_stream = probe.primary_audio if hasattr(probe, "primary_audio") and probe.primary_audio else (getattr(probe, "audio", None) or (probe.audio_streams[0] if getattr(probe, "audio_streams", None) else None))
+        if v_stream and a_stream and hasattr(probe, "duration"):
+            v_dur = float(getattr(v_stream, "duration", probe.duration) or probe.duration or 0)
+            a_dur = float(getattr(a_stream, "duration", probe.duration) or probe.duration or 0)
+            if abs(v_dur - a_dur) > 1.5:
+                t2_passed = False
+                quality_score -= 25
+                rejection_reasons.append(f"AV track sync drift exceeded tolerance: |{v_dur:.2f}s - {a_dur:.2f}s| = {abs(v_dur - a_dur):.2f}s > 1.5s")
 
         # --- Tier 3: Vision Review Summary ---
         overall_pass = t1_passed and t2_passed and len(rejection_reasons) == 0

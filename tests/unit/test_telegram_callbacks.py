@@ -52,12 +52,41 @@ def test_review_video_sends_inline_keyboard(tmp_path, monkeypatch):
 
     assert result.ok
     keyboard = json.loads(post.call_args.kwargs["data"]["reply_markup"])
+    # 2x2 grid layout
     assert [button["callback_data"] for button in keyboard["inline_keyboard"][0]] == [
         "approve:run-001",
-        "redo:run-001",
         "reject:run-001",
+    ]
+    assert [button["callback_data"] for button in keyboard["inline_keyboard"][1]] == [
+        "redo:run-001",
         "info:run-001",
     ]
+
+
+def test_review_video_with_drive_url_includes_button_and_caption(tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"mp4")
+    monkeypatch.setattr("lib.video.is_test_environment", lambda: False)
+    bot = TelegramReviewBot(token="token", chat_id="123")
+    fake_drive_url = "https://drive.google.com/file/d/test-drive-id-123/view"
+
+    with patch("review.telegram_bot.requests.post", return_value=_TelegramResponse()) as post:
+        result = bot.send_video_review(
+            str(video), caption="Historia de Terror", job_id="run-002", drive_url=fake_drive_url
+        )
+
+    assert result.ok
+    post_data = post.call_args.kwargs["data"]
+    caption = post_data["caption"]
+    assert "Historia de Terror" in caption
+    assert f"📁 Drive: {fake_drive_url}" in caption
+    assert "Cobertura:" not in caption
+    assert "Generado:" not in caption
+
+    keyboard = json.loads(post_data["reply_markup"])
+    assert len(keyboard["inline_keyboard"]) == 3
+    assert keyboard["inline_keyboard"][2][0]["text"] == "📁 Ver en Drive"
+    assert keyboard["inline_keyboard"][2][0]["url"] == fake_drive_url
 
 
 def test_reject_callback_is_authorized_and_transitions_job(tmp_path, monkeypatch):

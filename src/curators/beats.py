@@ -179,7 +179,11 @@ def calculate_beat_shot_durations(
 
     if not word_timestamps or len(word_timestamps) == 0:
         equal_dur = total_audio_duration / len(beats)
-        return [round(equal_dur, 3)] * len(beats)
+        durations = [round(equal_dur, 3)] * len(beats)
+        if durations and total_audio_duration > 0:
+            diff = round(total_audio_duration - sum(durations), 3)
+            durations[-1] = max(1.0, round(durations[-1] + diff, 3))
+        return durations
 
     total_words = len(word_timestamps)
     beat_durations: List[float] = []
@@ -210,6 +214,11 @@ def calculate_beat_shot_durations(
         beat_durations.append(round(dur, 3))
         prev_end = end_timestamp
         current_word_idx = target_idx + 1
+
+    if beat_durations and total_audio_duration > 0:
+        diff = round(total_audio_duration - sum(beat_durations), 3)
+        if abs(diff) > 0.001:
+            beat_durations[-1] = max(1.0, round(beat_durations[-1] + diff, 3))
 
     return beat_durations
 

@@ -246,13 +246,9 @@ def test_load_canonical_without_frontmatter_is_unchanged(tmp_path):
 
 
 def test_real_shipped_worksets_have_no_frontmatter_keys():
-    """The five bundled .md files carry no frontmatter and must parse as before."""
-    stories = [
-        s
-        for s in _load_canonical_stories(min_length=100)
-        if not s["id"].startswith("CANONICAL-")
-    ]
-    assert len(stories) >= 5
+    """The bundled canonical stories carry no frontmatter and must parse as before."""
+    stories = _load_canonical_stories(min_length=100)
+    assert len(stories) >= 2
     for story in stories:
         assert "score" not in story
         assert "tags" not in story

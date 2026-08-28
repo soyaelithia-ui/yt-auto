@@ -755,6 +755,7 @@ def run_pipeline_once(
                 channel_name=channel_name,
                 resolution=list(lane.expected_resolution),
                 fps=lane.fps,
+                actual_audio_duration=float(audio.get("duration_sec", 0.0) or 0.0),
             )
             scene_manifest_path.write_text(
                 json.dumps(manifest_payload, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -996,6 +997,73 @@ def run_pipeline_once(
         if not _set_owned_status(JobStatus.RENDERED):
             raise LeaseOwnershipError("Ownership perdido antes de marcar RENDERED")
 
+        # Automatically reclaim rendering intermediate files
+        try:
+            from src.cleaner import clean_run_intermediates
+            clean_run_intermediates(work_dir)
+        except Exception as cleaner_exc:
+            logger.debug("Non-fatal intermediate cleanup error: %s", cleaner_exc)
+
+        # Google Drive Backup & Verified URL generation before review/publishing
+        drive_url: str | None = None
+        drive_proof: DriveProof | None = None
+        approved_video_folder_id = (
+            getattr(SETTINGS, "drive_approved_video_folder_id", "")
+            or SETTINGS.drive_folder_id
+        )
+        if approved_video_folder_id:
+            from src.drive import upload_to_drive_verified
+
+            def _persist_drive_id(file_id: str) -> None:
+                repository.record_drive_upload_id(
+                    story_id, run_id, file_id, owner=owner
+                )
+
+            try:
+                drive_proof = upload_to_drive_verified(
+                    str(video_path),
+                    folder_id=approved_video_folder_id,
+                    sa_key_path=str(SETTINGS.drive_key_path),
+                    display_name=f"{sanitize_filename(spanish_title)}.mp4",
+                    token_path=str(settings.youtube_token_path),
+                    idempotency_key=f"YTShort:{channel_name}:{story_id}",
+                    on_file_id=_persist_drive_id,
+                )
+                repository.record_provider_attempt(
+                    run_id, "drive", "upload_and_verify", outcome="verified"
+                )
+                repository.record_artifact(
+                    run_id,
+                    "drive_video",
+                    remote_provider="drive",
+                    remote_id=drive_proof.file_id,
+                    remote_name=drive_proof.name,
+                    size_bytes=drive_proof.size_bytes,
+                    verified=True,
+                )
+                if drive_proof and drive_proof.file_id:
+                    drive_url = _drive_review_url(drive_proof)
+                if not _set_owned_status(JobStatus.DRIVE_BACKED_UP):
+                    raise LeaseOwnershipError("Ownership perdido después de confirmar Drive")
+            except Exception as exc:
+                repository.record_provider_attempt(
+                    run_id,
+                    "drive",
+                    "upload_and_verify",
+                    outcome="failed",
+                    error_code=getattr(exc, "code", "drive_error"),
+                    error_detail=str(exc),
+                )
+                if directed and isinstance(exc, AmbiguousUploadError):
+                    return _fail(
+                        "drive_upload_ambiguous",
+                        str(exc),
+                        status=JobStatus.UPLOAD_UNCONFIRMED,
+                    )
+                logger.warning("Drive backup attempt failed: %s", exc)
+        else:
+            logger.info("Drive backup omitido: DRIVE_FOLDER_ID no está configurado")
+
         if generate_only:
             if not repository.finish_run(run_id, JobStatus.RENDERED, owner=owner):
                 raise LeaseOwnershipError("Ownership perdido antes de finalizar el run")
@@ -1007,6 +1075,8 @@ def run_pipeline_once(
                 "run_id": run_id,
                 "channel": channel_name,
                 "work_dir": str(work_dir),
+                "drive_url": drive_url,
+                "drive_file_id": drive_proof.file_id if drive_proof else None,
                 **_peak_rss_metric(),
             }
 
@@ -1056,7 +1126,7 @@ def run_pipeline_once(
                         script=script,
                         subtitle_path=str(ass_path) if ass_path.is_file() else (str(srt_path) if srt_path.is_file() else None),
                         work_dir=str(work_dir),
-                        drive_url=None,
+                        drive_url=drive_url,
                     )
                     approved_job = review_manager.code_approve(
                         story_id, 1, verdict.to_dict(), user_id=0
@@ -1100,7 +1170,7 @@ def run_pipeline_once(
                     script=script,
                     subtitle_path=str(ass_path) if ass_path.is_file() else (str(srt_path) if srt_path.is_file() else None),
                     work_dir=str(work_dir),
-                    drive_url=None,
+                    drive_url=drive_url,
                 )
 
                 if is_test_environment() or os.environ.get("TEST_MODE") == "1":
@@ -1140,62 +1210,9 @@ def run_pipeline_once(
                 "channel": channel_name,
                 "work_dir": str(work_dir),
                 "review_status": review_job.status,
+                "drive_url": drive_url,
+                "drive_file_id": drive_proof.file_id if drive_proof else None,
             }
-
-        approved_video_folder_id = (
-            getattr(SETTINGS, "drive_approved_video_folder_id", "")
-            or SETTINGS.drive_folder_id
-        )
-        if approved_video_folder_id:
-            from src.drive import upload_to_drive_verified
-
-            def _persist_drive_id(file_id: str) -> None:
-                repository.record_drive_upload_id(
-                    story_id, run_id, file_id, owner=owner
-                )
-
-            try:
-                drive_proof = upload_to_drive_verified(
-                    str(video_path),
-                    folder_id=approved_video_folder_id,
-                    sa_key_path=str(SETTINGS.drive_key_path),
-                    display_name=f"{sanitize_filename(spanish_title)}.mp4",
-                    token_path=str(settings.youtube_token_path),
-                    idempotency_key=f"YTShort:{channel_name}:{story_id}",
-                    on_file_id=_persist_drive_id,
-                )
-                repository.record_provider_attempt(
-                    run_id, "drive", "upload_and_verify", outcome="verified"
-                )
-                repository.record_artifact(
-                    run_id,
-                    "drive_video",
-                    remote_provider="drive",
-                    remote_id=drive_proof.file_id,
-                    remote_name=drive_proof.name,
-                    size_bytes=drive_proof.size_bytes,
-                    verified=True,
-                )
-                if not _set_owned_status(JobStatus.DRIVE_BACKED_UP):
-                    raise LeaseOwnershipError("Ownership perdido después de confirmar Drive")
-            except Exception as exc:
-                repository.record_provider_attempt(
-                    run_id,
-                    "drive",
-                    "upload_and_verify",
-                    outcome="failed",
-                    error_code=getattr(exc, "code", "drive_error"),
-                    error_detail=str(exc),
-                )
-                if directed and isinstance(exc, AmbiguousUploadError):
-                    return _fail(
-                        "drive_upload_ambiguous",
-                        str(exc),
-                        status=JobStatus.UPLOAD_UNCONFIRMED,
-                    )
-                raise
-        else:
-            logger.info("Drive backup omitido: DRIVE_FOLDER_ID no está configurado")
 
         def _persist_youtube_id(video_id: str) -> None:
             repository.record_youtube_upload_id(
@@ -1349,6 +1366,11 @@ def run_pipeline_once(
                 "Publication committed; post-commit tasks failed: %s",
                 "; ".join(post_commit_errors),
             )
+        try:
+            from src.cleaner import clean_run_intermediates
+            clean_run_intermediates(work_dir)
+        except Exception:
+            pass
         return {
             "status": JobStatus.PUBLISHED.value,
             "story_id": story_id,

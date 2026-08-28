@@ -178,12 +178,14 @@ class MediaIntegrityVerifier:
             "-f", "null", "-"
         ]
         decode_cmd_str = " ".join(decode_cmd)
+        dur_val = float(fmt.get("duration", 0) or 0)
+        dec_timeout = max(300, int(dur_val * 1.5)) if dur_val > 0 else 300
         try:
-            dec_res = subprocess.run(decode_cmd, capture_output=True, text=True, timeout=180, shell=False)
+            dec_res = subprocess.run(decode_cmd, capture_output=True, text=True, timeout=dec_timeout, shell=False)
             decode_exit_code = dec_res.returncode
             dec_stderr = dec_res.stderr.strip()
         except subprocess.TimeoutExpired:
-            errors.append("FFmpeg full decoding timed out (>180s). File may contain infinite loops or corrupted atoms.")
+            errors.append(f"FFmpeg full decoding timed out (>{dec_timeout}s). File may contain infinite loops or corrupted atoms.")
             return self._build_failure_report(path_obj, errors, work_dir, sha256_hash, file_size)
         except Exception as exc:
             errors.append(f"FFmpeg decoding execution failed: {exc}")

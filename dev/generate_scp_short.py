@@ -227,7 +227,13 @@ def generate_scp_short(
         )
         notifier.send_message(summary_msg)
         if video_path.is_file():
-            notifier.send_video_preview(str(video_path), caption=f"🎬 {seo_data['selected_title']}")
+            metadata = {
+                "title": seo_data.get("selected_title", topic),
+                "caption": f"🎬 {seo_data.get('selected_title', topic)}",
+                "sha256_hash": qa_report.get("sha256_hash") if isinstance(qa_report, dict) else None,
+                "verified_sha256": qa_report.get("sha256_hash") if isinstance(qa_report, dict) else None,
+            }
+            notifier.send_video_preview(str(video_path), metadata=metadata)
 
     result = {
         "status": "SUCCESS",

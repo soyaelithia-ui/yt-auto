@@ -104,6 +104,137 @@ def build_aelithia_short_narrative(
     return f"{hook}\n\n{body}\n\n{outro}"
 
 
+def build_scp3000_longform_narrative(
+    topic: str,
+    channel: str = "moku",
+    target_duration_minutes: float = 12.0,
+    **kwargs: Any,
+) -> str:
+    """
+    Builds an in-depth, canon-grounded, multi-act documentary narrative for SCP-3000 (Anantashesha)
+    calibrated to >=2,600 words (12-16 minutes).
+    Structured in 10 continuous immersive beats covering the Bay of Bengal abyss, cognitive decay,
+    the harvesting of Y-909, and the horrifying secret behind Foundation amnestics.
+    """
+    actual_channel = kwargs.get("ch") or channel
+    branding = get_channel_branding(actual_channel)
+    ch_handle = branding.handle
+
+    paragraphs = [
+        # Beat 1: In Media Res Hook & Ocean Trench Descent
+        (
+            f"A tres mil metros de profundidad en las aguas oscuras y asfixiantes de la Bahía de Bengala descansa el secreto más perturbador y moralmente demoledor de la Fundación SCP en torno a {topic}. "
+            "En ese abismo absoluto, donde la luz del sol se extinguió hace millones de años y la presión aplastante del agua es capaz de colapsar un bloque macizo de titanio como si fuera papel delgado, opera en silencio el buque de contención SCPS Eremita y la estación submarina ATLS-12. "
+            "No se trata de una base de investigación convencional ni de un puesto de monitoreo oceanográfico ordinario, sino de una operación clandestina de supervivencia extrema diseñada para custodiar a la entidad biológica más grande jamás descubierta por la humanidad: una criatura clasificada bajo la categoría Thaumiel, cuyo propio nombre en sánscrito antiguo evoca el fin de los tiempos: Anantashesha. "
+            "Quienes han descendido a bordo de los batiscafos presurizados coinciden en una advertencia unánime: en el fondo de esa fosa marina, la oscuridad no es simplemente la ausencia de fotones, sino una masa viva y palpable que parece alimentarse de tus pensamientos antes de que alcances a formularlos. "
+            "El sonido de los cascos de inmersión crujiendo bajo la presión tectónica acompaña el descenso hacia un vacío total donde los instrumentos de navegación electrónica comienzan a fallar sin explicación alguna. "
+            "Una sensación de frío sobrenatural atraviesa los mamparos térmicos más gruesos, haciendo que los operarios sientan el temblor involuntario de la piel y una intensa pesadez en el pecho que ninguna mezcla de gases respiratorios logra aliviar. "
+            "En este fondo marino desolado, las corrientes oceánicas parecen detenerse por completo, creando una quietud sepulcral que amplifica cada latido cardíaco dentro de las escafandras presurizadas."
+        ),
+        # Beat 2: Colossal Dimensions & Non-Euclidean Biology
+        (
+            "Los informes de los sónares activos y pasivos de la Fundación describen a la entidad como una serpiente marina anguilliforme de proporciones físicamente inconcebibles, cuya longitud total se estima entre seiscientos y novecientos kilómetros de extensión. "
+            "Su cuerpo colosal no permanece estático en el fondo arenoso, sino que se retuerce en bucles continuos y perezosos a lo largo de las dorsales submarinas, desafiando las leyes de la biomecánica y de la hidrodinámica terrestre. "
+            "La cabeza de la criatura mide más de dos metros y medio de diámetro por sí sola, provista de una mandíbula dotada de múltiples hileras de dientes cónicos y dos ojos opacos y lechosos que no reflejan la luz de los reflectores de tungsteno. "
+            "Los análisis espectrométricos revelan que la masa corporal de la serpiente desafía la geometría euclidiana ordinaria, expandiéndose y contrayéndose en pliegues espaciales que distorsionan el volumen del agua a su alrededor. "
+            "Cualquier intento de cartografiar su extensión completa mediante satélites batimétricos genera patrones corruptos en los servidores centrales, como si el propio océano se negara a registrar la presencia física de este leviatán. "
+            "Biólogos marinos asignados al proyecto intentaron inicialmente clasificarla como una especie mutada de morena gigante o un remanente prehistórico del período cámbrico, pero los patrones de descomposición celular observados en las muestras de tejido descartaron cualquier vínculo con el árbol de la vida conocido. "
+            "Las ondas de baja frecuencia que emite su cuerpo al desplazarse hacen vibrar el lecho rocoso de toda la cuenca oceánica con un zumbido sordo e hipnótico."
+        ),
+        # Beat 3: The Cognitive Fog & Memory Dissolution
+        (
+            "Sin embargo, lo verdaderamente aterrador de Anantashesha no reside en su tamaño monstruoso ni en su capacidad para hundir flotas enteras de buques de guerra, sino en el campo cognitopeligroso invisible y devastador que proyecta en un radio de decenas de kilómetros. "
+            "A medida que un submarino se aproxima al sector donde la criatura serpentea, la mente de los tripulantes comienza a experimentar una descomposición neurológica progresiva e irreversible. "
+            "Primero desaparecen los recuerdos más recientes: los operarios olvidan la hora exacta de su turno de guardia, las órdenes recibidas hace pocos minutos o el motivo por el cual descendieron a las profundidades marinas. "
+            "Posteriormente, la niebla cognitiva avanza hacia los recuerdos más profundos e íntimos: los rostros de sus cónyuges e hijos se difuminan en sombras borrosas, las canciones de la infancia se borran de la memoria y la habilidad para articular palabras complejas se extingue por completo. "
+            "Los buzos que han trabajado en las esclusas exteriores reportan escuchar una vibración sorda en el interior del cráneo, una voz susurrante que no utiliza el lenguaje humano pero que transmite una sensación infinita de soledad, vacío cósmico y olvido absoluto. "
+            "Es como si la criatura no solo habitara el abismo oceánico, sino que fuera una personificación física del propio olvido, devorando la identidad de cualquier ser vivo que entre en su dominio."
+        ),
+        # Beat 4: The Feeding Protocol and the Class-D Sacrifices
+        (
+            "Para comprender la razón por la cual la Fundación SCP mantiene una instalación permanente en un lugar tan hostil, es necesario adentrarse en el protocolo clasificado más oscuro del Sitio ATLS-12: el procedimiento de alimentación. "
+            "Anantashesha es una criatura carnívora obligada, pero su organismo no se nutre de ballenas, peces abisales ni materia orgánica convencional; su apetito exige conciencias humanas despiertas y funcionales. "
+            "A intervalos regulares de varias semanas, el Consejo O5 autoriza el transporte de sujetos Clase-D hacia las cámaras de inmersión profunda del buque de guardia. "
+            "Los prisioneros son introducidos en jaulas de acero de alta densidad equipadas con transmisores biométricos y cámaras de video resistentes a la presión, para luego ser descendidos lentamente hacia la fosa donde la cabeza de la serpiente aguarda en reposo. "
+            "Las grabaciones de audio recuperadas de estas jaulas documentan los momentos finales más angustiantes jamás registrados en los archivos de contención: los sujetos experimentan ataques de pánico violentos mientras gritan nombres que ya no recuerdan y suplican clemencia a figuras que han dejado de existir en sus mentes disueltas. "
+            "En el instante en que las fauces de la criatura se abren para engullir la jaula, los monitores electroencefalográficos registran una descarga cerebral masiva de agonía psicológica antes de que la señal se corte definitivamente en la oscuridad abisal."
+        ),
+        # Beat 5: Compound Y-909 and the Secret of All Amnestics
+        (
+            "Es en este preciso instante de consumo y sufrimiento donde se produce el fenómeno que hace a SCP-3000 indispensable para la existencia misma de la civilización moderna. "
+            "Durante el proceso digestivo de una mente humana consciente, la piel circundante a la cabeza de la entidad comienza a secretar una sustancia líquida, densa, de color negro azabache y textura viscosa que los investigadores denominan compuesto Y-909. "
+            "Flotas de drones submarinos automatizados y brazos mecánicos se apresuran a recolectar cada mililitro de este fluido viscoso mediante bombas de succión presurizadas antes de que se disperse en las corrientes marinas profundas. "
+            "El compuesto Y-909 es el principio activo fundamental, insustituible e irremplazable a partir del cual la Fundación SCP sintetiza todos los amnésicos de Clase A, Clase B, Clase C y Clase D que utiliza diariamente en todo el planeta. "
+            "Cada vez que un civil presencia una anomalía aterradora, cada vez que un monstruo es contenido y la población es sometida a un borrado de memoria para mantener el velo de la normalidad, el químico que se inyecta en sus venas o se dispersa en aerosol proviene directamente de las secreciones de Anantashesha. "
+            "La normalidad del mundo entero descansa sobre el sacrificio humano continuo y metódico entregado a una serpiente milenaria en el fondo del océano índico. "
+            "Sin la extracción constante en la Bahía de Bengala, las reservas globales de amnésicos se agotarían en cuestión de noventa días, provocando la caída irreversible del secreto de contención y la histeria colectiva en todas las naciones."
+        ),
+        # Beat 6: The Historical Discovery in 1971 and Naval Anomalies
+        (
+            "Los registros históricos de la Fundación sitúan el primer contacto oficial con la criatura en el año 1971, durante el conflicto naval de la Guerra Indo-Pakistaní en el Golfo de Bengala. "
+            "En aquel entonces, dos submarinos militares convencionales desaparecieron sin dejar rastro de combate ni restos flotantes en una zona supuestamente libre de campos de minas. "
+            "Las estaciones de escucha hidroacústica de la región registraron un pulso de baja frecuencia masivo y sostenido que no correspondía a explosiones de torpedos ni a sismos submarinos. "
+            "Cuando la Fundación desplegó sus primeros buques de investigación encubiertos bajo la fachada de expediciones oceanográficas internacionales, los buzos de saturación descubrieron los restos de los navíos incrustados en la fosa a más de dos mil metros de profundidad. "
+            "Las compuertas de ambos sumergibles habían sido abiertas desde el interior por los propios marineros, cuyos cuerpos jamás fueron recuperados. "
+            "En las grabadoras de cinta magnética de las salas de control se escuchaban las voces de los oficiales cantando en idiomas desconocidos mientras describían a un dios negro con forma de serpiente que los invitaba a sumergirse en las aguas heladas para olvidar sus nombres. "
+            "Aquel incidente obligó al Consejo O5 a declarar la zona como perímetro de exclusión marítima permanente bajo el mando directo de la Fuerza de Tarea Móvil Gamma-6."
+        ),
+        # Beat 7: The Tragic Logs of Dr. Krishnamoorthy
+        (
+            "Entre los expedientes clasificados más impactantes de la estación ATLS-12 destacan las transcripciones personales del Doctor Krishnamoorthy, el neurocientífico jefe asignado para supervisar la recolección del fluido durante la década pasada. "
+            "A lo largo de sus registros diarios en audio, es posible trazar el colapso psicológico gradual de un hombre brillante que intentó comprender la naturaleza metafísica de la entidad. "
+            "En sus primeras notas, Krishnamoorthy registraba datos técnicos sobre la pureza del amnésico con frialdad metodológica; sin embargo, tras setenta días de exposición a las frecuencias del abismo, su lenguaje comenzó a fragmentarse en reflexiones poéticas y aterradoras. "
+            "En sus diarios personales describía cómo sus propios recuerdos familiares eran sustituidos por visiones de templos sumergidos y mares negros que existieron antes de la formación de los continentes. "
+            "En su última grabación oficial, fechada a las cuatro de la madrugada, su voz suena tranquila pero desprovista de cualquier rasgo de emoción humana: 'No hay nada después de la muerte', susurra el científico en el micrófono de la cabina. 'No hay cielo, no hay reencarnación ni castigo. Solo está la boca de la serpiente esperando que el tiempo termine. He visto el abismo donde van a parar todos los recuerdos del universo, y es hermoso en su frialdad absoluta'. "
+            "Minutos después de registrar aquellas palabras, el doctor desactivó los protocolos de seguridad de la esclusa número tres y se arrojó a las aguas heladas sin equipo de respiración, desapareciendo para siempre en la fosa abisal."
+        ),
+        # Beat 8: The Psychological Logs of D-4752 and D-5291
+        (
+            "Los archivos de audio de las misiones de inmersión tripuladas aportan los testimonios más escalofriantes sobre la distorsión de la identidad provocada por la proximidad de la criatura. "
+            "Durante la prueba de alimentación designada como Protocolo Beta-Nueve, dos sujetos de prueba Clase-D fueron descendidos juntos dentro de una cámara de titanio reforzado mientras los sensores registraban su actividad cognitiva. "
+            "A los cuatro minutos de descenso, el sujeto D-4752 comenzó a llorar desconsoladamente, afirmando con desesperación que recordaba la infancia de su compañero de celda con mayor nitidez que la suya propia. "
+            "Describía la casa materna de D-5291, el nombre de su primera mascota y el accidente que marcó su adolescencia, mientras que D-5291 permanecía en un mutismo catatónico incapaz de pronunciar su propio apellido. "
+            "Las memorias de ambos hombres se habían entrelazado y fundido en el campo de radiación psíquica de la serpiente, intercambiando vivencias y traumas personales como si sus cerebros fueran vasos comunicantes vertiéndose en el mismo vacío. "
+            "Momentos antes de que la masa colosal de Anantashesha envolviera la cápsula, D-4752 susurró por la radio una última frase que quedó grabada en los servidores del buque de mando: 'Ya no soy yo, y él tampoco es él; la serpiente está bebiendo nuestras vidas y lo único que queda es el agua negra'. "
+            "La señal de los electrodos cardíacos se aplanó instantáneamente al producirse el impacto de las mandíbulas de la entidad contra el blindaje."
+        ),
+        # Beat 9: The Nature of the Soul and the Void
+        (
+            "Las investigaciones psiquiátricas posteriores realizadas a los supervivientes de las misiones submarinas arrojaron una hipótesis aún más sombría que la simple pérdida biológica de recuerdos. "
+            "Los sujetos expuestos al campo de Anantashesha no sufren una amnesia temporal reparable mediante terapias neurológicas; lo que ocurre es una extirpación ontológica del tejido mismo de la conciencia. "
+            "Cuando la entidad absorbe un recuerdo, ese evento parece no haber ocurrido jamás en el plano metafísico de la realidad, dejando un vacío negro en el alma de la persona afectada que genera cuadros crónicos de depresión existencial, apatía severa y despersonalización completa. "
+            "Varios buzos rescatados tras fallas en los sistemas de presurización fueron incapaces de reconocer su propio reflejo en el espejo, afirmando que el cuerpo que habitaban pertenecía a un extraño que había muerto hace siglos. "
+            "La conclusión de los comités de ética de la Fundación fue tajante y despiadada: el daño cognitivo es un costo colateral aceptable frente a la necesidad imperiosa de mantener el suministro global de amnésicos en niveles operativos estables. "
+            "El Consejo O5 selló estos informes bajo clasificación de máxima seguridad, prohibiendo que los agentes de campo conozcan el verdadero origen de los viales amnésicos que llevan en sus cinturones tácticos."
+        ),
+        # Beat 10: Underwater Submersible Dive Telemetry and Scranton Anchors
+        (
+            "Durante la Operación Fosa Profunda, un dron de exploración no tripulado equipado con blindaje de aleación de osmio y un ancla de realidad Scranton miniaturizada logró descender hasta rozar el lomo de la criatura a cuatro mil doscientos metros bajo el nivel del mar. "
+            "El ancla de realidad tenía como objetivo estabilizar los niveles de Hume para permitir mediciones cuánticas directas, pero el campo emitido por Anantashesha sobrecargó los condensadores en cuestión de segundos, reduciendo la densidad ontológica del área a niveles cercanos a cero. "
+            "Las imágenes transmitidas por fibra óptica antes del colapso del cable mostraron la textura de las escamas de la serpiente: placas gigantescas de queratina fosilizada cubiertas por una densa capa de sedimentos marinos milenarios y colonias de gusanos tubícolas bioluminiscentes. "
+            "Al encender los reflectores principales hacia el sector cefálico, la cámara captó por primera vez el movimiento de sus párpados translúcidos, revelando una pupila vertical del tamaño de un automóvil que parecía mirar directamente a través de la lente electrónica hacia los operadores en la superficie. "
+            "En ese milisegundo de contacto visual mediado por pantallas, todos los técnicos en la sala de control del buque experimentaron una pérdida repentina de visión temporal y sangrado nasal simultáneo. "
+            "La telemetría del dron registró una elevación de temperatura en el agua circundante de más de quince grados en un segundo, como si la respiración del monstruo emanara calor geotérmico directo desde el manto terrestre. "
+            "El vehículo fue succionado hacia una cavidad oscura antes de que los sensores de presión estallaran por sobrecarga estructural."
+        ),
+        # Beat 11: Philosophical Horror & The Inevitable Return
+        (
+            "Vivir en un mundo custodiado por la Fundación SCP implica aceptar una paradoja aterradora: nuestra cordura cotidiana depende de un monstruo que devora la esencia misma de lo que nos hace humanos. "
+            "Cada vez que la humanidad olvida un encuentro con lo imposible, cada vez que una ciudad despierta creyendo que una catástrofe fue simplemente una fuga de gas o una tormenta meteorológica, una gota del sufrimiento destilado en la Bahía de Bengala ha sido vertida en la memoria colectiva. "
+            "Y en lo más profundo de la fosa abisal, la colosal serpiente de novecientos kilómetros continúa retorciéndose en la oscuridad, paciente, inmortal y hambrienta. "
+            "Sabe que no necesita subir a la superficie para reclamar su reino sobre la Tierra, porque tarde o temprano, cada pensamiento, cada amor, cada memoria y cada civilización terminarán hundiéndose en su boca insaciable. "
+            "La certeza de que el olvido definitivo aguarda bajo las olas es la verdad más pesada que cualquier ser humano puede llegar a contemplar en el silencio de la noche."
+        ),
+        # Beat 12: Final Lore Synthesis & Archive Custody
+        (
+            "El expediente del Sitio de Contención SCP-3000 permanece clasificado bajo el nivel cinco de seguridad y las patrullas del buque SCPS Eremita continúan navegando las coordenadas restringidas de la Bahía de Bengala sin descanso. "
+            "Las jaulas de alimentación siguen descendiendo hacia las fosas oceánicas y los viales de amnésicos continúan distribuyéndose por cada continente para sostener la frágil ilusión de control que llamamos realidad. "
+            f"El informe completo, las grabaciones recuperadas del fondo marino y los análisis de telemetría abisal permanecen bajo custodia oficial en {ch_handle}."
+        ),
+    ]
+    return "\n\n".join(p.strip() for p in paragraphs)
+
+
 def build_moku_longform_narrative(
     topic: str,
     channel: str = "moku",
@@ -119,6 +250,16 @@ def build_moku_longform_narrative(
     actual_channel = kwargs.get("ch") or channel
     branding = get_channel_branding(actual_channel)
     ch_handle = branding.handle
+
+    # Grounded canonical SCP longform documentaries
+    norm_topic = topic.lower()
+    if "3000" in norm_topic or "anantashesha" in norm_topic:
+        return build_scp3000_longform_narrative(
+            topic,
+            channel=actual_channel,
+            target_duration_minutes=target_duration_minutes,
+            **kwargs,
+        )
 
     paragraphs = [
         # Beat 1: In Media Res Hook & Setting the Atmosphere

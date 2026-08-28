@@ -10,7 +10,7 @@ Flow:
 5. Composites 10+ minute Full HD master MP4 with strict explicit stream mapping (-map 0:v:0 -map 1:a:0).
 6. Runs automated volume detection Gatekeeper to guarantee audio audibility (mean_volume > -25 dB).
 7. Encodes an optimized Telegram delivery proxy (< 48 MB, adhering to 50 MB bot API limit).
-8. Dispatches video and metadata report to Telegram bot @YT_AutoxxBot (Token: 8756926831:AAFGUEqCPhgBWxu2ZWluRjGc02pFEQ_XRck).
+8. Dispatches video and metadata report to Telegram review bot.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ import requests
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
+from review.telegram_bot import TelegramReviewBot, is_local_bot_api, get_telegram_api_base_url
 from src.media.realtime_video_engine import RealtimeVideoEngine, TemporalAct
 from src.scene_manifest import (
     AudioTracks,
@@ -407,39 +408,54 @@ def create_telegram_proxy(master_mp4: Path, output_proxy: Path, total_dur: float
     return output_proxy
 
 
-def dispatch_to_telegram(video_path: Path, chat_id: int | str, token: str, duration_sec: float) -> bool:
-    """Uploads the proxy video directly to the recipient chat in Telegram."""
-    url = f"https://api.telegram.org/bot{token}/sendVideo"
+def dispatch_to_telegram(
+    master_path: Path,
+    proxy_path: Optional[Path],
+    chat_id: int | str,
+    token: str,
+    duration_sec: float,
+) -> bool:
+    """Dispatches master (up to 2 GB with Local Bot API) or compressed proxy (Cloud fallback) via TelegramReviewBot."""
+    bot = TelegramReviewBot(token=token, chat_id=str(chat_id))
+    is_local = is_local_bot_api(bot.base_url)
+
+    target_video = master_path if (is_local and master_path.exists()) else (proxy_path or master_path)
+    res_label = "1080p Full HD Master" if target_video == master_path else "720p HD (Proxy)"
+    mode_label = "Servidor Local (2000 MB / 2 GB direct file://)" if is_local else "Cloud Bot API (50 MB límite)"
+
     caption = (
         "🎬 <b>SCP-2000: DEUS EX MACHINA</b>\n"
         "<i>El Archivo Clasificado de la Última Esperanza</i>\n\n"
         f"⏱️ <b>Duración:</b> {int(duration_sec // 60)}m {int(duration_sec % 60):02d}s\n"
-        "📐 <b>Resolución:</b> 720p HD (16:9 Horizontal)\n"
+        f"📐 <b>Resolución:</b> {res_label}\n"
+        f"⚡ <b>Modo Servidor:</b> {mode_label}\n"
         "🧬 <b>Visuales:</b> Motor Procedural Three.js Multicena (5 Entornos PBR + 7 Actos Sincronizados)\n"
         "🔊 <b>Audio:</b> Locución Álvaro Neural + Ducking EBU R128 (-16 LUFS)\n\n"
         "#SCP #SCP2000 #DeusExMachina #TerrorPsicologico #Documental"
     )
 
-    logger.info("📤 Despachando video a Telegram (Chat ID: %s, Archivo: %.2f MB)...", chat_id, video_path.stat().st_size / (1024*1024))
-    with open(video_path, "rb") as vf:
-        files = {"video": (video_path.name, vf, "video/mp4")}
-        data = {
-            "chat_id": chat_id,
-            "caption": caption,
-            "parse_mode": "HTML",
-            "supports_streaming": "true",
-            "duration": int(duration_sec),
-            "width": 1280,
-            "height": 720,
-        }
-        resp = requests.post(url, data=data, files=files, timeout=300)
+    logger.info(
+        "📤 Despachando video a Telegram vía %s (Chat ID: %s, Archivo: %s [%.2f MB])...",
+        "Servidor Local 2000 MB" if is_local else "Cloud Bot API",
+        chat_id,
+        target_video.name,
+        target_video.stat().st_size / (1024 * 1024),
+    )
 
-    if resp.status_code == 200 and resp.json().get("ok"):
-        msg_id = resp.json().get("result", {}).get("message_id")
-        logger.info("🎉 ¡Video entregado exitosamente en Telegram! (Message ID: %s)", msg_id)
+    res = bot.send_video(
+        video_path=str(target_video),
+        caption=caption,
+        chat_id=str(chat_id),
+        duration=duration_sec,
+        parse_mode="HTML",
+        supports_streaming=True,
+    )
+
+    if res.ok:
+        logger.info("🎉 ¡Video entregado exitosamente en Telegram! (Message ID: %s)", res.message_id)
         return True
     else:
-        logger.error("Error al enviar video a Telegram: %s", resp.text)
+        logger.error("Error al enviar video a Telegram: %s", res.error)
         return False
 
 
@@ -477,17 +493,23 @@ def main() -> int:
     # Step 5: Compose Full HD master video with strict stream mapping
     compose_master_longform(loop_mp4, mixed_audio, master_output, total_dur)
 
-    # Step 6: Encode Telegram delivery proxy (< 45 MB)
-    create_telegram_proxy(master_output, proxy_output, total_dur)
+    # Step 6: Encode Telegram delivery proxy (< 45 MB) only if Cloud Bot API is used
+    bot_base_url = get_telegram_api_base_url()
+    effective_proxy: Optional[Path] = None
+    if not is_local_bot_api(bot_base_url):
+        logger.info("Cloud Bot API detectada (50 MB). Generando proxy 720p optimizado...")
+        effective_proxy = create_telegram_proxy(master_output, proxy_output, total_dur)
+    else:
+        logger.info("⚡ Servidor Local de Telegram activo (%s): Se enviará el máster 1080p directamente (hasta 2 GB).", bot_base_url)
 
     # Step 7: Dispatch to Telegram User ID
     chat_id = args.chat_id
     if chat_id:
-        success = dispatch_to_telegram(proxy_output, chat_id, token, total_dur)
+        success = dispatch_to_telegram(master_output, effective_proxy, chat_id, token, total_dur)
         if success:
             logger.info("✨ Proceso completo: Video de 10+ minutos despachado a Telegram con audio y visuales multicena.")
         else:
-            logger.warning("El video está listo en %s pero falló el envío.", proxy_output)
+            logger.warning("El video está listo en %s pero falló el envío.", master_output)
 
     # Cleanup temporary work files
     if WORK_DIR.exists():

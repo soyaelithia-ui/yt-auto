@@ -159,6 +159,53 @@ class TestVPSCleaner(unittest.TestCase):
         self.assertFalse(tmp_file.exists())
         self.assertTrue(video.exists())
 
+    def test_clean_run_intermediates_includes_loop_concat_and_safe_area(self):
+        run_dir = self.work_root / "run_loop_789"
+        run_dir.mkdir()
+        loop_concat = run_dir / "loop_concat_list.txt"
+        loop_concat.write_text("file 'loop.mp4'")
+        safe_area = run_dir / "safe_area_validation.jpg"
+        safe_area.write_bytes(b"VALIDATION")
+        video = run_dir / "video.mp4"
+        video.write_bytes(b"VIDEO")
+
+        report = clean_run_intermediates(run_dir)
+        self.assertEqual(report["deleted_files_count"], 2)
+        self.assertFalse(loop_concat.exists())
+        self.assertFalse(safe_area.exists())
+        self.assertTrue(video.exists())
+
+    def test_cleanup_accepts_published_or_approved_drive_folders(self):
+        settings_published = SimpleNamespace(
+            work_root=self.work_root,
+            artifact_root=self.artifact_root,
+            drive_folder_id="folder-verified",
+            drive_published_folder_id="folder-published-123",
+            drive_approved_video_folder_id="folder-approved-456",
+            drive_root_folder_id="",
+        )
+        dummy2 = self.work_root / "published_video.mp4"
+        dummy2.write_bytes(b"PUBLISHED_VIDEO_DATA")
+        os.utime(dummy2, (1, 1))
+
+        proof_published = {
+            "id": "drive-pub-123",
+            "name": dummy2.name,
+            "size": dummy2.stat().st_size,
+            "parents": ["folder-published-123"],
+            "exists": True,
+        }
+        with patch("src.cleaner.SETTINGS", settings_published):
+            self.assertTrue(
+                verify_and_cleanup(
+                    str(dummy2),
+                    "drive-pub-123",
+                    remote_proof=proof_published,
+                    retention_seconds=0,
+                )
+            )
+        self.assertFalse(dummy2.exists())
+
     def test_clean_untracked_temp_files(self):
         tmp1 = self.work_root / ".tmp.orphaned.mp3"
         tmp1.write_bytes(b"TEMP")

@@ -125,6 +125,43 @@ class TestChannelLock(unittest.TestCase):
         mock_shutdown.assert_called_once()
         mock_release.assert_called_once()
 
+    def test_channel_lock_wait_timeout_expiry(self):
+        """ChannelLock with timeout expires and raises ChannelLockError after deadline."""
+        import time
+        lock1 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path)
+        lock2 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path, timeout=0.2, poll_interval=0.05)
+
+        with lock1:
+            t0 = time.monotonic()
+            with self.assertRaises(ChannelLockError) as cm:
+                lock2.acquire()
+            elapsed = time.monotonic() - t0
+            self.assertGreaterEqual(elapsed, 0.15)
+            self.assertIn("moku", str(cm.exception))
+
+    def test_channel_lock_wait_timeout_success(self):
+        """ChannelLock waits and acquires successfully when previous holder releases within timeout."""
+        import threading
+        import time
+
+        lock1 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path)
+        lock2 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path, timeout=1.0, poll_interval=0.05)
+
+        lock1.acquire()
+
+        def _delayed_release():
+            time.sleep(0.15)
+            lock1.release()
+
+        thread = threading.Thread(target=_delayed_release)
+        thread.start()
+
+        acquired = lock2.acquire()
+        self.assertTrue(acquired)
+        self.assertTrue(lock2.is_acquired)
+        lock2.release()
+        thread.join()
+
 
 if __name__ == "__main__":
     unittest.main()

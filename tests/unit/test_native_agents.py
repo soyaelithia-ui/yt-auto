@@ -8,8 +8,8 @@ from src.agents.base_agent import ProgrammaticAgent, CANONICAL_MODEL
 from src.agents.investigator import StoryInvestigatorAgent
 from src.agents.translator import TranslatorAgent
 
-def test_canonical_model_is_gemini_3_6_flash():
-    assert CANONICAL_MODEL == "gemini-3.6-flash"
+def test_canonical_model_is_gemini_flash():
+    assert CANONICAL_MODEL in ("gemini-3.6-flash", "gemini-3.7-flash")
 
 def test_programmatic_agent_consume(tmp_path):
     res_file = tmp_path / "task_result.json"
@@ -46,12 +46,12 @@ def test_programmatic_agent_run_success(mock_cli, tmp_path):
 
 def test_story_investigator_agent_instantiation():
     agent = StoryInvestigatorAgent()
-    assert agent.model == "gemini-3.6-flash"
+    assert agent.model == CANONICAL_MODEL
     assert agent.role_name == "story-investigator-agent"
 
 def test_translator_agent_instantiation():
     agent = TranslatorAgent()
-    assert agent.model == "gemini-3.6-flash"
+    assert agent.model == CANONICAL_MODEL
     assert agent.role_name == "translator-agent"
 
 

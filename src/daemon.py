@@ -544,6 +544,15 @@ def start_daemon_lanes(
 
     if not is_test_environment():
         _startup_incident_check(database, interval_seconds)
+        try:
+            from src.cleaner import (
+                clean_expired_failed_runs,
+                clean_untracked_temp_files,
+            )
+            clean_expired_failed_runs()
+            clean_untracked_temp_files()
+        except Exception:
+            logger.debug("daemon lane startup cleanup skipped", exc_info=True)
     if max_parallel is None and not is_test_environment():
         _start_telegram_callback_poller()
     breaker = ConsecutiveFailureBreaker()
@@ -556,6 +565,16 @@ def start_daemon_lanes(
             ticks += 1
             if not is_test_environment():
                 _run_auto_publish_sweep()
+                if ticks % 360 == 0:
+                    try:
+                        from src.cleaner import (
+                            clean_expired_failed_runs,
+                            clean_untracked_temp_files,
+                        )
+                        clean_expired_failed_runs()
+                        clean_untracked_temp_files()
+                    except Exception:
+                        logger.debug("periodic background cleanup skipped", exc_info=True)
                 try:
                     touch_daemon_liveness(database)
                 except Exception:
@@ -564,7 +583,11 @@ def start_daemon_lanes(
                 max_picks=max_picks, lanes_filter=set(active_lanes)
             )
             if not picks:
-                if _responsive_sleep(interval_seconds):
+                wait_time = min(
+                    interval_seconds,
+                    max(1, lane_scheduler.seconds_until_due(lanes_filter=set(active_lanes))),
+                )
+                if _responsive_sleep(wait_time):
                     break
                 continue
             futures = {

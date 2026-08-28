@@ -56,8 +56,18 @@ def verify_and_cleanup(
             logger.warning("Cleanup blocked: Drive proof mismatch for %s", key)
             return False
     parents = remote_proof.get("parents") or []
-    if SETTINGS.drive_folder_id and SETTINGS.drive_folder_id not in parents:
-        logger.warning("Cleanup blocked: Drive folder was not confirmed")
+    authorized_folders = {
+        f
+        for f in (
+            getattr(SETTINGS, "drive_folder_id", ""),
+            getattr(SETTINGS, "drive_published_folder_id", ""),
+            getattr(SETTINGS, "drive_approved_video_folder_id", ""),
+            getattr(SETTINGS, "drive_root_folder_id", ""),
+        )
+        if f
+    }
+    if authorized_folders and not any(p in authorized_folders for p in parents):
+        logger.warning("Cleanup blocked: Drive folder was not confirmed in authorized folders (%s)", parents)
         return False
     retention = (
         retention_seconds
@@ -181,6 +191,7 @@ def clean_run_intermediates(work_dir: str | Path) -> dict:
     patterns = [
         "prescaled_*.jpg",
         "concat_list.txt",
+        "loop_concat_list.txt",
         "*.tmp.*",
         "safe_area_validation.jpg",
         # R6: review proxies and compose logs are lineage-recorded before any
@@ -201,17 +212,18 @@ def clean_run_intermediates(work_dir: str | Path) -> dict:
     return report
 
 
-def clean_untracked_temp_files() -> dict:
+def clean_untracked_temp_files(dry_run: bool = False) -> dict:
     """Purge orphaned .tmp.* files and root validation artifacts directly under SETTINGS.work_root."""
     root = SETTINGS.work_root
-    report = {"freed_bytes": 0, "deleted_files_count": 0}
+    report = {"freed_bytes": 0, "deleted_files_count": 0, "dry_run": dry_run}
     if not root.exists():
         return report
     for item in root.glob(".tmp.*"):
         if item.is_file() and not item.is_symlink():
             try:
                 size = item.stat().st_size
-                item.unlink()
+                if not dry_run:
+                    item.unlink()
                 report["freed_bytes"] += size
                 report["deleted_files_count"] += 1
             except OSError as exc:
@@ -220,7 +232,8 @@ def clean_untracked_temp_files() -> dict:
     if root_safe_area.is_file():
         try:
             size = root_safe_area.stat().st_size
-            root_safe_area.unlink()
+            if not dry_run:
+                root_safe_area.unlink()
             report["freed_bytes"] += size
             report["deleted_files_count"] += 1
         except OSError as exc:

@@ -226,6 +226,49 @@ class LaneScheduler:
             empty=True,
         )
 
+    def seconds_until_due(
+        self,
+        *,
+        now: int | None = None,
+        lanes_filter: set[str] | None = None,
+    ) -> int:
+        """Return the number of seconds until the earliest eligible lane is due.
+
+        Checks all enabled, non-paused, non-leased lanes and finds min(next_due_at - current).
+        If no lanes are configured or pending, defaults to 60.
+        """
+        current = int(time.time() if now is None else now)
+        min_wait: int | None = None
+        for lane in self._lanes:
+            if not lane.enabled:
+                continue
+            if lanes_filter is not None and lane.id not in lanes_filter:
+                continue
+            state = self.repository.get_lane_state(lane.id)
+            if not state:
+                return 0
+            if state.get("paused"):
+                continue
+            with connect(self.db_path, read_only=True) as conn:
+                control = conn.execute(
+                    "SELECT paused FROM channel_controls WHERE channel = ?",
+                    (lane.channel.value,),
+                ).fetchone()
+                if control and control["paused"]:
+                    continue
+                lease_row = conn.execute(
+                    "SELECT 1 FROM lane_leases WHERE lane_id = ? AND expires_at > ?",
+                    (lane.id, current),
+                ).fetchone()
+                if lease_row:
+                    continue
+
+            next_due_at = int(state.get("next_due_at") or state.get("next_run_at") or 0)
+            wait = max(0, next_due_at - current)
+            if min_wait is None or wait < min_wait:
+                min_wait = wait
+        return min_wait if min_wait is not None else 60
+
 
 # Backward-compatible AutoPilot re-exports ported from Temp-
 from src.core.autopilot import AUTO_TOPICS, AutoPilotScheduler

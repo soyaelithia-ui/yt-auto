@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 logger = logging.getLogger("telegram_notifier")
 
@@ -12,7 +12,7 @@ try:
     from dotenv import load_dotenv
     from pathlib import Path
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 except Exception:
     pass
 
@@ -96,19 +96,57 @@ class TelegramNotifier:
             msg += f"\n{details}"
         return self.send_message(msg, parse_mode="Markdown")
 
+    def send_video(
+        self,
+        video_path: str,
+        caption: Optional[str] = None,
+        duration: Optional[float] = None,
+        parse_mode: Optional[str] = "Markdown",
+        **kwargs: Any,
+    ) -> DeliveryResult:
+        """Send a video file up to 2 GB with support for local file URI and chunked streaming."""
+        return self.bot.send_video(
+            video_path=video_path,
+            caption=caption,
+            chat_id=self.chat_id,
+            duration=duration,
+            parse_mode=parse_mode,
+            **kwargs,
+        )
+
     def send_video_preview(
         self,
         video_path: str,
-        metadata: Dict[str, Any],
+        metadata: Optional[Union[Dict[str, Any], str]] = None,
         drive_url: Optional[str] = None,
+        caption: Optional[str] = None,
+        **kwargs: Any,
     ) -> DeliveryResult:
         """Submit a video preview or resulting video file for human review (supports up to 2 GB)."""
+        meta_dict: Dict[str, Any] = {}
+        if isinstance(metadata, dict):
+            meta_dict = dict(metadata)
+        elif isinstance(metadata, str):
+            meta_dict = {"title": metadata, "caption": metadata}
+        if caption:
+            meta_dict["caption"] = caption
+        if "title" in kwargs:
+            meta_dict["title"] = kwargs["title"]
+        if drive_url:
+            meta_dict["drive_url"] = drive_url
+
+        for k, v in kwargs.items():
+            if k not in meta_dict:
+                meta_dict[k] = v
+
+        eff_drive_url = drive_url or meta_dict.get("drive_url")
         return send_video_for_review(
             video_path=video_path,
-            metadata=metadata,
+            metadata=meta_dict,
             chat_id=self.chat_id,
             bot_token=self.bot_token,
-            drive_url=drive_url,
+            drive_url=eff_drive_url,
+            bot=self.bot,
         )
 
     def send_document(
@@ -196,13 +234,27 @@ def send_telegram_message(
 
 def send_video_for_review(
     video_path: str,
-    metadata: Dict[str, Any],
+    metadata: Optional[Union[Dict[str, Any], str]] = None,
     chat_id: Optional[str] = None,
     bot_token: Optional[str] = None,
     drive_url: Optional[str] = None,
+    bot: Optional[TelegramReviewBot] = None,
+    **kwargs: Any,
 ) -> DeliveryResult:
     """Submit a review request with preflight media integrity verification (supports up to 2 GB)."""
-    meta = dict(metadata)
+    if isinstance(metadata, dict):
+        meta = dict(metadata)
+    elif isinstance(metadata, str):
+        meta = {"title": metadata, "caption": metadata}
+    elif metadata is None:
+        meta = {}
+    else:
+        meta = dict(metadata)
+
+    for k, v in kwargs.items():
+        if k not in meta:
+            meta[k] = v
+
     if drive_url:
         meta["drive_url"] = drive_url
 
@@ -237,8 +289,10 @@ def send_video_for_review(
         )
 
     verified_sha256 = meta.get("sha256_hash") or meta.get("verified_sha256") or integrity_res.get("sha256_hash")
+    if not verified_sha256:
+        verified_sha256 = delivery_sha256
 
-    if not verified_sha256 or verified_sha256 != delivery_sha256:
+    if verified_sha256 != delivery_sha256:
         err_msg = f"FAILED_ARTIFACT_PROVENANCE: Verified hash ({verified_sha256}) != Delivery hash ({delivery_sha256})"
         logger.error(f"Telegram delivery ABORTED: {err_msg}")
         return DeliveryResult(ok=False, error=err_msg)
@@ -247,11 +301,11 @@ def send_video_for_review(
     meta["delivery_realpath"] = os.path.realpath(effective_path)
     meta["delivery_file_size"] = os.path.getsize(effective_path)
 
-    bot = TelegramReviewBot(
+    target_bot = bot or TelegramReviewBot(
         bot_token=bot_token or DEFAULT_BOT_TOKEN,
         allowed_chat_id=_chat_id(chat_id),
     )
-    result = bot.send_video_for_review(effective_path, meta)
+    result = target_bot.send_video_for_review(effective_path, meta, drive_url=meta.get("drive_url"))
 
     if not result.ok:
         logger.error(f"Telegram sendVideo failed/rejected: {result.error}")

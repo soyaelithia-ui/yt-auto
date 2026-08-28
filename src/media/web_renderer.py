@@ -70,17 +70,27 @@ class RenderSpec:
         fps: int = 30,
         seed: int = 42,
         custom_params: Optional[dict[str, Any]] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        template_name: Optional[str] = None,
+        output_path: Optional[Union[str, Path]] = None,
+        params: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
         self.category = category.strip().lower().replace("-", "_").replace(" ", "_")
         self.orientation = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
-        if self.orientation == "horizontal":
+        if width is not None and height is not None:
+            self.width, self.height = int(width), int(height)
+        elif self.orientation == "horizontal":
             self.width, self.height = 1920, 1080
         else:
             self.width, self.height = 1080, 1920
         self.duration_sec = float(duration_sec)
         self.fps = int(fps)
         self.seed = int(seed)
-        self.custom_params = custom_params or {}
+        self.custom_params = custom_params or params or {}
+        self.template_name = template_name
+        self.output_path = Path(output_path) if output_path else None
 
 
 class WebVideoRenderer:
@@ -97,10 +107,14 @@ class WebVideoRenderer:
         self.output_loops_dir.mkdir(parents=True, exist_ok=True)
         self.catalog = LoopCatalogRepository(db_path=db_path)
 
-    def resolve_template_path(self, category: str) -> Path:
+    def resolve_template_path(self, category: str, template_name: Optional[str] = None) -> Path:
+        if template_name:
+            tmpl_path = self.templates_dir / template_name
+            if tmpl_path.is_file():
+                return tmpl_path
         cat_norm = category.strip().lower().replace("-", "_").replace(" ", "_")
-        template_name = THEMATIC_TEMPLATES.get(cat_norm, "cosmic_horror_three.html")
-        tmpl_path = self.templates_dir / template_name
+        tmpl_name = THEMATIC_TEMPLATES.get(cat_norm, "cosmic_horror_three.html")
+        tmpl_path = self.templates_dir / tmpl_name
         if not tmpl_path.is_file():
             # Fallback to cosmic_horror_three.html if not found
             tmpl_path = self.templates_dir / "cosmic_horror_three.html"
@@ -118,18 +132,23 @@ class WebVideoRenderer:
         """
         from playwright.sync_api import sync_playwright
 
-        template_path = self.resolve_template_path(spec.category)
+        template_path = self.resolve_template_path(spec.category, getattr(spec, "template_name", None))
         if not template_path.is_file():
             raise FileNotFoundError(f"Template file not found: {template_path}")
 
-        cat_dir = self.output_loops_dir / spec.category
-        cat_dir.mkdir(parents=True, exist_ok=True)
+        if getattr(spec, "output_path", None):
+            target_mp4 = Path(spec.output_path).resolve()
+            target_mp4.parent.mkdir(parents=True, exist_ok=True)
+            cat_dir = target_mp4.parent
+        else:
+            cat_dir = self.output_loops_dir / spec.category
+            cat_dir.mkdir(parents=True, exist_ok=True)
 
-        if not output_filename:
-            orient_suffix = "h" if spec.orientation == "horizontal" else "v"
-            output_filename = f"web_{spec.category}_{orient_suffix}_s{spec.seed}_{int(spec.duration_sec)}s.mp4"
+            if not output_filename:
+                orient_suffix = "h" if spec.orientation == "horizontal" else "v"
+                output_filename = f"web_{spec.category}_{orient_suffix}_s{spec.seed}_{int(spec.duration_sec)}s.mp4"
 
-        target_mp4 = cat_dir / output_filename
+            target_mp4 = cat_dir / output_filename
         total_frames = max(1, int(round(spec.duration_sec * spec.fps)))
         logger.info(
             "Rendering %s loop [%dx%d @ %dfps, %d frames, seed=%d] -> %s",
@@ -144,6 +163,7 @@ class WebVideoRenderer:
             "-r", str(spec.fps),
             "-i", "-",
             "-c:v", "libx264",
+            "-profile:v", "main",
             "-pix_fmt", "yuv420p",
             "-crf", "19",
             "-preset", "ultrafast",

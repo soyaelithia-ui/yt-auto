@@ -259,6 +259,27 @@ class SizeQuotaGate(BaseGate):
             ))
             return results
 
+        # Check max size limit FIRST to fail fast before expensive hashing
+        max_bytes = ctx.profile.max_file_size_bytes
+        if file_size > max_bytes:
+            size_mb = file_size / (1024 * 1024)
+            limit_mb = max_bytes / (1024 * 1024)
+            results.append(GateResult(
+                gate_id="size",
+                gate_name="size",
+                name="SizeQuota",
+                status=GateStatus.FAIL,
+                score=0.0,
+                passed=False,
+                severity=Severity.CRITICAL,
+                code="ERR_QA_FILESIZE_EXCEEDED",
+                message=f"File size {file_size} ({size_mb:.1f} MB) exceeds {limit_mb:.0f} MB limit",
+                errors=[f"File size exceeds limit ({size_mb:.1f} MB > {limit_mb:.0f} MB)"],
+                metric_value=size_mb,
+                threshold_limit=limit_mb,
+            ))
+            return results
+
         # Compute SHA256 if not already present
         if not ctx.sha256_hash:
             ctx.sha256_hash = _compute_sha256(path)
@@ -297,26 +318,6 @@ class SizeQuotaGate(BaseGate):
                     ))
         except Exception:
             pass
-
-        # Check max size limit
-        max_bytes = ctx.profile.max_file_size_bytes
-        if file_size > max_bytes:
-            size_mb = file_size / (1024 * 1024)
-            limit_mb = max_bytes / (1024 * 1024)
-            results.append(GateResult(
-                gate_id="size",
-                gate_name="size",
-                name="SizeQuota",
-                status=GateStatus.FAIL,
-                score=0.0,
-                passed=False,
-                severity=Severity.CRITICAL,
-                code="ERR_QA_FILESIZE_EXCEEDED",
-                message=f"File size {file_size} ({size_mb:.1f} MB) exceeds {limit_mb:.0f} MB limit",
-                errors=[f"File size exceeds limit ({size_mb:.1f} MB > {limit_mb:.0f} MB)"],
-                metric_value=size_mb,
-                threshold_limit=limit_mb,
-            ))
 
         return results
 
@@ -814,7 +815,7 @@ class AudioQualityGate(BaseGate):
 
     def _probe_audio_volume_and_silence(self, path: str) -> Tuple[float, Optional[float], Optional[float]]:
         """Probes audio volume and silence duration. Returns (max_silence, mean_vol, peak_db)."""
-        res_vol = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-filter_complex", "volumedetect", "-f", "null", "-"], timeout=90, check=False)
+        res_vol = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-filter_complex", "volumedetect", "-f", "null", "-"], timeout=300, check=False)
         out_vol = res_vol.stdout or res_vol.stderr or ""
         mean = _grab_grep_float(out_vol, r"mean_volume:\s*(-?[\d.]+)\s*dB")
         peak = _grab_grep_float(out_vol, r"max_volume:\s*(-?[\d.]+)\s*dB")
@@ -826,7 +827,7 @@ class AudioQualityGate(BaseGate):
             except ValueError:
                 pass
 
-        res_sil = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-af", "silencedetect=noise=-30dB:d=0.3", "-f", "null", "-"], timeout=90, check=False)
+        res_sil = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-af", "silencedetect=noise=-30dB:d=0.3", "-f", "null", "-"], timeout=300, check=False)
         out_sil = res_sil.stdout or res_sil.stderr or ""
         sil_dur_match_sil = re.search(r"silence_duration:\s*([\d.]+)", out_sil)
         if sil_dur_match_sil:
@@ -845,7 +846,7 @@ class AudioQualityGate(BaseGate):
 
     def _probe_ebu_r128(self, path: str) -> Tuple[float, Optional[float], float]:
         """Probes EBU R128 loudness. Returns (integrated_lufs, true_peak, lra)."""
-        res = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-filter_complex", "ebur128=peak=true", "-f", "null", "-"], timeout=90, check=False)
+        res = run_ffmpeg(["ffmpeg", "-nostats", "-i", path, "-filter_complex", "ebur128=peak=true", "-f", "null", "-"], timeout=300, check=False)
         output = res.stdout or res.stderr or ""
         integrated = [_float_or_none(m) for m in re.findall(r"I:\s*(-?[\d.eE-]+)\s*LUFS", output)]
         lra_list = [_float_or_none(m) for m in re.findall(r"LRA:\s*(-?[\d.eE-]+)\s*LU", output)]
@@ -1012,7 +1013,7 @@ class VisualQualityGate(BaseGate):
             "ffmpeg", "-nostats", "-i", path,
             "-vf", "freezedetect=n=-60dB:d=0.5,blackdetect=d=0.5:pix_th=0.10",
             "-an", "-f", "null", "-",
-        ], timeout=90, check=False)
+        ], timeout=300, check=False)
         output = res.stdout or res.stderr or ""
         bd_match = re.search(r"black_duration:\s*([\d.]+)", output)
         black_explicit = float(bd_match.group(1)) if bd_match else None

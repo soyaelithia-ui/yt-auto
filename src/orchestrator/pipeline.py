@@ -208,7 +208,7 @@ class PipelineOrchestrator:
                     video_file = os.path.join(work_d, "video.mp4") if work_d else ""
                     if os.path.exists(video_file):
                         notifier = TelegramNotifier()
-                        delivery = notifier.send_video_preview(video_file, metadata=res)
+                        delivery = notifier.send_video_preview(video_file, metadata=res, drive_url=res.get("drive_url"))
                         delivery_dict = {
                             "ok": delivery.ok,
                             "message_id": delivery.message_id,
@@ -310,7 +310,7 @@ class PipelineOrchestrator:
                 video_file = os.path.join(work_d, "video.mp4") if work_d else ""
                 if os.path.exists(video_file):
                     notifier = TelegramNotifier()
-                    preview_delivery = notifier.send_video_preview(video_file, metadata=res)
+                    preview_delivery = notifier.send_video_preview(video_file, metadata=res, drive_url=res.get("drive_url"))
                     return CanaryRunResult(
                         channel=ch,
                         status=res.get("status", "SUCCESS"),

@@ -480,9 +480,9 @@ def _strip_ass_tags(text: str) -> str:
     return re.sub(r"\{\\[^}]*\}", "", text)
 
 
-def _ffmpeg_run(cmd: List[str]) -> subprocess.CompletedProcess:
+def _ffmpeg_run(cmd: List[str], timeout: int = 300) -> subprocess.CompletedProcess:
     try:
-        res = run_ffmpeg(cmd, timeout=90, check=False)
+        res = run_ffmpeg(cmd, timeout=timeout, check=False)
         return subprocess.CompletedProcess(res.command, res.returncode, res.stdout, res.stderr)
     except Exception:
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")

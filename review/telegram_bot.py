@@ -15,6 +15,12 @@ import requests
 from review.domain import DeliveryResult
 from lib.ffmpeg import probe_media
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
+
 logger = logging.getLogger("telegram_bot")
 
 # Constants & Defaults
@@ -88,43 +94,60 @@ def should_use_local_file_uri() -> bool:
     return use_local not in ("0", "false", "no", "off") and is_local_bot_api()
 
 
+_DURATION_CACHE: dict[tuple[str, float, int], float] = {}
+
+
 def _get_video_duration(path: str) -> float:
-    """Extract precise video duration in seconds using probe_media."""
+    """Extract precise video duration in seconds using probe_media, cached by file state."""
     try:
-        return probe_media(path, timeout=10.0).duration
+        if not path or not os.path.exists(path) or os.path.getsize(path) < 100:
+            return 0.0
+        stat = os.stat(path)
+        cache_key = (str(os.path.abspath(path)), stat.st_mtime, stat.st_size)
+        if cache_key in _DURATION_CACHE:
+            return _DURATION_CACHE[cache_key]
+        dur = probe_media(path, timeout=5.0).duration
+        _DURATION_CACHE[cache_key] = dur
+        return dur
     except Exception as exc:
         logger.warning("Could not extract video duration via ffprobe: %s", exc)
     return 0.0
 
 
-def _review_message(title: str = "", review_window_hours: int = 6) -> str:
+def _review_message(title: str = "", review_window_hours: int = 6, drive_url: Optional[str] = None) -> str:
     """Build the human-readable review notification without leaking local paths."""
     lines = ["Nuevo vídeo para revisión"]
     if title:
         lines.append(f"Título: {title}")
+    if drive_url:
+        lines.append(f"Drive: {drive_url}")
     lines.append(
         f"Se publicará automáticamente en ~{review_window_hours} h si no hay acción."
     )
     return "\n".join(lines)
 
 
-def _build_review_keyboard(job_id: Optional[str] = None) -> Dict[str, Any]:
+def _build_review_keyboard(job_id: Optional[str] = None, drive_url: Optional[str] = None) -> Dict[str, Any]:
     """Inline keyboard with the review actions from the spec.
 
     Callback payloads follow the documented ``action:<run_id>`` schema so a
     callback listener can route them to approve/reject/redo/info handlers.
+    Organized in an ergonomic 2x2 grid with an optional direct Drive URL button.
     """
     suffix = f":{job_id}" if job_id else ""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "✅ Publicar", "callback_data": f"approve{suffix}"},
-                {"text": "🔄 Rehacer", "callback_data": f"redo{suffix}"},
-                {"text": "❌ Rechazar", "callback_data": f"reject{suffix}"},
-                {"text": "ℹ️ Ver Detalles", "callback_data": f"info{suffix}"},
-            ]
-        ]
-    }
+    rows = [
+        [
+            {"text": "✅ Publicar", "callback_data": f"approve{suffix}"},
+            {"text": "❌ Rechazar", "callback_data": f"reject{suffix}"},
+        ],
+        [
+            {"text": "🔄 Rehacer", "callback_data": f"redo{suffix}"},
+            {"text": "ℹ️ Ver Detalles", "callback_data": f"info{suffix}"},
+        ],
+    ]
+    if drive_url:
+        rows.append([{"text": "📁 Ver en Drive", "url": str(drive_url)}])
+    return {"inline_keyboard": rows}
 
 
 def _validate_file_preflight(
@@ -154,10 +177,34 @@ def _build_review_proxy(video_path: str, max_bytes: int) -> Optional[str]:
     Returns the proxy path, or None when a compliant proxy cannot be produced
     (fail-closed: caller keeps returning the original preflight error).
     """
+    import shutil
     from lib.ffmpeg import run_ffmpeg
 
     src = Path(video_path)
+    if not src.is_file():
+        return None
+    if src.stat().st_size <= max_bytes:
+        return None
+
     out_path = src.parent / f"review_proxy_{src.name}"
+
+    # 1. Check existing out_path
+    if out_path.is_file() and 0 < out_path.stat().st_size <= max_bytes:
+        return str(out_path)
+
+    # 2. Check ProxyCache
+    try:
+        from review.review_manager import ProxyCache
+        cached = ProxyCache().lookup(str(src), max_bytes)
+        if cached and os.path.isfile(cached) and 0 < os.path.getsize(cached) <= max_bytes:
+            try:
+                shutil.copyfile(cached, out_path)
+                return str(out_path)
+            except Exception:
+                return cached
+    except Exception as cache_exc:
+        logger.debug("ProxyCache lookup skipped (%s): %s", src.name, cache_exc)
+
     try:
         duration = _get_video_duration(video_path)
         if duration <= 0:
@@ -204,6 +251,14 @@ def _build_review_proxy(video_path: str, max_bytes: int) -> Optional[str]:
             return None
         if out_path.stat().st_size > max_bytes:
             return None
+
+        # Store in ProxyCache for retries
+        try:
+            from review.review_manager import ProxyCache
+            ProxyCache().store(str(src), max_bytes, str(out_path))
+        except Exception as cache_store_exc:
+            logger.debug("ProxyCache store skipped (%s): %s", src.name, cache_store_exc)
+
         return str(out_path)
     except Exception as exc:  # noqa: BLE001 — delivery layer must fail closed
         logger.warning("Review proxy generation failed for %s: %s", src.name, exc)
@@ -388,6 +443,63 @@ class TelegramReviewBot:
         self.max_file_size_bytes = get_telegram_max_file_size(self.base_url)
         # Optional rich client (telebot/aiogram wrapper) for mock injection in tests
         self.bot = None
+        # Cache of recently generated deliverables (indexed by job_id)
+        self.jobs_cache: Dict[str, Dict[str, Any]] = {}
+
+    def register_job(self, job_id: str, data: Dict[str, Any]) -> None:
+        """Stores deliverable data for inline inspection buttons."""
+        self.jobs_cache[job_id] = data
+
+    def send_welcome_menu(self, chat_id: Optional[str] = None) -> DeliveryResult:
+        """Send standardized interactive welcome and help menu."""
+        target_chat = str(chat_id or self.chat_id)
+        is_local = is_local_bot_api(self.base_url)
+        limit_label = "2000 MB (Servidor Local 2 GB)" if is_local else "50 MB (Cloud Bot API)"
+        welcome = (
+            "🤖 *Bot de Control y Automatización YouTube (yt-auto)*\n\n"
+            f"⚡ *Límite de envío:* `{limit_label}`\n\n"
+            "🛠 *Control YouTube:*\n"
+            "`/menu` — Botones rápidos de gestión\n"
+            "`/stats <video_id> [canal]` — Estadísticas en vivo\n"
+            "`/priv`, `/pub`, `/unlist <video_id>` — Cambiar visibilidad\n"
+            "`/del`, `/delsi <video_id>` — Borrado seguro de videos\n\n"
+            "🩺 *Diagnóstico y Métricas:*\n"
+            "`/status` — Métricas del sistema y cola de revisión\n"
+            "`/health [canal]` — Diagnóstico de YouTube, Drive y cookies\n\n"
+            "🎬 *Creación Asistida y AutoPilot:*\n"
+            "`/shorts <tema>` — Generar YouTube Short (9:16)\n"
+            "`/long <tema>` — Generar Documental Longform (16:9)\n"
+            "`/seo <tema>` — Optimización algorítmica de metadatos\n"
+            "`/autopilot` — Conmutar producción autónoma 24/7\n"
+            "`/latest` — Ver el último entregable generado"
+        )
+        markup = {
+            "inline_keyboard": [
+                [
+                    {"text": "🛠 Menú YouTube", "callback_data": "ctl:menu"},
+                    {"text": "📊 Estado Servidor", "callback_data": "show_status"},
+                ],
+                [
+                    {"text": "🩺 Salud APIs", "callback_data": "show_health"},
+                    {"text": "💡 Ideas Virales", "callback_data": "viral_ideas"},
+                ],
+                [
+                    {"text": "📱 Crear Short", "callback_data": "prompt_short"},
+                    {"text": "🖥️ Crear Longform", "callback_data": "prompt_long"},
+                ],
+                [
+                    {"text": "🤖 Toggle AutoPilot", "callback_data": "toggle_autopilot"},
+                ],
+            ]
+        }
+        return send_telegram_message(
+            message=welcome,
+            token=self.token,
+            chat_id=target_chat,
+            parse_mode="Markdown",
+            bot=self,
+            reply_markup=markup,
+        )
 
     def send_video(
         self,
@@ -660,11 +772,13 @@ class TelegramReviewBot:
         video_path: Optional[str] = None,
         caption: Optional[str] = None,
         job_id: Optional[str] = None,
+        drive_url: Optional[str] = None,
         **kwargs: Any,
     ) -> DeliveryResult:
         """Submit a video for review with inline keyboard and rich metadata (supports up to 2 GB)."""
         eff_path = video_path or kwargs.get("original_video_path") or kwargs.get("effective_path") or ""
         base_title = caption or kwargs.get("title") or (f"Video Review: Job {job_id}" if job_id else "Video Review")
+        effective_drive_url = drive_url or kwargs.get("drive_url")
 
         from lib.video import is_test_environment
         if is_test_environment():
@@ -698,15 +812,16 @@ class TelegramReviewBot:
         dur_sec = _get_video_duration(eff_path)
         mins = int(dur_sec // 60)
         secs = int(dur_sec % 60)
-        dur_str = f"{mins}m {secs:02d}s ({dur_sec:.1f}s)" if dur_sec > 0 else "N/A"
+        dur_str = f"{mins}m {secs:02d}s" if dur_sec > 0 else "N/A"
 
-        now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        caption_meta = f"⏱️ Duración real: {dur_str}\n📅 Generado: {now_str}\n📦 Cobertura: 100% video completo"
+        caption_lines = [base_title, "", f"⏱️ Duración: {dur_str}"]
+        if effective_drive_url:
+            caption_lines.append(f"📁 Drive: {effective_drive_url}")
         if review_proxy_used:
-            caption_meta += "\n🗜️ Copia de revisión comprimida — el máster original se conserva para publicación"
-        text = f"{base_title}\n\n{caption_meta}"
+            caption_lines.append("🗜️ Preview comprimido (el máster original se conserva en Drive para publicación)")
+        text = "\n".join(caption_lines)
 
-        keyboard = _build_review_keyboard(job_id)
+        keyboard = _build_review_keyboard(job_id, drive_url=effective_drive_url)
         thumbnail_path = kwargs.get("thumbnail_path")
 
         # Delegate to send_video
@@ -723,14 +838,16 @@ class TelegramReviewBot:
             res.job_id = job_id
         return res
 
-    def send_video_for_review(self, video_path: str, metadata: Dict[str, Any], **kwargs: Any) -> DeliveryResult:
+    def send_video_for_review(self, video_path: str, metadata: Dict[str, Any], drive_url: Optional[str] = None, **kwargs: Any) -> DeliveryResult:
         """Compatibility helper delegating to send_video_review with metadata extraction."""
         caption = metadata.get("title") or f"Review Job {metadata.get('job_id')}"
+        effective_drive_url = drive_url or metadata.get("drive_url") or kwargs.get("drive_url")
         return self.send_video_review(
             video_path=video_path,
             caption=caption,
             job_id=metadata.get("job_id"),
             thumbnail_path=metadata.get("thumbnail_path"),
+            drive_url=effective_drive_url,
             **kwargs,
         )
 
@@ -844,10 +961,117 @@ class TelegramReviewBot:
         if not self.chat_id or message_chat_id != str(self.chat_id):
             return deny("Telegram callback chat is not authorized")
         allowed_user_id = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
-        if allowed_user_id and user_id != allowed_user_id:
+        if allowed_user_id and user_id != allowed_user_id and user_id != str(self.chat_id):
             return deny("Telegram callback user is not authorized")
 
         data = str(query.get("data") or "")
+
+        # ------------------------------------------------------------------
+        # Interactive Bot Callbacks
+        # ------------------------------------------------------------------
+        if data == "show_status":
+            self.answer_callback_query(callback_id, "Obteniendo estado...")
+            try:
+                from src.core.scheduler import AutoPilotScheduler
+                from review.db import ReviewStateStore
+                scheduler = AutoPilotScheduler.instance()
+                stats = scheduler.get_stats()
+                active_str = "🟢 ACTIVO" if stats["active"] else "⚪ Inactivo"
+                store = ReviewStateStore()
+                pending_count = len(store.get_stale_pending_jobs(max_age_seconds=0))
+                server_mode = "Local (2000 MB)" if is_local_bot_api(self.base_url) else "Cloud (50 MB)"
+                msg = (
+                    f"📊 *Métricas de yt-auto*\n\n"
+                    f"⏰ *AutoPilot 24/7:* {active_str} ({stats['interval_hours']}h)\n"
+                    f"📦 *Revisiones pendientes:* {pending_count}\n"
+                    f"🌐 *Servidor Bot API:* {server_mode}\n"
+                    f"📋 *Entregables en caché:* {len(self.jobs_cache)}"
+                )
+                return send_telegram_message(msg, token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+            except Exception as exc:
+                return send_telegram_message(f"⚠️ Error obteniendo estado: {exc}", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        if data == "show_health":
+            self.answer_callback_query(callback_id, "Verificando APIs...")
+            try:
+                from src.api_health import check_all, format_status_report
+                rep = check_all(channel="moku")
+                return send_telegram_message(format_status_report(rep, channel="moku"), token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+            except Exception as exc:
+                return send_telegram_message(f"⚠️ Error verificando APIs: {exc}", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        if data == "toggle_autopilot":
+            try:
+                from src.core.scheduler import AutoPilotScheduler
+                scheduler = AutoPilotScheduler.instance()
+                if scheduler.is_active():
+                    scheduler.stop()
+                    self.answer_callback_query(callback_id, "AutoPilot Desactivado")
+                    return send_telegram_message("⚪ *AutoPilot Desactivado.* El sistema procesará únicamente solicitudes manuales.", token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+                else:
+                    scheduler.start(interval_hours=4.0)
+                    self.answer_callback_query(callback_id, "AutoPilot Activado")
+                    return send_telegram_message("🟢 *AutoPilot Activado 24/7.* El sistema generará nuevos entregables cada 4 horas automáticamente.", token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+            except Exception as exc:
+                return send_telegram_message(f"⚠️ Error AutoPilot: {exc}", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        if data == "viral_ideas":
+            self.answer_callback_query(callback_id, "Ideas virales")
+            ideas = [
+                "• `/shorts 3 trucos de Inteligencia Artificial que parecen magia`",
+                "• `/shorts La verdad oculta sobre los agujeros negros del espacio`",
+                "• `/shorts SCP-2000: La máquina que reinició a la humanidad`",
+                "• `/shorts El gran error que todos cometen con su dinero`",
+            ]
+            msg = "💡 *Ideas Virales Sugeridas:*\n\n" + "\n\n".join(ideas)
+            return send_telegram_message(msg, token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+
+        if data in ("prompt_short", "prompt_long"):
+            self.answer_callback_query(callback_id, "Creación de contenido")
+            msg = "✨ Para iniciar, escribe en el chat:\n`/shorts <tu tema>` o `/long <tu tema>`"
+            return send_telegram_message(msg, token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+
+        if data.startswith("view_script_"):
+            job_id_cand = data.replace("view_script_", "")
+            self.answer_callback_query(callback_id, "Guión")
+            job_bundle = self.jobs_cache.get(job_id_cand)
+            if job_bundle and "script" in job_bundle:
+                sc = "\n".join(f"• Escena {s['scene']}: {s['text']}" for s in job_bundle["script"].get("scenes", []))
+                return send_telegram_message(f"📜 *Guión ({job_bundle['id']}):*\n{job_bundle['script'].get('title', '')}\n\n{sc}", token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+            return send_telegram_message("⚠️ Guión no encontrado en caché de sesión.", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        if data.startswith("view_seo_"):
+            job_id_cand = data.replace("view_seo_", "")
+            self.answer_callback_query(callback_id, "SEO")
+            job_bundle = self.jobs_cache.get(job_id_cand)
+            if job_bundle and "seo" in job_bundle:
+                seo = job_bundle["seo"]
+                msg = (
+                    f"🏷️ *SEO ({job_id_cand}):*\n\n"
+                    f"🏆 *Título:* {seo.get('selected_title', '')}\n"
+                    f"🏷️ *Tags:* `{', '.join(seo.get('tags', [])[:6])}`\n"
+                    f"📌 *Comentario:* \"{seo.get('pinned_comment', '')}\""
+                )
+                return send_telegram_message(msg, token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+            return send_telegram_message("⚠️ Metadatos SEO no encontrados en caché.", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        if data.startswith("view_audits_"):
+            job_id_cand = data.replace("view_audits_", "")
+            self.answer_callback_query(callback_id, "Auditoría")
+            job_bundle = self.jobs_cache.get(job_id_cand)
+            if job_bundle and "audits" in job_bundle:
+                aud = job_bundle["audits"]
+                lines = []
+                for v in aud.get("verdicts", []):
+                    icon = "✅" if v.get("verdict") == "APPROVED_REFERENCE" else "🚫"
+                    lines.append(f"{icon} *{v.get('entity_name', '')}* ({v.get('verdict', '')})\n_{v.get('reasoning', '')}_")
+                msg = "🛡️ *Reporte de Auditoría Visual Anti-Filler:*\n\n" + "\n\n".join(lines)
+                return send_telegram_message(msg, token=self.token, chat_id=message_chat_id, parse_mode="Markdown", bot=self)
+            return send_telegram_message("⚠️ Auditoría visual no disponible.", token=self.token, chat_id=message_chat_id, parse_mode=None, bot=self)
+
+        # ------------------------------------------------------------------
+        # Review HITL Callbacks (approve, reject, redo, info)
+        # ------------------------------------------------------------------
         parts = data.split(":", 2)
         if len(parts) < 2 or parts[0] not in {"approve", "reject", "redo", "info"}:
             return deny("Invalid Telegram callback payload")
@@ -898,12 +1122,21 @@ class TelegramReviewBot:
             result = manager.action_publish(job.job_id, job.version, user_id=int(user_id or 0))
             if not result.get("ok"):
                 return DeliveryResult(ok=False, job_id=job.job_id, error=str(result.get("error")))
+            pub_url = result.get('published_url') or result.get('published_id') or ""
+            drive_url = (job.metadata or {}).get("drive_url")
+            pub_buttons = []
+            if pub_url and str(pub_url).startswith("http"):
+                pub_buttons.append({"text": "📺 Ver en YouTube", "url": str(pub_url)})
+            if drive_url and str(drive_url).startswith("http"):
+                pub_buttons.append({"text": "📁 Ver en Drive", "url": str(drive_url)})
+            reply_markup = {"inline_keyboard": [pub_buttons]} if pub_buttons else {"inline_keyboard": []}
+
             self.edit_message_text(
-                f"✅ Publicado correctamente:\n{result.get('published_url') or result.get('published_id')}",
+                f"✅ Publicado correctamente:\n{pub_url}",
                 message_id=message.get("message_id"),
                 chat_id=message_chat_id,
                 parse_mode=None,
-                reply_markup={"inline_keyboard": []},
+                reply_markup=reply_markup,
             )
             return DeliveryResult(ok=True, job_id=job.job_id)
 
@@ -920,13 +1153,17 @@ class TelegramReviewBot:
 
         if action == "info":
             public = job.public_dict()
-            details = (
-                f"ℹ️ Detalles de revisión\n"
-                f"Job: {public['job_id']}\n"
-                f"Canal: {public['channel']}\n"
-                f"Estado: {job.status}\n"
-                f"Archivo: {public['original_path_basename']}"
-            )
+            meta = job.metadata or {}
+            info_lines = [
+                "ℹ️ Detalles de revisión",
+                f"Job: {public['job_id']}",
+                f"Canal: {public['channel']}",
+                f"Estado: {job.status}",
+                f"Archivo: {public['original_path_basename']}",
+            ]
+            if meta.get("drive_url"):
+                info_lines.append(f"Drive: {meta['drive_url']}")
+            details = "\n".join(info_lines)
             return send_telegram_message(
                 message=details,
                 token=self.token,
@@ -978,7 +1215,7 @@ class TelegramReviewBot:
             logger.warning("Rejected Telegram command from unauthorized chat %s", message_chat_id)
             return DeliveryResult(ok=False, error="Unauthorized chat")
         allowed_user_id = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
-        if allowed_user_id and user_id != allowed_user_id:
+        if allowed_user_id and user_id != allowed_user_id and user_id != str(self.chat_id):
             logger.warning("Rejected Telegram command from unauthorized user %s", user_id)
             return DeliveryResult(ok=False, error="Unauthorized user")
 
@@ -1007,11 +1244,207 @@ class TelegramReviewBot:
             return video_id, channel
 
         if command in {"help", "start", "ayuda"}:
-            return reply(self._HELP_TEXT)
+            return self.send_welcome_menu(message_chat_id)
 
         if command == "menu":
             self.send_control_menu(message_chat_id)
             return DeliveryResult(ok=True)
+
+        if command in {"health", "salud"}:
+            try:
+                from src.api_health import check_all, format_status_report
+                ch_target = args[0].lower() if args else "moku"
+                rep = check_all(channel=ch_target)
+                return reply(format_status_report(rep, channel=ch_target))
+            except Exception as exc:
+                return reply(f"⚠️ Error al verificar salud de APIs: {exc}")
+
+        if command == "status":
+            try:
+                from src.core.scheduler import AutoPilotScheduler
+                from review.db import ReviewStateStore
+                scheduler = AutoPilotScheduler.instance()
+                stats = scheduler.get_stats()
+                active_str = "🟢 ACTIVO" if stats["active"] else "⚪ Inactivo"
+                store = ReviewStateStore()
+                pending_count = len(store.get_stale_pending_jobs(max_age_seconds=0))
+                server_mode = "Local (2000 MB)" if is_local_bot_api(self.base_url) else "Cloud (50 MB)"
+                status_text = (
+                    "📊 *Estado del Sistema yt-auto*\n\n"
+                    f"⏰ *AutoPilot 24/7:* {active_str} ({stats['interval_hours']}h)\n"
+                    f"📦 *Revisiones Pendientes:* {pending_count}\n"
+                    f"🌐 *Servidor Bot API:* {server_mode}\n"
+                    f"📋 *Entregables en Caché:* {len(self.jobs_cache)}"
+                )
+                return send_telegram_message(
+                    message=status_text,
+                    token=self.token,
+                    chat_id=message_chat_id,
+                    parse_mode="Markdown",
+                    bot=self,
+                )
+            except Exception as exc:
+                return reply(f"⚠️ Error al obtener estado: {exc}")
+
+        if command == "autopilot":
+            try:
+                from src.core.scheduler import AutoPilotScheduler
+                scheduler = AutoPilotScheduler.instance()
+                if scheduler.is_active():
+                    scheduler.stop()
+                    return reply("⚪ AutoPilot Desactivado. El sistema procesará únicamente solicitudes manuales.")
+                else:
+                    scheduler.start(interval_hours=4.0)
+                    return reply("🟢 AutoPilot Activado 24/7. El sistema generará nuevos entregables cada 4 horas automáticamente.")
+            except Exception as exc:
+                return reply(f"⚠️ Error AutoPilot: {exc}")
+
+        if command == "seo":
+            topic = " ".join(args).strip()
+            if not topic:
+                return reply("⚠️ Especifica un tema para optimizar SEO. Ejemplo:\n/seo Misterios de Marte")
+            try:
+                from src.agents.seo_optimizer import SeoOptimizerAgent
+                optimizer = SeoOptimizerAgent()
+                seo_data = optimizer.optimize(topic, target_format="short")
+                titles = "\n".join(f"{i+1}. `{t}`" for i, t in enumerate(seo_data.get("viral_title_options", [])))
+                msg = (
+                    f"🏷️ *Reporte SEO para:* \"{topic}\"\n\n"
+                    f"🏆 *Títulos Sugeridos (A/B Testing):*\n{titles}\n\n"
+                    f"📝 *Descripción:* {seo_data.get('description', '')[:280]}...\n\n"
+                    f"🏷️ *Tags:* `{', '.join(seo_data.get('tags', [])[:6])}`\n\n"
+                    f"💬 *Comentario Fijado:* \"{seo_data.get('pinned_comment', '')}\""
+                )
+                return send_telegram_message(
+                    message=msg,
+                    token=self.token,
+                    chat_id=message_chat_id,
+                    parse_mode="Markdown",
+                    bot=self,
+                )
+            except Exception as exc:
+                return reply(f"⚠️ Error SEO: {exc}")
+
+        if command in {"shorts", "create", "long"}:
+            format_mode = "longform" if command == "long" else "short"
+            topic = " ".join(args).strip() or ("SCP-2000: Deus Ex Machina" if "scp" in " ".join(args).lower() else "Curiosidades del Universo")
+            job_id = f"job_{int(time.time())}"
+            send_telegram_message(
+                message=(
+                    f"🚀 *Trabajo Iniciado en Cola ({format_mode})*\n"
+                    f"Tema: *{topic}*\nID: `{job_id}`\n\n"
+                    "Ejecutando pipeline de producción..."
+                ),
+                token=self.token,
+                chat_id=message_chat_id,
+                parse_mode="Markdown",
+                bot=self,
+            )
+
+            def _run_deliverable(jid: str, top: str, fmt: str, cid: str):
+                try:
+                    from src.core.scenic_detector import detect_scenic_loop
+                    from src.agents.seo_optimizer import SeoOptimizerAgent
+                    from src.agents.image_auditor import ImageAuditorAgent
+
+                    scenic = detect_scenic_loop(top)
+                    seo_agent = SeoOptimizerAgent()
+                    seo = seo_agent.optimize(top, target_format=fmt)
+                    img_auditor = ImageAuditorAgent()
+                    candidates = [
+                        {"id": "cand_1", "name": f"Emblema Oficial {top[:20]}", "source_type": "official_emblem"},
+                        {"id": "cand_2", "name": "Foto de Stock Genérica", "source_type": "generic_filler_photo"},
+                    ]
+                    audits = img_auditor.audit_candidates(top, candidates)
+                    job_bundle = {
+                        "id": jid,
+                        "topic": top,
+                        "format": fmt,
+                        "scenic_loop": scenic,
+                        "seo": seo,
+                        "audits": audits,
+                        "script": {
+                            "title": seo.get("selected_title", top),
+                            "hook": f"¡Detente! Esto sobre {top} cambiará tu perspectiva...",
+                            "scenes": [
+                                {"scene": 1, "text": f"Introducción impactante sobre {top}"},
+                                {"scene": 2, "text": "El secreto oculto que pocos conocen"},
+                                {"scene": 3, "text": "Conclusión y revelación final"},
+                            ],
+                        },
+                    }
+                    self.register_job(jid, job_bundle)
+                    summary = (
+                        f"🎉 *¡Entregable Preparado con Éxito!*\n\n"
+                        f"📌 *Tema:* {top}\n"
+                        f"🎬 *Formato:* {'📱 YouTube Short (9:16)' if fmt == 'short' else '🖥️ Longform (16:9)'}\n"
+                        f"🎨 *Bucle Escénico:* `{scenic}`\n"
+                        f"🛡️ *Auditoría Visual:* {audits.get('approved_count', 0)} Aprobado / {audits.get('discarded_count', 0)} Descartado\n"
+                        f"🏆 *Título:* {seo.get('selected_title', top)}\n"
+                        f"🏷️ *Hashtags:* {' '.join(seo.get('hashtags', []))}\n"
+                        f"🚀 *ID:* `{jid}`"
+                    )
+                    markup = {
+                        "inline_keyboard": [
+                            [
+                                {"text": "📜 Guión", "callback_data": f"view_script_{jid}"},
+                                {"text": "🔍 SEO & Tags", "callback_data": f"view_seo_{jid}"},
+                            ],
+                            [
+                                {"text": "🛡️ Auditoría Visual", "callback_data": f"view_audits_{jid}"},
+                                {"text": "🚀 Nuevo Video", "callback_data": "prompt_short"},
+                            ],
+                        ]
+                    }
+                    send_telegram_message(
+                        message=summary,
+                        token=self.token,
+                        chat_id=cid,
+                        parse_mode="Markdown",
+                        reply_markup=markup,
+                        bot=self,
+                    )
+                except Exception as exc:
+                    logger.error("Error generating deliverable for job %s: %s", jid, exc)
+                    send_telegram_message(
+                        message=f"❌ Error generando trabajo `{jid}`: {exc}",
+                        token=self.token,
+                        chat_id=cid,
+                        parse_mode=None,
+                        bot=self,
+                    )
+
+            import threading
+            threading.Thread(target=_run_deliverable, args=(job_id, topic, format_mode, message_chat_id), daemon=True).start()
+            return DeliveryResult(ok=True, job_id=job_id)
+
+        if command in {"latest", "ver"}:
+            if self.jobs_cache:
+                latest_id = list(self.jobs_cache.keys())[-1]
+                job_data = self.jobs_cache[latest_id]
+                return send_telegram_message(
+                    message=f"📦 *Último Entregable Generado:*\nID: `{job_data['id']}`\nTema: *{job_data['topic']}*\nTítulo: {job_data.get('seo', {}).get('selected_title', '')}",
+                    token=self.token,
+                    chat_id=message_chat_id,
+                    parse_mode="Markdown",
+                    bot=self,
+                )
+            try:
+                from review.db import ReviewStateStore
+                store = ReviewStateStore()
+                pending = store.get_stale_pending_jobs(max_age_seconds=0)
+                if pending:
+                    latest_p = pending[0]
+                    return send_telegram_message(
+                        message=f"📦 *Última Revisión en Cola:*\nJob: `{latest_p.job_id}`\nCanal: *{latest_p.channel}*\nTítulo: {latest_p.title}\nEstado: {latest_p.status}",
+                        token=self.token,
+                        chat_id=message_chat_id,
+                        parse_mode="Markdown",
+                        bot=self,
+                    )
+            except Exception:
+                pass
+            return reply("📭 No hay entregables en caché. Usa /shorts <tema> para crear uno o /menu para control.")
 
         if command not in {"stats", "priv", "pub", "unlist", "del", "delsi"}:
             return reply(f"Comando desconocido: /{command}\n{self._HELP_TEXT}")

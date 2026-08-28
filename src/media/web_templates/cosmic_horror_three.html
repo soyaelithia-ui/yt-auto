@@ -33,74 +33,130 @@ const fsSource = `
 
   #define PI 3.14159265359
 
-  // Hash & Noise
+  // Hash & Pseudo-random noise
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7) + u_seed)) * 43758.5453123);
+  }
+
+  float hash3(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
   }
 
   float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
-    vec2 u = f*f*(3.0-2.0*f);
-    return mix(mix(hash(i + vec2(0.0,0.0)), hash(i + vec2(1.0,0.0)), u.x),
-               mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
 
+  // 5-Octave Rotated Fractional Brownian Motion for Volumetric Fog
   float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
     vec2 shift = vec2(100.0);
-    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
+    mat2 rot = mat2(cos(0.52), sin(0.52), -sin(0.52), cos(0.52));
     for (int i = 0; i < 5; ++i) {
       v += a * noise(p);
-      p = rot * p * 2.0 + shift;
+      p = rot * p * 2.05 + shift;
       a *= 0.5;
     }
     return v;
   }
 
+  // Cinematic Color Grading: Rec.709 S-Curve Contrast Remap
+  vec3 rec709_scurve(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return c * c * (3.0 - 2.0 * c);
+  }
+
+  // Calculate base abyssal oceanic scene intensity
+  vec3 sampleScene(vec2 uv, float phase, float t_sin, float t_cos) {
+    float dist = length(uv);
+    float angle = atan(uv.y, uv.x);
+
+    // Swirling abyssal vortex warp
+    float warp = angle + 2.8 / (dist + 0.14) + t_sin * 0.45;
+    vec2 warped_uv = vec2(cos(warp), sin(warp)) * dist * 3.2 + vec2(t_cos * 0.35, t_sin * 0.35);
+
+    // Dynamic Volumetric Fog Layers
+    float fog1 = fbm(warped_uv + vec2(t_cos * 0.4, t_sin * 0.4));
+    float fog2 = fbm(warped_uv * 2.1 + fog1 * 2.0 - vec2(t_sin * 0.35, t_cos * 0.35));
+    float fog3 = fbm(warped_uv * 4.2 - fog2 * 1.5 + vec2(t_cos * 0.6, -t_sin * 0.6));
+
+    // Rec.709 Abyssal Oceanic Palette (Jet Black, Deep Indigo, Emerald Teal, Bioluminescent Cyan)
+    vec3 col_jet = vec3(0.008, 0.015, 0.025);        // Deepest trench shadow
+    vec3 col_indigo = vec3(0.02, 0.08, 0.16);       // Abyssal water column
+    vec3 col_teal = vec3(0.0, 0.55, 0.45);          // Deep sea phytoplankton & sediment
+    vec3 col_cyan_glow = vec3(0.0, 0.95, 0.85);     // Bioluminescent organ emission
+    vec3 col_emerald_hot = vec3(0.15, 1.0, 0.65);   // High tension anomaly core
+
+    vec3 scene_col = mix(col_jet, col_indigo, fog1);
+    scene_col = mix(scene_col, col_teal, fog2 * 0.85);
+    scene_col += col_cyan_glow * pow(fog3, 2.2) * 0.65;
+
+    // Void Singularity / Leviathan Maw Core in the center
+    float maw_core = smoothstep(0.38, 0.04, dist);
+    scene_col = mix(scene_col, col_jet * 0.5, maw_core * 0.98);
+
+    // Bioluminescent Accretion Ring
+    float ring_radius = 0.28 + t_sin * 0.025;
+    float ring = exp(-pow((dist - ring_radius) * 19.0, 2.0));
+    vec3 ring_color = mix(col_cyan_glow, col_emerald_hot, 0.5 + 0.5 * t_sin);
+    scene_col += ring_color * ring * 1.25 * (0.85 + 0.15 * t_cos);
+
+    // Reactive Marine Snow & Suspended Organic Dust Particles
+    for (float i = 1.0; i <= 3.0; i += 1.0) {
+      vec2 p_grid = uv * (45.0 * i) + vec2(t_cos * 0.3 * i, t_sin * 0.5 * i + fbm(uv * 2.0));
+      float p_hash = hash(floor(p_grid));
+      if (p_hash > 0.94) {
+        float p_dist = length(fract(p_grid) - 0.5);
+        float p_spark = smoothstep(0.3, 0.0, p_dist) * pow((p_hash - 0.94) / 0.06, 2.0);
+        vec3 p_col = mix(vec3(0.6, 0.9, 1.0), col_emerald_hot, p_hash);
+        scene_col += p_col * p_spark * 0.85 * (1.0 - maw_core);
+      }
+    }
+
+    return scene_col;
+  }
+
   void main() {
-    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
-    
-    // Periodic harmonic time for perfect seamless loop:
+    vec2 uv_screen = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+    float dist_center = length(gl_FragCoord.xy / u_resolution.xy - 0.5);
+
+    // Periodic harmonic time for perfect seamless looping
     float phase = (u_time / u_duration) * 2.0 * PI;
     float t_sin = sin(phase);
     float t_cos = cos(phase);
-    
-    float dist = length(uv);
-    float angle = atan(uv.y, uv.x);
-    
-    // Swirling vortex warp
-    float warp = angle + 2.5 / (dist + 0.15) + t_sin * 0.4;
-    vec2 warped_uv = vec2(cos(warp), sin(warp)) * dist * 3.0 + vec2(t_cos * 0.3, t_sin * 0.3);
-    
-    float f1 = fbm(warped_uv + vec2(t_cos * 0.5, t_sin * 0.5));
-    float f2 = fbm(warped_uv * 2.0 + f1 * 2.0 - vec2(t_sin * 0.4, t_cos * 0.4));
-    
-    // Cosmic Horror Palette: Deep Black / Violet / Purple / Blood Magenta
-    vec3 col_abyss = vec3(0.02, 0.01, 0.04);
-    vec3 col_violet = vec3(0.18, 0.04, 0.32);
-    vec3 col_crimson = vec3(0.45, 0.08, 0.22);
-    vec3 col_glow = vec3(0.75, 0.25, 0.85);
-    
-    vec3 col = mix(col_abyss, col_violet, f1);
-    col = mix(col, col_crimson, f2 * 0.8);
-    
-    // Black Hole / Void Core in the center
-    float core = smoothstep(0.35, 0.05, dist);
-    col = mix(col, col_abyss, core * 0.95);
-    
-    // Accretion / Photon ring glow
-    float ring = exp(-pow((dist - 0.28 - t_sin * 0.02) * 18.0, 2.0));
-    col += col_glow * ring * 0.9 * (0.8 + 0.2 * t_cos);
-    
-    // Subtle star dust
-    float stars = pow(hash(floor(uv * 120.0)), 35.0) * 1.5;
-    col += vec3(0.9, 0.8, 1.0) * stars * (1.0 - core);
 
-    // Vignette
-    float vig = smoothstep(1.3, 0.4, length((gl_FragCoord.xy / u_resolution.xy) - 0.5) * 1.5);
+    // --- Sub-pixel Radial Chromatic Aberration ---
+    float ca_strength = 0.012 * smoothstep(0.1, 0.8, dist_center);
+    vec2 ca_dir = normalize(uv_screen + 0.0001);
+    
+    vec2 uv_r = uv_screen + ca_dir * ca_strength;
+    vec2 uv_g = uv_screen;
+    vec2 uv_b = uv_screen - ca_dir * ca_strength;
+
+    float r_ch = sampleScene(uv_r, phase, t_sin, t_cos).r;
+    float g_ch = sampleScene(uv_g, phase, t_sin, t_cos).g;
+    float b_ch = sampleScene(uv_b, phase, t_sin, t_cos).b;
+    vec3 col = vec3(r_ch, g_ch, b_ch);
+
+    // --- Rec.709 Contrast S-Curve Grading ---
+    col = rec709_scurve(col);
+
+    // --- Anamorphic Optical Vignette ---
+    float vig = smoothstep(1.35, 0.25, length((gl_FragCoord.xy / u_resolution.xy) - 0.5) * 1.55);
     col *= vig;
+
+    // --- Analog 35mm Film Grain (Eliminates flat digital look & color banding) ---
+    float grain = hash3(vec3(gl_FragCoord.xy * 0.75, fract(u_time * 7.13 + u_seed)));
+    col += (grain - 0.5) * 0.038 * (0.8 + 0.4 * (1.0 - vig));
+
+    // Clamp within valid SDR range
+    col = clamp(col, 0.0, 1.0);
 
     gl_FragColor = vec4(col, 1.0);
   }

@@ -9,6 +9,7 @@ import fcntl
 import os
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -49,11 +50,17 @@ class ChannelLockError(RuntimeError):
 
 class ChannelLock:
     """
-    Context manager for atomic, non-blocking per-channel file locking.
+    Context manager for atomic per-channel file locking with optional timeout.
     Uses kernel-managed fcntl.flock to guarantee OS-level multi-process mutual exclusion.
     """
 
-    def __init__(self, channel_name: str = "global", lock_file_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        channel_name: str = "global",
+        lock_file_path: Optional[str] = None,
+        timeout: Optional[float] = None,
+        poll_interval: float = 0.5,
+    ) -> None:
         self.channel_name = channel_name if channel_name else "global"
         base_lock = lock_file_path or _get_default_lock_path()
         if self.channel_name in ("global", None, ""):
@@ -61,6 +68,8 @@ class ChannelLock:
         else:
             self.lock_file = f"{base_lock}.{self.channel_name}"
 
+        self.timeout = timeout
+        self.poll_interval = max(0.05, float(poll_interval))
         self._file_handle: Optional[Any] = None
         self._acquired: bool = False
         self._is_reentrant: bool = False
@@ -73,10 +82,11 @@ class ChannelLock:
     def path(self) -> str:
         return self.lock_file
 
-    def acquire(self) -> bool:
+    def acquire(self, timeout: Optional[float] = None, poll_interval: Optional[float] = None) -> bool:
         """
-        Acquires exclusive non-blocking lock on channel lock file.
-        Raises ChannelLockError if lock is already held.
+        Acquires exclusive lock on channel lock file.
+        If timeout is provided, retries acquisition every poll_interval seconds until acquired or timeout expires.
+        Raises ChannelLockError if lock is already held and cannot be acquired within timeout.
         """
         if self._acquired and self._file_handle is not None:
             return True
@@ -89,30 +99,50 @@ class ChannelLock:
             self._is_reentrant = True
             return True
 
-        f = None
-        try:
-            os.makedirs(os.path.dirname(os.path.abspath(self.lock_file)), exist_ok=True)
-            f = open(self.lock_file, "a+", encoding="utf-8")
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            f.seek(0)
-            f.truncate()
-            f.write(f"{os.getpid()}\n")
-            f.flush()
-            os.fsync(f.fileno())
-            self._file_handle = f
-            self._acquired = True
-            return True
-        except (IOError, OSError) as err:
-            self._acquired = False
-            if f is not None:
+        effective_timeout = timeout if timeout is not None else self.timeout
+        effective_poll = poll_interval if poll_interval is not None else self.poll_interval
+        deadline = (time.monotonic() + max(0.0, float(effective_timeout))) if effective_timeout is not None else None
+
+        while True:
+            f = None
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(self.lock_file)), exist_ok=True)
+                f = open(self.lock_file, "a+", encoding="utf-8")
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                f.seek(0)
+                f.truncate()
+                f.write(f"{os.getpid()}\n")
+                f.flush()
+                os.fsync(f.fileno())
+                self._file_handle = f
+                self._acquired = True
+                return True
+            except (IOError, OSError) as err:
+                self._acquired = False
+                if f is not None:
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
+                self._file_handle = None
+
+                if deadline is not None and time.monotonic() < deadline:
+                    time.sleep(min(effective_poll, max(0.05, deadline - time.monotonic())))
+                    continue
+
+                holder_pid = "?"
                 try:
-                    f.close()
+                    if os.path.exists(self.lock_file):
+                        with open(self.lock_file, "r", encoding="utf-8") as lf:
+                            holder_pid = lf.read().strip() or "?"
                 except Exception:
                     pass
-            self._file_handle = None
-            raise ChannelLockError(
-                f"Error: Another instance of the YouTube Automation script for channel [{self.channel_name}] is already running."
-            ) from err
+
+                timeout_suffix = f" tras esperar {effective_timeout}s" if effective_timeout is not None else ""
+                raise ChannelLockError(
+                    f"Error: Another instance of the YouTube Automation script for channel [{self.channel_name}] "
+                    f"is already running (pid={holder_pid}){timeout_suffix}."
+                ) from err
 
     def release(self) -> None:
         """
@@ -146,7 +176,7 @@ class ChannelLock:
         self._acquired = False
 
     def __enter__(self) -> ChannelLock:
-        self.acquire()
+        self.acquire(timeout=self.timeout, poll_interval=self.poll_interval)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -157,11 +187,11 @@ _active_locks: dict[str, ChannelLock] = {}
 _legacy_active_channel: str = "global"
 
 
-def acquire_lock(channel_name: str = "global") -> None:
+def acquire_lock(channel_name: str = "global", timeout: Optional[float] = None) -> None:
     """Legacy compatibility function for acquiring a lock."""
     global _legacy_active_channel
     _legacy_active_channel = channel_name if channel_name else "global"
-    lock = ChannelLock(channel_name=_legacy_active_channel)
+    lock = ChannelLock(channel_name=_legacy_active_channel, timeout=timeout)
     try:
         lock.acquire()
         _active_locks[_legacy_active_channel] = lock

@@ -104,6 +104,7 @@ class LoopSynthesizerWorker:
                             total_generated += 1
                             if cat_norm not in updated_categories:
                                 updated_categories.append(cat_norm)
+                            time.sleep(0.05)
                         except Exception as e:
                             logger.error("Failed synthesizing loop for %s [%s]: %s", cat_norm, orient_norm, e)
 

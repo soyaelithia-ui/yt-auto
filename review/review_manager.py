@@ -141,12 +141,14 @@ class ReviewJobManager:
             description=description,
             status=ReviewStatus.PENDING_REVIEW.value,
             telegram_chat_id=chat_id,
+            metadata={"drive_url": str(drive_url)} if drive_url else {},
         )
         delivery = self.bot.send_video_review(
             video_path=str(original_video_path),
             caption=title,
             job_id=job_id,
             chat_id=chat_id,
+            drive_url=drive_url,
         )
         if delivery.ok:
             job.telegram_message_id = delivery.message_id

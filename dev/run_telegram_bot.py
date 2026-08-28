@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from dotenv import load_dotenv
 load_dotenv(ROOT_DIR / ".env")
 
+from review.telegram_bot import is_local_bot_api
 from src.telegram.interactive_bot import InteractiveTelegramBot
 from src.log import get_logger
 
@@ -48,6 +49,8 @@ def main() -> int:
             logger.info("Modo de espera: Puedes configurar TELEGRAM_BOT_TOKEN en .env")
 
     bot = InteractiveTelegramBot(token=token, chat_id=chat_id)
+    is_local = is_local_bot_api(bot.base_url)
+    server_mode = "Servidor Local 2000 MB (2 GB)" if is_local else "Cloud Bot API 50 MB"
 
     if args.autopilot:
         logger.info("Iniciando AutoPilot 24/7 (intervalo: %.1f horas)...", args.autopilot_interval)
@@ -61,6 +64,7 @@ def main() -> int:
 
     logger.info("=======================================================")
     logger.info("🤖 Interactive Telegram Bot Activo (Polling)")
+    logger.info("📡 Modo Telegram: %s (Base URL: %s)", server_mode, bot.base_url)
     logger.info("Presiona Ctrl+C para detener el servicio.")
     logger.info("=======================================================")
 

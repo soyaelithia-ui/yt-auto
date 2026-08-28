@@ -190,7 +190,8 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             )
 
             try:
-                loop_file = self.renderer.render_loop(spec)
+                loop_rec = self.renderer.render_loop(spec)
+                loop_file = Path(getattr(loop_rec, "file_path", loop_rec))
             except Exception as e:
                 logger.warning("Procedural on-demand rendering failed (%s). Using fallback procedural generator.", e)
                 loop_file = self._generate_fallback_loop(category, width, height, fps, 6.0, synth_mp4)

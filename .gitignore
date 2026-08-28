@@ -15,7 +15,7 @@ data/queue.db-*
 data/backups/
 data/worksets/*
 !data/worksets/canonical/
-!data/worksets/canonical/*.md
+!data/worksets/canonical/*
 *.db
 *.db*
 *.sqlite

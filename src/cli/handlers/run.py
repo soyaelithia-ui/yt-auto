@@ -198,6 +198,7 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
                 topic=getattr(args, "topic", None),
                 story_id=getattr(args, "story_id", None),
                 lane_id=lane_id,
+                dry_run=getattr(args, "dry_run", False),
                 generate_only=getattr(args, "generate_only", False),
                 dispatch_telegram=getattr(args, "dispatch_telegram", False),
             )
