@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cosmic Horror Procedural Engine</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #020604;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    #renderCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #hudLayer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 30px;
+      color: #00ff66;
+      text-shadow: 0 0 8px rgba(0, 255, 102, 0.7);
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      z-index: 10;
+    }
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid rgba(0, 255, 102, 0.4);
+      padding-bottom: 8px;
+    }
+    .hud-footer {
+      display: flex;
+      justify-content: space-between;
+      border-top: 2px solid rgba(0, 255, 102, 0.4);
+      padding-top: 8px;
+    }
+    .rec-dot {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      background: #ff2222;
+      border-radius: 50%;
+      margin-right: 8px;
+      box-shadow: 0 0 10px #ff2222;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="hudLayer">
+    <div class="hud-header">
+      <div><span class="rec-dot"></span><span id="telemetryHeader">REC [●] 2026-08-28 00:00:00 UTC // RESTRICTED</span></div>
+      <div id="hudTimecode">00:00:00:00</div>
+    </div>
+    <div class="hud-footer">
+      <div id="hudStatus">SENSOR DE PROFUNDIDAD: ESTABLE</div>
+      <div id="hudCoords">LAT: 11.35° N | LON: 142.20° E</div>
+    </div>
+  </div>
+
+  <script>
+    window.SCENE_CONFIG = __SCENE_CONFIG_JSON__;
+
+    const VS_SOURCE = `
+      attribute vec2 aPosition;
+      varying vec2 vUv;
+      void main() {
+        vUv = aPosition * 0.5 + 0.5;
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+      }
+    `;
+
+    const SHADERS = {
+      RADAR_HYDROACOUSTIC: `__RADAR_FRAG__`,
+      MONOLITHS_RAYMARCHING: `__MONOLITHS_FRAG__`,
+      GRAVITATIONAL_SINGULARITY: `__SINGULARITY_FRAG__`,
+      POSTPROCESS: `__POSTPROCESS_FRAG__`
+    };
+
+    let gl, canvas;
+    let quadBuffer;
+    let scenePrograms = {};
+    let postProgram;
+    let fbo, fboTexture;
+    let width, height;
+
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error("Shader compile error:", gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    }
+
+    function createProgram(gl, vsSrc, fsSrc) {
+      const vs = createShader(gl, gl.VERTEX_SHADER, vsSrc);
+      const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSrc);
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error("Program link error:", gl.getProgramInfoLog(program));
+        return null;
+      }
+      return program;
+    }
+
+    function initWebGL() {
+      canvas = document.getElementById("renderCanvas");
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+
+      gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, antialias: false });
+      if (!gl) {
+        console.error("WebGL not supported");
+        return;
+      }
+
+      // Quad geometry
+      const vertices = new Float32Array([
+        -1.0, -1.0,
+         1.0, -1.0,
+        -1.0,  1.0,
+        -1.0,  1.0,
+         1.0, -1.0,
+         1.0,  1.0
+      ]);
+      quadBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+      // Create Scene Programs
+      for (const [id, src] of Object.entries(SHADERS)) {
+        if (id === "POSTPROCESS") {
+          postProgram = createProgram(gl, VS_SOURCE, src);
+        } else {
+          scenePrograms[id] = createProgram(gl, VS_SOURCE, src);
+        }
+      }
+
+      // FBO (RenderTarget) setup
+      fboTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTexture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      if (window.SCENE_CONFIG && window.SCENE_CONFIG.telemetryHeader) {
+        document.getElementById("telemetryHeader").innerText = window.SCENE_CONFIG.telemetryHeader;
+      }
+    }
+
+    function getActiveScene(t) {
+      const scenes = window.SCENE_CONFIG?.scenes || [];
+      for (let i = 0; i < scenes.length; i++) {
+        if (t >= scenes[i].start_sec && t <= scenes[i].end_sec) {
+          return scenes[i];
+        }
+      }
+      return scenes[scenes.length - 1] || {
+        shader_id: "RADAR_HYDROACOUSTIC",
+        shader_params: { uGlitchIntensity: 0.0, uTension: 0.5, uColorTint: [0, 0, 0] },
+        hud_status: "STATUS: NOMINAL"
+      };
+    }
+
+    window.renderFrame = function(frameIndex, totalFrames) {
+      if (!gl) initWebGL();
+      const fps = window.SCENE_CONFIG?.fps || 30;
+      const t = frameIndex / fps;
+      const scene = getActiveScene(t);
+
+      // Update HUD
+      const framesPart = String(frameIndex % fps).padStart(2, "0");
+      const secsPart = String(Math.floor(t) % 60).padStart(2, "0");
+      const minsPart = String(Math.floor(t / 60) % 60).padStart(2, "0");
+      const hrsPart = String(Math.floor(t / 3600)).padStart(2, "0");
+      document.getElementById("hudTimecode").innerText = `${hrsPart}:${minsPart}:${secsPart}:${framesPart}`;
+      document.getElementById("hudStatus").innerText = scene.hud_status || "STATUS: ONLINE";
+
+      // 1. Pass 1: Render active scene shader into FBO RenderTarget
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.viewport(0, 0, width, height);
+
+      const prog = scenePrograms[scene.shader_id] || scenePrograms["RADAR_HYDROACOUSTIC"];
+      gl.useProgram(prog);
+
+      const aPos = gl.getAttribLocation(prog, "aPosition");
+      gl.enableVertexAttribArray(aPos);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      // Set Uniforms
+      gl.uniform2f(gl.getUniformLocation(prog, "uResolution"), width, height);
+      gl.uniform1f(gl.getUniformLocation(prog, "uTime"), t);
+      gl.uniform1f(gl.getUniformLocation(prog, "uGlitchIntensity"), scene.shader_params?.uGlitchIntensity || 0.0);
+      gl.uniform1f(gl.getUniformLocation(prog, "uTension"), scene.shader_params?.uTension || 0.5);
+
+      const tint = scene.shader_params?.uColorTint || [0.0, 0.0, 0.0];
+      gl.uniform3f(gl.getUniformLocation(prog, "uColorTint"), tint[0], tint[1], tint[2]);
+
+      const camPos = [Math.sin(t * 0.12) * 1.5, 1.2 + Math.sin(t * 0.08) * 0.3, -t * 0.85];
+      gl.uniform3f(gl.getUniformLocation(prog, "uCameraPos"), camPos[0], camPos[1], camPos[2]);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // 2. Pass 2: Global Post-Processing Shader (CRT + Scanlines + Chromatic Aberration + Grain)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, width, height);
+      gl.useProgram(postProgram);
+
+      const aPostPos = gl.getAttribLocation(postProgram, "aPosition");
+      gl.enableVertexAttribArray(aPostPos);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+      gl.vertexAttribPointer(aPostPos, 2, gl.FLOAT, false, 0, 0);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+      gl.uniform1i(gl.getUniformLocation(postProgram, "tDiffuse"), 0);
+
+      gl.uniform2f(gl.getUniformLocation(postProgram, "uResolution"), width, height);
+      gl.uniform1f(gl.getUniformLocation(postProgram, "uTime"), t);
+      gl.uniform1f(gl.getUniformLocation(postProgram, "uGlitchIntensity"), scene.shader_params?.uGlitchIntensity || 0.0);
+      gl.uniform1f(gl.getUniformLocation(postProgram, "uTension"), scene.shader_params?.uTension || 0.5);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    };
+
+    window.addEventListener("DOMContentLoaded", initWebGL);
+  </script>
+</body>
+</html>
