@@ -7,7 +7,9 @@ muxing mastered audio and karaoke ASS subtitles without creating temporary disk 
 from __future__ import annotations
 
 import errno
+import math
 import os
+import select
 import shutil
 import subprocess
 import time
@@ -18,13 +20,14 @@ from playwright.sync_api import sync_playwright
 
 from src.narrative.schema import CosmicScriptContract
 from src.rendering.renderer import CosmicShaderRenderer, resolve_chrome_path
+from lib.ffmpeg import probe_media
 from src.log import get_logger
 
 logger = get_logger("stream_renderer")
 
 
 class DirectStreamCompositor:
-    """Renders WebGL scenes and pipes frames directly into FFmpeg stdin."""
+    """Renders WebGL scenes and pipes frames directly into FFmpeg stdin with backpressure flow control."""
 
     def __init__(self, chrome_exec_path: Optional[str] = None) -> None:
         self.chrome_path = chrome_exec_path or resolve_chrome_path()
@@ -36,26 +39,55 @@ class DirectStreamCompositor:
         output_mp4_path: Union[str, Path],
         master_audio_path: Optional[Union[str, Path]] = None,
         subtitles_ass_path: Optional[Union[str, Path]] = None,
-        duration_sec: float = 30.0,
+        duration_sec: Optional[float] = None,
+        total_frames: Optional[int] = None,
         width: int = 1080,
         height: int = 1920,
         fps: int = 30,
+        stream_format: str = "image2pipe",
     ) -> Path:
         """
         Executes end-to-end direct stream rendering:
-        1. Compiles runtime HTML with GLSL shaders and scene parameters.
-        2. Spawns FFmpeg process with stdin pipe (`image2pipe`).
-        3. Headless Chromium evaluates frames and writes PNG buffers directly to `ffmpeg.stdin`.
-        4. Muxes with master audio and burns/applies ASS subtitles.
+        1. Dynamically calculates duration and frame count from master audio or scene configuration.
+        2. Compiles runtime HTML with GLSL shaders and scene parameters.
+        3. Spawns FFmpeg process with stdin pipe and backpressure flow control.
+        4. Headless Chromium evaluates frames and streams buffers directly to `ffmpeg.stdin`.
+        5. Muxes with master audio and burns/applies ASS subtitles.
         """
         out_p = Path(output_mp4_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
         log_file_path = out_p.parent / f"{out_p.stem}_ffmpeg.log"
 
-        total_frames = max(1, int(round(duration_sec * fps)))
+        has_audio = master_audio_path is not None and Path(master_audio_path).is_file()
+
+        # Dynamic duration & frame count calculation
+        if total_frames is not None:
+            actual_total_frames = max(1, int(total_frames))
+            actual_duration_sec = float(duration_sec) if duration_sec is not None else (actual_total_frames / fps)
+        elif has_audio:
+            try:
+                probe = probe_media(master_audio_path)
+                audio_dur = probe.duration
+                if audio_dur <= 0.0 and probe.primary_audio:
+                    audio_dur = probe.primary_audio.duration
+            except Exception as probe_err:
+                logger.warning("No se pudo sondear la duración del audio: %s", probe_err)
+                audio_dur = float(duration_sec or 30.0)
+
+            actual_total_frames = max(1, math.ceil((audio_dur + 0.5) * fps))
+            actual_duration_sec = actual_total_frames / fps
+        elif duration_sec is not None:
+            actual_duration_sec = float(duration_sec)
+            actual_total_frames = max(1, int(round(actual_duration_sec * fps)))
+        else:
+            # Fallback based on scenes duration or 30s
+            scene_dur = sum(getattr(s, "duration_sec", 0.0) for s in getattr(script_contract, "scenes", []))
+            actual_duration_sec = float(scene_dur) if scene_dur > 0 else 30.0
+            actual_total_frames = max(1, int(round(actual_duration_sec * fps)))
+
         logger.info(
-            "Iniciando renderizado directo a FFmpeg stdin: %dx%d @ %dfps (%.1fs = %d frames)",
-            width, height, fps, duration_sec, total_frames
+            "Iniciando renderizado directo a FFmpeg stdin: %dx%d @ %dfps (%.2fs = %d frames)",
+            width, height, fps, actual_duration_sec, actual_total_frames
         )
 
         html_content = self.shader_renderer.build_runtime_html(
@@ -66,15 +98,24 @@ class DirectStreamCompositor:
         )
 
         # Build FFmpeg command
-        ffmpeg_cmd = [
-            "ffmpeg", "-y", "-v", "warning",
-            "-f", "image2pipe",
-            "-vcodec", "png",
-            "-r", str(fps),
-            "-i", "-",
-        ]
+        if stream_format == "rawvideo":
+            ffmpeg_cmd = [
+                "ffmpeg", "-y", "-v", "warning",
+                "-f", "rawvideo",
+                "-pix_fmt", "rgba",
+                "-s", f"{width}x{height}",
+                "-r", str(fps),
+                "-i", "-",
+            ]
+        else:
+            ffmpeg_cmd = [
+                "ffmpeg", "-y", "-v", "warning",
+                "-f", "image2pipe",
+                "-vcodec", "png",
+                "-r", str(fps),
+                "-i", "-",
+            ]
 
-        has_audio = master_audio_path and Path(master_audio_path).is_file()
         if has_audio:
             ffmpeg_cmd.extend(["-i", str(Path(master_audio_path).resolve())])
 
@@ -94,10 +135,17 @@ class DirectStreamCompositor:
         ])
 
         if has_audio:
-            ffmpeg_cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-shortest"])
+            ffmpeg_cmd.extend([
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-ac", "2",
+            ])
         else:
             ffmpeg_cmd.extend(["-an"])
 
+        # Restrict output to exact duration derived from frames
+        ffmpeg_cmd.extend(["-t", f"{actual_duration_sec:.3f}"])
         ffmpeg_cmd.append(str(out_p.resolve()))
 
         # Launch Playwright & FFmpeg Pipeline
@@ -126,30 +174,26 @@ class DirectStreamCompositor:
                     browser = p.chromium.launch(**launch_kwargs)
                     page = browser.new_page(viewport={"width": width, "height": height})
                     page.set_content(html_content, wait_until="domcontentloaded")
-                    canvas_elem = page.locator("body")
 
-                    for frame_idx in range(total_frames):
+                    for frame_idx in range(actual_total_frames):
                         page.evaluate(
                             "([f, total]) => { window.renderFrame(f, total); }",
-                            [frame_idx, total_frames],
+                            [frame_idx, actual_total_frames],
                         )
                         frame_bytes = page.screenshot(type="png")
-                        try:
-                            proc.stdin.write(frame_bytes)
-                            if frame_idx % 10 == 0:
-                                proc.stdin.flush()
-                        except (BrokenPipeError, OSError) as pipe_err:
-                            logger.info("FFmpeg pipe cerrado por el receptor en fotograma %d (%s)", frame_idx, pipe_err)
+                        
+                        # Backpressure flow control on FFmpeg stdin
+                        written = self._write_frame_with_backpressure(proc, frame_bytes)
+                        if not written:
+                            logger.info("FFmpeg pipe cerrado por el receptor en fotograma %d", frame_idx)
                             break
 
                     browser.close()
 
                 try:
-                    proc.stdin.flush()
-                except (BrokenPipeError, OSError):
-                    pass
-                try:
-                    proc.stdin.close()
+                    if proc.stdin:
+                        proc.stdin.flush()
+                        proc.stdin.close()
                 except (BrokenPipeError, OSError):
                     pass
 
@@ -167,7 +211,40 @@ class DirectStreamCompositor:
                     raise RuntimeError(f"Error during headless frame stream: {exc}") from exc
 
         elapsed = time.time() - start_time
-        fps_eff = total_frames / max(0.1, elapsed)
+        fps_eff = actual_total_frames / max(0.1, elapsed)
         logger.info("✅ Video renderizado con éxito en %.2fs (%.1f fps): %s (%d KB)", elapsed, fps_eff, out_p.name, out_p.stat().st_size // 1024)
 
         return out_p
+
+    def _write_frame_with_backpressure(
+        self,
+        proc: subprocess.Popen,
+        frame_bytes: bytes,
+        timeout: float = 10.0,
+    ) -> bool:
+        """
+        Pipes frame bytes to FFmpeg stdin with backpressure throttling.
+        Uses select to pause frame generation when OS pipe buffer is saturated.
+        """
+        if proc.poll() is not None or proc.stdin is None:
+            return False
+
+        try:
+            fd = proc.stdin.fileno()
+            # Wait for pipe buffer to be writable (backpressure handling)
+            while True:
+                if proc.poll() is not None:
+                    return False
+                _, writable, _ = select.select([], [fd], [], timeout)
+                if writable:
+                    break
+                # Buffer full: throttle producer to allow FFmpeg encoder to catch up
+                time.sleep(0.002)
+
+            proc.stdin.write(frame_bytes)
+            proc.stdin.flush()
+            return True
+        except (BrokenPipeError, OSError) as e:
+            logger.debug("Pipe write interrupted or closed: %s", e)
+            return False
+

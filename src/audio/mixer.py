@@ -93,9 +93,10 @@ class CosmicAudioMixer:
 
         if not sfx_timeline:
             # Generate empty silence track
+            safe_dur = max(0.1, float(total_dur))
             cmd = [
                 "ffmpeg", "-y", "-v", "error",
-                "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={total_dur}",
+                "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={safe_dur}",
                 "-c:a", "pcm_s16le", str(sfx_track_wav)
             ]
             subprocess.run(cmd, check=True)
@@ -115,7 +116,7 @@ class CosmicAudioMixer:
             filter_parts.append(f"[{idx}:a]volume={vol},adelay={delay_ms}|{delay_ms},apad=whole_dur={total_dur}s[sfx{idx}]")
 
         mix_inputs = "".join([f"[sfx{i}]" for i in range(len(sfx_timeline))])
-        filter_parts.append(f"{mix_inputs}amix=inputs={len(sfx_timeline)}:duration=first:dropout_transition=0[sfx_out]")
+        filter_parts.append(f"{mix_inputs}amix=inputs={len(sfx_timeline)}:duration=longest:dropout_transition=0[sfx_out]")
 
         cmd = [
             "ffmpeg", "-y", "-v", "error",
@@ -149,7 +150,7 @@ class CosmicAudioMixer:
             "[1:a]volume=0.35[drone_in];"
             "[drone_in][v_ctrl]sidechaincompress=threshold=0.08:ratio=5:attack=15:release=350[drone_ducked];"
             "[2:a]volume=0.85[sfx_in];"
-            "[drone_ducked][v_mix][sfx_in]amix=inputs=3:duration=first:dropout_transition=2[mixed];"
+            "[drone_ducked][v_mix][sfx_in]amix=inputs=3:duration=longest:dropout_transition=2[mixed];"
             "[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
         )
 

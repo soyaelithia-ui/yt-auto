@@ -100,3 +100,142 @@ def test_audio_mixer_end_to_end(tmp_path: Path) -> None:
     assert out_res.stat().st_size > 0
     with wave.open(str(out_res), "rb") as wf:
         assert wf.getframerate() == 44100
+
+
+def test_vocal_chain_processor_all_presets(tmp_path: Path) -> None:
+    proc = VocalChainProcessor()
+    sample_rate = 44100
+    duration = 1.0
+    t = np.arange(int(sample_rate * duration)) / float(sample_rate)
+    voice_samples = (0.4 * np.sin(2.0 * np.pi * 440.0 * t) * 32767.0).astype(np.int16)
+
+    voice_wav = tmp_path / "voice_in.wav"
+    with wave.open(str(voice_wav), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(voice_samples.tobytes())
+
+    presets = [
+        VoicePreset.INTERCOM_BUNKER,
+        VoicePreset.HYDROPHONE_RADIO,
+        VoicePreset.BLACKBOX_TAPE,
+        "intercom_bunker",
+        "unknown_preset_fallback",
+    ]
+
+    for idx, preset in enumerate(presets):
+        out_wav = tmp_path / f"voice_out_{idx}.wav"
+        res = proc.apply_chain(voice_wav, out_wav, preset=preset)
+        assert res.is_file()
+        assert res.stat().st_size > 0
+        with wave.open(str(res), "rb") as wf:
+            assert wf.getframerate() == 44100
+            assert wf.getsampwidth() == 2
+
+
+def test_vocal_chain_processor_missing_file_raises(tmp_path: Path) -> None:
+    proc = VocalChainProcessor()
+    missing_wav = tmp_path / "missing.wav"
+    out_wav = tmp_path / "out.wav"
+    with pytest.raises(FileNotFoundError):
+        proc.apply_chain(missing_wav, out_wav)
+
+
+def test_procedural_drone_synthesizer_stereo_and_determinism(tmp_path: Path) -> None:
+    synth = ProceduralDroneSynthesizer(sample_rate=44100)
+
+    # Determinism
+    s1 = synth.synthesize(duration_sec=1.0, base_freq_hz=40.0, seed=12345)
+    s2 = synth.synthesize(duration_sec=1.0, base_freq_hz=40.0, seed=12345)
+    np.testing.assert_array_almost_equal(s1, s2)
+
+    # Stereo WAV export
+    stereo_wav = tmp_path / "drone_stereo.wav"
+    synth.generate_wav(stereo_wav, duration_sec=1.5, base_freq_hz=40.0, stereo=True)
+    assert stereo_wav.is_file()
+    with wave.open(str(stereo_wav), "rb") as wf:
+        assert wf.getnchannels() == 2
+        assert wf.getframerate() == 44100
+        assert wf.getsampwidth() == 2
+
+
+def test_butterworth_filter_empty_input() -> None:
+    empty_arr = np.array([], dtype=np.float32)
+    filtered = apply_butterworth_4th_lowpass_50hz(empty_arr)
+    assert len(filtered) == 0
+
+
+def test_sfx_library_fallback_unknown_id(tmp_path: Path) -> None:
+    synth = SFXLibrarySynthesizer(sample_rate=44100)
+    samples = synth.synthesize_sfx("non_existent_sfx_id", duration_sec=0.3)
+    assert len(samples) > 0
+    assert np.max(np.abs(samples)) <= 1.0
+
+
+def test_audio_mixer_empty_sfx_and_missing_voice(tmp_path: Path) -> None:
+    mixer = CosmicAudioMixer(work_dir=tmp_path / "work_empty")
+
+    # Missing voice raises FileNotFoundError
+    audio_contract = AudioContract(
+        voice_text="Test",
+        voice_preset=VoicePreset.INTERCOM_BUNKER,
+        drone_base_freq_hz=38.0,
+        sfx_timeline=[],
+    )
+    with pytest.raises(FileNotFoundError):
+        mixer.master_soundtrack(
+            audio_contract=audio_contract,
+            raw_voice_wav=tmp_path / "missing_voice.wav",
+            output_master_wav=tmp_path / "out_master.wav",
+            total_duration_sec=2.0,
+        )
+
+    # Valid voice with empty SFX timeline
+    voice_wav = tmp_path / "valid_voice.wav"
+    sample_rate = 44100
+    duration = 2.0
+    t = np.arange(int(sample_rate * duration)) / float(sample_rate)
+    voice_samples = (0.3 * np.sin(2.0 * np.pi * 300.0 * t) * 32767.0).astype(np.int16)
+    with wave.open(str(voice_wav), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(voice_samples.tobytes())
+
+    master_wav = tmp_path / "master_no_sfx.wav"
+    res = mixer.master_soundtrack(
+        audio_contract=audio_contract,
+        raw_voice_wav=voice_wav,
+        output_master_wav=master_wav,
+        total_duration_sec=2.0,
+    )
+    assert res.is_file()
+    assert res.stat().st_size > 0
+
+
+def test_src_audio_package_exports_and_synthetic_pcm(tmp_path: Path) -> None:
+    import src.audio as audio_pkg
+
+    # Check key exports
+    assert hasattr(audio_pkg, "ProceduralDroneSynthesizer")
+    assert hasattr(audio_pkg, "VocalChainProcessor")
+    assert hasattr(audio_pkg, "SFXLibrarySynthesizer")
+    assert hasattr(audio_pkg, "CosmicAudioMixer")
+    assert hasattr(audio_pkg, "VoicePreset")
+    assert hasattr(audio_pkg, "normalize_narration_lufs")
+    assert hasattr(audio_pkg, "apply_sidechain_ducking")
+    assert hasattr(audio_pkg, "master_audio_track")
+    assert hasattr(audio_pkg, "generate_synthetic_pcm_audio")
+    assert hasattr(audio_pkg, "AudioProcessingError")
+    assert hasattr(audio_pkg, "AudioMasteringError")
+
+    pcm_wav = tmp_path / "test_synth_pcm.wav"
+    res = audio_pkg.generate_synthetic_pcm_audio(str(pcm_wav), duration_sec=1.0, freq=440.0)
+    assert Path(res).is_file()
+    with wave.open(res, "rb") as wf:
+        assert wf.getnchannels() == 2
+        assert wf.getframerate() == 44100
+        assert wf.getsampwidth() == 2
+        assert wf.getnframes() == 44100
+

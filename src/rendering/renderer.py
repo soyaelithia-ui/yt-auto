@@ -89,12 +89,18 @@ class CosmicShaderRenderer:
         self,
         script_contract: CosmicScriptContract,
         frame_idx: int = 0,
-        total_frames: int = 100,
+        total_frames: Optional[int] = None,
         width: int = 1080,
         height: int = 1920,
         fps: int = 30,
     ) -> bytes:
         """Renders and returns a single PNG screenshot frame bytes."""
+        if total_frames is not None:
+            actual_total_frames = max(1, int(total_frames))
+        else:
+            scenes_dur = sum(getattr(s, "duration_sec", 0.0) for s in getattr(script_contract, "scenes", []))
+            actual_total_frames = max(1, int(round((scenes_dur if scenes_dur > 0 else 30.0) * fps)))
+
         html_content = self.build_runtime_html(script_contract, width=width, height=height, fps=fps)
 
         launch_args = [
@@ -113,7 +119,7 @@ class CosmicShaderRenderer:
             page.set_content(html_content, wait_until="domcontentloaded")
             page.evaluate(
                 "([f, total]) => { window.renderFrame(f, total); }",
-                [frame_idx, total_frames],
+                [frame_idx, actual_total_frames],
             )
             png_bytes = page.locator("body").screenshot(type="png")
             browser.close()

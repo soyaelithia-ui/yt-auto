@@ -24,6 +24,7 @@ from src.audio.mixer import CosmicAudioMixer
 from src.compositing.subtitles import TerminalKaraokeSubtitleGenerator
 from src.compositing.stream_renderer import DirectStreamCompositor
 from src.export.presets import ExportPreset, get_preset_for_format
+from lib.ffmpeg import probe_media
 from src.log import get_logger
 
 logger = get_logger("cosmic_pipeline")
@@ -114,6 +115,23 @@ class CosmicVideoPipeline:
             total_duration_sec=final_dur,
         )
 
+        # Dynamic Audio Probing via ffprobe (Requirement R1)
+        audio_probe = probe_media(master_audio_wav)
+        probed_audio_dur = audio_probe.duration
+        if probed_audio_dur <= 0.0 and audio_probe.primary_audio:
+            probed_audio_dur = audio_probe.primary_audio.duration
+        if probed_audio_dur <= 0.0:
+            probed_audio_dur = final_dur
+
+        # Formula: total_frames = math.ceil((audio_duration + 0.5) * fps)
+        total_frames = math.ceil((probed_audio_dur + 0.5) * target_fps)
+        render_duration_sec = total_frames / target_fps
+
+        logger.info(
+            "Duración dinámica vinculada al audio maestro: Audio=%.2fs -> Render=%.2fs (%d fotogramas @ %dfps)",
+            probed_audio_dur, render_duration_sec, total_frames, target_fps
+        )
+
         # 4. Module 4: Subtitles Generation
         logger.info("Módulo 4: Generando subtítulos ASS terminal karaoke...")
         subtitles_ass = run_folder / "subtitles.ass"
@@ -131,7 +149,8 @@ class CosmicVideoPipeline:
             output_mp4_path=final_mp4,
             master_audio_path=master_audio_wav,
             subtitles_ass_path=subtitles_ass if preset.require_subtitles else None,
-            duration_sec=final_dur,
+            duration_sec=render_duration_sec,
+            total_frames=total_frames,
             width=target_w,
             height=target_h,
             fps=target_fps,
@@ -147,7 +166,9 @@ class CosmicVideoPipeline:
             "script_contract": script.to_dict(),
             "master_audio_path": str(master_audio_wav.resolve()),
             "subtitles_path": str(subtitles_ass.resolve()),
-            "duration_sec": final_dur,
+            "duration_sec": render_duration_sec,
+            "audio_duration_sec": probed_audio_dur,
+            "total_frames": total_frames,
             "width": target_w,
             "height": target_h,
             "fps": target_fps,
@@ -171,11 +192,12 @@ class CosmicVideoPipeline:
 
         # Try Edge-TTS if available
         try:
-            from lib.tts import synthesize_narration_with_timestamps
-            res = synthesize_narration_with_timestamps(
-                text=script.audio.voice_text,
-                out_path=voice_out,
+            from lib.tts import generate_audio
+            res = generate_audio(
+                script=script.audio.voice_text,
+                audio_path=str(voice_out),
                 voice="es-ES-AlvaroNeural",
+                target_duration_sec=target_dur,
             )
             if voice_out.is_file() and voice_out.stat().st_size > 0:
                 dur = float(res.get("duration_sec", target_dur))
