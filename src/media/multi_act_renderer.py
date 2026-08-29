@@ -11,16 +11,32 @@ import json
 import logging
 import math
 import os
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
 from src.log import get_logger
 
 logger = get_logger("multi_act_renderer")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def calculate_xfade_duration(scene_durations: List[float], transition_duration: float = 0.75) -> float:
+    """Calculates total duration across scenes with transitions: sum(durations) - ((n - 1) * transition_duration)."""
+    if not scene_durations:
+        return 0.0
+    if len(scene_durations) == 1:
+        return float(scene_durations[0])
+    num_transitions = len(scene_durations) - 1
+    return float(sum(scene_durations) - (num_transitions * transition_duration))
+
+
+def clamp_transition_duration(dur1: float, dur2: float, requested_transition: float = 0.75) -> float:
+    """Clamps transition duration to <= 30% of the shortest adjacent scene duration."""
+    shortest = min(float(dur1), float(dur2))
+    return min(float(requested_transition), shortest * 0.30)
 
 
 @dataclass
@@ -82,12 +98,14 @@ class MultiActVideoRenderer:
         acts: List[NarrativeSceneAct],
         output_ass: Path,
         is_vertical: bool = False,
+        downward_drift_px: int = 0,
     ) -> Path:
         """Generates a clean, styled ASS subtitle file for the video acts."""
         width = 1080 if is_vertical else 1920
         height = 1920 if is_vertical else 1080
         font_size = 38 if is_vertical else 32
-        margin_v = 280 if is_vertical else 65
+        base_margin_v = max(480, int(height * 0.25)) if is_vertical else max(130, int(height * 0.12))
+        margin_v = base_margin_v + max(0, int(downward_drift_px))
 
         ass_content = f"""[Script Info]
 Title: SCP-5000 Dynamic Subtitles
@@ -177,7 +195,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             )
             
             # Apply slight fade-in and fade-out at act boundaries
-            fade_dur = 0.5
+            fade_dur = clamp_transition_duration(act.duration_sec, act.duration_sec, 0.5)
             fade_out_start = max(0.1, act.duration_sec - fade_dur)
             trans_filter = f"{hud_filters},fade=t=in:st=0:d={fade_dur},fade=t=out:st={fade_out_start:.3f}:d={fade_dur}"
             
@@ -210,12 +228,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "-colorspace", "bt709",
             "-color_primaries", "bt709",
             "-color_trc", "bt709",
-            "-c:a", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-ar", "44100",
             "-movflags", "+faststart",
             str(output_video),
         ])
 
         logger.info("🚀 Ejecutando renderizado FFmpeg Multi-Escena...")
-        subprocess.run(cmd, check=True)
+        run_ffmpeg(cmd, check=True)
         logger.info("✅ Master Multi-Escena Generado: %s (%.2f MB)", output_video.name, output_video.stat().st_size / (1024*1024))
         return output_video

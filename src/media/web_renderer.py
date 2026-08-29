@@ -8,6 +8,7 @@ into FFmpeg to produce lightweight, mathematically seamless H.264 video loops.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import logging
@@ -19,7 +20,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.catalog import LoopCatalogRepository, LoopRecord, compute_file_sha256
+from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger
+from lib.ffmpeg import FFmpegExecutionError
 
 logger = get_logger("web_video_renderer")
 
@@ -208,7 +211,11 @@ class WebVideoRenderer:
             launch_kwargs["executable_path"] = chrome_exec
 
         start_t = time.time()
-        with subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        register_process(proc)
+        browser = None
+
+        try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(**launch_kwargs)
                 page = browser.new_page(
@@ -236,12 +243,28 @@ class WebVideoRenderer:
                         proc.stdin.write(frame_bytes)
 
                 browser.close()
+                browser = None
 
-            proc.stdin.close()
-            stderr_out = proc.stderr.read()
+            if proc.stdin:
+                with contextlib.suppress(Exception):
+                    proc.stdin.flush()
+                with contextlib.suppress(Exception):
+                    proc.stdin.close()
+            stderr_out = proc.stderr.read() if proc.stderr else b""
             proc.wait()
             if proc.returncode != 0:
-                raise RuntimeError(f"FFmpeg encoding failed with code {proc.returncode}: {stderr_out.decode('utf-8', errors='ignore')}")
+                err_msg = stderr_out.decode("utf-8", errors="replace")
+                raise FFmpegExecutionError(
+                    f"FFmpeg encoding failed with code {proc.returncode}: {err_msg}",
+                    returncode=proc.returncode,
+                    stderr=err_msg,
+                    command=ffmpeg_cmd,
+                )
+        finally:
+            if browser is not None:
+                with contextlib.suppress(Exception):
+                    browser.close()
+            cleanup_subprocesses(proc)
 
         elapsed = time.time() - start_t
         file_size = target_mp4.stat().st_size

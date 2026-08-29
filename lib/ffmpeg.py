@@ -24,6 +24,7 @@ __all__ = [
     "AudioStreamInfo",
     "MediaProbeResult",
     "FFmpegCommandResult",
+    "SubprocessWatchdog",
     "run_ffmpeg",
     "run_ffprobe",
     "probe_media",
@@ -181,6 +182,97 @@ class FFmpegCommandResult:
 
 
 # ---------------------------------------------------------------------------
+# Subprocess Watchdog & Resource Monitor
+# ---------------------------------------------------------------------------
+
+
+class SubprocessWatchdog:
+    """
+    Non-blocking subprocess watchdog:
+    - Tracks process group liveness and execution time (<= timeout_sec, default 180.0s)
+    - Monitors RSS memory consumption (<= max_rss_mb, default 4096.0 MB / 4.0 GB)
+    - Reaps process group with SIGTERM / SIGKILL on timeout or memory threshold violation
+    """
+
+    def __init__(
+        self,
+        max_rss_mb: float = 4096.0,
+        timeout_sec: float = 180.0,
+        poll_interval_sec: float = 0.2,
+    ) -> None:
+        self.max_rss_mb = float(max_rss_mb)
+        self.timeout_sec = float(timeout_sec)
+        self.poll_interval_sec = float(poll_interval_sec)
+
+    @staticmethod
+    def get_process_rss_mb(pid: int) -> float:
+        """Reads resident set size (RSS) in MB for given PID from Linux /proc/statm."""
+        try:
+            statm_path = Path(f"/proc/{pid}/statm")
+            if statm_path.is_file():
+                parts = statm_path.read_text().split()
+                if len(parts) >= 2:
+                    rss_pages = int(parts[1])
+                    page_size_kb = os.sysconf("SC_PAGE_SIZE") / 1024.0
+                    return (rss_pages * page_size_kb) / 1024.0
+        except Exception:
+            pass
+        return 0.0
+
+    def monitor_process(self, proc: subprocess.Popen) -> None:
+        """
+        Monitors a running subprocess until completion, terminating process group if limits are violated.
+        """
+        start_time = time.monotonic()
+        while proc.poll() is None:
+            elapsed = time.monotonic() - start_time
+            if elapsed > self.timeout_sec:
+                self._terminate_process_group(proc)
+                raise FFmpegTimeoutError(
+                    f"Subprocess exceeded timeout limit of {self.timeout_sec}s",
+                    timeout=self.timeout_sec,
+                    command=getattr(proc, "args", []),
+                )
+
+            current_rss = self.get_process_rss_mb(proc.pid)
+            if current_rss > self.max_rss_mb:
+                self._terminate_process_group(proc)
+                raise FFmpegExecutionError(
+                    f"Subprocess exceeded RSS memory limit of {self.max_rss_mb:.1f} MB (used: {current_rss:.1f} MB)",
+                    returncode=-9,
+                    stderr=f"OOM: RSS {current_rss:.1f}MB > {self.max_rss_mb:.1f}MB",
+                    command=getattr(proc, "args", []),
+                )
+
+            time.sleep(self.poll_interval_sec)
+
+    def _terminate_process_group(self, proc: subprocess.Popen) -> None:
+        """Terminates process group with SIGTERM followed by SIGKILL."""
+        try:
+            pgid = os.getpgid(proc.pid)
+        except (ProcessLookupError, PermissionError, OSError):
+            pgid = proc.pid
+
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+            time.sleep(0.15)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        try:
+            proc.wait(timeout=1.0)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Core Execution Engine
 # ---------------------------------------------------------------------------
 
@@ -192,15 +284,19 @@ def run_ffmpeg(
     check: bool = True,
     binary: bool = False,
     stderr_file: Optional[Union[str, Path]] = None,
+    max_rss_mb: float = 4096.0,
 ) -> FFmpegCommandResult:
     """
     Executes an FFmpeg command within an isolated process group (start_new_session=True).
-    Guarantees SIGKILL process group termination on timeout and typed error translation.
+    Utilizes SubprocessWatchdog polling for timeout and memory enforcement.
+    Guarantees SIGKILL process group termination on timeout/OOM and typed error translation.
 
     ``stderr_file`` (R2): when provided, stderr is streamed to that path instead of
     being buffered in RAM — for long analyses (blackdetect over longform masters)
     logs can reach tens of MB. The returned result keeps a short tail in memory.
     """
+    import threading
+
     cmd_str_list = [str(c) for c in cmd]
     proc = None
     start_time = time.monotonic()
@@ -216,8 +312,41 @@ def run_ffmpeg(
             cwd=str(cwd) if cwd else None,
             start_new_session=True,
         )
-        stdout, stderr = proc.communicate(timeout=timeout)
+
+        poll_interval = min(0.1, max(0.005, timeout / 10.0))
+        watchdog = SubprocessWatchdog(
+            max_rss_mb=max_rss_mb,
+            timeout_sec=timeout,
+            poll_interval_sec=poll_interval,
+        )
+        watchdog_err: list[Exception] = []
+
+        def _monitor() -> None:
+            try:
+                watchdog.monitor_process(proc)
+            except Exception as ex:
+                watchdog_err.append(ex)
+
+        t_watch = threading.Thread(target=_monitor, daemon=True)
+        t_watch.start()
+
+        stdout, stderr = proc.communicate()
+        t_watch.join(timeout=1.0)
+
         duration_sec = time.monotonic() - start_time
+        if watchdog_err:
+            if check:
+                raise watchdog_err[0]
+            if isinstance(watchdog_err[0], FFmpegTimeoutError):
+                return FFmpegCommandResult(
+                    command=cmd_str_list,
+                    returncode=124,
+                    stdout="",
+                    stderr="TimeoutExpired",
+                    duration_sec=duration_sec,
+                )
+            raise watchdog_err[0]
+
         if stderr_file:
             try:
                 stderr_target.close()
@@ -244,27 +373,34 @@ def run_ffmpeg(
             logger.warning(
                 "FFmpeg command failed with returncode %d: %s",
                 res.returncode,
-                res.stderr.strip()[:400],
+                res.stderr.strip()[:400] if isinstance(res.stderr, str) else str(res.stderr)[:400],
             )
             raise FFmpegExecutionError(
-                f"FFmpeg command failed with returncode {res.returncode}: {res.stderr.strip()}",
+                f"FFmpeg command failed with returncode {res.returncode}: {res.stderr.strip() if isinstance(res.stderr, str) else ''}",
                 returncode=res.returncode,
-                stderr=res.stderr,
+                stderr=res.stderr if isinstance(res.stderr, str) else res.stderr.decode("utf-8", errors="replace"),
                 command=cmd_str_list,
             )
         return res
-    except subprocess.TimeoutExpired as te:
+    except (subprocess.TimeoutExpired, FFmpegTimeoutError) as te:
         duration_sec = time.monotonic() - start_time
         logger.warning("FFmpeg command timed out after %.1f seconds: %s", timeout, cmd_str_list)
         if proc:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
+                pgid = os.getpgid(proc.pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                pgid = proc.pid
+            try:
+                os.killpg(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
                 try:
                     proc.kill()
                 except Exception:
                     pass
-            proc.wait()
+            try:
+                proc.wait(timeout=1.0)
+            except Exception:
+                pass
         if check:
             raise FFmpegTimeoutError(
                 f"FFmpeg command timed out after {timeout} seconds",
@@ -339,13 +475,20 @@ def run_ffprobe(
     except subprocess.TimeoutExpired as te:
         if proc:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
+                pgid = os.getpgid(proc.pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                pgid = proc.pid
+            try:
+                os.killpg(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
                 try:
                     proc.kill()
                 except Exception:
                     pass
-            proc.wait()
+            try:
+                proc.wait(timeout=1.0)
+            except Exception:
+                pass
         raise FFmpegTimeoutError(
             f"FFprobe command timed out after {timeout} seconds",
             timeout=timeout,

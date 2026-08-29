@@ -184,12 +184,11 @@ def test_composite_with_explicit_audio_stream_copy(tmp_path: Path, monkeypatch: 
 
     captured_cmds: List[List[str]] = []
 
-    def mock_run(cmd: List[str], check: bool = True) -> Any:
-        captured_cmds.append(cmd)
+    def mock_run(cmd: List[str], check: bool = True, **kwargs: Any) -> Any:
+        captured_cmds.append([str(c) for c in cmd])
         return None
 
-    import subprocess
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr("src.media.realtime_video_engine.run_ffmpeg", mock_run)
 
     # 1. No subtitles -> should use -c:v copy
     engine._composite_with_explicit_audio(

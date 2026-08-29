@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from src.subtitles import create_subtitles, create_ass_subtitles, _clean_word_for_karaoke
+from lib.subtitles import create_subtitles, create_ass_subtitles, _clean_word_for_karaoke
 from src.templates.template_manager import SubtitleStyle
 
 
@@ -197,7 +197,7 @@ class TestSubtitles(unittest.TestCase):
         margin_v = int(parts[-2])
         self.assertGreaterEqual(outline, 4)
         self.assertGreaterEqual(shadow, 3)
-        self.assertTrue(180 <= margin_v <= 280, f"MarginV {margin_v} must be in 180..280 safe zone")
+        self.assertGreaterEqual(margin_v, 480, f"MarginV {margin_v} must be >= 480 for portrait safe zone")
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ class TestAdversarialM2_2(unittest.TestCase):
     # define su presupuesto de palabras y su duración mínima.
     # -------------------------------------------------------------------------
     @patch("src.pipeline.validate_prepublication")
-    @patch("src.video.create_video_thumbnail")
+    @patch("lib.video.create_video_thumbnail")
     @patch("src.llm.curate_batch_json", return_value={
         "title": "Short Title",
         "script": "Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.",
@@ -73,9 +73,9 @@ class TestAdversarialM2_2(unittest.TestCase):
     @patch("src.llm.translate_title", side_effect=lambda x, *a, **k: x)
     @patch("src.llm.clean_title", side_effect=lambda x: x)
     @patch("src.llm.curate_script")
-    @patch("src.tts.generate_audio")
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video")
+    @patch("lib.tts.generate_audio")
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video")
     @patch("src.drive.upload_to_drive_verified")
     @patch("src.youtube.uploader.upload_video")
     @patch("src.cleaner.verify_and_cleanup")
@@ -138,7 +138,7 @@ class TestAdversarialM2_2(unittest.TestCase):
             self.assertEqual(compose_kwargs.get("min_duration"), 0.0)
 
     @patch("src.pipeline.validate_prepublication")
-    @patch("src.video.create_video_thumbnail")
+    @patch("lib.video.create_video_thumbnail")
     @patch("src.llm.curate_batch_json", return_value={
         "title": "Short Title",
         "script": "Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.",
@@ -147,9 +147,9 @@ class TestAdversarialM2_2(unittest.TestCase):
     @patch("src.llm.translate_title", side_effect=lambda x, *a, **k: x)
     @patch("src.llm.clean_title", side_effect=lambda x: x)
     @patch("src.llm.curate_script")
-    @patch("src.tts.generate_audio")
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video")
+    @patch("lib.tts.generate_audio")
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video")
     @patch("src.drive.upload_to_drive_verified")
     @patch("src.youtube.uploader.upload_video")
     @patch("src.cleaner.verify_and_cleanup")
@@ -210,7 +210,7 @@ class TestAdversarialM2_2(unittest.TestCase):
             self.assertEqual(compose_kwargs.get("min_duration"), float(LONG_MIN_DURATION_SEC))
 
     @patch("src.pipeline.validate_prepublication")
-    @patch("src.video.create_video_thumbnail")
+    @patch("lib.video.create_video_thumbnail")
     @patch("src.llm.curate_batch_json", return_value={
         "title": "Short Title",
         "script": "Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.",
@@ -219,9 +219,9 @@ class TestAdversarialM2_2(unittest.TestCase):
     @patch("src.llm.translate_title", side_effect=lambda x, *a, **k: x)
     @patch("src.llm.clean_title", side_effect=lambda x: x)
     @patch("src.llm.curate_script")
-    @patch("src.tts.generate_audio")
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video")
+    @patch("lib.tts.generate_audio")
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video")
     @patch("src.drive.upload_to_drive_verified")
     @patch("src.youtube.uploader.upload_video")
     @patch("src.cleaner.verify_and_cleanup")

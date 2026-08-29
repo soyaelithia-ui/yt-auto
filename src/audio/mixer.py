@@ -11,11 +11,11 @@ Implements the broadcast mastering pipeline:
 from __future__ import annotations
 
 import os
-import subprocess
 import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
 from src.narrative.schema import AudioContract, SFXCue
 from src.audio.procedural_drone import ProceduralDroneSynthesizer
 from src.audio.vocal_chain import VocalChainProcessor
@@ -99,7 +99,7 @@ class CosmicAudioMixer:
                 "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={safe_dur}",
                 "-c:a", "pcm_s16le", str(sfx_track_wav)
             ]
-            subprocess.run(cmd, check=True)
+            run_ffmpeg(cmd, check=True)
             return sfx_track_wav
 
         # Synthesize individual SFX files
@@ -115,8 +115,11 @@ class CosmicAudioMixer:
             vol = max(0.1, min(2.0, float(cue.volume)))
             filter_parts.append(f"[{idx}:a]volume={vol},adelay={delay_ms}|{delay_ms},apad=whole_dur={total_dur}s[sfx{idx}]")
 
-        mix_inputs = "".join([f"[sfx{i}]" for i in range(len(sfx_timeline))])
-        filter_parts.append(f"{mix_inputs}amix=inputs={len(sfx_timeline)}:duration=longest:dropout_transition=0[sfx_out]")
+        if len(sfx_timeline) == 1:
+            filter_parts.append("[sfx0]anull[sfx_out]")
+        else:
+            mix_inputs = "".join([f"[sfx{i}]" for i in range(len(sfx_timeline))])
+            filter_parts.append(f"{mix_inputs}amix=inputs={len(sfx_timeline)}:duration=longest:dropout_transition=0[sfx_out]")
 
         cmd = [
             "ffmpeg", "-y", "-v", "error",
@@ -127,7 +130,7 @@ class CosmicAudioMixer:
             "-c:a", "pcm_s16le",
             str(sfx_track_wav)
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        run_ffmpeg(cmd, check=True)
         return sfx_track_wav
 
     def _execute_ffmpeg_mixdown(
@@ -141,9 +144,9 @@ class CosmicAudioMixer:
         """
         FFmpeg filtergraph sidechain ducking mix:
         - Voice splits into control and mix
-        - Drone is compressed when voice is active (ducked by ~10dB)
-        - SFX mixed in
-        - Mastered with loudnorm=I=-16:TP=-1.5:LRA=11
+        - Drone is compressed when voice is active (ducked by -18dB)
+        - SFX mixed in with adelay alignment
+        - Mastered with broadcast EBU R128 loudnorm=I=-14:TP=-1.5:LRA=11
         """
         filter_complex = (
             "[0:a]volume=1.0,asplit=2[v_ctrl][v_mix];"
@@ -151,7 +154,7 @@ class CosmicAudioMixer:
             "[drone_in][v_ctrl]sidechaincompress=threshold=0.08:ratio=5:attack=15:release=350[drone_ducked];"
             "[2:a]volume=0.85[sfx_in];"
             "[drone_ducked][v_mix][sfx_in]amix=inputs=3:duration=longest:dropout_transition=2[mixed];"
-            "[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+            "[mixed]loudnorm=I=-14:TP=-1.5:LRA=11[aout]"
         )
 
         cmd = [
@@ -168,6 +171,4 @@ class CosmicAudioMixer:
         ]
 
         logger.info("Ejecutando mezcla multipista con Sidechain Ducking y EBU R128...")
-        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        if res.returncode != 0:
-            raise RuntimeError(f"FFmpeg audio mixing failed: {res.stderr.decode('utf-8', errors='ignore')}")
+        run_ffmpeg(cmd, check=True)

@@ -215,17 +215,11 @@ def clean_run_intermediates(work_dir: str | Path) -> dict:
         # R2 audio and scene intermediate chunks
         "procedural_ambient_*.wav",
         "procedural_*.wav",
-        "speech.wav",
-        "narration.wav",
         "scene_*.mp4",
         "segment_*.mp4",
         "loop_*.mp4",
         "frame_*.png",
         "frame_*.jpg",
-        "subtitles.ass",
-        "subtitles.srt",
-        "subtitles.vtt",
-        "subtitles.json",
     ]
     seen_paths = set()
     for pattern in patterns:
@@ -240,6 +234,11 @@ def clean_run_intermediates(work_dir: str | Path) -> dict:
                 except OSError as exc:
                     logger.debug("Failed to remove intermediate file %s: %s", item, exc)
     return report
+
+
+def sweep_post_render_scratch(work_dir: str | Path) -> dict:
+    """Convenience entrypoint for post-render intermediate scratch artifact sweeping."""
+    return clean_run_intermediates(work_dir)
 
 
 def clean_untracked_temp_files(dry_run: bool = False, root: str | Path | None = None) -> dict:

@@ -200,9 +200,9 @@ def run_pipeline_once(
     from src.config import LONG_MIN_WORDS
     from src.llm import clean_title, compile_stories_to_target_words, translate_title
     from src.scraper import fetch_reddit_stories
-    from src.subtitles import create_ass_subtitles, create_subtitles, validate_subtitle_artifact
-    from src.tts import generate_audio
-    from src.video import (
+    from lib.subtitles import create_ass_subtitles, create_subtitles, validate_subtitle_artifact
+    from lib.tts import generate_audio
+    from lib.video import (
         compose_video,
         create_video_thumbnail,
     )
@@ -729,7 +729,7 @@ def run_pipeline_once(
                     video_res=video_res,
                     script_text=clean_script,
                 )
-                from src.subtitles import validate_subtitle_grammar_and_syntax, generate_safe_area_validation_artifact
+                from lib.subtitles import validate_subtitle_grammar_and_syntax, generate_safe_area_validation_artifact
                 validate_subtitle_grammar_and_syntax(str(srt_path))
                 validate_subtitle_grammar_and_syntax(str(ass_path))
 

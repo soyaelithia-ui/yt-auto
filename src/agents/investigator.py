@@ -32,11 +32,18 @@ STORY_JSON_SCHEMA: dict[str, Any] = {
 class StoryInvestigatorAgent(ProgrammaticAgent):
     """Researches story anomalies and generates video scripts via the Pro harness."""
 
-    def __init__(self, model: str = CANONICAL_MODEL) -> None:
+    def __init__(
+        self,
+        model: str = CANONICAL_MODEL,
+        instance_id: str = "pipeline_creative",
+        reasoning_effort: str = "high",
+    ) -> None:
         super().__init__(
             system_instructions=STORY_SYSTEM_INSTRUCTION,
             model=model,
             role_name="story-investigator-agent",
+            instance_id=instance_id,
+            reasoning_effort=reasoning_effort,
             task_result_path=SCRIPT_RESULT_PATH,
             json_schema=STORY_JSON_SCHEMA,
         )

@@ -9,9 +9,9 @@ from unittest.mock import patch, MagicMock
 from src.db import init_db, enqueue_story, get_pending_story
 from src.scraper import fetch_reddit_stories
 from src.llm import curate_script
-from src.tts import generate_audio
-from src.subtitles import create_subtitles
-from src.video import compose_video
+from lib.tts import generate_audio
+from lib.subtitles import create_subtitles
+from lib.video import compose_video
 from src.drive import upload_to_drive
 from src.cleaner import verify_and_cleanup
 from src.youtube.uploader import upload_video, upload_video_via_api, upload_video_via_playwright

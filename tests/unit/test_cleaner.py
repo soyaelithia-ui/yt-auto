@@ -170,23 +170,25 @@ class TestVPSCleaner(unittest.TestCase):
     def test_clean_run_intermediates_expanded_patterns(self):
         run_dir = self.work_root / "run_expanded"
         run_dir.mkdir()
-        files_to_clean = [
+        scratch_files_to_clean = [
             "procedural_ambient_drama.wav",
             "procedural_synth.wav",
-            "speech.wav",
-            "narration.wav",
             "scene_001.mp4",
             "segment_002.mp4",
             "loop_003.mp4",
             "concat_procedural_scenes.txt",
-            "subtitles.ass",
-            "subtitles.srt",
-            "subtitles.json",
             "frame_0001.png",
             "ffmpeg_master.log",
         ]
-        for name in files_to_clean:
-            (run_dir / name).write_bytes(b"INTERMEDIATE_DATA")
+        canonical_files_to_preserve = [
+            "speech.wav",
+            "narration.wav",
+            "subtitles.ass",
+            "subtitles.srt",
+            "subtitles.json",
+        ]
+        for name in scratch_files_to_clean + canonical_files_to_preserve:
+            (run_dir / name).write_bytes(b"DATA")
 
         keep_video = run_dir / "video.mp4"
         keep_video.write_bytes(b"FINAL_VIDEO")
@@ -196,12 +198,14 @@ class TestVPSCleaner(unittest.TestCase):
         keep_marker.write_text('{"run_id": "run_expanded", "active": false}')
 
         report = clean_run_intermediates(run_dir)
-        self.assertEqual(report["deleted_files_count"], len(files_to_clean))
+        self.assertEqual(report["deleted_files_count"], len(scratch_files_to_clean))
         self.assertTrue(keep_video.exists())
         self.assertTrue(keep_thumb.exists())
         self.assertTrue(keep_marker.exists())
-        for name in files_to_clean:
+        for name in scratch_files_to_clean:
             self.assertFalse((run_dir / name).exists())
+        for name in canonical_files_to_preserve:
+            self.assertTrue((run_dir / name).exists())
 
     def test_clean_run_intermediates_includes_loop_concat_and_safe_area(self):
         run_dir = self.work_root / "run_loop_789"

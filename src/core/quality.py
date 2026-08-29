@@ -590,7 +590,7 @@ def validate_prepublication(
     if subtitle is not None and subtitle.is_file():
         if subtitle.suffix.lower() == ".srt":
             try:
-                from src.subtitles import validate_subtitle_artifact
+                from lib.subtitles import validate_subtitle_artifact
 
                 subtitle_facts = validate_subtitle_artifact(
                     str(subtitle), duration_sec=float(report.facts.get("duration") or 0)

@@ -1454,7 +1454,7 @@ class TelegramReviewBot:
             return DeliveryResult(ok=False, error="Missing video_id argument")
         video_id, channel = parsed
 
-        from src import youtube_control as ctl
+        from src.youtube import control as ctl
 
         if command == "stats":
             result = ctl.get_video_stats(video_id, channel)
@@ -1597,7 +1597,7 @@ class TelegramReviewBot:
             )
             return DeliveryResult(ok=True)
 
-        from src import youtube_control as ctl
+        from src.youtube import control as ctl
 
         if step == "menu":
             self.answer_callback_query(callback_id, "Menú")
@@ -1657,7 +1657,7 @@ class TelegramReviewBot:
 
     def _control_run(self, op: str, video_id: str, channel: str) -> str:
         """Execute a non-destructive control action and format the reply."""
-        from src import youtube_control as ctl
+        from src.youtube import control as ctl
 
         if op == "stats":
             res = ctl.get_video_stats(video_id, channel)

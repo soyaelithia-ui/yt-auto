@@ -1,5 +1,5 @@
 """
-src/narrative/archetypes.py - Archetypal story templates and tension progression structures.
+src/narrative/archetypes.py - Archetypal story templates, tension progression structures, and Rec.709 palette mappings.
 """
 from __future__ import annotations
 
@@ -9,17 +9,109 @@ from src.narrative.schema import (
     AudioContract,
     CosmicScriptContract,
     NarrativeArchetype,
+    Rec709Palette,
     SceneContract,
     SFXCue,
     VideoFormat,
     VoicePreset,
 )
 
+REC709_PALETTE_TABLES: Dict[str, Rec709Palette] = {
+    "cosmic_horror": Rec709Palette(
+        primary="#041421",
+        secondary="#0a2233",
+        accent="#00e5a3",
+        shadow="#000305",
+        highlight="#b0fff1",
+        kelvin=6500,
+        lut_profile="cosmic_abyss_rec709",
+    ),
+    "creepypasta": Rec709Palette(
+        primary="#12080a",
+        secondary="#261014",
+        accent="#cc1824",
+        shadow="#040102",
+        highlight="#ffd8dc",
+        kelvin=3200,
+        lut_profile="slasher_crimson_noir",
+    ),
+    "scp_foundation": Rec709Palette(
+        primary="#030e06",
+        secondary="#082110",
+        accent="#00ff66",
+        shadow="#000502",
+        highlight="#c8ffe0",
+        kelvin=5400,
+        lut_profile="crt_terminal_rec709",
+    ),
+    "drama_aita": Rec709Palette(
+        primary="#181014",
+        secondary="#2c1c22",
+        accent="#ffaa44",
+        shadow="#060304",
+        highlight="#fff2e0",
+        kelvin=4000,
+        lut_profile="warm_interior_drama",
+    ),
+    NarrativeArchetype.HYDROACOUSTIC_TELEMETRY.value: Rec709Palette(
+        primary="#02111b",
+        secondary="#072235",
+        accent="#00e5a3",
+        shadow="#000305",
+        highlight="#b0fff1",
+        kelvin=6500,
+        lut_profile="hydroacoustic_rec709",
+    ),
+    NarrativeArchetype.PROCEDURAL_INSTITUTIONAL_MANUAL.value: Rec709Palette(
+        primary="#05120a",
+        secondary="#0b2416",
+        accent="#00ff66",
+        shadow="#000502",
+        highlight="#c8ffe0",
+        kelvin=5400,
+        lut_profile="crt_terminal_rec709",
+    ),
+    NarrativeArchetype.SPECULATIVE_BIOLOGICAL_DOSSIER.value: Rec709Palette(
+        primary="#140611",
+        secondary="#270f22",
+        accent="#d926a9",
+        shadow="#040103",
+        highlight="#ffd6f6",
+        kelvin=5800,
+        lut_profile="biomorphic_specimen_rec709",
+    ),
+}
+
+
+def resolve_archetype_for_topic(topic: Optional[str]) -> NarrativeArchetype:
+    """Analyzes open-domain topic text to determine the best-fit narrative archetype."""
+    if not topic or not topic.strip():
+        return NarrativeArchetype.HYDROACOUSTIC_TELEMETRY
+
+    t = topic.lower()
+
+    # Hydroacoustic / deep sea / sonar / trench / ocean keywords
+    if any(k in t for k in ("sea", "mar ", "marino", "oceano", "océano", "fosa", "abismo", "marianas", "sonar", "submarino", "hydrophone", "depth", "water", "aquatic", "underwater")):
+        return NarrativeArchetype.HYDROACOUSTIC_TELEMETRY
+
+    # Procedural / bunker / protocol / institutional / containment / facility / vault keywords
+    if any(k in t for k in ("bunker", "búnker", "protocol", "protocolo", "manual", "containment", "contención", "bóveda", "boveda", "facility", "laboratorio", "guardia", "directiva", "sitio-", "scp-", "collider")):
+        return NarrativeArchetype.PROCEDURAL_INSTITUTIONAL_MANUAL
+
+    # Specimen / biological / organism / leviathan / dissection / cellular / creature keywords
+    if any(k in t for k in ("bio", "biológico", "biologico", "organism", "organismo", "leviathan", "leviatán", "dossier", "expediente", "muestra", "anatom", "tejido", "celular", "especimen", "espécimen")):
+        return NarrativeArchetype.SPECULATIVE_BIOLOGICAL_DOSSIER
+
+    # Default canonical
+    return NarrativeArchetype.HYDROACOUSTIC_TELEMETRY
+
+
 ARCHETYPE_PRESETS: Dict[NarrativeArchetype, Dict[str, Any]] = {
     NarrativeArchetype.HYDROACOUSTIC_TELEMETRY: {
         "title_template": "REGISTRO HIDROACÚSTICO // SECTOR FO-73",
         "voice_preset": VoicePreset.HYDROPHONE_RADIO,
         "drone_freq": 34.0,
+        "palette": REC709_PALETTE_TABLES[NarrativeArchetype.HYDROACOUSTIC_TELEMETRY.value],
         "shader_sequence": ["RADAR_HYDROACOUSTIC", "MONOLITHS_RAYMARCHING", "RADAR_HYDROACOUSTIC"],
         "hud_baseline": "SONAR PASIVO: FRECUENCIA NOMINAL",
         "hud_escalation": "ANOMALÍA BAROMÉTRICA: -11,400 METROS",
@@ -38,6 +130,7 @@ ARCHETYPE_PRESETS: Dict[NarrativeArchetype, Dict[str, Any]] = {
         "title_template": "PROTOCOLO DE CONTENCIÓN // DIRECTIVA C-88",
         "voice_preset": VoicePreset.INTERCOM_BUNKER,
         "drone_freq": 48.0,
+        "palette": REC709_PALETTE_TABLES[NarrativeArchetype.PROCEDURAL_INSTITUTIONAL_MANUAL.value],
         "shader_sequence": ["MONOLITHS_RAYMARCHING", "RADAR_HYDROACOUSTIC", "GRAVITATIONAL_SINGULARITY"],
         "hud_baseline": "NIVEL DE ACCESO 5 // BÚNKER SUBTERRÁNEO",
         "hud_escalation": "RESONANCIA DIMENSIONAL ELEVADA",
@@ -56,6 +149,7 @@ ARCHETYPE_PRESETS: Dict[NarrativeArchetype, Dict[str, Any]] = {
         "title_template": "EXPEDIENTE ANATÓMICO // ENTIDAD LEVIATÁN-0",
         "voice_preset": VoicePreset.BLACKBOX_TAPE,
         "drone_freq": 32.0,
+        "palette": REC709_PALETTE_TABLES[NarrativeArchetype.SPECULATIVE_BIOLOGICAL_DOSSIER.value],
         "shader_sequence": ["GRAVITATIONAL_SINGULARITY", "MONOLITHS_RAYMARCHING", "GRAVITATIONAL_SINGULARITY"],
         "hud_baseline": "REGISTRO DE DISECCIÓN // CRÍPTICO",
         "hud_escalation": "DISTORSIÓN LOCAL DEL ESPACIO",

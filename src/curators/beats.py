@@ -225,6 +225,6 @@ def calculate_beat_shot_durations(
 
 def expand_beat_shot_durations(durations: List[float]) -> List[float]:
     """Expands narrative beat shot durations to strictly satisfy 8-15s visual cadence rules."""
-    from src.video import expand_durations_to_cadence
+    from lib.video import expand_durations_to_cadence
     return expand_durations_to_cadence(durations)
 

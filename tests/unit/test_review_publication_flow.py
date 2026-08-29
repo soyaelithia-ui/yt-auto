@@ -18,8 +18,8 @@ def _render_fixture(monkeypatch, tmp_path):
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia de prueba")
     monkeypatch.setattr("src.llm.translate_title", lambda *args, **kwargs: "Titulo")
     monkeypatch.setattr("src.pipeline.is_spanish_neutral", lambda *args, **kwargs: True)
-    monkeypatch.setattr("src.tts.generate_audio", lambda script, output, **kwargs: _audio(output))
-    monkeypatch.setattr("src.subtitles.create_subtitles", lambda timestamps, output, **kwargs: _text(output))
+    monkeypatch.setattr("lib.tts.generate_audio", lambda script, output, **kwargs: _audio(output))
+    monkeypatch.setattr("lib.subtitles.create_subtitles", lambda timestamps, output, **kwargs: _text(output))
     def _mock_loop_render(*args, **kwargs):
         # Bound method: args = (self, manifest_path, output_video_path, ...)
         out = args[2] if len(args) > 2 else kwargs.get("output_video_path")
@@ -27,7 +27,7 @@ def _render_fixture(monkeypatch, tmp_path):
 
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", _mock_loop_render)
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", lambda *args, **kwargs: str(tmp_path / "fake_loop.mp4"))
-    monkeypatch.setattr("src.video.create_video_thumbnail", lambda *args, **kwargs: _image(args[2]))
+    monkeypatch.setattr("lib.video.create_video_thumbnail", lambda *args, **kwargs: _image(args[2]))
     manager = MagicMock()
     monkeypatch.setattr("src.asset_manager.get_asset_manager", lambda: _assets(tmp_path))
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: _report())

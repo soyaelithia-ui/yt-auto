@@ -22,12 +22,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR))
-
+from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
 from src.core.scenic_detector import detect_scenic_loop, detect_subtitle_style
 from src.log import get_logger
 
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 logger = get_logger("realtime_video_engine")
 
 # Auto-detect available Chromium Headless Shell or browser binaries
@@ -1009,7 +1008,16 @@ class RealtimeVideoEngine:
         if self.chrome_exec:
             launch_kwargs["executable_path"] = self.chrome_exec
 
-        with subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        proc = None
+        stderr_log = self.work_dir / f"ffmpeg_render_{time.time_ns()}.log"
+        stderr_f = open(stderr_log, "wb+")
+        try:
+            proc = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stderr=stderr_f,
+                start_new_session=True,
+            )
             with sync_playwright() as p:
                 browser = p.chromium.launch(**launch_kwargs)
                 page = browser.new_page(viewport={"width": width, "height": height})
@@ -1022,15 +1030,55 @@ class RealtimeVideoEngine:
                         [frame_idx, total_frames],
                     )
                     frame_bytes = canvas_elem.screenshot(type="png")
-                    proc.stdin.write(frame_bytes)
+                    try:
+                        proc.stdin.write(frame_bytes)
+                    except BrokenPipeError:
+                        break
 
                 browser.close()
 
             proc.stdin.close()
-            stderr_out = proc.stderr.read()
             proc.wait()
             if proc.returncode != 0:
-                raise RuntimeError(f"FFmpeg render pipeline failed: {stderr_out.decode('utf-8', errors='ignore')}")
+                stderr_f.seek(0)
+                err_text = stderr_f.read().decode("utf-8", errors="ignore")
+                raise FFmpegExecutionError(
+                    f"FFmpeg render pipeline failed with returncode {proc.returncode}: {err_text}",
+                    returncode=proc.returncode,
+                    stderr=err_text,
+                    command=ffmpeg_cmd,
+                )
+        except BrokenPipeError:
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                proc.wait()
+            raise FFmpegExecutionError(
+                "FFmpeg render pipeline failed: Broken pipe",
+                returncode=proc.returncode if proc else None,
+                command=ffmpeg_cmd,
+            )
+        finally:
+            if proc:
+                if proc.stdin and not proc.stdin.closed:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+                if proc.poll() is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    proc.wait()
+            try:
+                stderr_f.close()
+                if stderr_log.is_file() and (proc is None or proc.returncode == 0):
+                    stderr_log.unlink(missing_ok=True)
+            except Exception:
+                pass
 
         render_elapsed = time.time() - start_render_t
         logger.info("Renderizado procedural completado en %.2fs (%.1f fps efectivos)", render_elapsed, total_frames / max(0.1, render_elapsed))
@@ -1105,7 +1153,7 @@ class RealtimeVideoEngine:
                 str(output_final),
             ]
 
-        subprocess.run(cmd, check=True)
+        run_ffmpeg(cmd, check=True)
 
 
 def main() -> int:

@@ -423,7 +423,7 @@ class ScenePlannerCompositorAgent:
         # Safe area boundaries
         safe_area = {
             "margin_top": 60 if res[0] > res[1] else 120,
-            "margin_bottom": 124 if res[0] > res[1] else 330,
+            "margin_bottom": 124 if res[0] > res[1] else 480,
             "margin_left": 85 if res[0] > res[1] else 40,
             "margin_right": 85 if res[0] > res[1] else 40,
         }

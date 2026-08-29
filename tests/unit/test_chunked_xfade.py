@@ -130,8 +130,8 @@ class TestChunkedFilterIntegration:
                 with patch("subprocess.run") as mock_run:
                     mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                     with patch("lib.video.validate_video_format", return_value=True):
-                        # also need src.video validate patch for compose
-                        with patch("src.video.validate_video_format", return_value=True):
+                        # also need lib.video validate patch for compose
+                        with patch("lib.video.validate_video_format", return_value=True):
                             compose_video(
                                 audio,
                                 "",
@@ -168,7 +168,7 @@ class TestChunkedFilterIntegration:
                 with patch("subprocess.run") as mock_run:
                     mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                     with patch("lib.video.validate_video_format", return_value=True):
-                        with patch("src.video.validate_video_format", return_value=True):
+                        with patch("lib.video.validate_video_format", return_value=True):
                             compose_video(
                                 audio,
                                 "",
@@ -201,7 +201,7 @@ class TestChunkedFilterIntegration:
                     with patch("subprocess.run") as mock_run:
                         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                         with patch("lib.video.validate_video_format", return_value=True):
-                            with patch("src.video.validate_video_format", return_value=True):
+                            with patch("lib.video.validate_video_format", return_value=True):
                                 compose_video(
                                     audio,
                                     "",
@@ -229,7 +229,7 @@ class TestChunkedFilterIntegration:
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                 with patch("lib.video.validate_video_format", return_value=True):
-                    with patch("src.video.validate_video_format", return_value=True):
+                    with patch("lib.video.validate_video_format", return_value=True):
                         compose_video(
                             audio,
                             "",
@@ -261,7 +261,7 @@ class TestChunkedFilterIntegration:
                 with patch("subprocess.run") as mock_run:
                     mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                     with patch("lib.video.validate_video_format", return_value=True):
-                        with patch("src.video.validate_video_format", return_value=True):
+                        with patch("lib.video.validate_video_format", return_value=True):
                             compose_video(
                                 audio,
                                 "",

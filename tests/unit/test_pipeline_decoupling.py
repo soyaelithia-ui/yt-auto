@@ -63,7 +63,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
     @patch("src.pipeline.validate_prepublication")
     @patch("src.youtube.uploader.upload_video")
     @patch("src.media.loop_engine.run_ffmpeg")
-    @patch("src.tts.generate_audio", side_effect=_fake_generate_audio)
+    @patch("lib.tts.generate_audio", side_effect=_fake_generate_audio)
     @patch("src.llm.curate_script")
     def test_pipeline_defaults_to_loop_mode(
         self, mock_curate, mock_audio, mock_ffmpeg, mock_upload, mock_validate
@@ -108,7 +108,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
 
     @patch("src.pipeline.validate_prepublication")
     @patch("src.youtube.uploader.upload_video")
-    @patch("src.tts.generate_audio", side_effect=_fake_generate_audio)
+    @patch("lib.tts.generate_audio", side_effect=_fake_generate_audio)
     @patch("src.llm.curate_script")
     def test_subtitles_disabled_by_default(self, mock_curate, mock_audio, mock_upload, mock_validate):
         """Subtitles generation is disabled by default in pipeline execution."""
@@ -119,8 +119,8 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
         mock_report = QualityReport(channel=CanonicalChannel.MOKU)
         mock_validate.return_value = mock_report
 
-        with patch("src.subtitles.create_ass_subtitles") as mock_ass, \
-             patch("src.subtitles.create_subtitles") as mock_srt, \
+        with patch("lib.subtitles.create_ass_subtitles") as mock_ass, \
+             patch("lib.subtitles.create_subtitles") as mock_srt, \
              patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_fake_loop_render) as mock_loop_render, \
              patch("src.core.quality.ffprobe") as mock_probe:
 
@@ -145,7 +145,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
 
     @patch("src.pipeline.validate_prepublication")
     @patch("src.youtube.uploader.upload_video")
-    @patch("src.tts.generate_audio", side_effect=_fake_generate_audio)
+    @patch("lib.tts.generate_audio", side_effect=_fake_generate_audio)
     @patch("src.llm.curate_script")
     def test_subtitles_enabled_when_explicitly_flagged(self, mock_curate, mock_audio, mock_upload, mock_validate):
         """Subtitles generation runs when enable_subtitles=True."""
@@ -156,10 +156,10 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
         mock_report = QualityReport(channel=CanonicalChannel.MOKU)
         mock_validate.return_value = mock_report
 
-        with patch("src.subtitles.create_ass_subtitles", side_effect=_fake_create_ass) as mock_ass, \
-             patch("src.subtitles.create_subtitles", side_effect=_fake_create_srt) as mock_srt, \
-             patch("src.subtitles.validate_subtitle_grammar_and_syntax"), \
-             patch("src.subtitles.generate_safe_area_validation_artifact"), \
+        with patch("lib.subtitles.create_ass_subtitles", side_effect=_fake_create_ass) as mock_ass, \
+             patch("lib.subtitles.create_subtitles", side_effect=_fake_create_srt) as mock_srt, \
+             patch("lib.subtitles.validate_subtitle_grammar_and_syntax"), \
+             patch("lib.subtitles.generate_safe_area_validation_artifact"), \
              patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_fake_loop_render) as mock_loop_render, \
              patch("src.core.quality.ffprobe") as mock_probe:
 

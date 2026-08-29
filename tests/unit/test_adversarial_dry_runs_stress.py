@@ -67,10 +67,10 @@ class TestThreeLaneDryRunsStress:
         # Mock external APIs (translation, TTS, Telegram, YouTube) to ensure 100% offline determinism
         with patch("src.scraper.fetch_reddit_stories", return_value=[]), \
              patch("src.llm.curate_script", return_value=story_content), \
-             patch("src.tts.generate_audio") as mock_audio, \
-             patch("src.subtitles.create_subtitles") as mock_subs, \
-             patch("src.subtitles.create_ass_subtitles") as mock_ass, \
-             patch("src.video.compose_video") as mock_video, \
+             patch("lib.tts.generate_audio") as mock_audio, \
+             patch("lib.subtitles.create_subtitles") as mock_subs, \
+             patch("lib.subtitles.create_ass_subtitles") as mock_ass, \
+             patch("lib.video.compose_video") as mock_video, \
              patch("src.drive.upload_to_drive") as mock_drive, \
              patch("src.youtube.uploader.upload_video") as mock_yt:
 

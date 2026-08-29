@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.video import (
+from lib.video import (
     compose_video,
     get_media_duration,
     validate_video_format,
@@ -71,8 +71,8 @@ class TestVideo(unittest.TestCase):
 
     @patch("lib.video.validate_video_format", return_value=True)
     @patch("lib.video.get_media_duration", return_value=60.0)
-    @patch("src.video.validate_video_format", return_value=True)
-    @patch("src.video.get_media_duration", return_value=60.0)
+    @patch("lib.video.validate_video_format", return_value=True)
+    @patch("lib.video.get_media_duration", return_value=60.0)
     @patch("subprocess.run")
     def test_compose_video_over_120s_success(self, mock_run, *args):
         """Test synthesis for duration > 120.0 seconds."""
@@ -120,8 +120,8 @@ class TestVideo(unittest.TestCase):
 
         valid_json = '{"format": {"format_name": "mp4", "duration": "605.0"}, "streams": [{"codec_type": "video", "codec_name": "h264"}, {"codec_type": "audio", "codec_name": "aac"}]}'
         with patch("subprocess.run") as mock_run, \
-             patch("src.video.validate_video_format", return_value=True), \
-             patch("src.video.get_media_duration", return_value=60.0), \
+             patch("lib.video.validate_video_format", return_value=True), \
+             patch("lib.video.get_media_duration", return_value=60.0), \
              patch("lib.video.validate_video_format", return_value=True), \
              patch("lib.video.get_media_duration", return_value=60.0):
             mock_run.return_value = MagicMock(stdout=valid_json, returncode=0)
@@ -181,8 +181,8 @@ class TestVideo(unittest.TestCase):
 
         valid_json = '{"format": {"format_name": "mp4", "duration": "605.0"}, "streams": [{"codec_type": "video", "codec_name": "h264"}, {"codec_type": "audio", "codec_name": "aac"}]}'
         with patch("subprocess.run") as mock_run, \
-             patch("src.video.validate_video_format", return_value=True), \
-             patch("src.video.get_media_duration", return_value=60.0), \
+             patch("lib.video.validate_video_format", return_value=True), \
+             patch("lib.video.get_media_duration", return_value=60.0), \
              patch("lib.video.validate_video_format", return_value=True), \
              patch("lib.video.get_media_duration", return_value=60.0):
             mock_run.return_value = MagicMock(stdout=valid_json, returncode=0)
@@ -261,8 +261,8 @@ class TestVideo(unittest.TestCase):
         out_video = os.path.join(self.temp_dir.name, "telegram_out.mp4")
 
         with patch("subprocess.run") as mock_run, \
-             patch("src.video.validate_video_format", return_value=True), \
-             patch("src.video.get_media_duration", return_value=60.0), \
+             patch("lib.video.validate_video_format", return_value=True), \
+             patch("lib.video.get_media_duration", return_value=60.0), \
              patch("lib.video.validate_video_format", return_value=True), \
              patch("lib.video.get_media_duration", return_value=60.0):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -298,8 +298,8 @@ class TestVideo(unittest.TestCase):
 
         # Test environment -> 720x1280 test scale
         with patch("subprocess.run") as mock_run, \
-             patch("src.video.validate_video_format", return_value=True), \
-             patch("src.video.get_media_duration", return_value=60.0), \
+             patch("lib.video.validate_video_format", return_value=True), \
+             patch("lib.video.get_media_duration", return_value=60.0), \
              patch("lib.video.validate_video_format", return_value=True), \
              patch("lib.video.get_media_duration", return_value=60.0):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -322,10 +322,10 @@ class TestVideo(unittest.TestCase):
 
         with patch("subprocess.run") as mock_run, \
              patch("lib.video.is_test_environment", return_value=False), \
-             patch("src.video.is_test_environment", return_value=False), \
+             patch("lib.video.is_test_environment", return_value=False), \
              patch("src.asset_manager.get_asset_manager", return_value=manager), \
-             patch("src.video.validate_video_format", return_value=True), \
-             patch("src.video.get_media_duration", return_value=60.0), \
+             patch("lib.video.validate_video_format", return_value=True), \
+             patch("lib.video.get_media_duration", return_value=60.0), \
              patch("lib.video.validate_video_format", return_value=True), \
              patch("lib.video.get_media_duration", return_value=60.0):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -402,8 +402,8 @@ class TestVideo(unittest.TestCase):
 
         valid_json = '{"format": {"format_name": "mp4", "duration": "605.0"}, "streams": [{"codec_type": "video", "codec_name": "h264", "pix_fmt": "yuv420p"}, {"codec_type": "audio", "codec_name": "aac", "channels": 2, "sample_rate": 44100}]}'
         with patch("subprocess.run") as mock_run, \
-             patch("src.video.is_test_environment", return_value=False), \
-             patch("src.video.has_faststart", return_value=False):
+             patch("lib.video.is_test_environment", return_value=False), \
+             patch("lib.video.has_faststart", return_value=False):
             mock_run.return_value = MagicMock(stdout=valid_json, returncode=0)
             with self.assertRaises(ValueError) as ctx:
                 validate_video_format(v_file, min_duration=600.0)
@@ -426,7 +426,7 @@ class TestVideo(unittest.TestCase):
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, "", "", out_video,
                     duration_sec=10.0,
@@ -481,7 +481,7 @@ class TestVideo(unittest.TestCase):
         # documented default for the duration of this test.
         with patch("subprocess.run") as mock_run, patch("lib.video.RENDER_CRF", 24):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, "", "", out_video,
                     duration_sec=10.0,
@@ -553,7 +553,7 @@ class TestVideo(unittest.TestCase):
         def _capture(env):
             with patch.dict(os.environ, env), patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-                with patch("src.video.validate_video_format", return_value=True):
+                with patch("lib.video.validate_video_format", return_value=True):
                     compose_video(
                         audio_path, "", "", out_video,
                         duration_sec=10.0,
@@ -645,7 +645,7 @@ class TestVideo(unittest.TestCase):
             return MagicMock(returncode=0, stdout="", stderr="")
 
         with patch("subprocess.run", side_effect=_grab_prescaled):
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, "", "", out_video,
                     duration_sec=5.0,
@@ -690,7 +690,7 @@ class TestVideo(unittest.TestCase):
         with patch.dict(os.environ, {"EASED_PAN": "0"}):
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-                with patch("src.video.validate_video_format", return_value=True):
+                with patch("lib.video.validate_video_format", return_value=True):
                     compose_video(
                         audio_path, "", "", out_video,
                         duration_sec=10.0,
@@ -724,7 +724,7 @@ class TestVideo(unittest.TestCase):
         out_video = os.path.join(self.temp_dir.name, "font_out.mp4")
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, sub_path, "", out_video,
                     duration_sec=5.0,
@@ -763,7 +763,7 @@ class TestVideo(unittest.TestCase):
         out_video = os.path.join(self.temp_dir.name, "subs_out.mp4")
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, sub_path, "", out_video,
                     duration_sec=5.0,
@@ -798,7 +798,7 @@ class TestVideo(unittest.TestCase):
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 compose_video(
                     audio_path, "", "", out_video,
                     duration_sec=10.0,

@@ -82,7 +82,7 @@ class TestFontVendoring(unittest.TestCase):
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-            with patch("src.video.validate_video_format", return_value=True):
+            with patch("lib.video.validate_video_format", return_value=True):
                 shared_video.compose_video(
                     audio_path, subtitle_path, "", out_video,
                     duration_sec=5.0,

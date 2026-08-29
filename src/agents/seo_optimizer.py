@@ -13,7 +13,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 
@@ -40,9 +40,17 @@ SYSTEM_INSTRUCTIONS = (
 class SeoOptimizerAgent:
     """Agent 6: High-conversion YouTube SEO & Metadata Optimizer."""
 
-    def __init__(self, schema_file: Optional[Path] = None, model: str = CANONICAL_MODEL) -> None:
+    def __init__(
+        self,
+        schema_file: Optional[Path] = None,
+        model: str = CANONICAL_MODEL,
+        instance_id: str = "pipeline_seo",
+        reasoning_effort: str = "low",
+    ) -> None:
         self.schema_path = schema_file or SCHEMA_PATH
         self.model = model
+        self.instance_id = instance_id
+        self.reasoning_effort = reasoning_effort
         self._schema: Optional[Dict[str, Any]] = None
         if self.schema_path.is_file():
             with open(self.schema_path, "r", encoding="utf-8") as f:
@@ -110,15 +118,18 @@ class SeoOptimizerAgent:
                     system_instructions=SYSTEM_INSTRUCTIONS,
                     model=self.model,
                     role_name="seo-optimizer",
+                    instance_id=self.instance_id,
+                    reasoning_effort=self.reasoning_effort,
                     json_schema=self.schema_path if self.schema_path.is_file() else None,
                 )
                 result_path = agent.run(task_prompt)
                 consumed = ProgrammaticAgent.consume(result_path)
-                structured = consumed.get("structured_output")
+                output_doc = consumed.get("output", {})
+                structured = output_doc.get("structured_output")
                 if isinstance(structured, dict) and "selected_title" in structured:
                     self.validate_metadata(structured)
                     return structured
-                parsed = parse_json_reply(consumed.get("response", ""))
+                parsed = parse_json_reply(output_doc.get("reply", ""))
                 if parsed and "selected_title" in parsed:
                     self.validate_metadata(parsed)
                     return parsed

@@ -56,6 +56,10 @@ def _env_float(name: str, default: float) -> float:
     return value
 
 
+def _env_signed_float(name: str, default: float) -> float:
+    return float(os.environ.get(name, str(default)))
+
+
 @dataclass(frozen=True)
 class SubtitleSettings:
     template: str
@@ -134,6 +138,7 @@ class RuntimeSettings:
     short_compositor: str = "loop"
     video_engine: str = "loop"
     enable_subtitles: bool = False
+    continuous_engine_v2: bool = True
 
     def channel(self, value: str | CanonicalChannel) -> ChannelSettings:
         return self.channels[canonical_channel(value)]
@@ -303,6 +308,7 @@ SETTINGS = RuntimeSettings(
     short_compositor=os.environ.get("SHORT_COMPOSITOR", os.environ.get("VIDEO_ENGINE", os.environ.get("COMPOSITOR", "loop"))),
     video_engine=os.environ.get("VIDEO_ENGINE", os.environ.get("COMPOSITION_ENGINE", "loop")),
     enable_subtitles=os.environ.get("ENABLE_SUBTITLES", "0").strip().lower() in ("1", "true", "yes"),
+    continuous_engine_v2=os.environ.get("CONTINUOUS_ENGINE_V2", "1").strip().lower() in ("1", "true", "yes"),
 )
 
 
@@ -449,6 +455,21 @@ DEFAULT_LANG = "es"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+
+# Continuous Engine V2 configuration
+CONTINUOUS_ENGINE_V2: bool = (
+    os.environ.get("CONTINUOUS_ENGINE_V2", "1").strip().lower() in ("1", "true", "yes")
+)
+SIMHASH_MIN_HAMMING_DISTANCE: int = _env_int("SIMHASH_MIN_HAMMING_DISTANCE", 4)
+SIMHASH_HISTORY_WINDOW: int = _env_int("SIMHASH_HISTORY_WINDOW", 100)
+MIN_FREE_DISK_GB: float = _env_float("YT_MIN_FREE_DISK_GB", 5.0)
+RENDER_CONCURRENCY_LIMIT: int = _env_int("RENDER_CONCURRENCY_LIMIT", 1)
+SYNTHESIS_CONCURRENCY_LIMIT: int = _env_int("SYNTHESIS_CONCURRENCY_LIMIT", 2)
+EBU_R128_TARGET_LUFS: float = _env_signed_float("EBU_R128_TARGET_LUFS", -14.0)
+EBU_R128_TRUE_PEAK: float = _env_signed_float("EBU_R128_TRUE_PEAK", -1.5)
+EBU_R128_LRA: float = _env_float("EBU_R128_LRA", 11.0)
+SUBPROCESS_WATCHDOG_TIMEOUT_SEC: float = _env_float("SUBPROCESS_WATCHDOG_TIMEOUT_SEC", 180.0)
+SUBPROCESS_WATCHDOG_MAX_RSS_MB: float = _env_float("SUBPROCESS_WATCHDOG_MAX_RSS_MB", 4096.0)
 
 
 def resolve_channel2_token_path() -> str:

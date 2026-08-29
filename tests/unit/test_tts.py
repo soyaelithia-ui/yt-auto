@@ -5,7 +5,7 @@ import wave
 import sys
 from unittest.mock import patch, MagicMock
 
-from src.tts import generate_audio, sanitize_text_for_tts
+from lib.tts import generate_audio, sanitize_text_for_tts
 
 
 class TestTTS(unittest.TestCase):
@@ -124,7 +124,7 @@ class TestTTS(unittest.TestCase):
     @patch("subprocess.run")
     def test_master_voice_audio_invokes_ffmpeg(self, mock_run):
         """Test master_voice_audio calls FFmpeg with equalizer and loudnorm filter chain."""
-        from src.tts import master_voice_audio
+        from lib.tts import master_voice_audio
         audio_path = os.path.join(self.temp_dir.name, "voice_input.wav")
         with open(audio_path, "wb") as f:
             f.write(b"RIFF_WAV_HEADER_DATA")

@@ -1,0 +1,21 @@
+change_name: native-sdk-dual-instance-isolation
+current_phase: archive
+status: completed
+delivery_strategy: single-pr
+phases:
+  explore:
+    status: completed
+  proposal:
+    status: completed
+  spec:
+    status: completed
+  design:
+    status: completed
+  tasks:
+    status: completed
+  apply:
+    status: completed
+  verify:
+    status: completed
+  archive:
+    status: completed

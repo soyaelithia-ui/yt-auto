@@ -6,14 +6,17 @@ with word-by-word active highlighting, neon glows, rounded backdrop pills, and s
 """
 from __future__ import annotations
 
+import contextlib
 import math
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger
 
 logger = get_logger("subtitle_drawer")
@@ -51,7 +54,7 @@ class SubtitleTheme:
     bg_pill_color: Tuple[int, int, int, int] = (4, 12, 8, 195)  # Semi-transparent Dark Pill
     bg_pill_border: Optional[Tuple[int, int, int, int]] = (0, 255, 102, 140)  # Subtle Neon Trim
     bg_pill_radius: int = 18
-    safe_margin_bottom: int = 380  # Safe vertical margin above Shorts/TikTok UI
+    safe_margin_bottom: int = 480  # Safe vertical margin above Shorts/TikTok UI (>= 480px)
     shadow_offset: Tuple[int, int] = (0, 4)
     shadow_color: Tuple[int, int, int, int] = (0, 0, 0, 180)
 
@@ -299,7 +302,6 @@ def apply_code_subtitles_to_video(
     """
     Overlays programmatic code-rendered subtitles onto a video file frame-by-frame.
     """
-    import subprocess
     in_path = Path(input_mp4).resolve()
     out_path = Path(output_mp4).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,10 +314,12 @@ def apply_code_subtitles_to_video(
     drawer = drawer or CodeSubtitleDrawer(theme=subtitle_theme)
     read_cmd = [
         "ffmpeg", "-y", "-i", str(in_path),
+        "-vf", f"scale={width}:{height}",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
     ]
     write_cmd = [
         "ffmpeg", "-y",
+        "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
         "-i", "-",
         "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -326,28 +330,51 @@ def apply_code_subtitles_to_video(
 
     frame_size = width * height * 3
     proc_in = subprocess.Popen(read_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    proc_out = subprocess.Popen(write_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc_out = subprocess.Popen(write_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    register_process(proc_in)
+    register_process(proc_out)
 
-    frame_idx = 0
-    while True:
-        raw_bytes = proc_in.stdout.read(frame_size) if proc_in.stdout else b""
-        if not raw_bytes or len(raw_bytes) < frame_size:
-            break
-        img = Image.frombytes("RGB", (width, height), raw_bytes)
-        try:
-            t_sec = scene_start_sec + (frame_idx / float(fps))
-            img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
-            if proc_out.stdin:
-                proc_out.stdin.write(img.tobytes())
-        finally:
-            img.close()
-        frame_idx += 1
+    stderr_out = b""
+    ret_out = 0
+    try:
+        frame_idx = 0
+        while True:
+            raw_bytes = proc_in.stdout.read(frame_size) if proc_in.stdout else b""
+            if not raw_bytes or len(raw_bytes) < frame_size:
+                break
+            img = Image.frombytes("RGB", (width, height), raw_bytes)
+            try:
+                t_sec = scene_start_sec + (frame_idx / float(fps))
+                img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
+                if proc_out.stdin:
+                    proc_out.stdin.write(img.tobytes())
+            finally:
+                img.close()
+            frame_idx += 1
 
-    if proc_in.stdout:
-        proc_in.stdout.close()
-    proc_in.wait()
-    if proc_out.stdin:
-        proc_out.stdin.flush()
-        proc_out.stdin.close()
-    proc_out.wait()
+        if proc_in.stdout:
+            with contextlib.suppress(Exception):
+                proc_in.stdout.close()
+        proc_in.wait()
+
+        if proc_out.stdin:
+            with contextlib.suppress(Exception):
+                proc_out.stdin.flush()
+                proc_out.stdin.close()
+        if proc_out.stderr:
+            with contextlib.suppress(Exception):
+                stderr_out = proc_out.stderr.read()
+        ret_out = proc_out.wait()
+    finally:
+        cleanup_subprocesses(proc_in, proc_out)
+
+    if ret_out != 0:
+        from lib.ffmpeg import FFmpegExecutionError
+        err_msg = stderr_out.decode("utf-8", errors="replace")
+        raise FFmpegExecutionError(
+            f"FFmpeg apply code subtitles failed (returncode {ret_out}): {err_msg}",
+            returncode=ret_out,
+            stderr=err_msg,
+            command=write_cmd,
+        )
     return out_path

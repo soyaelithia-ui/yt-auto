@@ -1,7 +1,7 @@
 """Video composition engine: scene plans, FFmpeg filter graphs, thumbnails.
 
-All public entry points are also reachable through the ``src.video`` shim,
-which is why internals resolve name overrides through ``vars(src.video)`` so
+All public entry points are also reachable through the ``lib.video`` shim,
+which is why internals resolve name overrides through ``vars(lib.video)`` so
 that monkeypatches applied to the shim module are honored.
 """
 from __future__ import annotations
@@ -225,9 +225,9 @@ except Exception:  # pragma: no cover
 
 
 def _resolve(name: str, default=None):
-    """Return a module member, honoring overrides planted on the src.video shim."""
+    """Return a module member, honoring overrides planted on the lib.video shim."""
     try:
-        import src.video as _shim  # noqa: F401
+        import lib.video as _shim  # noqa: F401
     except Exception:
         return default
     attrs = vars(_shim)

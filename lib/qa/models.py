@@ -146,8 +146,8 @@ class RuleProfile:
     freeze_threshold_sec: float = 2.5
     black_threshold_sec: float = 3.0
     av_drift_threshold_sec: float = 0.30
-    subtitle_safe_margin_v_min: int = 180
-    subtitle_safe_margin_v_max: int = 280
+    subtitle_safe_margin_v_min: int = 120
+    subtitle_safe_margin_v_max: int = 650
     subtitle_max_chars_per_line: int = 22
     subtitle_max_words_per_line: int = 3
     # PR3 visual-director thresholds

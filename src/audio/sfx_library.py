@@ -30,7 +30,7 @@ class SFXLibrarySynthesizer:
         self.sample_rate = sample_rate
 
     def synthesize_sfx(self, sfx_id: str, duration_sec: Optional[float] = None) -> np.ndarray:
-        """Returns float32 samples in [-1.0, 1.0] for the requested sfx_id."""
+        """Returns float32 samples in [-1.0, 1.0] for the requested sfx_id with synthetic fallback."""
         method_map = {
             "ptt_squelch": self._synth_ptt_squelch,
             "sonar_ping_deep_reverb": self._synth_sonar_ping,
@@ -38,10 +38,66 @@ class SFXLibrarySynthesizer:
             "singularity_glitch_burst": self._synth_singularity_glitch,
             "geiger_clicks": self._synth_geiger_clicks,
             "static_burst": self._synth_static_burst,
+            "tension_riser": self._synth_tension_riser,
+            "inter_act_riser": self._synth_tension_riser,
+            "riser": self._synth_tension_riser,
+            "sub_drop": self._synth_sub_drop,
+            "bass_drop": self._synth_sub_drop,
+            "deep_impact": self._synth_sub_drop,
+            "sweep": self._synth_fallback_sweep,
         }
 
-        synth_fn = method_map.get(sfx_id, self._synth_static_burst)
+        synth_fn = method_map.get(sfx_id, self._synth_fallback_sweep)
         return synth_fn(duration_sec=duration_sec)
+
+    def _synth_tension_riser(self, duration_sec: Optional[float] = None) -> np.ndarray:
+        """Ascending tension riser pitch/noise sweep (2.0s)."""
+        dur = duration_sec or 2.0
+        n_samples = int(self.sample_rate * dur)
+        t = np.arange(n_samples) / float(self.sample_rate)
+
+        # Exponential pitch rise from 60 Hz up to 750 Hz
+        f_rise = 60.0 * np.exp(t * 1.25)
+        phase = 2.0 * np.pi * np.cumsum(f_rise) / float(self.sample_rate)
+        sine_rise = np.sin(phase)
+
+        # White noise swell
+        noise = np.random.uniform(-0.5, 0.5, size=n_samples)
+        env = (t / dur) ** 2.0
+
+        mix = (sine_rise * 0.65 + noise * 0.35) * env
+        return np.clip(mix * 0.85, -1.0, 1.0).astype(np.float32)
+
+    def _synth_sub_drop(self, duration_sec: Optional[float] = None) -> np.ndarray:
+        """Deep sub-bass drop from 130 Hz down to 28 Hz (2.2s)."""
+        dur = duration_sec or 2.2
+        n_samples = int(self.sample_rate * dur)
+        t = np.arange(n_samples) / float(self.sample_rate)
+
+        # Exponential pitch drop from 130 Hz down to 28 Hz
+        f_drop = 28.0 + 102.0 * np.exp(-t * 2.2)
+        phase = 2.0 * np.pi * np.cumsum(f_drop) / float(self.sample_rate)
+        sub = np.sin(phase) + 0.3 * np.sin(phase * 2.0)
+
+        # Amplitude decay envelope
+        env = np.exp(-t * 1.5)
+        mix = np.tanh(sub * 1.5) * env * 0.9
+        return np.clip(mix, -1.0, 1.0).astype(np.float32)
+
+    def _synth_fallback_sweep(self, duration_sec: Optional[float] = None) -> np.ndarray:
+        """Procedural synthetic fallback sweep for unknown cues (1.0s)."""
+        dur = duration_sec or 1.0
+        n_samples = int(self.sample_rate * dur)
+        t = np.arange(n_samples) / float(self.sample_rate)
+
+        # Smooth bi-directional frequency sweep (80 Hz -> 350 Hz -> 60 Hz)
+        f_mod = 80.0 + 270.0 * np.sin(np.pi * t / dur)
+        phase = 2.0 * np.pi * np.cumsum(f_mod) / float(self.sample_rate)
+        sweep = np.sin(phase)
+
+        env = np.sin(np.pi * t / dur)
+        mix = sweep * env * 0.75
+        return np.clip(mix, -1.0, 1.0).astype(np.float32)
 
     def _synth_ptt_squelch(self, duration_sec: Optional[float] = None) -> np.ndarray:
         """Push-to-talk mic click and noise burst (0.2s)."""

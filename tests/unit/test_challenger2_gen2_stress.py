@@ -29,11 +29,11 @@ from src.audio import (
     DEFAULT_TARGET_LUFS,
     DEFAULT_MAX_TP,
     DEFAULT_MAX_LRA,
-    generate_synthetic_pcm_audio,
     normalize_narration_lufs,
     apply_sidechain_ducking,
     master_audio_track,
 )
+from tests.helpers.audio import generate_synthetic_pcm_audio
 
 
 class TestGen2WildcardAndExportIntegrity:

@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from src.db import init_db, enqueue_story, get_pending_story, update_story_status
 from src.scraper import fetch_reddit_stories
-from src.video import compose_video
+from lib.video import compose_video
 from src.drive import upload_to_drive
 from src.youtube.uploader import upload_video_via_playwright, upload_video
 from src.daemon import run_pipeline_once
@@ -52,7 +52,7 @@ class TestTier4AdversarialRecovery(unittest.TestCase):
         enqueue_story("fail_story_001", "Fail Title", "Content", "http://url.com", channel="moku", db_path=self.db_path)
 
         # Force TTS audio generation to generate duration <= 120 to trigger video composition failure
-        with patch("src.tts.generate_audio") as mock_tts, \
+        with patch("lib.tts.generate_audio") as mock_tts, \
              patch("src.llm.curate_script", return_value="Title: Fail Title.\n\nThis is some curated script content."):
             mock_tts.return_value = {
                 "audio_path": os.path.join(self.temp_dir.name, "short.wav"),

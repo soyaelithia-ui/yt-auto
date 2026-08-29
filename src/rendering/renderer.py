@@ -34,6 +34,17 @@ def resolve_chrome_path() -> Optional[str]:
     return None
 
 
+VALID_SHADERS = {"RADAR_HYDROACOUSTIC", "MONOLITHS_RAYMARCHING", "GRAVITATIONAL_SINGULARITY"}
+FALLBACK_SHADER = "MONOLITHS_RAYMARCHING"
+
+
+def resolve_shader_id(shader_id: Optional[str]) -> str:
+    """Resolves shader ID with fallback to MONOLITHS_RAYMARCHING upon unmapped/invalid ID."""
+    if shader_id and shader_id in VALID_SHADERS:
+        return shader_id
+    return FALLBACK_SHADER
+
+
 class CosmicShaderRenderer:
     """Renders multi-pass GLSL scenes with unified post-processing deterministically."""
 
@@ -44,6 +55,9 @@ class CosmicShaderRenderer:
 
     def _load_shader(self, filename: str) -> str:
         shader_file = self.shaders_dir / filename
+        if not shader_file.is_file():
+            # Fallback to monoliths if shader file not found
+            shader_file = self.shaders_dir / "monoliths.frag"
         if not shader_file.is_file():
             raise FileNotFoundError(f"Shader file not found: {shader_file}")
         return shader_file.read_text(encoding="utf-8")
@@ -74,11 +88,17 @@ class CosmicShaderRenderer:
         html = html.replace("`__SINGULARITY_FRAG__`", f"`{singularity_escaped}`")
         html = html.replace("`__POSTPROCESS_FRAG__`", f"`{postprocess_escaped}`")
 
+        cleaned_scenes = []
+        for s in script_contract.scenes:
+            s_dict = s.to_dict() if hasattr(s, "to_dict") else dict(s)
+            s_dict["shader_id"] = resolve_shader_id(s_dict.get("shader_id"))
+            cleaned_scenes.append(s_dict)
+
         scene_config = {
             "format": script_contract.format.value if hasattr(script_contract.format, "value") else str(script_contract.format),
             "telemetryHeader": script_contract.telemetry_header,
             "fps": fps,
-            "scenes": [s.to_dict() if hasattr(s, "to_dict") else s for s in script_contract.scenes],
+            "scenes": cleaned_scenes,
         }
         config_json = json.dumps(scene_config, indent=2, ensure_ascii=False)
         html = html.replace("__SCENE_CONFIG_JSON__", config_json)
@@ -98,7 +118,10 @@ class CosmicShaderRenderer:
         if total_frames is not None:
             actual_total_frames = max(1, int(total_frames))
         else:
-            scenes_dur = sum(getattr(s, "duration_sec", 0.0) for s in getattr(script_contract, "scenes", []))
+            scenes_dur = sum(
+                (getattr(s, "end_sec", 0.0) - getattr(s, "start_sec", 0.0) if hasattr(s, "start_sec") else getattr(s, "duration_sec", 0.0))
+                for s in (script_contract.scenes if hasattr(script_contract, "scenes") else [])
+            )
             actual_total_frames = max(1, int(round((scenes_dur if scenes_dur > 0 else 30.0) * fps)))
 
         html_content = self.build_runtime_html(script_contract, width=width, height=height, fps=fps)

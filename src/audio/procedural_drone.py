@@ -73,6 +73,12 @@ def apply_butterworth_4th_lowpass_50hz(signal: np.ndarray, sample_rate: int = 44
     return filtered.astype(np.float32)
 
 
+def map_tension_to_freq(tension_level: int) -> float:
+    """Maps tension level (1 to 5) monotonically to fundamental frequency (28.0 Hz to 65.0 Hz)."""
+    t_clamped = max(1, min(5, int(tension_level)))
+    return 28.0 + (t_clamped - 1) * (65.0 - 28.0) / 4.0
+
+
 class ProceduralDroneSynthesizer:
     """Synthesizes dark sub-bass atmospheric drones for cosmic horror soundscapes."""
 
@@ -82,30 +88,38 @@ class ProceduralDroneSynthesizer:
     def synthesize(
         self,
         duration_sec: float = 30.0,
-        base_freq_hz: float = 38.0,
+        base_freq_hz: Optional[float] = None,
         amplitude: float = 0.35,
         seed: Optional[int] = 42,
+        tension_level: Optional[int] = None,
     ) -> np.ndarray:
         """
         Generates a 1D float32 audio array in [-1.0, 1.0] with:
+        - Tension-coupled frequency modulation (28-65 Hz)
         - Binaural beating
         - Wow tape LFO (0.25 Hz +/- 1.2%)
         - 4th-order 50 Hz filtered brown noise
         - 60 Hz and 120 Hz mains hum
+        - Overtone saturation and pop-free cosine fades
         """
+        if tension_level is not None:
+            freq = map_tension_to_freq(tension_level)
+        else:
+            freq = float(base_freq_hz) if base_freq_hz is not None else 38.0
+
         dur = max(1.0, float(duration_sec))
         num_samples = int(self.sample_rate * dur)
         t = np.arange(num_samples, dtype=np.float64) / float(self.sample_rate)
 
         # 1. Wow Tape LFO Modulation (0.25 Hz with +/- 1.2% variation)
         wow_lfo = 1.0 + 0.012 * np.sin(2.0 * np.pi * 0.25 * t)
-        inst_phase = 2.0 * np.pi * base_freq_hz * np.cumsum(wow_lfo) / float(self.sample_rate)
-        inst_phase_beat = 2.0 * np.pi * (base_freq_hz + 1.5) * np.cumsum(wow_lfo) / float(self.sample_rate)
+        inst_phase = 2.0 * np.pi * freq * np.cumsum(wow_lfo) / float(self.sample_rate)
+        inst_phase_beat = 2.0 * np.pi * (freq + 1.5) * np.cumsum(wow_lfo) / float(self.sample_rate)
 
         # 2. Binaural Beating Drone
         s1 = 0.50 * np.sin(inst_phase) + 0.40 * np.sin(inst_phase_beat)
 
-        # 3. Sub-harmonics for immense cosmic weight (0.5x and 1.5x)
+        # 3. Sub-harmonics & overtones for immense cosmic weight (0.5x and 1.5x)
         s_sub = 0.25 * np.sin(inst_phase * 0.5) + 0.15 * np.sin(inst_phase * 1.5)
 
         # 4. Low-frequency rumble: Brownian noise filtered with 4th-order Butterworth lowpass at 50 Hz
@@ -124,31 +138,38 @@ class ProceduralDroneSynthesizer:
         # 5. Mains hum: 60 Hz (amp 0.035) + 120 Hz (amp 0.018)
         mains_hum = 0.035 * np.sin(2.0 * np.pi * 60.0 * t) + 0.018 * np.sin(2.0 * np.pi * 120.0 * t)
 
-        # Sum components
-        raw_mix = (s1 + s_sub + rumble_filtered + mains_hum) * float(amplitude)
+        # 6. Sum components with subtle overtone saturation
+        combined = s1 + s_sub + rumble_filtered + mains_hum
+        saturated = np.tanh(combined * 1.15) * float(amplitude)
 
-        # Smooth fade-in and fade-out to prevent clicks
+        # Smooth cosine fade-in and fade-out to guarantee click-free boundaries
         fade_samples = int(self.sample_rate * min(1.0, dur * 0.08))
         if fade_samples > 0:
             fade_in = 0.5 * (1.0 - np.cos(np.pi * np.arange(fade_samples) / float(fade_samples)))
-            raw_mix[:fade_samples] *= fade_in
-            raw_mix[-fade_samples:] *= fade_in[::-1]
+            saturated[:fade_samples] *= fade_in
+            saturated[-fade_samples:] *= fade_in[::-1]
 
-        return np.clip(raw_mix, -1.0, 1.0).astype(np.float32)
+        return np.clip(saturated, -1.0, 1.0).astype(np.float32)
 
     def generate_wav(
         self,
         output_path: Union[str, Path],
         duration_sec: float = 30.0,
-        base_freq_hz: float = 38.0,
+        base_freq_hz: Optional[float] = None,
         amplitude: float = 0.35,
         stereo: bool = False,
+        tension_level: Optional[int] = None,
     ) -> Path:
         """Saves synthesized drone as a 44.1 kHz 16-bit WAV file."""
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
-        samples = self.synthesize(duration_sec=duration_sec, base_freq_hz=base_freq_hz, amplitude=amplitude)
+        samples = self.synthesize(
+            duration_sec=duration_sec,
+            base_freq_hz=base_freq_hz,
+            amplitude=amplitude,
+            tension_level=tension_level,
+        )
         int16_samples = (samples * 32767.0).astype(np.int16)
 
         num_channels = 2 if stereo else 1
@@ -166,5 +187,6 @@ class ProceduralDroneSynthesizer:
             else:
                 wf.writeframes(int16_samples.tobytes())
 
-        logger.info("Drone sintético generado: %s (%.1fs @ %.1fHz)", out_p.name, duration_sec, base_freq_hz)
+        freq_log = float(base_freq_hz) if base_freq_hz is not None else (map_tension_to_freq(tension_level) if tension_level is not None else 38.0)
+        logger.info("Drone sintético generado: %s (%.1fs @ %.1fHz)", out_p.name, duration_sec, freq_log)
         return out_p

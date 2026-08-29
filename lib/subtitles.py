@@ -232,7 +232,7 @@ def create_subtitles(
     return str(out)
 
 
-def _ass_style_spec(template, font_name, play_w: int, play_h: int) -> dict:
+def _ass_style_spec(template, font_name, play_w: int, play_h: int, **kwargs) -> dict:
     spec = {
         "font_name": font_name or "Montserrat Black",
         "font_size": 40,
@@ -273,9 +273,16 @@ def _ass_style_spec(template, font_name, play_w: int, play_h: int) -> dict:
         pass
     if font_name:
         spec["font_name"] = font_name
+    if kwargs.get("downward_drift_px"):
+        spec["margin_v"] = int(spec.get("margin_v", 230)) + max(0, int(kwargs["downward_drift_px"]))
+    if play_h > play_w:
+        spec["margin_v"] = max(480, int(spec.get("margin_v", 480)))
+    spec["outline"] = max(3, int(spec.get("outline", 4)))
+    spec["margin_l"] = max(40, int(spec.get("margin_l", 40)))
+    spec["margin_r"] = max(40, int(spec.get("margin_r", 40)))
     if spec.get("margin_v", 0) >= 320:
-        spec["margin_l"] = 72
-        spec["margin_r"] = 72
+        spec["margin_l"] = max(spec["margin_l"], 72)
+        spec["margin_r"] = max(spec["margin_r"], 72)
     scale = max(0.5, play_w / 1080.0)
     font_base = spec["font_size"]
     spec["font_size"] = max(24, int(font_base * scale))
@@ -439,7 +446,7 @@ def create_ass_subtitles(
 ) -> str:
     """Write ASS subtitles with per-word karaoke timing (`{\\kfN}` tags)."""
     play_w, play_h = _resolve_video_resolution(video_res)
-    style = _ass_style_spec(template, font_name, play_w, play_h)
+    style = _ass_style_spec(template, font_name, play_w, play_h, **kwargs)
     group_size = int(group_size or style["group_size"])
     if max_chars is None:
         max_chars = max(12, int(play_w / 50))

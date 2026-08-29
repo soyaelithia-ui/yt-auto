@@ -13,9 +13,9 @@ from src.core.domain import CanonicalChannel, JobStatus, PublicationProof
 from src.core.quality import validate_prepublication
 from src.core.repository import QueueRepository, connect
 from src.llm import curate_script
-from src.subtitles import create_subtitles, validate_subtitle_artifact
-from src.tts import validate_word_boundaries
-from src.video import (
+from lib.subtitles import create_subtitles, validate_subtitle_artifact
+from lib.tts import validate_word_boundaries
+from lib.video import (
     build_visual_scene_plan,
     compose_video,
     create_video_thumbnail,
@@ -249,7 +249,7 @@ def test_compose_adds_faststart_and_writes_visual_qa(monkeypatch, tmp_path):
             return lambda *args, **kwargs: True
         return default
     monkeypatch.setattr("lib.video._get_video_attr", fake_get_video_attr)
-    monkeypatch.setattr("src.video.subprocess", sub_mod)
+    monkeypatch.setattr("lib.video.subprocess", sub_mod)
     monkeypatch.setattr("lib.video.subprocess", sub_mod)
     monkeypatch.setattr("subprocess.run", run)
 
@@ -340,7 +340,7 @@ def test_real_ffmpeg_render_has_no_long_black_segments(monkeypatch, tmp_path):
 def test_directed_thumbnail_fails_before_cli_or_local_fallback(monkeypatch, tmp_path):
     local = MagicMock(return_value=str(tmp_path / "thumbnail.jpg"))
     monkeypatch.setattr("lib.video.generate_pil_thumbnail", local)
-    monkeypatch.setattr("src.video.generate_pil_thumbnail", local)
+    monkeypatch.setattr("lib.video.generate_pil_thumbnail", local)
     res = create_video_thumbnail(
         "Título", "moku", str(tmp_path / "thumbnail.jpg")
     )
@@ -407,10 +407,10 @@ def test_directed_pipeline_skips_scraper_and_passes_no_extra_stories(monkeypatch
 
     monkeypatch.setattr("src.scraper.fetch_reddit_stories", scraper)
     monkeypatch.setattr("src.llm.curate_script", curate)
-    monkeypatch.setattr("src.tts.generate_audio", audio)
-    monkeypatch.setattr("src.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("src.video.compose_video", video)
-    monkeypatch.setattr("src.video.create_video_thumbnail", thumbnail)
+    monkeypatch.setattr("lib.tts.generate_audio", audio)
+    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
+    monkeypatch.setattr("lib.video.compose_video", video)
+    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
     report = MagicMock()
     report.require_pass.return_value = None
     # Los artefactos son placeholders; el gate real exige MP4/miniatura válidos.
@@ -487,12 +487,12 @@ def test_non_short_pipeline_creates_srt_before_validation(monkeypatch, tmp_path)
     report = MagicMock()
     report.require_pass.return_value = None
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Esta es una historia completa en español.")
-    monkeypatch.setattr("src.tts.generate_audio", audio)
-    monkeypatch.setattr("src.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("src.subtitles.create_ass_subtitles", ass_subtitles)
-    monkeypatch.setattr("src.subtitles.validate_subtitle_artifact", validate)
-    monkeypatch.setattr("src.video.compose_video", video)
-    monkeypatch.setattr("src.video.create_video_thumbnail", thumbnail)
+    monkeypatch.setattr("lib.tts.generate_audio", audio)
+    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
+    monkeypatch.setattr("lib.subtitles.create_ass_subtitles", ass_subtitles)
+    monkeypatch.setattr("lib.subtitles.validate_subtitle_artifact", validate)
+    monkeypatch.setattr("lib.video.compose_video", video)
+    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
     try:
         result = run_pipeline_once(
@@ -521,7 +521,7 @@ def test_pipeline_aborts_when_heartbeat_loses_ownership(monkeypatch, tmp_path):
         "src.core.repository.QueueRepository.heartbeat", lambda *args, **kwargs: False
     )
     audio = MagicMock(side_effect=AssertionError("TTS no debe ejecutarse"))
-    monkeypatch.setattr("src.tts.generate_audio", audio)
+    monkeypatch.setattr("lib.tts.generate_audio", audio)
     try:
         result = run_pipeline_once(
             channel="moku",
@@ -588,10 +588,10 @@ def test_post_commit_failure_does_not_downgrade_published(monkeypatch, tmp_path)
         }
 
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia")
-    monkeypatch.setattr("src.tts.generate_audio", audio)
-    monkeypatch.setattr("src.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("src.video.compose_video", video)
-    monkeypatch.setattr("src.video.create_video_thumbnail", thumbnail)
+    monkeypatch.setattr("lib.tts.generate_audio", audio)
+    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
+    monkeypatch.setattr("lib.video.compose_video", video)
+    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
     monkeypatch.setattr("src.drive.upload_to_drive_verified", drive)
     monkeypatch.setattr("src.youtube.uploader.upload_video", youtube)
     monkeypatch.setattr(
@@ -637,7 +637,7 @@ def test_missing_official_thumbnail_sdk_leaves_story_retryable_without_remote_ca
     drive_preflight = MagicMock(side_effect=AssertionError("Drive no debe llamarse"))
     youtube_preflight = MagicMock(side_effect=AssertionError("YouTube no debe llamarse"))
     monkeypatch.setattr("src.pipeline.is_test_environment", lambda: False)
-    monkeypatch.setattr("src.tts.generate_audio", MagicMock(side_effect=RuntimeError("Simulated missing SDK error")))
+    monkeypatch.setattr("lib.tts.generate_audio", MagicMock(side_effect=RuntimeError("Simulated missing SDK error")))
     monkeypatch.setattr("src.drive.preflight_drive_access", drive_preflight)
     monkeypatch.setattr("src.youtube.uploader.preflight_youtube_api", youtube_preflight)
     try:
@@ -681,7 +681,7 @@ def test_api_only_uploader_never_calls_playwright(monkeypatch, tmp_path):
     token.write_text("{}", encoding="utf-8")
     monkeypatch.delenv("TEST_MODE", raising=False)
     monkeypatch.delenv("MOCK_YOUTUBE_UPLOAD", raising=False)
-    monkeypatch.setattr("src.video.validate_video_format", lambda *args, **kwargs: True)
+    monkeypatch.setattr("lib.video.validate_video_format", lambda *args, **kwargs: True)
     monkeypatch.setattr("src.youtube.uploader.preflight_youtube_api", MagicMock())
     api = MagicMock(
         return_value={

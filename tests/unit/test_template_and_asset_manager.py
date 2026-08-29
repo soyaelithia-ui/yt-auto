@@ -13,8 +13,8 @@ from src.templates import (
     get_template,
 )
 from src.asset_manager import AssetManager, get_asset_manager
-from src.subtitles import create_ass_subtitles, create_subtitles
-from src.video import generate_pil_thumbnail
+from lib.subtitles import create_ass_subtitles, create_subtitles
+from lib.video import generate_pil_thumbnail
 
 
 class TestTemplateAndAssetManager:

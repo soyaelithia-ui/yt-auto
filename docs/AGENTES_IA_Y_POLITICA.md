@@ -46,11 +46,13 @@ src/agents/
 ### Funciones de los Agentes
 
 1. **`ProgrammaticAgent` (`base_agent.py`)**:
-   - Gestiona el arnés del CLI `agy` y SDK de Antigravity.
-   - Aplica aislamiento de sesión en `.bot_home/.gemini/antigravity-cli` mediante `ANTIGRAVITY_AGENTS_APP_DATA_DIR`.
-   - Circuit breaker integrado para suspender llamadas ante saturación (`AgentSaturationError`).
+   - Gestiona el arnés de ejecución nativo con cliente de streaming persistente NDJSON (`stream-json`) y SDK oficial `google-antigravity`.
+   - Autenticación 100% nativa con cuota Pro mediante sesión OAuth (`antigravity-oauth-token`) sin necesidad de API keys.
+   - Aislamiento Multi-Instancia: directorio AppData (`.bot_home_{instance_id}/.gemini/antigravity-cli`) y `CircuitBreaker.get(instance_id)` independientes por instancia para evitar colisiones y saturación cruzada.
+   - Soporte de modulación de esfuerzo de razonamiento (`--effort low|medium|high`) y poda automática de trayectorias efímeras (`cleanup_ephemeral_sessions`).
 2. **`CinematicScriptCuratorAgent` (`script_curator.py`)**:
    - Estructura guiones en 4 actos con gancho inicial (0-3s), sincronización de pausas dramáticas y franja segura de subtitulado.
+   - Opera en `instance_id="pipeline_creative"` con esfuerzo `high` para máxima profundidad narrativa.
 3. **`ArtDirectorMoodAgent` (`art_director.py`)**:
    - Define el tratamiento estético cinemático, matrices de color y comportamientos de cámara procedural.
 4. **`ScenePlannerCompositorAgent` (`scene_planner.py`)**:

@@ -95,7 +95,7 @@ class TestAdversarialZeroCallsInLoopMode(unittest.TestCase):
         mock_report = QualityReport(channel=CanonicalChannel.MOKU if channel == "moku" else CanonicalChannel.AELITHIA)
 
         with patch("src.pipeline.curate_script", return_value=SAMPLE_SPANISH_NARRATION), \
-             patch("src.tts.generate_audio", side_effect=_mock_audio_gen), \
+             patch("lib.tts.generate_audio", side_effect=_mock_audio_gen), \
              patch("src.pipeline.validate_prepublication", return_value=mock_report) as mock_validate, \
              patch("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", return_value=self.loop_video) as spy_resolve_loop, \
              patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_mock_loop_render) as spy_loop_render, \
@@ -163,7 +163,7 @@ class TestSubtitleMatrix(unittest.TestCase):
         db_path = str(self.root_path / "test_subtitles.db")
         mock_report = QualityReport(channel=CanonicalChannel.MOKU)
         with patch("src.pipeline.curate_script", return_value=SAMPLE_SPANISH_NARRATION), \
-             patch("src.tts.generate_audio", side_effect=_mock_audio_gen), \
+             patch("lib.tts.generate_audio", side_effect=_mock_audio_gen), \
              patch("src.pipeline.validate_prepublication", return_value=mock_report), \
              patch("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", return_value=self.loop_video), \
              patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_mock_loop_render), \
@@ -182,8 +182,8 @@ class TestSubtitleMatrix(unittest.TestCase):
             )
 
     def test_default_subtitles_disabled(self):
-        with patch("src.subtitles.create_ass_subtitles") as mock_ass, \
-             patch("src.subtitles.create_subtitles") as mock_srt:
+        with patch("lib.subtitles.create_ass_subtitles") as mock_ass, \
+             patch("lib.subtitles.create_subtitles") as mock_srt:
             res = self._run()
         self.assertEqual(res["status"], "RENDERED")
         mock_ass.assert_not_called()
@@ -191,10 +191,10 @@ class TestSubtitleMatrix(unittest.TestCase):
 
     def test_env_enables_subtitles_when_explicit_arg_absent(self):
         with patch.dict(os.environ, {"ENABLE_SUBTITLES": "1"}):
-            with patch("src.subtitles.create_ass_subtitles", side_effect=_mock_create_ass) as mock_ass, \
-                 patch("src.subtitles.create_subtitles", side_effect=_mock_create_srt) as mock_srt, \
-                 patch("src.subtitles.validate_subtitle_grammar_and_syntax"), \
-                 patch("src.subtitles.generate_safe_area_validation_artifact"):
+            with patch("lib.subtitles.create_ass_subtitles", side_effect=_mock_create_ass) as mock_ass, \
+                 patch("lib.subtitles.create_subtitles", side_effect=_mock_create_srt) as mock_srt, \
+                 patch("lib.subtitles.validate_subtitle_grammar_and_syntax"), \
+                 patch("lib.subtitles.generate_safe_area_validation_artifact"):
                 res = self._run()
         self.assertEqual(res["status"], "RENDERED")
         mock_ass.assert_called_once()
@@ -202,8 +202,8 @@ class TestSubtitleMatrix(unittest.TestCase):
 
     def test_explicit_arg_overrides_env(self):
         with patch.dict(os.environ, {"ENABLE_SUBTITLES": "1"}):
-            with patch("src.subtitles.create_ass_subtitles") as mock_ass, \
-                 patch("src.subtitles.create_subtitles") as mock_srt:
+            with patch("lib.subtitles.create_ass_subtitles") as mock_ass, \
+                 patch("lib.subtitles.create_subtitles") as mock_srt:
                 res = self._run(enable_subtitles=False)
         self.assertEqual(res["status"], "RENDERED")
         mock_ass.assert_not_called()
@@ -365,7 +365,7 @@ class TestNonLoopCompositorRejected(unittest.TestCase):
         from src.core.domain import JobStatus
         db_path = str(self.root_path / "fb.db")
         with patch("src.pipeline.curate_script", return_value=SAMPLE_SPANISH_NARRATION), \
-             patch("src.tts.generate_audio", side_effect=_mock_audio_gen), \
+             patch("lib.tts.generate_audio", side_effect=_mock_audio_gen), \
              patch("src.pipeline.validate_prepublication") as mock_validate, \
              patch("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", return_value=self.loop_video) as spy_resolve, \
              patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_mock_loop_render) as spy_render, \

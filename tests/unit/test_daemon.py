@@ -23,7 +23,7 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         self.temp_dir.cleanup()
 
     @patch("src.scraper.fetch_reddit_stories", return_value=[])
-    @patch("src.video.create_video_thumbnail")
+    @patch("lib.video.create_video_thumbnail")
     @patch("src.llm.curate_batch_json", return_value={
         "title": "Spanish Mock Title",
         "script_3_acts": {"act1": "a1", "act2": "a2", "act3": "a3"},
@@ -32,9 +32,9 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         "image_prompts": {"background": "bg prompt", "thumbnail": "thumb prompt"}
     })
     @patch("src.llm.curate_script", return_value="Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.")
-    @patch("src.tts.generate_audio")
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video")
+    @patch("lib.tts.generate_audio")
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video")
     @patch("src.llm.translate_title", return_value="Esta es una historia de misterio y terror")
     @patch("src.drive.upload_to_drive_verified")
     @patch("src.youtube.uploader.upload_video", return_value={"status": "SUCCESS"})
@@ -102,9 +102,9 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         "image_prompts": {"background": "bg prompt", "thumbnail": "thumb prompt"}
     })
     @patch("src.llm.curate_script", return_value="Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.")
-    @patch("src.tts.generate_audio", return_value={"duration_sec": 605.0, "word_timestamps": []})
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video", side_effect=ValueError("FFmpeg synthesis failed"))
+    @patch("lib.tts.generate_audio", return_value={"duration_sec": 605.0, "word_timestamps": []})
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video", side_effect=ValueError("FFmpeg synthesis failed"))
     def test_run_pipeline_once_error_recovery(self, mock_compose, mock_subs, mock_tts, mock_curate, mock_curate_batch):
         """Test pipeline error causes DB status transition to RETRYABLE_FAILED with error_msg."""
         enqueue_story("err_story_001", "Error Title", "Error Content", "http://err1.com", channel="moku", db_path=self.db_path)
@@ -259,16 +259,16 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
             main()
 
     @patch("src.scraper.fetch_reddit_stories", return_value=[])
-    @patch("src.video.create_video_thumbnail")
+    @patch("lib.video.create_video_thumbnail")
     @patch("src.llm.curate_batch_json", return_value={
         "title": "Título traducido",
         "script": "Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.",
         "seo": {"description": "Esta es una descripción completa y detallada en español para el video de YouTube sobre historias de la vida real."}
     })
     @patch("src.llm.curate_script", return_value="Había una vez en un pueblo lejano donde la oscuridad caía temprano y los secretos de la noche aterrorizaban a todos los habitantes que intentaban cruzar el bosque encantado en busca de respuestas.")
-    @patch("src.tts.generate_audio")
-    @patch("src.subtitles.create_subtitles")
-    @patch("src.video.compose_video")
+    @patch("lib.tts.generate_audio")
+    @patch("lib.subtitles.create_subtitles")
+    @patch("lib.video.compose_video")
     @patch("src.llm.translate_title", return_value="Esta es una historia de misterio y terror")
     @patch("src.drive.upload_to_drive_verified")
     @patch("src.youtube.uploader.upload_video", return_value={"status": "SUCCESS", "url": "https://youtu.be/m2_test_url"})

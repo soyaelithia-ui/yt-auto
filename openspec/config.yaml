@@ -1,0 +1,70 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Python 3.13, FFmpeg, Playwright, Edge-TTS, Pillow, SQLite (WAL)
+  Architecture: Multi-lane automated video generation pipeline (agents, media DSP, sanitizers)
+  Testing: pytest (pytest-asyncio, pytest-timeout), 4-tier test architecture
+  Style: Modular Python, dataclasses/Pydantic, strict schema validation, offline mockable
+
+strict_tdd: true
+
+testing:
+  runner:
+    command: "pytest"
+    framework: "pytest"
+  layers:
+    unit:
+      available: true
+      tool: "pytest"
+      path: "tests/unit"
+    integration:
+      available: true
+      tool: "pytest"
+      path: "tests/integration"
+    e2e:
+      available: true
+      tool: "pytest"
+      path: "tests/e2e"
+  coverage:
+    available: false
+    command: ""
+  quality:
+    linter:
+      available: false
+      command: ""
+    type_checker:
+      available: false
+      command: ""
+    formatter:
+      available: false
+      command: ""
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Document media processing performance impact
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Require schema compliance for agent contracts
+  design:
+    - Include sequence diagrams for complex multi-stage flows
+    - Document architecture decisions with rationale
+    - Adhere to single-pass DSP and EBU R128 mastering standards
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+    - Enforce TDD ordering (write test first)
+  apply:
+    guidelines:
+      - Follow existing code patterns and modular layout
+      - Ensure offline synthetic mock testability (zero-quota)
+    tdd: true
+    test_command: "pytest"
+  verify:
+    test_command: "pytest -v"
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas

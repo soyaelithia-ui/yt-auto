@@ -7,6 +7,7 @@ Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -19,6 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository, LoopRecord
+from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger
 from src.media.web_renderer import WebVideoRenderer, RenderSpec
 from src.scene_manifest import (
@@ -178,16 +180,26 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             synth_dir.mkdir(parents=True, exist_ok=True)
             synth_mp4 = synth_dir / f"proc_{category}_{orientation}_{width}x{height}_s{cfg.seed}_6s.mp4"
 
-            pal_accent = getattr(getattr(cfg, "palette", None), "accent", "#00ff66")
-            pal_mid = getattr(getattr(cfg, "palette", None), "mid_tone", "#052b12")
-            pal_dark = getattr(getattr(cfg, "palette", None), "base_dark", "#020604")
+            palette_obj = getattr(cfg, "palette", None) or getattr(scene, "palette", None)
+            pal_primary = getattr(palette_obj, "primary", "#00ff66")
+            pal_secondary = getattr(palette_obj, "secondary", getattr(palette_obj, "mid_tone", "#052b12"))
+            pal_accent = getattr(palette_obj, "accent", "#00ff66")
+            pal_shadow = getattr(palette_obj, "shadow", getattr(palette_obj, "base_dark", "#020604"))
+            pal_highlight = getattr(palette_obj, "highlight", "#ffffff")
 
             render_params = {
                 "seed": cfg.seed,
                 "tension": scene.tension_level,
+                "u_tension": float(scene.tension_level) / 5.0,
+                "u_resolution": [width, height],
+                "u_palette_primary": pal_primary,
+                "u_palette_secondary": pal_secondary,
+                "u_palette_accent": pal_accent,
+                "u_palette_shadow": pal_shadow,
+                "u_palette_highlight": pal_highlight,
                 "accentColor": pal_accent,
-                "secondaryColor": pal_mid,
-                "shadowDark": pal_dark,
+                "secondaryColor": pal_secondary,
+                "shadowDark": pal_shadow,
                 **(cfg.uniforms if hasattr(cfg, "uniforms") and isinstance(cfg.uniforms, dict) else {}),
             }
 
@@ -207,7 +219,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 loop_rec = self.renderer.render_loop(spec)
                 loop_file = Path(getattr(loop_rec, "file_path", loop_rec))
             except Exception as e:
-                logger.warning("Procedural on-demand rendering failed (%s). Using fallback procedural generator.", e)
+                logger.warning("Procedural on-demand rendering failed (%s). Using MONOLITHS_RAYMARCHING fallback generator.", e)
                 loop_file = self._generate_fallback_loop(category, width, height, fps, 6.0, synth_mp4)
 
         # 3. Stream-loop or concatenate to reach exact scene duration
@@ -239,13 +251,14 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                     "ffmpeg", "-y",
                     "-f", "concat", "-safe", "0", "-i", str(concat_txt),
                     "-t", f"{duration:.3f}",
+                    "-vf", f"scale={width}:{height}",
                     "-f", "rawvideo", "-pix_fmt", "rgb24",
-                    "-s", f"{width}x{height}",
                     "-r", str(fps),
                     "-",
                 ]
                 write_cmd = [
                     "ffmpeg", "-y",
+                    "-loglevel", "error",
                     "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
                     "-i", "-",
                     "-c:v", "libx264",
@@ -264,27 +277,48 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 ]
                 frame_size = width * height * 3
                 proc_in = subprocess.Popen(read_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                proc_out = subprocess.Popen(write_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                proc_out = subprocess.Popen(write_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                register_process(proc_in)
+                register_process(proc_out)
 
-                frame_idx = 0
-                while True:
-                    raw_bytes = proc_in.stdout.read(frame_size) if proc_in.stdout else b""
-                    if not raw_bytes or len(raw_bytes) < frame_size:
-                        break
-                    img = Image.frombytes("RGB", (width, height), raw_bytes)
-                    t_sec = scene_start_sec + (frame_idx / float(fps))
-                    img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
+                stderr_out = b""
+                ret_out = 0
+                try:
+                    frame_idx = 0
+                    while True:
+                        raw_bytes = proc_in.stdout.read(frame_size) if proc_in.stdout else b""
+                        if not raw_bytes or len(raw_bytes) < frame_size:
+                            break
+                        img = Image.frombytes("RGB", (width, height), raw_bytes)
+                        t_sec = scene_start_sec + (frame_idx / float(fps))
+                        img = drawer.draw_on_frame(img, t_sec, subtitle_cues, theme_override=subtitle_theme)
+                        if proc_out.stdin:
+                            proc_out.stdin.write(img.tobytes())
+                        frame_idx += 1
+                    if proc_in.stdout:
+                        with contextlib.suppress(Exception):
+                            proc_in.stdout.close()
+                    proc_in.wait()
+
                     if proc_out.stdin:
-                        proc_out.stdin.write(img.tobytes())
-                    frame_idx += 1
+                        with contextlib.suppress(Exception):
+                            proc_out.stdin.flush()
+                            proc_out.stdin.close()
+                    if proc_out.stderr:
+                        with contextlib.suppress(Exception):
+                            stderr_out = proc_out.stderr.read()
+                    ret_out = proc_out.wait()
+                finally:
+                    cleanup_subprocesses(proc_in, proc_out)
 
-                if proc_in.stdout:
-                    proc_in.stdout.close()
-                proc_in.wait()
-                if proc_out.stdin:
-                    proc_out.stdin.flush()
-                    proc_out.stdin.close()
-                proc_out.wait()
+                if ret_out != 0:
+                    err_msg = stderr_out.decode("utf-8", errors="replace")
+                    raise FFmpegExecutionError(
+                        f"FFmpeg subtitle pipeline failed (returncode {ret_out}): {err_msg}",
+                        returncode=ret_out,
+                        stderr=err_msg,
+                        command=write_cmd,
+                    )
             else:
                 ffmpeg_cmd = [
                     "ffmpeg", "-y",
@@ -348,6 +382,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
 
         cmd = [
             "ffmpeg", "-y",
+            "-loglevel", "error",
             "-f", "rawvideo",
             "-pix_fmt", "rgb24",
             "-s", f"{width}x{height}",
@@ -363,23 +398,43 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             "-movflags", "+faststart",
             str(out_path),
         ]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        register_process(proc)
 
-        for i in range(total_frames):
-            t_norm = i / float(total_frames)
-            # Create atmospheric procedural frame
-            arr = np.zeros((height, width, 3), dtype=np.uint8)
-            for y in range(0, height, 4):
-                fac = y / height
-                val = int(5 + fac * 25 + 10 * math.sin(2 * math.pi * t_norm + fac * 3))
-                arr[y:y+4, :, 0] = max(0, min(255, val // 2))
-                arr[y:y+4, :, 1] = max(0, min(255, val // 3))
-                arr[y:y+4, :, 2] = max(0, min(255, val))
+        stderr_bytes = b""
+        retcode = 0
+        try:
+            for i in range(total_frames):
+                t_norm = i / float(total_frames)
+                # Create atmospheric procedural frame
+                arr = np.zeros((height, width, 3), dtype=np.uint8)
+                for y in range(0, height, 4):
+                    fac = y / height
+                    val = int(5 + fac * 25 + 10 * math.sin(2 * math.pi * t_norm + fac * 3))
+                    arr[y:y+4, :, 0] = max(0, min(255, val // 2))
+                    arr[y:y+4, :, 1] = max(0, min(255, val // 3))
+                    arr[y:y+4, :, 2] = max(0, min(255, val))
 
-            proc.stdin.write(arr.tobytes())
+                if proc.stdin:
+                    proc.stdin.write(arr.tobytes())
 
-        if proc.stdin:
-            proc.stdin.flush()
-            proc.stdin.close()
-        proc.wait()
+            if proc.stdin:
+                with contextlib.suppress(Exception):
+                    proc.stdin.flush()
+                    proc.stdin.close()
+            if proc.stderr:
+                with contextlib.suppress(Exception):
+                    stderr_bytes = proc.stderr.read()
+            retcode = proc.wait()
+        finally:
+            cleanup_subprocesses(proc)
+
+        if retcode != 0:
+            err_msg = stderr_bytes.decode("utf-8", errors="replace")
+            raise FFmpegExecutionError(
+                f"FFmpeg fallback loop generation failed (returncode {retcode}): {err_msg}",
+                returncode=retcode,
+                stderr=err_msg,
+                command=cmd,
+            )
         return out_path

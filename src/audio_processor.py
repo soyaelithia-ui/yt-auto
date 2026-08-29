@@ -164,7 +164,7 @@ class AudioProcessor:
         eliminating micro-pauses between scenes. Recalculates and returns (output_path, scene_durations).
         """
         from typing import List, Tuple
-        from src.tts import get_wav_duration
+        from lib.tts import get_wav_duration
 
         valid_clips = [p for p in clip_paths if p and os.path.exists(p)]
         if not valid_clips:

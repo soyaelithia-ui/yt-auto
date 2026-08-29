@@ -48,8 +48,8 @@ from src.audio import (
     build_sidechain_ducking_filter_graph,
     apply_sidechain_ducking,
     master_audio_track,
-    generate_synthetic_pcm_audio,
 )
+from tests.helpers.audio import generate_synthetic_pcm_audio
 
 
 @pytest.fixture

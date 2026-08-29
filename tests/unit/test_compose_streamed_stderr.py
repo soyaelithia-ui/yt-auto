@@ -41,7 +41,7 @@ class TestComposeStreamedStderr(unittest.TestCase):
         """Legacy path (default) still patches cleanly via subprocess.run."""
         with _TempFiles() as tf:
             with patch.dict(os.environ, {"YT_COMPOSE_STREAM_STDERR": "0"}), \
-                    patch("src.video.validate_video_format", return_value=True), \
+                    patch("lib.video.validate_video_format", return_value=True), \
                     patch("subprocess.run") as sp_mock:
                 sp_mock.return_value = MagicMock(returncode=0)
                 res = compose_video(
@@ -67,7 +67,7 @@ class TestComposeStreamedStderr(unittest.TestCase):
         with _TempFiles() as tf:
             log_expected = os.path.join(os.path.dirname(tf.output_video), "ffmpeg_compose.log")
             with patch.dict(os.environ, {"YT_COMPOSE_STREAM_STDERR": "1"}), \
-                    patch("src.video.validate_video_format", return_value=True), \
+                    patch("lib.video.validate_video_format", return_value=True), \
                     mock.patch("lib.video.run_ffmpeg", side_effect=fake_run_ffmpeg), \
                     mock.patch("subprocess.run") as sp_mock:
                 res = compose_video(
@@ -87,7 +87,7 @@ class TestComposeStreamedStderr(unittest.TestCase):
 
         with _TempFiles() as tf:
             with patch.dict(os.environ, {"YT_COMPOSE_STREAM_STDERR": "1"}), \
-                    patch("src.video.validate_video_format", return_value=True), \
+                    patch("lib.video.validate_video_format", return_value=True), \
                     mock.patch("lib.video.run_ffmpeg", side_effect=fake_run_ffmpeg):
                 with self.assertRaises(RuntimeError) as ctx:
                     compose_video(

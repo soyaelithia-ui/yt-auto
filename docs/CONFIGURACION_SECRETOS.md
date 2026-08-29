@@ -20,7 +20,8 @@ Inventario estructurado de variables de entorno y directivas de seguridad para `
 | `WORK_ROOT` | Directorio temporal de trabajo y renders. | `work/` |
 | `ARTIFACT_ROOT` | Directorio persistente de artefactos generados. | `artifacts/` |
 | `SECRETS_DIR` | Directorio de montaje de secretos del sistema. | `/run/secrets` |
-| `ANTIGRAVITY_AGENTS_APP_DATA_DIR` | Directorio aislado de sesión para agentes de IA. | `.bot_home/.gemini/antigravity-cli` |
+| `ANTIGRAVITY_AGENTS_APP_DATA_DIR` | Directorio aislado de sesión para agentes de IA (instancia predeterminada). | `.bot_home/.gemini/antigravity-cli` |
+| `ANTIGRAVITY_AGENTS_APP_DATA_DIR_<ID>` | Directorio aislado para una instancia específica (ej. `PIPELINE_CREATIVE`). | `.bot_home_<id>/.gemini/antigravity-cli` |
 
 ### B. Inteligencia Artificial (Google Gemini)
 | Variable | Descripción | Uso |

@@ -260,12 +260,18 @@ def main() -> int:
     mix_master_audio(voice_wav, AUDIO_BGM, master_audio, total_dur)
 
     # Step 3: Use the upgraded WebGL Rec.709 loop
-    shader_loop = ROOT_DIR / "assets" / "loops" / "web_procedural" / "cosmic_horror" / "web_cosmic_horror_h_s142567_6s.mp4"
-    if not shader_loop.is_file():
-        logger.info("Generando loop cinemático WebGL Rec.709...")
-        cmd_gen = ["python3", "main.py", "loop", "generate", "--category", "cosmic_horror", "--orientation", "horizontal", "--duration", "6"]
-        subprocess.run(cmd_gen, check=True)
-        shader_loop = list((ROOT_DIR / "assets" / "loops" / "web_procedural" / "cosmic_horror").glob("*.mp4"))[0]
+    shader_candidates = [
+        ROOT_DIR / "assets" / "loops" / "web_procedural" / "classified_terminal" / "proc_classified_terminal_horizontal_1920x1080_s61_6s.mp4",
+        ROOT_DIR / "assets" / "loops" / "web_procedural" / "cosmic_singularity" / "proc_cosmic_singularity_horizontal_1920x1080_s61_6s.mp4",
+        ROOT_DIR / "assets" / "loops" / "thematic_iconic" / "act1_suit_1920x1080_6s.mp4",
+    ]
+    shader_loop = next((p for p in shader_candidates if p.is_file()), None)
+    if not shader_loop or not shader_loop.is_file():
+        all_1080p = list((ROOT_DIR / "assets" / "loops").glob("**/*1920x1080*.mp4"))
+        if all_1080p:
+            shader_loop = all_1080p[0]
+        else:
+            raise FileNotFoundError("No 1920x1080 loop asset found in assets/loops")
 
     # Step 4: Compose Master Full HD 1080p
     compose_master_video(shader_loop, master_audio, master_output, total_dur)

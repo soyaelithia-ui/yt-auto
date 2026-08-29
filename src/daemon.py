@@ -28,6 +28,81 @@ logger = get_logger("daemon")
 _SHUTDOWN_EVENT = threading.Event()
 _SHUTDOWN_REQUESTED = False
 
+_RENDER_SEMAPHORE = threading.Semaphore(1)
+_SYNTHESIS_SEMAPHORE = threading.Semaphore(2)
+
+
+def compute_simhash_64(text: str | None) -> int:
+    """Computes a 64-bit SimHash fingerprint using token and bigram frequency weights."""
+    import hashlib
+    import re
+    from collections import Counter
+
+    if not text:
+        return 0
+    tokens = re.findall(r"\w+", str(text).lower())
+    if not tokens:
+        return 0
+
+    features: list[str] = list(tokens)
+    for i in range(len(tokens) - 1):
+        features.append(f"{tokens[i]}_{tokens[i+1]}")
+
+    counts = Counter(features)
+    v = [0.0] * 64
+
+    for feat, weight in counts.items():
+        h_bytes = hashlib.md5(feat.encode("utf-8")).digest()[:8]
+        h = int.from_bytes(h_bytes, byteorder="big")
+        for i in range(64):
+            bit = (h >> i) & 1
+            v[i] += weight if bit else -weight
+
+    fingerprint = 0
+    for i in range(64):
+        if v[i] > 0:
+            fingerprint |= 1 << i
+
+    return fingerprint
+
+
+def hamming_distance_64(h1: int | None, h2: int | None) -> int:
+    """Computes Hamming distance between two 64-bit integers."""
+    v1 = int(h1 or 0) & 0xFFFFFFFFFFFFFFFF
+    v2 = int(h2 or 0) & 0xFFFFFFFFFFFFFFFF
+    xor = v1 ^ v2
+    return bin(xor).count("1")
+
+
+def evaluate_script_simhash(
+    candidate_text: str,
+    history_hashes: list[int] | tuple[int, ...] | set[int] | Any = None,
+    min_hamming_distance: int = 4,
+    *,
+    repository: Any = None,
+    channel: str = "moku",
+) -> bool:
+    """Returns True if candidate text is sufficiently distinct (Hamming >= min_hamming_distance) against history."""
+    candidate_hash = compute_simhash_64(candidate_text)
+    if candidate_hash == 0:
+        return True
+
+    target_repo = repository or (history_hashes if hasattr(history_hashes, "has_near_duplicate") else None)
+    if target_repo is not None and hasattr(target_repo, "has_near_duplicate"):
+        return not target_repo.has_near_duplicate(
+            channel, candidate_hash, max_distance=min_hamming_distance - 1
+        )
+
+    if isinstance(history_hashes, (list, tuple, set)):
+        for hist_h in history_hashes:
+            if hist_h is not None:
+                dist = hamming_distance_64(candidate_hash, int(hist_h))
+                if dist < min_hamming_distance:
+                    return False
+        return True
+
+    return True
+
 
 def _startup_incident_check(database: str, interval_seconds: int) -> None:
     """Detect an unclean previous stop (crash/OOM) and alert with its cause."""
@@ -127,17 +202,32 @@ def run_pipeline_once(
     generate_only: bool = False,
     story_id: str | None = None,
     lane_id: str | None = None,
+    **kwargs: Any,
 ) -> dict[str, Any]:
-    """Compatibility entrypoint with an explicit canonical channel."""
+    """Compatibility entrypoint with an explicit canonical channel and bounded concurrency."""
     from src.pipeline import run_pipeline_once as safe_run
+    from src.cleaner import clean_run_intermediates
 
-    return safe_run(
-        channel=canonical_channel(channel).value,
-        db_path=db_path,
-        generate_only=generate_only,
-        story_id=story_id,
-        lane_id=lane_id,
-    )
+    work_dir = None
+    with _RENDER_SEMAPHORE:
+        try:
+            res = safe_run(
+                channel=canonical_channel(channel).value,
+                db_path=db_path,
+                generate_only=generate_only,
+                story_id=story_id,
+                lane_id=lane_id,
+                **kwargs,
+            )
+            if isinstance(res, dict):
+                work_dir = res.get("work_dir")
+            return res
+        finally:
+            if work_dir:
+                try:
+                    clean_run_intermediates(work_dir)
+                except Exception:
+                    pass
 
 
 def run_lane_once(
@@ -436,6 +526,7 @@ def _execute_lane_pick(
     owner = f"lane-{pick.lane_id}"
     lease_seconds = max(900, int(os.environ.get("RENDER_TIMEOUT_SECONDS", "10800")) // 2)
     job: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
     try:
         job = repository.claim_resumable(
             pick.lane_id, pick.channel.value, owner, lease_seconds=lease_seconds
@@ -456,13 +547,14 @@ def _execute_lane_pick(
         logger.info(
             "Lane %s reclamó historia %s (%s)", pick.lane_id, job["story_id"], mode
         )
-        result = safe_run(
-            channel=pick.channel.value,
-            db_path=database,
-            generate_only=generate_only,
-            story_id=job["story_id"],
-            lane_id=pick.lane_id,
-        )
+        with _RENDER_SEMAPHORE:
+            result = safe_run(
+                channel=pick.channel.value,
+                db_path=database,
+                generate_only=generate_only,
+                story_id=job["story_id"],
+                lane_id=pick.lane_id,
+            )
     except QuotaError as exc:
         result = {
             "status": "WAITING_LLM_QUOTA",
@@ -488,6 +580,15 @@ def _execute_lane_pick(
         )
     finally:
         clear_run_context()
+        if result and isinstance(result, dict) and result.get("work_dir"):
+            try:
+                from src.cleaner import clean_run_intermediates
+                clean_run_intermediates(result["work_dir"])
+            except Exception:
+                pass
+
+    if result is None:
+        return {"status": "LANE_EMPTY", "lane": pick.lane_id, "channel": pick.channel.value}
 
     scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
     status_value = str(result.get("status", ""))

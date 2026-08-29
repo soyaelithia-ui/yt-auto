@@ -27,6 +27,24 @@ def format_ass_timestamp(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}.{cs:02d}"
 
 
+def hex_to_ass_color(hex_str: str, alpha: str = "00") -> str:
+    """Converts #RRGGBB hex color to ASS &HAABBGGRR& format."""
+    if not hex_str:
+        return f"&H{alpha}FFFFFF&"
+    if hex_str.startswith("&H") and hex_str.endswith("&"):
+        return hex_str
+    clean = hex_str.replace("#", "").strip()
+    if len(clean) == 3:
+        clean = "".join([c * 2 for c in clean])
+    if len(clean) == 6:
+        r, g, b = clean[0:2], clean[2:4], clean[4:6]
+        return f"&H{alpha}{b.upper()}{g.upper()}{r.upper()}&"
+    elif len(clean) == 8:
+        r, g, b, a = clean[0:2], clean[2:4], clean[4:6], clean[6:8]
+        return f"&H{a.upper()}{b.upper()}{g.upper()}{r.upper()}&"
+    return f"&H{alpha}FFFFFF&"
+
+
 class TerminalKaraokeSubtitleGenerator:
     """Generates phosphor-green terminal karaoke ASS subtitles."""
 
@@ -39,10 +57,10 @@ class TerminalKaraokeSubtitleGenerator:
         background_box_color: str = "&H90051208&",  # Translucent dark abyssal green backdrop
     ) -> None:
         self.font_name = font_name
-        self.active_color = active_color
-        self.inactive_color = inactive_color
-        self.outline_color = outline_color
-        self.background_box_color = background_box_color
+        self.active_color = hex_to_ass_color(active_color) if active_color.startswith("#") else active_color
+        self.inactive_color = hex_to_ass_color(inactive_color) if inactive_color.startswith("#") else inactive_color
+        self.outline_color = hex_to_ass_color(outline_color) if outline_color.startswith("#") else outline_color
+        self.background_box_color = hex_to_ass_color(background_box_color, alpha="90") if background_box_color.startswith("#") else background_box_color
 
     def generate_ass(
         self,
@@ -51,6 +69,7 @@ class TerminalKaraokeSubtitleGenerator:
         width: int = 1080,
         height: int = 1920,
         words_per_cue: int = 3,
+        downward_drift_px: int = 0,
     ) -> Path:
         """
         Groups word timestamps into short high-impact cues (2-4 words) with ASS \\k karaoke tags.
@@ -60,13 +79,13 @@ class TerminalKaraokeSubtitleGenerator:
 
         if not word_timestamps:
             # Generate empty valid ASS header
-            out_p.write_text(self._build_header(width, height), encoding="utf-8")
+            out_p.write_text(self._build_header(width, height, downward_drift_px=downward_drift_px), encoding="utf-8")
             return out_p
 
         # Group words into cues
         cues = self._group_words_to_cues(word_timestamps, max_words=words_per_cue)
 
-        ass_lines = [self._build_header(width, height)]
+        ass_lines = [self._build_header(width, height, downward_drift_px=downward_drift_px)]
         ass_lines.append("[Events]")
         ass_lines.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text")
 
@@ -79,13 +98,19 @@ class TerminalKaraokeSubtitleGenerator:
             # Build karaoke formatted string
             # In ASS: {\k<centiseconds>}word
             karaoke_text_parts = []
+            prev_w_end = start_val
             for w in cue["words"]:
                 w_start = float(w["start"])
                 w_end = float(w["end"])
+                if w_start > prev_w_end:
+                    gap_cs = int(round((w_start - prev_w_end) * 100))
+                    if gap_cs > 0:
+                        karaoke_text_parts.append(f"{{\\k{gap_cs}}}")
                 dur_cs = max(1, int(round((w_end - w_start) * 100)))
                 # Highlight active word with phosphor green
                 clean_w = str(w["word"]).strip()
                 karaoke_text_parts.append(f"{{\\k{dur_cs}}}{clean_w}")
+                prev_w_end = w_end
 
             text_line = " ".join(karaoke_text_parts)
             ass_lines.append(
@@ -108,12 +133,14 @@ class TerminalKaraokeSubtitleGenerator:
             w_text = str(stamp.get("word", stamp.get("w", ""))).strip()
             if not w_text:
                 continue
-            w_start = float(stamp.get("start", stamp.get("w_start", 0.0)))
-            w_end = float(stamp.get("end", stamp.get("w_end", w_start + 0.3)))
-            if w_end <= w_start:
-                w_end = w_start + 0.15
-
-            word_obj = {"word": w_text, "start": w_start, "end": w_end}
+            
+            w_start = max(0.0, float(stamp.get("start", stamp.get("s", 0.0))))
+            w_end = max(w_start + 0.05, float(stamp.get("end", stamp.get("e", w_start + 0.3))))
+            word_obj = {
+                "word": w_text,
+                "start": w_start,
+                "end": w_end,
+            }
 
             if len(current_words) >= max_words:
                 cues.append({
@@ -141,9 +168,11 @@ class TerminalKaraokeSubtitleGenerator:
 
         return cues
 
-    def _build_header(self, width: int, height: int) -> str:
+    def _build_header(self, width: int, height: int, downward_drift_px: int = 0) -> str:
         # Centered vertically in the lower-middle safe zone (alignment = 2 / bottom-center with margin)
-        margin_v = int(height * 0.22) if height > width else int(height * 0.12)
+        # Guarantees >= 480px margin for portrait (clearing mobile UI controls) and >= 130px for landscape.
+        base_margin_v = max(480, int(height * 0.25)) if height > width else max(130, int(height * 0.12))
+        margin_v = base_margin_v + max(0, int(downward_drift_px))
         font_size = int(height * 0.038) if height > width else int(height * 0.055)
 
         return f"""[Script Info]
@@ -156,5 +185,5 @@ PlayResY: {height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TerminalKaraoke,{self.font_name},{font_size},{self.inactive_color},{self.active_color},{self.outline_color},{self.background_box_color},-1,0,0,0,100,100,1,0,1,3,2,2,40,40,{margin_v},1
+Style: TerminalKaraoke,{self.font_name},{font_size},{self.active_color},{self.inactive_color},{self.outline_color},{self.background_box_color},-1,0,0,0,100,100,1,0,1,3,2,2,40,40,{margin_v},1
 """

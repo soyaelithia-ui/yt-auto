@@ -1113,7 +1113,7 @@ def upload_video(
             "verified": False,
         }
     if not dry_run:
-        from src.video import validate_video_format
+        from lib.video import validate_video_format
 
         validate_video_format(video_path, min_duration=0.0)
 

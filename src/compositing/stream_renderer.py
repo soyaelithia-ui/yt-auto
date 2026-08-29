@@ -6,6 +6,7 @@ muxing mastered audio and karaoke ASS subtitles without creating temporary disk 
 """
 from __future__ import annotations
 
+import contextlib
 import errno
 import math
 import os
@@ -18,6 +19,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from playwright.sync_api import sync_playwright
 
+from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.narrative.schema import CosmicScriptContract
 from src.rendering.renderer import CosmicShaderRenderer, resolve_chrome_path
 from lib.ffmpeg import probe_media
@@ -168,6 +170,8 @@ class DirectStreamCompositor:
                 stdout=log_f,
                 stderr=log_f,
             )
+            register_process(proc)
+            browser = None
 
             try:
                 with sync_playwright() as p:
@@ -189,6 +193,7 @@ class DirectStreamCompositor:
                             break
 
                     browser.close()
+                    browser = None
 
                 try:
                     if proc.stdin:
@@ -204,11 +209,11 @@ class DirectStreamCompositor:
                     raise RuntimeError(
                         f"FFmpeg pipeline error (code {proc.returncode}): {err_msg}"
                     )
-            except Exception as exc:
-                if not isinstance(exc, (BrokenPipeError, OSError)):
-                    if proc.poll() is None:
-                        proc.kill()
-                    raise RuntimeError(f"Error during headless frame stream: {exc}") from exc
+            finally:
+                if browser is not None:
+                    with contextlib.suppress(Exception):
+                        browser.close()
+                cleanup_subprocesses(proc)
 
         elapsed = time.time() - start_time
         fps_eff = actual_total_frames / max(0.1, elapsed)
@@ -229,15 +234,21 @@ class DirectStreamCompositor:
         if proc.poll() is not None or proc.stdin is None:
             return False
 
+        deadline = time.monotonic() + timeout
         try:
             fd = proc.stdin.fileno()
             # Wait for pipe buffer to be writable (backpressure handling)
             while True:
                 if proc.poll() is not None:
                     return False
-                _, writable, _ = select.select([], [fd], [], timeout)
+                if time.monotonic() >= deadline:
+                    return False
+                remaining = max(0.0, deadline - time.monotonic())
+                _, writable, _ = select.select([], [fd], [], min(remaining, 0.5))
                 if writable:
                     break
+                if time.monotonic() >= deadline:
+                    return False
                 # Buffer full: throttle producer to allow FFmpeg encoder to catch up
                 time.sleep(0.002)
 

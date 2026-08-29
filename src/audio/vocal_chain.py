@@ -4,10 +4,10 @@ src/audio/vocal_chain.py - Vocal processing chains (intercom bunker, hydrophone 
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 from typing import Optional, Union
 
+from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
 from src.narrative.schema import VoicePreset
 from src.log import get_logger
 
@@ -81,6 +81,6 @@ class VocalChainProcessor:
         ]
 
         logger.info("Aplicando cadena vocal '%s' con FFmpeg...", preset.value)
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        run_ffmpeg(cmd, check=True)
 
         return out_p

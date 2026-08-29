@@ -216,6 +216,7 @@ def test_audio_mixer_empty_sfx_and_missing_voice(tmp_path: Path) -> None:
 
 def test_src_audio_package_exports_and_synthetic_pcm(tmp_path: Path) -> None:
     import src.audio as audio_pkg
+    from tests.helpers.audio import generate_synthetic_pcm_audio
 
     # Check key exports
     assert hasattr(audio_pkg, "ProceduralDroneSynthesizer")
@@ -226,16 +227,52 @@ def test_src_audio_package_exports_and_synthetic_pcm(tmp_path: Path) -> None:
     assert hasattr(audio_pkg, "normalize_narration_lufs")
     assert hasattr(audio_pkg, "apply_sidechain_ducking")
     assert hasattr(audio_pkg, "master_audio_track")
-    assert hasattr(audio_pkg, "generate_synthetic_pcm_audio")
     assert hasattr(audio_pkg, "AudioProcessingError")
     assert hasattr(audio_pkg, "AudioMasteringError")
 
     pcm_wav = tmp_path / "test_synth_pcm.wav"
-    res = audio_pkg.generate_synthetic_pcm_audio(str(pcm_wav), duration_sec=1.0, freq=440.0)
+    res = generate_synthetic_pcm_audio(str(pcm_wav), duration_sec=1.0, freq=440.0)
     assert Path(res).is_file()
     with wave.open(res, "rb") as wf:
         assert wf.getnchannels() == 2
         assert wf.getframerate() == 44100
         assert wf.getsampwidth() == 2
         assert wf.getnframes() == 44100
+
+
+def test_audio_mixer_single_sfx(tmp_path: Path) -> None:
+    # 1. Create a dummy dry voice file
+    voice_wav = tmp_path / "voice_dry.wav"
+    sample_rate = 44100
+    duration = 2.0
+    t = np.arange(int(sample_rate * duration)) / float(sample_rate)
+    voice_samples = (0.5 * np.sin(2.0 * np.pi * 220.0 * t) * 32767.0).astype(np.int16)
+    with wave.open(str(voice_wav), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(voice_samples.tobytes())
+
+    mixer = CosmicAudioMixer(work_dir=tmp_path / "work_single_sfx")
+    audio_contract = AudioContract(
+        voice_text="Prueba de audio con un solo SFX...",
+        voice_preset=VoicePreset.INTERCOM_BUNKER,
+        drone_base_freq_hz=38.0,
+        sfx_timeline=[
+            SFXCue(time_sec=0.5, sfx_id="ptt_squelch", volume=1.0),
+        ],
+    )
+
+    master_wav = tmp_path / "master_single_sfx.wav"
+    out_res = mixer.master_soundtrack(
+        audio_contract=audio_contract,
+        raw_voice_wav=voice_wav,
+        output_master_wav=master_wav,
+        total_duration_sec=2.0,
+    )
+
+    assert out_res.is_file()
+    assert out_res.stat().st_size > 0
+    with wave.open(str(out_res), "rb") as wf:
+        assert wf.getframerate() == 44100
 

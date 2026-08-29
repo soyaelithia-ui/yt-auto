@@ -876,9 +876,9 @@ class LoopVideoEngine(BaseVideoCompositor):
         }
         forward_kwargs = {k: v for k, v in extra_kwargs.items() if k not in BOUND_KEYS}
 
-        # Check if src.video.compose_video is mocked in legacy test suites
+        # Check if lib.video.compose_video is mocked in legacy test suites
         try:
-            from src.video import compose_video as _cv
+            from lib.video import compose_video as _cv
             from unittest.mock import Mock
             if isinstance(_cv, Mock):
                 from src.config import LONG_MIN_DURATION_SEC

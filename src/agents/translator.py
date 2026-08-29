@@ -37,11 +37,18 @@ class TranslatorAgent(ProgrammaticAgent):
     synthesizes per-scene images.
     """
 
-    def __init__(self, model: str = CANONICAL_MODEL) -> None:
+    def __init__(
+        self,
+        model: str = CANONICAL_MODEL,
+        instance_id: str = "pipeline_translator",
+        reasoning_effort: str = "low",
+    ) -> None:
         super().__init__(
             system_instructions=TRANSLATOR_SYSTEM_INSTRUCTION,
             model=model,
             role_name="translator-agent",
+            instance_id=instance_id,
+            reasoning_effort=reasoning_effort,
             task_result_path=TRANSLATION_RESULT_PATH,
             json_schema=TRANSLATOR_JSON_SCHEMA,
         )

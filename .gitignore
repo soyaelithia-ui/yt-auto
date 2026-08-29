@@ -26,7 +26,7 @@ secrets/
 browser_data/
 cookies/
 *.key
-.bot_home/
+.bot_home*/
 *.token
 *cookies*.json
 *token*.json

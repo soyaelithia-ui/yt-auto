@@ -216,85 +216,99 @@ class HybridVideoEngine(BaseVideoCompositor):
             str(out_path),
         ]
 
-        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
-        # Precompute god rays overlay once per scene segment
-        god_rays_overlay = None
-        if lighting.volumetric_rays:
-            god_rays_overlay = self._create_god_rays_overlay(width, height, lighting)
+        stderr_bytes = b""
+        try:
+            # Precompute god rays overlay once per scene segment
+            god_rays_overlay = None
+            if lighting.volumetric_rays:
+                god_rays_overlay = self._create_god_rays_overlay(width, height, lighting)
 
-        bg_w, bg_h = bg_image.size
-        for frame_idx in range(total_frames):
-            t_norm = frame_idx / max(1, total_frames - 1)
-            ease_t = cubic_bezier_ease(t_norm)
+            bg_w, bg_h = bg_image.size
+            for frame_idx in range(total_frames):
+                t_norm = frame_idx / max(1, total_frames - 1)
+                ease_t = cubic_bezier_ease(t_norm)
 
-            # Camera zoom & pan interpolation
-            curr_zoom = zoom_start + (zoom_end - zoom_start) * ease_t
-            crop_w = int(bg_w / curr_zoom)
-            crop_h = int(bg_h / curr_zoom)
+                # Camera zoom & pan interpolation
+                curr_zoom = zoom_start + (zoom_end - zoom_start) * ease_t
+                crop_w = int(bg_w / curr_zoom)
+                crop_h = int(bg_h / curr_zoom)
 
-            # Pan calculation
-            if pan_dir == "center_to_top":
-                crop_x = (bg_w - crop_w) // 2
-                crop_y = int((bg_h - crop_h) * (1.0 - ease_t * 0.5))
-            elif pan_dir == "center_to_bottom":
-                crop_x = (bg_w - crop_w) // 2
-                crop_y = int((bg_h - crop_h) * (ease_t * 0.5))
-            elif pan_dir == "left_to_right":
-                crop_x = int((bg_w - crop_w) * ease_t)
-                crop_y = (bg_h - crop_h) // 2
-            elif pan_dir == "right_to_left":
-                crop_x = int((bg_w - crop_w) * (1.0 - ease_t))
-                crop_y = (bg_h - crop_h) // 2
-            else:
-                crop_x = (bg_w - crop_w) // 2
-                crop_y = (bg_h - crop_h) // 2
+                # Pan calculation
+                if pan_dir == "center_to_top":
+                    crop_x = (bg_w - crop_w) // 2
+                    crop_y = int((bg_h - crop_h) * (1.0 - ease_t * 0.5))
+                elif pan_dir == "center_to_bottom":
+                    crop_x = (bg_w - crop_w) // 2
+                    crop_y = int((bg_h - crop_h) * (ease_t * 0.5))
+                elif pan_dir == "left_to_right":
+                    crop_x = int((bg_w - crop_w) * ease_t)
+                    crop_y = (bg_h - crop_h) // 2
+                elif pan_dir == "right_to_left":
+                    crop_x = int((bg_w - crop_w) * (1.0 - ease_t))
+                    crop_y = (bg_h - crop_h) // 2
+                else:
+                    crop_x = (bg_w - crop_w) // 2
+                    crop_y = (bg_h - crop_h) // 2
 
-            crop_x = max(0, min(bg_w - crop_w, crop_x))
-            crop_y = max(0, min(bg_h - crop_h, crop_y))
+                crop_x = max(0, min(bg_w - crop_w, crop_x))
+                crop_y = max(0, min(bg_h - crop_h, crop_y))
 
-            # Crop & scale to target viewport
-            frame = bg_image.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
-            frame = frame.resize((width, height), Image.Resampling.BILINEAR)
+                # Crop & scale to target viewport
+                frame = bg_image.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
+                frame = frame.resize((width, height), Image.Resampling.BILINEAR)
 
-            # Ambient flicker
-            if lighting.flicker_frequency > 0.0:
-                freq = lighting.flicker_frequency
-                flicker = 1.0 + 0.08 * math.sin(2.0 * math.pi * freq * t_norm) + 0.04 * math.sin(2.0 * math.pi * freq * 2.3 * t_norm)
-                frame = ImageEnhance.Brightness(frame).enhance(flicker)
+                # Ambient flicker
+                if lighting.flicker_frequency > 0.0:
+                    freq = lighting.flicker_frequency
+                    flicker = 1.0 + 0.08 * math.sin(2.0 * math.pi * freq * t_norm) + 0.04 * math.sin(2.0 * math.pi * freq * 2.3 * t_norm)
+                    frame = ImageEnhance.Brightness(frame).enhance(flicker)
 
-            # Volumetric god rays composite
-            if god_rays_overlay:
-                frame = Image.alpha_composite(frame.convert("RGBA"), god_rays_overlay).convert("RGB")
+                # Volumetric god rays composite
+                if god_rays_overlay:
+                    frame = Image.alpha_composite(frame.convert("RGBA"), god_rays_overlay).convert("RGB")
 
-            # Draw Atmospheric Particles
-            if particles.type != "none" and particle_system:
-                frame = self._render_particles(frame, particle_system, t_norm, width, height)
+                # Draw Atmospheric Particles
+                if particles.type != "none" and particle_system:
+                    frame = self._render_particles(frame, particle_system, t_norm, width, height)
 
-            # Direct in-memory Code Subtitle Rendering (Word-by-Word Active Karaoke)
-            if subtitle_cues:
-                curr_time = scene_start_sec + (frame_idx / float(fps))
-                frame = self.subtitle_drawer.draw_on_frame(
-                    frame,
-                    current_time_sec=curr_time,
-                    cues=subtitle_cues,
-                    theme_override=subtitle_theme,
-                )
+                # Direct in-memory Code Subtitle Rendering (Word-by-Word Active Karaoke)
+                if subtitle_cues:
+                    curr_time = scene_start_sec + (frame_idx / float(fps))
+                    frame = self.subtitle_drawer.draw_on_frame(
+                        frame,
+                        current_time_sec=curr_time,
+                        cues=subtitle_cues,
+                        theme_override=subtitle_theme,
+                    )
 
-            # Send raw RGB bytes to FFmpeg pipe
-            process.stdin.write(frame.tobytes())
+                # Send raw RGB bytes to FFmpeg pipe
+                process.stdin.write(frame.tobytes())
+        finally:
+            if process.stdin:
+                try:
+                    process.stdin.flush()
+                except Exception:
+                    pass
+                try:
+                    process.stdin.close()
+                except Exception:
+                    pass
+            try:
+                if process.stderr:
+                    stderr_bytes = process.stderr.read()
+            except Exception:
+                pass
+            retcode = process.wait()
 
-        if process.stdin:
-            process.stdin.flush()
-            process.stdin.close()
-        stdout = process.stdout.read() if process.stdout else b""
-        stderr = process.stderr.read() if process.stderr else b""
-        retcode = process.wait()
         if retcode != 0:
+            err_msg = stderr_bytes.decode("utf-8", errors="replace")
             raise FFmpegExecutionError(
-                f"FFmpeg failed while rendering scene {scene.scene_id}: {stderr.decode('utf-8', errors='replace')}",
+                f"FFmpeg failed while rendering scene {scene.scene_id}: {err_msg}",
                 returncode=retcode,
-                stderr=stderr.decode("utf-8", errors="replace"),
+                stderr=err_msg,
+                command=ffmpeg_cmd,
             )
 
         return out_path
