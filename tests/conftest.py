@@ -49,11 +49,12 @@ def offline_provider_guard(monkeypatch, request):
             raise RuntimeError("AGY y systemd están bloqueados en pruebas")
         return original_run(*args, **kwargs)
 
-    def guarded_popen(*args, **kwargs):
-        command = args[0] if args else kwargs.get("args")
-        if _blocked_command(command):
-            raise RuntimeError("AGY y systemd están bloqueados en pruebas")
-        return original_popen(*args, **kwargs)
+    class guarded_popen(original_popen):
+        def __init__(self, *args, **kwargs):
+            command = args[0] if args else kwargs.get("args")
+            if _blocked_command(command):
+                raise RuntimeError("AGY y systemd están bloqueados en pruebas")
+            super().__init__(*args, **kwargs)
 
     def guarded_connect(sock, address):
         host = str(address[0]) if isinstance(address, tuple) and address else ""

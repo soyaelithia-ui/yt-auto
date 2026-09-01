@@ -75,7 +75,8 @@ class SeoOptimizerAgent:
             ss = int(start % 60)
             label = act.get("title") or act.get("label") or "Sección"
             # Clean editorial markers from label
-            label = re.sub(r"(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9]+[:\.\-–—]\s*", "", label).strip()
+            from src.sanitizer import RE_ACT_CHAPTER_LABELS
+            label = RE_ACT_CHAPTER_LABELS.sub("", label).strip()
             lines.append(f"{mm:02d}:{ss:02d} - {label}")
         return "\n".join(lines)
 

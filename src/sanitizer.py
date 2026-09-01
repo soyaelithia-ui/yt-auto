@@ -63,6 +63,89 @@ ORDINAL_OR_ROMAN = (
     r")"
 )
 
+# Centralized compiled module-level regex patterns
+RE_ASS_TAGS = re.compile(r"\{\\[^}]*\}")
+RE_CODE_BLOCKS = re.compile(r"```[\w]*\n?")
+RE_MARKDOWN_LINKS = re.compile(r"\[([^\]]+)\]\([^\)]+\)")
+RE_URLS = re.compile(r"(?:https?://|www\.)\S+")
+RE_MARKDOWN_HEADERS = re.compile(r"(?i)^[>*\s]*#+\s*[^\n]*", flags=re.MULTILINE)
+RE_MARKDOWN_BOLD = re.compile(r"\*\*(.+?)\*\*")
+RE_MARKDOWN_ITALIC = re.compile(r"\*(.+?)\*")
+RE_MARKDOWN_CHARS = re.compile(r"[#>`~|]")
+RE_MARKDOWN_CHARS_ALL = re.compile(r"[#>{}\[\]~`|]")
+RE_STRUCTURAL_HEADERS_PREFIX = re.compile(
+    r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)",
+    flags=re.MULTILINE,
+)
+RE_STRUCTURAL_HEADERS_LINE = re.compile(
+    r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$",
+    flags=re.MULTILINE,
+)
+RE_STRUCTURAL_HEADERS_INLINE = re.compile(
+    r"(?i)\b(?:secci[óo]n|cap[íi]tulo)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?"
+)
+RE_CHAPTER_HEADER_LINE = re.compile(r"(?i)###?\s*cap[íi]tulo\s*\d*[:.-]?[^\n]*")
+RE_TITLE_PREFIX = re.compile(r"(?i)^\s*(?:t[íi]tulo|title)\s*[:：][^\n]*", flags=re.MULTILINE)
+RE_TITLE_INLINE = re.compile(r"(?i)\b(?:t[íi]tulo|title)\s*[:：]\s*[^\n]*")
+RE_ACT_CHAPTER_LABELS = re.compile(
+    r"(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9IVXLCDMivxlcdm]+[:\.\-–—]\s*"
+)
+RE_ACT_CHAPTER_LINE = re.compile(
+    r"(?im)^\s*(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9IVXLCDMivxlcdm]+[:\.\-–—]\s*"
+)
+RE_EDITORIAL_CUES = re.compile(
+    r"(?i)\b(?:gancho\s+viral\s+inicial|remate\s+y\s+debate|remate\s+final|llamado\s+a\s+la\s+acci[óo]n)[:.-]?[^\n]*"
+)
+RE_SFX_CUES = re.compile(
+    r"(?i)\[\s*(?:sonido|sfx|audio|m[uú]sica)[:\s][^\]]*\]"
+)
+RE_SFX_LINE = re.compile(
+    r"(?i)^\s*(?:sonido|sfx)\s*(?:\d+\s*[:.-]|\s*[:.-])\s*[^\n]*",
+    flags=re.MULTILINE,
+)
+RE_SFX_INLINE = re.compile(
+    r"(?i)\b(?:sonido|sfx)\s+(?:\d+\s*[:.-]|\s*[:.-])\s*[^\n]*"
+)
+
+
+def strip_ass_tags(text: str | None) -> str:
+    """Strip Advanced SubStation Alpha (ASS) formatting override tags (e.g. {\\k50}, {\\pos(x,y)})."""
+    if not text:
+        return ""
+    return RE_ASS_TAGS.sub("", str(text))
+
+
+def strip_act_chapter_headers(text: str | None) -> str:
+    """Strip chapter, section, act, and title headers from text."""
+    if not text:
+        return ""
+    cleaned = str(text)
+    cleaned = RE_TITLE_PREFIX.sub("", cleaned)
+    cleaned = RE_TITLE_INLINE.sub("", cleaned)
+    cleaned = RE_MARKDOWN_HEADERS.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_PREFIX.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_LINE.sub("", cleaned)
+    cleaned = RE_CHAPTER_HEADER_LINE.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_INLINE.sub("", cleaned)
+    cleaned = RE_ACT_CHAPTER_LABELS.sub("", cleaned)
+    cleaned = RE_ACT_CHAPTER_LINE.sub("", cleaned)
+    return cleaned.strip()
+
+
+def sanitize_scp_acronyms_for_tts(text: str | None) -> str:
+    """Format technical SCP acronyms phonetically for clean neutral Spanish TTS."""
+    if not text:
+        return ""
+    cleaned = str(text)
+    cleaned = re.sub(r"\bSCP-(\d+)\b", r"S-C-P \1", cleaned)
+    cleaned = re.sub(r"\bSCP\b", r"S-C-P", cleaned)
+    cleaned = re.sub(r"\bBZHR\b", r"B-Z-H-R", cleaned)
+    cleaned = re.sub(r"\bXACTS\b", r"X-ACTS", cleaned)
+    cleaned = re.sub(r"\bO5\b", r"O-5", cleaned)
+    cleaned = re.sub(r"\bXK\b", r"X-K", cleaned)
+    return cleaned
+
+
 
 def validate_semantic_barrier(text: str) -> bool:
     """
@@ -514,11 +597,11 @@ def sanitize_script_text(text: str, channel: str = "moku") -> str:
     cleaned = re.sub(r'(\b\w+ó)\s+n\b', r'\1n', cleaned)
 
     # 6. Strip markdown headers and unbracketed structural headers
-    cleaned = re.sub(r"(?i)^[>*\s]*#+\s*[^\n]*", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)###?\s*cap[íi]tulo\s*\d*[:.-]?[^\n]*", "", cleaned)
-    cleaned = re.sub(r"(?i)\b(?:secci[óo]n|cap[íi]tulo)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?", "", cleaned)
+    cleaned = RE_MARKDOWN_HEADERS.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_PREFIX.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_LINE.sub("", cleaned)
+    cleaned = RE_CHAPTER_HEADER_LINE.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_INLINE.sub("", cleaned)
 
     # 7. Normalize spanglish loanwords
     cleaned = normalize_spanglish_terms(cleaned)
@@ -648,20 +731,20 @@ def limpiar_texto_para_tts(text: str) -> str:
     cleaned = str(text or "")
 
     # 0. Strip code blocks & fences and links
-    cleaned = re.sub(r"```[\w]*\n?", "", cleaned)
-    cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
-    cleaned = re.sub(r"(?:https?://|www\.)\S+", "", cleaned)
+    cleaned = RE_CODE_BLOCKS.sub("", cleaned)
+    cleaned = RE_MARKDOWN_LINKS.sub(r"\1", cleaned)
+    cleaned = RE_URLS.sub("", cleaned)
 
     # 1. Remove markdown headers and section titles like ### Capítulo 1:, Sección Primera:, etc.
-    cleaned = re.sub(r"(?i)^[>*\s]*#+\s*[^\n]*", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)###?\s*cap[íi]tulo\s*\d*[:.-]?[^\n]*", "", cleaned)
-    cleaned = re.sub(r"(?i)\b(?:secci[óo]n|cap[íi]tulo)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?", "", cleaned)
+    cleaned = RE_MARKDOWN_HEADERS.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_PREFIX.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_LINE.sub("", cleaned)
+    cleaned = RE_CHAPTER_HEADER_LINE.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_INLINE.sub("", cleaned)
 
     # 2. Remove topic title markers (e.g. "Título: ...", "Title: ...")
-    cleaned = re.sub(r"(?i)^\s*(?:t[íi]tulo|title)\s*[:：][^\n]*", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)\b(?:t[íi]tulo|title)\s*[:：]\s*[^\n]*", "", cleaned)
+    cleaned = RE_TITLE_PREFIX.sub("", cleaned)
+    cleaned = RE_TITLE_INLINE.sub("", cleaned)
 
     # 3. Remove legacy / forbidden conversational greetings
     for pattern in LEGACY_BRANDING_PATTERNS + CRINGE_INTRO_PATTERNS:
@@ -669,12 +752,12 @@ def limpiar_texto_para_tts(text: str) -> str:
     cleaned = re.sub(r"(?i)\b(?:hoy\s+les\s+traigo(?:\s+una\s+historia)?|hoy\s+veremos|hoy\s+vamos\s+a\s+ver|hoy\s+hablaremos\s+de|esta\s+es\s+una\s+historia\s+de\s+terror)\b[^\n.!?]*[.!?]?", "", cleaned)
 
     # 4. Remove editorial cues & stage directions
-    cleaned = re.sub(r"(?i)\b(?:gancho\s+viral\s+inicial|remate\s+y\s+debate|remate\s+final|llamado\s+a\s+la\s+acci[óo]n)[:.-]?[^\n]*", "", cleaned)
+    cleaned = RE_EDITORIAL_CUES.sub("", cleaned)
 
     # 5. Remove SFX cues like [Sonido: ...] or Sonido 1: ...
-    cleaned = re.sub(r"(?i)\[\s*(?:sonido|sfx|audio|m[uú]sica)[:\s][^\]]*\]", "", cleaned)
-    cleaned = re.sub(r"(?i)^\s*(?:sonido|sfx)\s*(?:\d+\s*[:.-]|\s*[:.-])\s*[^\n]*", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)\b(?:sonido|sfx)\s+(?:\d+\s*[:.-]|\s*[:.-])\s*[^\n]*", "", cleaned)
+    cleaned = RE_SFX_CUES.sub("", cleaned)
+    cleaned = RE_SFX_LINE.sub("", cleaned)
+    cleaned = RE_SFX_INLINE.sub("", cleaned)
 
     # 6. Sanitize general script text
     cleaned = sanitize_script_text(cleaned, channel="moku")
@@ -683,7 +766,7 @@ def limpiar_texto_para_tts(text: str) -> str:
     cleaned = re.sub(r"\s+[a-zA-Z]\s*$", "", cleaned)
     # Strip markdown blockquote and stray hashes/backticks/tildes
     cleaned = re.sub(r"^[>\s]+", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"[#>`~|]", "", cleaned)
+    cleaned = RE_MARKDOWN_CHARS.sub("", cleaned)
     return cleaned.strip()
 
 

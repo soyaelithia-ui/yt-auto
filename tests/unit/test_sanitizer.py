@@ -240,6 +240,46 @@ def test_validate_pre_tts_script_preserves_dramatic_pauses():
     assert "[PAUSA]" in cleaned
 
 
+def test_strip_ass_tags_centralized():
+    from src.sanitizer import strip_ass_tags
+    assert strip_ass_tags(None) == ""
+    assert strip_ass_tags("") == ""
+    ass_sample = "{\\k50}Hola {\\pos(192,200)\\c&H0000FF&}mundo{\\r}"
+    assert strip_ass_tags(ass_sample) == "Hola mundo"
+
+
+def test_strip_act_chapter_headers_centralized():
+    from src.sanitizer import strip_act_chapter_headers
+    assert strip_act_chapter_headers(None) == ""
+    assert strip_act_chapter_headers("") == ""
+    raw = (
+        "Título: El Despertar\n"
+        "### Capítulo 1: La Llegada\n"
+        "Acto I: Inicio del relato\n"
+        "La noche estaba fría y silenciosa."
+    )
+    cleaned = strip_act_chapter_headers(raw)
+    assert "Título:" not in cleaned
+    assert "Capítulo" not in cleaned
+    assert "Acto I:" not in cleaned
+    assert "La noche estaba fría y silenciosa." in cleaned
+
+
+def test_sanitize_scp_acronyms_for_tts_centralized():
+    from src.sanitizer import sanitize_scp_acronyms_for_tts
+    assert sanitize_scp_acronyms_for_tts(None) == ""
+    assert sanitize_scp_acronyms_for_tts("") == ""
+    raw = "El SCP-173 fue investigado por el consejo O5 ante un escenario XK con tecnología BZHR y XACTS de SCP."
+    res = sanitize_scp_acronyms_for_tts(raw)
+    assert "S-C-P 173" in res
+    assert "O-5" in res
+    assert "X-K" in res
+    assert "B-Z-H-R" in res
+    assert "X-ACTS" in res
+    assert "S-C-P" in res
+
+
+
 
 
 

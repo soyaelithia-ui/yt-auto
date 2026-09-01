@@ -436,7 +436,8 @@ def _repair_dangling_events(
 
 
 def _strip_ass_tags(text: str) -> str:
-    return re.sub(r"\{\\[^}]*\}", "", text)
+    from src.sanitizer import strip_ass_tags
+    return strip_ass_tags(text)
 
 
 def _ass_header(play_w: int, play_h: int, style: dict) -> str:

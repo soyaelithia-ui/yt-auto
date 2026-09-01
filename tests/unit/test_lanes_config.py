@@ -111,6 +111,13 @@ class TestLoadLanes:
         ]
         assert any("embebidos" in record.message for record in caplog.records)
 
+    def test_fallback_lanes_have_bounded_word_limits(self):
+        lanes = {lane.id: lane for lane in fallback_lanes()}
+        assert lanes["moku-horror-long"].words_max == 4800
+        assert lanes["moku-horror-long"].words_recondense_max == 4500
+        assert lanes["aelithia-aita-long"].words_max == 4800
+        assert lanes["aelithia-aita-long"].words_recondense_max == 4500
+
     def test_valid_document_roundtrip(self, tmp_path):
         path = _write(
             tmp_path,

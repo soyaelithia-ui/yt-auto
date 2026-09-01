@@ -477,7 +477,8 @@ class QAGatekeeper:
 
 
 def _strip_ass_tags(text: str) -> str:
-    return re.sub(r"\{\\[^}]*\}", "", text)
+    from src.sanitizer import strip_ass_tags
+    return strip_ass_tags(text)
 
 
 def _ffmpeg_run(cmd: List[str], timeout: int = 300) -> subprocess.CompletedProcess:

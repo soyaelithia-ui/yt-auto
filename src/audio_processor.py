@@ -250,20 +250,19 @@ def sanitize_script_for_tts(raw_text: str) -> str:
     2. Formats technical acronyms phonetically for clear neutral Spanish TTS.
     3. Normalizes punctuation spacing.
     """
-    import re
     if not raw_text:
         return ""
+    from src.sanitizer import (
+        RE_ACT_CHAPTER_LINE,
+        RE_ACT_CHAPTER_LABELS,
+        sanitize_scp_acronyms_for_tts,
+    )
     # Strip line-leading Act/Chapter labels
-    cleaned = re.sub(r"(?im)^\s*(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9]+[:\.\-–—]\s*", "", raw_text)
+    cleaned = RE_ACT_CHAPTER_LINE.sub("", raw_text)
     # Strip inline Act/Chapter announcements
-    cleaned = re.sub(r"(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+(?:uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|\d+)[:\.\-–—]\s*", "", cleaned)
+    cleaned = RE_ACT_CHAPTER_LABELS.sub("", cleaned)
     # Acronym phonetic formatting
-    cleaned = re.sub(r"\bSCP-(\d+)\b", r"S-C-P \1", cleaned)
-    cleaned = re.sub(r"\bSCP\b", r"S-C-P", cleaned)
-    cleaned = re.sub(r"\bBZHR\b", r"B-Z-H-R", cleaned)
-    cleaned = re.sub(r"\bXACTS\b", r"X-ACTS", cleaned)
-    cleaned = re.sub(r"\bO5\b", r"O-5", cleaned)
-    cleaned = re.sub(r"\bXK\b", r"X-K", cleaned)
+    cleaned = sanitize_scp_acronyms_for_tts(cleaned)
     # Clean redundant blank lines
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()

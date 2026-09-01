@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=mvfhymyhqw
-WorkingDirectory=/home/mvfhymyhqw/project/prod/apps/YTAuto
+User=moku
+WorkingDirectory=/home/moku/projects/yt-auto
 Environment=YT_PROFILE=prod
 Environment=ENABLE_TELEGRAM_CALLBACK_POLLING=1
-ExecStart=/home/mvfhymyhqw/project/prod/apps/YTAuto/.venv/bin/python deploy/tmux_review_bot.py
+ExecStart=/home/moku/projects/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
 # Refuerzo de recursos y anti-doble-polling (auditoría 2026-08-24)
 # Este unit es el ÚNICO poller de Telegram autorizado; los daemons lo desactivan.
 Nice=10

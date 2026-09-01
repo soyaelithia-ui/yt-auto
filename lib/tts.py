@@ -194,7 +194,17 @@ def strip_markdown_for_tts(text: str | None) -> str:
     if not text:
         return ""
     cleaned = str(text)
-    from src.sanitizer import ORDINAL_OR_ROMAN
+    from src.sanitizer import (
+        RE_MARKDOWN_HEADERS,
+        RE_STRUCTURAL_HEADERS_PREFIX,
+        RE_STRUCTURAL_HEADERS_LINE,
+        RE_CHAPTER_HEADER_LINE,
+        RE_STRUCTURAL_HEADERS_INLINE,
+        RE_TITLE_PREFIX,
+        RE_MARKDOWN_BOLD,
+        RE_MARKDOWN_ITALIC,
+        RE_MARKDOWN_CHARS_ALL,
+    )
 
     # Protect dramatic pause tags from bracket removal
     pause_tokens: dict[str, str] = {}
@@ -206,18 +216,18 @@ def strip_markdown_for_tts(text: str | None) -> str:
     cleaned = re.sub(r"\[\s*(?:PAUSA|PAUSE|SILENCE)[^\]]*\]", _protect_pause, cleaned, flags=re.IGNORECASE)
 
     # Strip markdown headers (e.g. # Header, ## Subheader, ### Capítulo 1)
-    cleaned = re.sub(r"(?i)^[>*\s]*#+\s*[^\n]*", "", cleaned, flags=re.MULTILINE)
+    cleaned = RE_MARKDOWN_HEADERS.sub("", cleaned)
     # Strip unbracketed and bracketed structural labels (Sección Primera:, Capítulo 1:, etc.)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"(?i)###?\s*cap[íi]tulo\s*\d*[:.-]?[^\n]*", "", cleaned)
-    cleaned = re.sub(r"(?i)\b(?:secci[óo]n|cap[íi]tulo)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?", "", cleaned)
-    cleaned = re.sub(r"(?i)^\s*(?:t[íi]tulo|title)\s*[:：][^\n]*", "", cleaned, flags=re.MULTILINE)
+    cleaned = RE_STRUCTURAL_HEADERS_PREFIX.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_LINE.sub("", cleaned)
+    cleaned = RE_CHAPTER_HEADER_LINE.sub("", cleaned)
+    cleaned = RE_STRUCTURAL_HEADERS_INLINE.sub("", cleaned)
+    cleaned = RE_TITLE_PREFIX.sub("", cleaned)
     # Strip bold / italics / links / markdown characters
-    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)
-    cleaned = re.sub(r"\*(.+?)\*", r"\1", cleaned)
+    cleaned = RE_MARKDOWN_BOLD.sub(r"\1", cleaned)
+    cleaned = RE_MARKDOWN_ITALIC.sub(r"\1", cleaned)
     cleaned = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", cleaned)
-    cleaned = re.sub(r"[#>{}\[\]~`|]", "", cleaned)
+    cleaned = RE_MARKDOWN_CHARS_ALL.sub("", cleaned)
 
     # Restore protected pause tags
     for tok, tag in pause_tokens.items():

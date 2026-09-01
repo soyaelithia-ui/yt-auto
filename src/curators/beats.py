@@ -27,17 +27,14 @@ def extract_story_beats(script_text: str) -> Tuple[str, List[Dict[str, Any]]]:
     except ImportError:
         pass
 
-    from src.sanitizer import ORDINAL_OR_ROMAN
-
-    # Strip title header lines (e.g. "Título: ...") from spoken narration text
-    script_text = re.sub(r"(?i)^\s*(?:t[íi]tulo|title)\s*[:：][^\n]*\n*", "", script_text.strip(), flags=re.MULTILINE).strip()
-
-    # Strip unbracketed and bracketed section/chapter headers and markdown headers
-    script_text = re.sub(r"(?i)^[>*\s]*#+\s*[^\n]*\n*", "", script_text, flags=re.MULTILINE)
-    script_text = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", script_text, flags=re.MULTILINE)
-    script_text = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte|bloque|fase|paso)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$", "", script_text, flags=re.MULTILINE)
-    script_text = re.sub(r"(?i)###?\s*cap[íi]tulo\s*\d*[:.-]?[^\n]*\n*", "", script_text)
-    script_text = re.sub(r"(?i)\b(?:secci[óo]n|cap[íi]tulo)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?", "", script_text)
+    from src.sanitizer import (
+        strip_act_chapter_headers,
+        RE_STRUCTURAL_HEADERS_PREFIX,
+        RE_STRUCTURAL_HEADERS_LINE,
+        RE_STRUCTURAL_HEADERS_INLINE,
+        RE_TITLE_INLINE,
+    )
+    script_text = strip_act_chapter_headers(script_text)
 
     try:
         from src.sanitizer import sanitize_llm_script
@@ -74,17 +71,17 @@ def extract_story_beats(script_text: str) -> Tuple[str, List[Dict[str, Any]]]:
             # Remove the marker tag from line
             line_rem = re.sub(r'\[(?:BEAT|SECCION|SHOT)\s*\d*\s*:?\s*[^\]]*\]', '', stripped, flags=re.IGNORECASE).strip()
             # Also clean any structural header prefixes from remaining line content
-            line_rem = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", line_rem).strip()
-            line_rem = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?$", "", line_rem).strip()
+            line_rem = RE_STRUCTURAL_HEADERS_PREFIX.sub("", line_rem).strip()
+            line_rem = RE_STRUCTURAL_HEADERS_LINE.sub("", line_rem).strip()
             line_rem = re.sub(r"(?i)^#+\s*", "", line_rem).strip()
             if line_rem:
                 current_text_buf.append(line_rem)
         else:
             # Strip structural header prefixes if present on regular lines
-            line_clean = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", stripped).strip()
-            line_clean = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?$", "", line_clean).strip()
+            line_clean = RE_STRUCTURAL_HEADERS_PREFIX.sub("", stripped).strip()
+            line_clean = RE_STRUCTURAL_HEADERS_LINE.sub("", line_clean).strip()
             line_clean = re.sub(r"(?i)^#+\s*", "", line_clean).strip()
-            line_clean = re.sub(r"(?i)^\s*(?:t[íi]tulo|title)\s*[:：]\s*", "", line_clean).strip()
+            line_clean = RE_TITLE_INLINE.sub("", line_clean).strip()
             if line_clean:
                 current_text_buf.append(line_clean)
 
@@ -117,9 +114,9 @@ def extract_story_beats(script_text: str) -> Tuple[str, List[Dict[str, Any]]]:
     # Final cleanup on all beat texts to ensure zero structural headers
     for b in beat_texts:
         b_text = b.get("text", "")
-        b_text = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"(?:\s*[:.-]|\s+)", "", b_text)
-        b_text = re.sub(r"(?i)^[>*\s#]*(?:secci[óo]n|cap[íi]tulo|parte)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?\s*$", "", b_text)
-        b_text = re.sub(r"(?i)\b(?:cap[íi]tulo|secci[óo]n)\s+" + ORDINAL_OR_ROMAN + r"[:.-]?", "", b_text)
+        b_text = RE_STRUCTURAL_HEADERS_PREFIX.sub("", b_text)
+        b_text = RE_STRUCTURAL_HEADERS_LINE.sub("", b_text)
+        b_text = RE_STRUCTURAL_HEADERS_INLINE.sub("", b_text)
         b_text = re.sub(r"(?i)^#+\s*", "", b_text)
         b["text"] = b_text.strip()
 

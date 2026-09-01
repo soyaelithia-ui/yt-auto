@@ -85,7 +85,8 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _strip_ass_tags(text: str) -> str:
-    return re.sub(r"\{\\[^}]*\}", "", text)
+    from src.sanitizer import strip_ass_tags
+    return strip_ass_tags(text)
 
 
 def _grep_float(text: str, pattern: str, default: float) -> float:
