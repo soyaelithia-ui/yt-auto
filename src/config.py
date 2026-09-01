@@ -105,10 +105,17 @@ class ChannelSettings:
     video_mode: str = "short"
 
     def public_dict(self) -> dict[str, Any]:
+        """Return a sanitized dict safe for logging, Telegram, and CLI output.
+
+        Filesystem paths to cookies and tokens are replaced with boolean
+        presence flags to prevent accidental exposure of credential locations.
+        """
         data = asdict(self)
         data["key"] = self.key.value if hasattr(self.key, "value") else str(self.key)
-        data["cookies_path"] = str(self.cookies_path)
-        data["youtube_token_path"] = str(self.youtube_token_path)
+        data["cookies_available"] = self.cookies_path.is_file()
+        data.pop("cookies_path", None)
+        data["youtube_token_available"] = self.youtube_token_path.is_file()
+        data.pop("youtube_token_path", None)
         return data
 
 

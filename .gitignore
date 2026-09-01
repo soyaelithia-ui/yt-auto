@@ -34,6 +34,7 @@ cookies/
 # Environments
 .env
 .env.*
+!.env.example
 *.pem
 venv/
 env/
