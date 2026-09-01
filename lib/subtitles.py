@@ -502,7 +502,7 @@ def create_ass_subtitles(
     events = _ass_dialogues(
         word_timestamps,
         group_size=group_size,
-        max_chars=int(max_chars),
+        max_chars=int(max_chars) if max_chars is not None else int(style.get("max_chars", 35)),
         max_width_px=max_width,
         font_name=style.get("font_name", "Montserrat Black"),
         font_size=style.get("font_size", 40),
