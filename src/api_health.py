@@ -74,26 +74,35 @@ def check_drive_api() -> Dict[str, Any]:
 
 
 def check_cookies(channel: str = "moku") -> Dict[str, Any]:
-    """Validate Playwright cookies files for a given channel."""
+    """Validate Playwright cookies files for a given channel with deep session inspection."""
     try:
         settings = get_channel_settings(channel)
     except Exception as exc:
         return {"ok": False, "detail": f"Canal inválido: {exc}"}
 
     path = settings.cookies_path
-    if not Path(path).is_file():
-        return {"ok": False, "detail": f"Faltan cookies: {path.name}"}
-    size = Path(path).stat().st_size
-    if size < 2:
-        return {"ok": False, "detail": f"Cookies vacías: {path.name}"}
+    p = Path(path)
+    if not p.is_file():
+        return {"ok": False, "detail": f"Faltan cookies: {p.name}"}
+    if p.stat().st_size < 2:
+        return {"ok": False, "detail": f"Cookies vacías: {p.name}"}
+
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-        valid = isinstance(data, list) and len(data) > 0
+        from src.core.cookies import (
+            SessionStatus,
+            parse_cookies_file,
+            validate_youtube_session_cookies,
+        )
+
+        cookies = parse_cookies_file(p)
+        health = validate_youtube_session_cookies(cookies)
+        if health.status in (SessionStatus.HEALTHY, SessionStatus.EXPIRING_SOON):
+            return {"ok": True, "detail": health.detail}
+        return {"ok": False, "detail": health.detail}
     except (OSError, ValueError):
-        valid = False
-    if not valid:
-        return {"ok": False, "detail": f"Cookies inválidas: {path.name}"}
-    return {"ok": True, "detail": f"Cookies OK ({len(data)} dominios)"}
+        return {"ok": False, "detail": f"Cookies inválidas: {p.name}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"Error al validar cookies: {exc}"}
 
 
 def check_all(channel: str = "moku") -> Dict[str, Dict[str, Any]]:

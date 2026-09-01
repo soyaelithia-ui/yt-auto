@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -71,10 +72,51 @@ def test_check_drive_api_no_credentials_available(tmp_path):
 
 def test_check_cookies_valid_list(tmp_path):
     cookies = tmp_path / "cookies.json"
-    cookies.write_text(json.dumps([{"domain": ".example.com", "name": "sid", "value": "1"}]), encoding="utf-8")
+    future_time = time.time() + 86400 * 10
+    sample = [
+        {"name": "LOGIN_INFO", "value": "tok", "expires": future_time},
+        {"name": "SID", "value": "sid", "expires": future_time},
+    ]
+    cookies.write_text(json.dumps(sample), encoding="utf-8")
     with patch("src.api_health.get_channel_settings", return_value=SimpleNamespace(cookies_path=cookies)):
         res = check_cookies(channel="moku")
     assert res["ok"] is True
+    assert "activas" in res["detail"] or "OK" in res["detail"]
+
+
+def test_check_cookies_netscape_format(tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    future_time = int(time.time() + 86400 * 5)
+    content = f".youtube.com\tTRUE\t/\tTRUE\t{future_time}\tLOGIN_INFO\ttok_netscape\n.google.com\tTRUE\t/\tTRUE\t{future_time}\tSID\tsid_netscape\n"
+    cookies.write_text(content, encoding="utf-8")
+    with patch("src.api_health.get_channel_settings", return_value=SimpleNamespace(cookies_path=cookies)):
+        res = check_cookies(channel="moku")
+    assert res["ok"] is True
+    assert "activas" in res["detail"] or "OK" in res["detail"]
+
+
+def test_check_cookies_expired(tmp_path):
+    cookies = tmp_path / "cookies.json"
+    past_time = time.time() - 3600 * 24
+    sample = [
+        {"name": "LOGIN_INFO", "value": "tok", "expires": past_time},
+        {"name": "SID", "value": "sid", "expires": past_time},
+    ]
+    cookies.write_text(json.dumps(sample), encoding="utf-8")
+    with patch("src.api_health.get_channel_settings", return_value=SimpleNamespace(cookies_path=cookies)):
+        res = check_cookies(channel="moku")
+    assert res["ok"] is False
+    assert "expiradas" in res["detail"].lower()
+
+
+def test_check_cookies_missing_tokens(tmp_path):
+    cookies = tmp_path / "cookies.json"
+    sample = [{"name": "OTHER_COOKIE", "value": "val", "expires": time.time() + 86400}]
+    cookies.write_text(json.dumps(sample), encoding="utf-8")
+    with patch("src.api_health.get_channel_settings", return_value=SimpleNamespace(cookies_path=cookies)):
+        res = check_cookies(channel="moku")
+    assert res["ok"] is False
+    assert "incompletas" in res["detail"].lower()
 
 
 def test_check_cookies_missing_file(tmp_path):
@@ -86,7 +128,7 @@ def test_check_cookies_missing_file(tmp_path):
 
 def test_check_cookies_invalid_json(tmp_path):
     cookies = tmp_path / "cookies.json"
-    cookies.write_text("not-json{", encoding="utf-8")
+    cookies.write_text("not-json-or-netscape-invalid", encoding="utf-8")
     with patch("src.api_health.get_channel_settings", return_value=SimpleNamespace(cookies_path=cookies)):
         res = check_cookies(channel="moku")
     assert res["ok"] is False

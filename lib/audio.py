@@ -81,6 +81,20 @@ def _looks_like_real_input(path: str | os.PathLike | None) -> bool:
     return p.exists() and p.stat().st_size > 0
 
 
+def _get_ram_temp_dir() -> Path:
+    """Return /dev/shm directory if available and writable for zero-SSD RAM audio I/O, else temp dir."""
+    shm = Path("/dev/shm")
+    if shm.is_dir() and os.access(shm, os.W_OK):
+        d = shm / "yt_auto_audio"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    import tempfile
+    d = Path(tempfile.gettempdir()) / "yt_auto_audio"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+
 # ============================================================================
 # Dramatic Pause Parsing & Handling
 # ============================================================================
@@ -294,7 +308,9 @@ def insert_dramatic_pauses_to_audio(
 
             p_dur = pause_durations[idx] if idx < len(pause_durations) else 0.0
             if p_dur > 0 and idx < len(valid_paths) - 1:
-                silence_p = out_target + f".tmp_silence_{idx}.wav"
+                import uuid
+                ram_dir = _get_ram_temp_dir()
+                silence_p = str(ram_dir / f"silence_{uuid.uuid4().hex[:8]}_{idx}.wav")
                 generate_silence_audio(silence_p, duration_sec=p_dur, sample_rate=48000, channels=2)
                 temp_silence_files.append(silence_p)
                 seq_files.append(silence_p)

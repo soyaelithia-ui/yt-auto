@@ -316,7 +316,7 @@ def _curate_with_gemini(prompt: str) -> Optional[str]:
             logger.debug("GEMINI_API_KEY not configured; Provider B unavailable")
         return None
 
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash").strip()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     payload = {

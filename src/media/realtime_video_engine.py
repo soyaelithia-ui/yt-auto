@@ -47,6 +47,19 @@ def resolve_chrome_executable() -> Optional[str]:
     for candidate in DEFAULT_CHROME_CANDIDATES:
         if candidate and Path(candidate).is_file() and os.access(candidate, os.X_OK):
             return candidate
+    import glob
+    search_roots = [
+        os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""),
+        str(ROOT_DIR / ".bot_home" / ".cache" / "ms-playwright"),
+        os.path.expanduser("~/.cache/ms-playwright"),
+    ]
+    for root in search_roots:
+        if root and os.path.isdir(root):
+            for binary_name in ("chrome-headless-shell", "chrome"):
+                matches = glob.glob(f"{root}/**/{binary_name}", recursive=True)
+                for m in sorted(matches, reverse=True):
+                    if Path(m).is_file() and os.access(m, os.X_OK):
+                        return m
     return None
 
 
@@ -428,7 +441,7 @@ def generate_realtime_html_code(
       border-radius: 50%;
     }}
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/assets/vendor/three/three.min.js"></script>
 </head>
 <body>
   <div id="crt-overlay"></div>

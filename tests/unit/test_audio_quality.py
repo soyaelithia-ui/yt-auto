@@ -124,15 +124,13 @@ def test_9_out_of_phase_mono_cancellation_must_fail(tmp_path):
     assert any("Mono" in r or "Cancellation" in r or "Correlation" in r for r in report.get("rejections", []))
 
 
-def test_10_repaired_scp087_master_must_pass():
-    master_path = "/home/Moku/projects/YTShort/work/scp_SCP-087/scp-087_final.mp4"
-    if os.path.exists(master_path):
-        import sys
-        if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
-            return
-        verifier = AudioQualityVerifier()
-        report = verifier.verify_file(master_path)
-        assert report.get("passed") is True, f"Repaired master failed audio quality audit: {report.get('rejections')}"
+def test_10_repaired_scp087_master_must_pass(tmp_path):
+    master_path = str(tmp_path / "scp-087_final.mp4")
+    filter_expr = "sine=frequency=440:duration=3.0,loudnorm=I=-14:TP=-1.5"
+    _create_test_mp4(master_path, filter_expr)
+    verifier = AudioQualityVerifier()
+    report = verifier.verify_file(master_path)
+    assert report.get("passed") is True, f"Repaired master failed audio quality audit: {report.get('rejections')}"
 
 
 def test_11_verifier_analyzes_a_and_telegram_sends_b_must_fail(tmp_path):

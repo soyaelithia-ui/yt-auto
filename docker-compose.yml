@@ -67,7 +67,7 @@ services:
       - ./output:/app/output
       - ./secrets:/run/secrets:ro
       - ./.bot_home/.gemini:/home/appuser/.gemini
-      - ${AGY_BINARY_PATH:-/home/mvfhymyhqw/.local/bin/agy}:/run/agy/agy:ro
+      - ${AGY_BINARY_PATH:-/usr/local/bin/agy}:/run/agy/agy:ro
     tmpfs:
       - /tmp:size=2g,mode=1777
     read_only: true

@@ -3,10 +3,50 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
 from src.config import DEFAULT_DB_PATH
+from src.core.repository import connect
+from src.log import get_logger
+
+logger = get_logger("cli.queue")
+
+
+def list_queue(db_path: str = DEFAULT_DB_PATH, limit: int = 50) -> list[dict[str, Any]]:
+    """Retrieve list of stories from the SQLite database queue."""
+    stories: list[dict[str, Any]] = []
+    if os.path.exists(db_path):
+        try:
+            with connect(db_path, read_only=True) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT story_id, title, status, created_at, updated_at, error_msg FROM stories ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                )
+                for row in cursor.fetchall():
+                    stories.append(dict(row))
+        except Exception as e:
+            logger.error(f"Error querying queue from {db_path}: {e}")
+
+    return stories
+
+
+def print_queue(db_path: str = DEFAULT_DB_PATH, limit: int = 50) -> None:
+    """Print queue table to stdout."""
+    queue = list_queue(db_path, limit=limit)
+    print("=== YouTube Automation Story Queue ===")
+    if not queue:
+        print("Queue is empty.")
+        return
+    print(f"{'STORY ID':<20} | {'STATUS':<10} | {'CREATED AT':<20} | TITLE")
+    print("-" * 75)
+    for s in queue:
+        title_disp = (s["title"][:30] + "...") if len(s["title"]) > 30 else s["title"]
+        print(f"{s['story_id']:<20} | {s['status']:<10} | {str(s.get('created_at', '')):<20} | {title_disp}")
+        if s.get("error_msg"):
+            print(f"  └ Error: {s['error_msg']}")
 
 
 def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> int:
@@ -99,12 +139,8 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
     # Default action: list
     limit = getattr(args, "limit", 50) or 50
     if getattr(args, "json", False):
-        from src.cli.legacy import list_queue
-
         items = list_queue(db_path=db_path, limit=limit)
         print(json.dumps(items, ensure_ascii=False, indent=2, default=str))
     else:
-        from src.cli.legacy import print_queue
-
         print_queue(db_path=db_path, limit=limit)
     return 0

@@ -223,55 +223,9 @@ def verify_youtube_credentials_preflight(channel: str) -> tuple[bool, str]:
 
 
 def format_cookies_for_playwright(cookies: list) -> list:
-    """
-    Formats raw cookies (e.g. from Chrome extension or decrypted_cookies.json)
-    for Playwright context.add_cookies().
-    """
-    formatted = []
-    if not isinstance(cookies, list):
-        return formatted
-
-    for c in cookies:
-        if not isinstance(c, dict) or "name" not in c or "value" not in c:
-            continue
-
-        domain = c.get("domain", ".youtube.com")
-        if domain and not domain.startswith("."):
-            domain = "." + domain
-
-        fc = {
-            "name": str(c["name"]),
-            "value": str(c["value"]),
-            "domain": domain,
-            "path": c.get("path", "/"),
-            "secure": bool(c.get("secure", False)),
-            "httpOnly": bool(c.get("httpOnly", False)),
-        }
-
-        if "expirationDate" in c and c["expirationDate"] is not None:
-            try:
-                fc["expires"] = float(c["expirationDate"])
-            except (ValueError, TypeError):
-                pass
-        elif "expires" in c and c["expires"] is not None:
-            try:
-                fc["expires"] = float(c["expires"])
-            except (ValueError, TypeError):
-                pass
-
-        same_site = c.get("sameSite")
-        if same_site is not None:
-            s_str = str(same_site).lower()
-            if s_str in ("strict",):
-                fc["sameSite"] = "Strict"
-            elif s_str in ("none", "no_restriction"):
-                fc["sameSite"] = "None"
-            else:
-                fc["sameSite"] = "Lax"
-
-        formatted.append(fc)
-
-    return formatted
+    """Formats raw cookies for Playwright context.add_cookies()."""
+    from src.core.cookies import format_cookies_for_playwright as _fmt
+    return _fmt(cookies)
 
 
 def upload_video_via_api(
@@ -473,6 +427,14 @@ def _safe_preupload_failure(error: Exception) -> bool:
         marker in detail
         for marker in (
             "cookies are expired",
+            "session validation failed",
+            "session validation",
+            "cookies expiradas",
+            "cookies incompletas",
+            "cookies inválidas",
+            "invalid cookies format",
+            "invalid cookies file",
+            "cookies file is empty",
             "authentication failed",
             "identity could not be confirmed",
             "no confirmó la identidad",
@@ -670,18 +632,22 @@ def upload_video_via_playwright(
 
     if not video_path or not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
-        
+
     if not os.path.exists(cookies_path):
         raise FileNotFoundError(f"Cookies file not found: {cookies_path}")
-        
-    try:
-        with open(cookies_path, "r", encoding="utf-8") as f:
-            cookies = json.load(f)
-    except Exception as e:
-        raise ValueError(f"Invalid JSON in cookies file: {e}")
 
-    if not cookies or not isinstance(cookies, list):
-        raise ValueError("Invalid cookies format in decrypted_cookies.json")
+    try:
+        from src.core.cookies import (
+            SessionStatus,
+            parse_cookies_file,
+            validate_youtube_session_cookies,
+        )
+
+        cookies = parse_cookies_file(cookies_path)
+    except (FileNotFoundError, OSError):
+        raise
+    except Exception as e:
+        raise ValueError(f"Invalid cookies format in {cookies_path}: {e}") from e
 
     formatted_cookies = format_cookies_for_playwright(cookies)
 
@@ -693,6 +659,11 @@ def upload_video_via_playwright(
             "method": "PLAYWRIGHT",
             "verified": False,
         }
+
+    # Preflight cookie session check to fail fast before launching Chromium
+    session_health = validate_youtube_session_cookies(cookies)
+    if session_health.status in (SessionStatus.EXPIRED, SessionStatus.INCOMPLETE, SessionStatus.INVALID):
+        raise RuntimeError(f"Playwright session validation failed: {session_health.detail}")
 
     logger.info("Launching headless browser for YouTube upload via Playwright...")
     if sync_playwright is None:

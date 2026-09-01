@@ -189,7 +189,8 @@ def test_native_sdk_chat_async_mock(tmp_path):
         use_sdk=True,
         instance_id="sdk_test",
     )
-    with patch.object(agent, "_chat_async") as mock_sdk:
+    with patch.object(agent, "_can_use_sdk", return_value=True), \
+         patch.object(agent, "_chat_async") as mock_sdk:
         mock_sdk.return_value = {
             "response": "Respuesta directa SDK",
             "status": "SUCCESS",

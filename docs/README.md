@@ -21,13 +21,14 @@
 | Documento | Ámbito y Contenido Clave |
 |---|---|
 | [ARQUITECTURA](ARQUITECTURA.md) | Diseño multiformato (Shorts 9:16 y Longform 16:9), persistencia SQLite WAL y máquina de estados. |
+| [PLAN_ARQUITECTURA_V3_1](PLAN_ARQUITECTURA_V3_1.md) | Plan maestro de arquitectura v3.1: Resiliencia de sesiones, reaper de PIDs, reconciliador 2PC y audio en RAM. |
 | [FLUJO_VIDEOS](FLUJO_VIDEOS.md) | Las 13 etapas canónicas de producción, desde la extracción hasta la publicación. |
 | [MULTICHANNEL_PIPELINE](MULTICHANNEL_PIPELINE.md) | Especificaciones visuales, perfiles de canal (`moku`, `aelithia`), márgenes y renderizado zero-copy. |
 | [OPERACION](OPERACION.md) | Manual operativo: CLI unificado (`main.py`), Systemd, Docker Compose, respaldos y recuperación. |
 | [CONFIGURACION_SECRETOS](CONFIGURACION_SECRETOS.md) | Inventario de variables de entorno `.env`, perfiles de ejecución (`prod`, `cli`, `test`) y preflight. |
-| [INTEGRACIONES_Y_SERVICIOS](INTEGRACIONES_Y_SERVICIOS.md) | Contratos de APIs externas: Telegram Bot API (servidor local 2 GB), YouTube Data API v3, Drive y FFmpeg. |
-| [AGENTES_IA_Y_POLITICA](AGENTES_IA_Y_POLITICA.md) | Política AI-First y fail-closed, arnés `agy` / SDK, modelo canónico `gemini-3.6-flash` y agentes por rol. |
-| [TROUBLESHOOTING](TROUBLESHOOTING.md) | Matriz de diagnóstico rápido de errores, causas raíz y procedimientos de mitigación. |
+| [INTEGRACIONES_Y_SERVICIOS](INTEGRACIONES_Y_SERVICIOS.md) | Contratos de APIs externas: Telegram Bot API (servidor local 2 GB), publicación por sesión/cookies, Drive y FFmpeg. |
+| [AGENTES_IA_Y_POLITICA](AGENTES_IA_Y_POLITICA.md) | Política AI-First y fail-closed, arnés `agy` / SDK, modelos canónicos `gemini-3.7-flash` / `gemini-3.6-flash` y agentes por rol. |
+| [TROUBLESHOOTING](TROUBLESHOOTING.md) | Matriz de diagnóstico rápido de errores, causas raíz, rotación de cookies y procedimientos de mitigación. |
 | [REFERENCIAS_Y_VERSIONES](REFERENCIAS_Y_VERSIONES.md) | Versiones fijadas de binarios, dependencias de Python/Node y referencias primarias oficiales. |
 
 ---

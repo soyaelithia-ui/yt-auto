@@ -15,6 +15,7 @@ def _render_fixture(monkeypatch, tmp_path):
     repository.initialize()
     repository.enqueue("review-job", "SCP-173: La Escultura", "Contenido de prueba", "https://example.invalid", "moku")
     object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
+    object.__setattr__(SETTINGS, "drive_folder_id", "test_drive_fld")
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia de prueba")
     monkeypatch.setattr("src.llm.translate_title", lambda *args, **kwargs: "Titulo")
     monkeypatch.setattr("src.pipeline.is_spanish_neutral", lambda *args, **kwargs: True)

@@ -36,15 +36,26 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
 LEGACY_ALIASES: Final[frozenset[str]] = frozenset({"terror", "soy_el_malo", "scp_shorts", "moku_terror", "aita_drama"})
 
 
-def canonical_channel(value: str | CanonicalChannel) -> CanonicalChannel:
+def canonical_channel(value: str | CanonicalChannel) -> CanonicalChannel | str:
     """Resolve input aliases but never guess an absent or unknown channel."""
     if isinstance(value, CanonicalChannel):
         return value
     normalized = str(value or "").strip().lower()
-    try:
+    if not normalized:
+        raise ValueError(f"Canal desconocido o ausente: {value!r}")
+    if normalized in CHANNEL_ALIASES:
         return CHANNEL_ALIASES[normalized]
-    except KeyError as exc:
-        raise ValueError(f"Canal desconocido o ausente: {value!r}") from exc
+    try:
+        from src.core.channel_profile import ChannelProfileRegistry
+        norm_cid = ChannelProfileRegistry.normalize_channel_id(normalized)
+        if norm_cid in CHANNEL_ALIASES:
+            return CHANNEL_ALIASES[norm_cid]
+        active_ids = ChannelProfileRegistry.list_active_channel_ids()
+        if norm_cid in active_ids or norm_cid in ChannelProfileRegistry._cache:
+            return norm_cid
+    except Exception:
+        pass
+    raise ValueError(f"Canal desconocido o ausente: {value!r}")
 
 
 class JobStatus(str, Enum):

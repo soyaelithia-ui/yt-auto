@@ -55,11 +55,12 @@ La integración expone una fachada unificada en `src/telegram`:
 
 ---
 
-## 2. YouTube Data API v3 & Autenticación Oficial
-- **SDK Oficial**: Utiliza `google-auth`, `google-auth-oauthlib` (`InstalledAppFlow`) y `google-api-python-client` (`build("youtube", "v3", ...)`).
-- **Subida Primaria (API v3)**: Endpoint `videos.insert` con soporte de subida reanudable (`MediaFileUpload(resumable=True)`).
-- **Control y Mutaciones (`src/youtube/control.py`)**: Endpoints `videos.delete`, `videos.update` (privacidad) y estadísticas `videos.list`, verificando la propiedad del canal (`expected_youtube_channel_id`) antes de cualquier mutación.
-- **Subida Secundaria (Playwright)**: En caso de agotamiento de cuota diaria de API (HTTP 403 `quotaExceeded`), el sistema conmuta a subida automatizada vía navegador con cookies descifradas de sesión.
+## 2. Publicación en YouTube: Sesión Directa / Cookies & Data API v3
+
+- **Subida Primaria por Sesión Persistente (`src/youtube/session_uploader.py`)**: Para evitar el agotamiento de la cuota diaria de YouTube Data API v3 (10,000 unidades = ~6 videos máx), el método primario de publicación de producción masiva opera mediante **sesiones autenticadas persistentes** inyectando cookies Netscape/JSON (`LOGIN_INFO`, `SAPISID`, `__Secure-3PSID`).
+- **Validador de Salud de Sesión (`SessionHealthValidator`)**: Inspección profunda previa a cualquier renderizado. Si las cookies están en estado `EXPIRING_SOON` (< 48 horas restantes), emite una advertencia al operador y notifica por Telegram vía `/health`. Si están `EXPIRED` o `INVALID`, aborta preventivamente para evitar fallos a mitad de camino.
+- **Control y Metadatos (`src/youtube/control.py`)**: Mutaciones de privacidad, borrado y consulta de estadísticas a través de endpoints protegidos por verificación estricta de propiedad de canal.
+- **Canal de Respaldo API v3**: Disponible para sincronización de metadatos o subidas aisladas mediante OAuth (`google-api-python-client`).
 
 ---
 

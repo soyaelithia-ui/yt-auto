@@ -35,10 +35,10 @@ def generate_valid_mini_mp4(output_path: str, duration_sec: float = 2.0) -> str:
 
 def test_1_corrupt_nal_units_rejected(tmp_path):
     """Point 1: MP4 with valid metadata header but corrupt NAL units is rejected."""
-    corrupt_file = Path("/home/Moku/projects/YTShort/work/scp_SCP-087/scp-087_corrupt_invalid.mp4")
-    if corrupt_file.exists():
-        report = verify_media_integrity(corrupt_file, work_dir=tmp_path)
-        assert report["passed"] is False, "Corrupt NAL units file must be rejected"
+    corrupt_file = tmp_path / "scp-087_corrupt_invalid.mp4"
+    corrupt_file.write_bytes(b"\x00\x00\x00\x1cftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\xff" * 500)
+    report = verify_media_integrity(corrupt_file, work_dir=tmp_path)
+    assert report["passed"] is False, "Corrupt NAL units file must be rejected"
 
 
 def test_2_corrupt_aac_rejected(tmp_path):
@@ -150,10 +150,15 @@ def test_11_valid_h264_aac_master_passes(tmp_path):
     assert report["faststart_optimized"] is True
 
 
-@pytest.mark.skipif(not Path("/home/Moku/projects/YTShort/work/scp_SCP-087").exists(), reason="work/scp_SCP-087 not present in workspace")
 def test_12_rebuild_from_existing_assets_preserves_artifacts(tmp_path):
     """Point 12: Rebuilding SCP-087 uses existing intact source assets without repeating TTS."""
-    work_dir = Path("/home/Moku/projects/YTShort/work/scp_SCP-087")
+    work_dir = tmp_path / "scp_SCP-087"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    (work_dir / "narration_mastered.mp3").write_bytes(b"mock_audio")
+    (work_dir / "subtitles.ass").write_text("[Script Info]\n", encoding="utf-8")
+    (work_dir / "storyboard.json").write_text("{}", encoding="utf-8")
+    (work_dir / "scp_content_profile.json").write_text("{}", encoding="utf-8")
+
     assert (work_dir / "narration_mastered.mp3").exists()
     assert (work_dir / "subtitles.ass").exists()
     assert (work_dir / "storyboard.json").exists()

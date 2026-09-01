@@ -84,7 +84,7 @@ class DesignSettings:
 
 @dataclass(frozen=True)
 class ChannelSettings:
-    key: CanonicalChannel
+    key: CanonicalChannel | str
     public_name: str
     handle: str
     topic: str
@@ -106,7 +106,7 @@ class ChannelSettings:
 
     def public_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        data["key"] = self.key.value
+        data["key"] = self.key.value if hasattr(self.key, "value") else str(self.key)
         data["cookies_path"] = str(self.cookies_path)
         data["youtube_token_path"] = str(self.youtube_token_path)
         return data
@@ -141,7 +141,49 @@ class RuntimeSettings:
     continuous_engine_v2: bool = True
 
     def channel(self, value: str | CanonicalChannel) -> ChannelSettings:
-        return self.channels[canonical_channel(value)]
+        key = canonical_channel(value)
+        if key in self.channels:
+            return self.channels[key]
+        if isinstance(key, str):
+            for k, ch in self.channels.items():
+                if k == key or getattr(k, "value", None) == key:
+                    return ch
+        return self._resolve_dynamic_channel(key)
+
+    def _resolve_dynamic_channel(self, key: str | CanonicalChannel) -> ChannelSettings:
+        cid = key.value if hasattr(key, "value") else str(key)
+        from src.core.channel_profile import ChannelProfileRegistry
+        profile = ChannelProfileRegistry.get_channel(cid)
+        return ChannelSettings(
+            key=profile.id,
+            public_name=profile.editorial.public_name,
+            handle=profile.editorial.handle,
+            topic=profile.editorial.topic,
+            voice=profile.audio.default_voice_profile,
+            tts_provider=profile.audio.default_tts_provider,
+            tone=profile.editorial.tone,
+            intro=profile.editorial.persona_system_prompt,
+            cta=profile.editorial.community_question,
+            seo_tags=profile.editorial.tags,
+            subtitle=SubtitleSettings(
+                template=profile.id,
+                font_name=profile.visual.typography.font_subtitles,
+                font_size=profile.visual.typography.subtitle_font_size,
+                primary_colour=profile.visual.typography.subtitle_primary_color,
+                outline_colour=profile.visual.typography.subtitle_outline_color,
+            ),
+            design=DesignSettings(
+                style=profile.visual.style_id,
+                primary_colour=profile.visual.palette.primary,
+                accent_colour=profile.visual.palette.accent,
+                font_bold=profile.visual.typography.font_bold,
+                font_regular=profile.visual.typography.font_regular,
+            ),
+            cookies_path=profile.auth.cookies_path,
+            youtube_token_path=profile.auth.youtube_token_path,
+            expected_youtube_channel_id=profile.auth.expected_youtube_channel_id,
+            source_feed=profile.auth.source_feed,
+        )
 
 
 BOT_HOME_PATH = _env_path("BOT_HOME", BASE_DIR / ".bot_home")

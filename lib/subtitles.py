@@ -289,6 +289,47 @@ def _ass_style_spec(template, font_name, play_w: int, play_h: int, **kwargs) -> 
     return spec
 
 
+_FONT_METRICS_CACHE: dict = {}
+
+
+def get_font_metrics(font_name: str = "Montserrat Black", font_size: int = 40):
+    """Load Pillow ImageFont with caching for font metrics and bounding box measurement."""
+    cache_key = (font_name, font_size)
+    if cache_key in _FONT_METRICS_CACHE:
+        return _FONT_METRICS_CACHE[cache_key]
+    try:
+        from PIL import ImageFont
+        local_font_candidates = [
+            Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Montserrat-Black.ttf",
+            Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Montserrat-Bold.ttf",
+        ]
+        for candidate in local_font_candidates:
+            if candidate.is_file():
+                font = ImageFont.truetype(str(candidate), size=font_size)
+                _FONT_METRICS_CACHE[cache_key] = font
+                return font
+        font = ImageFont.load_default()
+        _FONT_METRICS_CACHE[cache_key] = font
+        return font
+    except Exception:
+        _FONT_METRICS_CACHE[cache_key] = None
+        return None
+
+
+def estimate_text_width_px(text: str, font_name: str = "Montserrat Black", font_size: int = 40) -> float:
+    """Estimate pixel width of text using Pillow font.getlength with fallback."""
+    clean = _strip_ass_tags(text)
+    if not clean:
+        return 0.0
+    font = get_font_metrics(font_name, font_size)
+    if font and hasattr(font, "getlength"):
+        try:
+            return float(font.getlength(clean))
+        except Exception:
+            pass
+    return len(clean) * (font_size * 0.55)
+
+
 def _ass_karaoke_token(token: dict) -> str:
     word = _word_text(token)
     if not word:
@@ -301,7 +342,15 @@ def _ass_karaoke_token(token: dict) -> str:
     return f"{prefix}{{\\kf{cs}}}{clean}"
 
 
-def _ass_dialogues(word_timestamps: list[dict], group_size: int, max_chars: int) -> list[tuple[float, float, str]]:
+def _ass_dialogues(
+    word_timestamps: list[dict],
+    group_size: int,
+    max_chars: int,
+    max_width_px: float = 960.0,
+    font_name: str = "Montserrat Black",
+    font_size: int = 40,
+) -> list[tuple[float, float, str]]:
+
     events: list[tuple[float, float, str]] = []
     group: list[dict] = []
     group_chars = 0
@@ -448,9 +497,15 @@ def create_ass_subtitles(
     play_w, play_h = _resolve_video_resolution(video_res)
     style = _ass_style_spec(template, font_name, play_w, play_h, **kwargs)
     group_size = int(group_size or style["group_size"])
-    if max_chars is None:
-        max_chars = max(12, int(play_w / 50))
-    events = _ass_dialogues(word_timestamps, group_size=group_size, max_chars=int(max_chars))
+    max_width = float(play_w - style.get("margin_l", 40) - style.get("margin_r", 40))
+    events = _ass_dialogues(
+        word_timestamps,
+        group_size=group_size,
+        max_chars=int(max_chars),
+        max_width_px=max_width,
+        font_name=style.get("font_name", "Montserrat Black"),
+        font_size=style.get("font_size", 40),
+    )
     content = _ass_header(play_w, play_h, style)
     content += "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     pop_in = r"{\fscx108\fscy108\t(0,120,\fscx100\fscy100)}" if template == "scp_classified" else ""

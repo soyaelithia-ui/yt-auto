@@ -16,49 +16,48 @@ graph TD
         Config[src/config.py: Canales moku & aelithia]
         Domain[src/core/domain.py: Estados JobStatus]
     end
-    subgraph Persistencia, Cola y Catálogo de Loops
+    subgraph Persistencia, Cola y Resiliencia
         DB[(data/shorts_queue.db: SQLite WAL)]
         Repo[src/core/repository.py: QueueRepository & Lane Leases]
+        Reaper[src/core/lease_reaper.py: Auto-Reaper PID Daemon]
+        Reconciler[src/core/db_reconciler.py: 2PC Atomic Reconciler]
         LoopDB[(data/shorts_queue.db: tabla video_loops)]
         LoopCat[src/core/loop_catalog.py: LoopCatalogRepository]
     end
-    subgraph Generación Visual por Código Web
-        WebRenderer[src/media/web_video_renderer.py: Playwright Chromium]
-        WebTemplates[src/media/web_templates/: Three.js, Canvas, WebGL, CSS]
-        LoopWorker[src/media/loop_synthesizer_worker.py: Buffer Activo]
+    subgraph Generación Visual y Audio Streamlined
+        LoopWorker[src/media/loop_worker.py: Buffer Activo Batch]
+        TTSRouter[src/audio/tts_router.py: Multi-Tier Fallback]
+        Subs[lib/subtitles.py: ASS Karaoke Safe Area 260px]
+        Video[src/media/loop_engine.py: LoopVideoEngine FFmpeg]
     end
     subgraph Pipeline de Producción (13 Etapas)
         Pipe[src/pipeline.py: Orquestador Canónico]
-        Agents[src/agents/: Agentes Gemini Direct REST]
-        TTS[lib/tts.py: Edge-TTS & Masterización EBU R128]
-        Subs[src/subtitles.py: ASS Karaoke Franja Segura]
-        Video[src/media/loop_video_engine.py: LoopVideoEngine FFmpeg]
+        Agents[src/agents/: Agentes Gemini 3.7 Flash arnés agy]
+        TTS[lib/tts.py: Edge-TTS & Masterización EBU R128 en /dev/shm]
     end
     subgraph Puerta de Revisión y Veredicto
-        CodeQA[src/core/code_review_verdict.py: CodeReviewVerdict]
         ReviewDB[(data/review_state.db)]
-        Adapter[src/review_publication_adapter.py]
-        TelegramBot[review: Bot Client]
+        Adapter[src/core/db_reconciler.py: 2PC Reconciler]
+        TelegramBot[review: Bot Client /health]
         LocalAPI[telegram-bot-api :8081: Servidor Local 2 GB]
     end
     subgraph Destinos Remotos Verificados
         Drive[src/drive.py: Google Drive API v3 Backup]
-        YouTube[src/youtube_uploader.py: YouTube API v3 / Playwright]
+        YouTube[src/youtube/session_uploader.py: Sesión Persistente / Cookies]
     end
 
     Lanes --> Pipe
     Config --> Pipe
     Repo <--> DB
+    Reaper --> Repo
     LoopCat <--> LoopDB
-    WebRenderer --> WebTemplates
-    LoopWorker --> WebRenderer --> LoopCat
     Pipe --> LoopCat
-    Pipe --> Repo & Agents & TTS & Subs & Video & CodeQA
-    CodeQA -- Code PASS --> Drive & YouTube
-    CodeQA -- Manual/Fallback --> Adapter
+    Pipe --> Repo & Agents & TTS & Subs & Video
+    Pipe --> Drive & Adapter
     Adapter <--> ReviewDB & TelegramBot
     TelegramBot -->|Transporte Dual: file:/// 0-Copy & Multipart| LocalAPI
-    TelegramBot -- APPROVED --> Drive & YouTube
+    TelegramBot -- APPROVED --> Reconciler
+    Reconciler --> YouTube
 ```
 
 ---

@@ -121,7 +121,7 @@ class TestGeminiProviderCircuitBreakerIntegration:
         cb.reset()
 
         monkeypatch.setenv("GEMINI_API_KEY", "dummy_key_12345")
-        monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+        monkeypatch.setenv("GEMINI_MODEL", "gemini-3.7-flash")
 
         # Force breaker to OPEN
         for _ in range(cb.failure_threshold):

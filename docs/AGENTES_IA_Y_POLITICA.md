@@ -21,10 +21,7 @@ El renderizado FFmpeg con `LoopVideoEngine`, subtítulos ASS, miniaturas y opera
 | Identificador | Rol en el Sistema | Estado |
 |---|---|---|
 | **`gemini-3.7-flash`** | **Modelo Canónico Primario** para agentes nativos en `src/agents/` y arnés CLI `agy`. | Activo / Predeterminado |
-| **`gemini-3.6-flash`** | Modelo secundario de alta velocidad y compatibilidad en arnés CLI. | Activo / Compatible |
-| **`gemini-2.5-flash`** | Proveedor secundario de contingencia vía API REST. | Activo / Failover |
-| **`gemini-1.5-flash`** | Fallback terciario en contingencias. | Legacy / Activo |
-| **`gemini-2.0-flash`** | Descomisionado por Google. | **Retirado / Prohibido** |
+| **`gemini-3.6-flash`** | Modelo secundario de alta velocidad y compatibilidad en arnés CLI `agy`. | Activo / Secundario |
 
 ---
 
