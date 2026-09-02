@@ -19,18 +19,29 @@ from src.media.compositor import (
     MultiSceneCompositor,
     MultiSceneCompositorError,
 )
-from src.media.web_renderer import (
-    WebVideoRenderer,
-    RenderSpec,
-    THEMATIC_TEMPLATES,
-    CATEGORY_TECH_MAP,
-)
 from src.media.loop_engine import (
     LoopVideoEngine,
     LoopVideoCompositor,
     LoopVideoError,
     LoopVideoAssetError,
     LoopCompositionError,
+)
+from src.media.native_procedural import (
+    NativeProceduralEngine,
+)
+from src.media.svg_overlay import (
+    SVGOverlayEngine,
+)
+from src.media.inmemory_compositor import (
+    InMemoryCompositor,
+)
+from src.media.subtitles_ass import (
+    ASSSubtitleGenerator,
+    sanitize_timestamps,
+    format_ass_timestamp,
+)
+from src.media.unified_encoder import (
+    UnifiedEncoder,
 )
 
 __all__ = [
@@ -44,13 +55,16 @@ __all__ = [
     "ProceduralVideoError",
     "MultiSceneCompositor",
     "MultiSceneCompositorError",
-    "WebVideoRenderer",
-    "RenderSpec",
-    "THEMATIC_TEMPLATES",
-    "CATEGORY_TECH_MAP",
     "LoopVideoEngine",
     "LoopVideoCompositor",
     "LoopVideoError",
     "LoopVideoAssetError",
     "LoopCompositionError",
+    "NativeProceduralEngine",
+    "SVGOverlayEngine",
+    "InMemoryCompositor",
+    "ASSSubtitleGenerator",
+    "sanitize_timestamps",
+    "format_ass_timestamp",
+    "UnifiedEncoder",
 ]
