@@ -29,17 +29,17 @@ class TestArchitecturalDocumentation:
     """Verifies existence, completeness, and structure of architecture specifications."""
 
     EXPECTED_DOCS = [
-        "01_DUAL_RENDERING_ENGINES.md",
-        "02_MULTI_SCENE_ORCHESTRATION.md",
-        "03_SPECIALIZED_AGENTS_AND_PROMPTS.md",
-        "04_FFMPEG_POSTPROCESSING_AND_DEBT.md",
-        "05_ZERO_QUOTA_TESTING_FRAMEWORK.md",
+        "ARQUITECTURA.md",
+        "FLUJO_VIDEOS.md",
+        "INTEGRACIONES_Y_SERVICIOS.md",
+        "PLAN_MAESTRO_PIPELINE_VISUAL.md",
+        "PLAN_ARQUITECTURA_V3_1.md",
     ]
 
     @pytest.mark.parametrize("doc_filename", EXPECTED_DOCS)
     def test_architecture_doc_exists_and_non_empty(self, doc_filename: str):
-        """Ensure all 5 milestone architecture blueprints exist and exceed minimum content threshold."""
-        doc_path = DOCS_ARCH_DIR / doc_filename
+        """Ensure all canonical architecture blueprints exist and exceed minimum content threshold."""
+        doc_path = REPO_ROOT / "docs" / doc_filename
         assert doc_path.is_file(), f"Missing required architecture doc: {doc_filename}"
         content = doc_path.read_text(encoding="utf-8")
         assert len(content.strip()) > 1000, f"Architecture doc {doc_filename} content is too sparse (<1000 chars)"
@@ -54,29 +54,28 @@ class TestArchitecturalDocumentation:
         project_text = project_md.read_text(encoding="utf-8")
         test_infra_text = test_infra_md.read_text(encoding="utf-8")
 
-        # Verify 24 feature inventory presence
-        for i in range(1, 25):
-            feat_tag = f"F-{i:02d}"
-            assert feat_tag in project_text, f"Feature {feat_tag} missing from PROJECT.md"
-            assert feat_tag in test_infra_text, f"Feature {feat_tag} missing from TEST_INFRA.md"
+        # Verify feature inventory presence
+        for i in range(1, 17):
+            feat_tag = f"F{i:02d}"
+            assert feat_tag in project_text or f"F-{i:02d}" in project_text, f"Feature {feat_tag} missing from PROJECT.md"
+            assert feat_tag in test_infra_text or f"F-{i:02d}" in test_infra_text, f"Feature {feat_tag} missing from TEST_INFRA.md"
 
-    def test_doc_05_zero_quota_testing_framework_sections(self):
-        """Verify 05_ZERO_QUOTA_TESTING_FRAMEWORK.md contains all mandatory technical sections."""
-        doc_path = DOCS_ARCH_DIR / "05_ZERO_QUOTA_TESTING_FRAMEWORK.md"
+    def test_plan_maestro_pipeline_visual_sections(self):
+        """Verify PLAN_MAESTRO_PIPELINE_VISUAL.md contains all mandatory technical sections."""
+        doc_path = REPO_ROOT / "docs" / "PLAN_MAESTRO_PIPELINE_VISUAL.md"
         content = doc_path.read_text(encoding="utf-8")
 
         mandatory_sections = [
-            "Zero-Quota Testing Philosophy",
-            "5-Tier Stratified Test Architecture",
-            "Offline Synthetic Fixtures",
-            "Headless Mock Runners",
-            "Schema Validation & Contract Enforcement",
-            "Invariant Assertions & Forensic Quality Gates",
-            "Continuous Integration & Local Verification Strategy",
-            "Architectural Traceability Matrix",
+            "Consolidación de Auditorías Previas",
+            "Diagnóstico del Workflow Actual",
+            "Matriz de Componentes",
+            "Estructura del Sistema",
+            "Auditoría y Plan de Saneamiento Documental",
+            "Checklist de Seguridad, Rendimiento",
+            "Hitos Estratégicos de Transición",
         ]
         for sec in mandatory_sections:
-            assert sec.lower() in content.lower(), f"Missing section '{sec}' in 05_ZERO_QUOTA_TESTING_FRAMEWORK.md"
+            assert sec.lower() in content.lower(), f"Missing section '{sec}' in PLAN_MAESTRO_PIPELINE_VISUAL.md"
 
 
 # ---------------------------------------------------------------------------

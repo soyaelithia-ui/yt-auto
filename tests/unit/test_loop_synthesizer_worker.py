@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 
 from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.media.loop_worker import LoopSynthesizerWorker
-from src.media.web_renderer import RenderSpec
 
 
 class TestLoopSynthesizerWorker(unittest.TestCase):
@@ -77,26 +76,26 @@ class TestLoopSynthesizerWorker(unittest.TestCase):
         rec = self.worker.synthesize_on_demand("scp", orientation="vertical", seed=42)
         self.assertEqual(rec.loop_id, "web_scp_v_123")
         self.mock_renderer.render_loop.assert_called_once()
-        spec_arg = self.mock_renderer.render_loop.call_args[0][0]
-        self.assertEqual(spec_arg.category, "scp")
-        self.assertEqual(spec_arg.orientation, "vertical")
-        self.assertEqual(spec_arg.seed, 42)
+        call_kwargs = self.mock_renderer.render_loop.call_args[1]
+        self.assertEqual(call_kwargs.get("category"), "scp")
+        self.assertEqual(call_kwargs.get("orientation"), "vertical")
+        self.assertEqual(call_kwargs.get("seed"), 42)
 
     def test_maintain_buffer_fills_stock_to_target(self):
         self._create_dummy_loop("c1", "cosmic_horror", "vertical")
 
-        def fake_render(spec, register_in_db=True):
-            f = Path(self.temp_dir.name) / f"{spec.category}_{spec.orientation}_{spec.seed}.mp4"
+        def fake_render(category, orientation="vertical", duration_sec=6.0, fps=30, seed=42, register_in_db=True, **kwargs):
+            f = Path(self.temp_dir.name) / f"{category}_{orientation}_{seed}.mp4"
             f.write_bytes(b"data")
             rec = LoopRecord(
-                loop_id=f"loop_{spec.category}_{spec.orientation}_{spec.seed}",
-                category=spec.category,
+                loop_id=f"loop_{category}_{orientation}_{seed}",
+                category=category,
                 technology="canvas2d",
-                orientation=spec.orientation,
-                width=spec.width,
-                height=spec.height,
-                duration_sec=spec.duration_sec,
-                fps=spec.fps,
+                orientation=orientation,
+                width=1080 if orientation == "vertical" else 1920,
+                height=1920 if orientation == "vertical" else 1080,
+                duration_sec=duration_sec,
+                fps=fps,
                 file_path=str(f),
                 file_size_bytes=4,
                 sha256="fake_sha",
