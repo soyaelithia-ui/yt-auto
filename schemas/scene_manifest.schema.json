@@ -405,6 +405,16 @@
           "procedural_config": {
             "type": "object",
             "properties": {
+              "archetype_id": {
+                "type": "string",
+                "enum": [
+                  "cosmic_singularity",
+                  "dark_forest",
+                  "synaptic_network",
+                  "tactical_chamber"
+                ],
+                "default": "cosmic_singularity"
+              },
               "template_name": {
                 "type": "string"
               },

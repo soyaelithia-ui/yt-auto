@@ -149,6 +149,7 @@ class ReviewJobManager:
             job_id=job_id,
             chat_id=chat_id,
             drive_url=drive_url,
+            thumbnail_path=thumbnail_path,
         )
         if delivery.ok:
             job.telegram_message_id = delivery.message_id

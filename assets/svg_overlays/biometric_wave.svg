@@ -1,0 +1,11 @@
+<svg viewBox="0 0 1080 1920" width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
+  <!-- EKG Vital Pulse Line -->
+  <path d="M 40 400 L 280 400 L 310 320 L 340 480 L 370 280 L 400 440 L 430 400 L 1040 400" stroke="#00FF88" stroke-width="4" fill="none"/>
+  
+  <!-- Biometric Telemetry Readouts -->
+  <g transform="translate(70, 430)">
+    <rect x="0" y="0" width="340" height="85" fill="#021408" fill-opacity="0.75" stroke="#00FF88" stroke-width="2"/>
+    <text x="20" y="35" font-family="monospace" font-size="24" font-weight="bold" fill="#00FF88">HEART RATE: {{bpm}} BPM</text>
+    <text x="20" y="68" font-family="monospace" font-size="20" fill="#00CC77">SpO2: {{spo2}}%</text>
+  </g>
+</svg>

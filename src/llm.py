@@ -442,9 +442,9 @@ _FORBIDDEN_EDITORIAL_DIRECTIVE = (
     "'bienvenidos', 'saludos', 'te damos la bienvenida'); llamadas a la acción "
     "('suscríbete', 'dale like', 'deja tu comentario', 'comenta abajo', "
     "'síguenos'); despedidas ('hasta la próxima', 'nos vemos', 'adiós'); "
-    "referencias meta al canal, al video o al episodio ('este canal', 'este "
-    "video', 'el episodio de hoy'); encabezados de sección ('capítulo', "
-    "'sección', 'parte 1')."
+    "referencias meta al canal, a redes o archivos ('este canal', 'este "
+    "video', 'el episodio de hoy', 'los expedientes se encuentran en Moku Reddit', '@MokuRedit'); "
+    "encabezados de sección ('capítulo', 'sección', 'parte 1')."
 )
 
 _ADAPTATION_OUTPUT_CONTRACT = (

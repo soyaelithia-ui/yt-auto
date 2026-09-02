@@ -10,12 +10,29 @@ LOG_MAX_BYTES = 20 * 1024 * 1024
 LOG_BACKUP_COUNT = 9
 
 
-class RunContextFilter(logging.Filter):
-    """Inject run-correlation fields into every record.
+import re
 
-    Missing fields render as ``-`` so the plain format stays readable when
-    no pipeline turn is active (CLI, pollers, tests).
-    """
+_REDACTION_PATTERNS = [
+    # Telegram Bot Token format: 123456789:ABCdef-ghij_klmn12345
+    (re.compile(r"\b(\d{8,12}:)[A-Za-z0-9_-]{30,40}\b"), r"\1***REDACTED***"),
+    # Google / OAuth Refresh and Access Tokens
+    (re.compile(r"(?i)(refresh_token|client_secret|api_key|access_token|secret)([\"']?\s*[:=]\s*[\"']?)([\w\-\.]{15,})"), r"\1\2***REDACTED***"),
+    # Bearer Tokens
+    (re.compile(r"(?i)bearer\s+([A-Za-z0-9_\-\.]{20,})"), r"Bearer ***REDACTED***"),
+]
+
+
+def redact_secrets(text: str) -> str:
+    """Sanitizes text by replacing credential tokens with redacted masks."""
+    if not isinstance(text, str):
+        text = str(text)
+    for pattern, repl in _REDACTION_PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
+
+
+class RunContextFilter(logging.Filter):
+    """Inject run-correlation fields and redact sensitive secrets."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         context = get_run_context()
@@ -26,6 +43,15 @@ class RunContextFilter(logging.Filter):
             or record.name.split(".")[-1]
         )
         record.stage = getattr(record, "stage", None) or context.stage or "-"
+
+        # Redact secrets in message
+        if isinstance(record.msg, str):
+            record.msg = redact_secrets(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: redact_secrets(v) if isinstance(v, str) else v for k, v in record.args.items()}
+            elif isinstance(record.args, tuple):
+                record.args = tuple(redact_secrets(v) if isinstance(v, str) else v for v in record.args)
         return True
 
 

@@ -449,14 +449,54 @@ class MigrationReport:
     quick_check: str
 
 
+def validate_db_path(db_path: Any) -> Path | str:
+    """Validate database path argument before executing filesystem or SQLite operations.
+
+    Args:
+        db_path: Path-like, string, or in-memory SQLite identifier.
+
+    Returns:
+        Path or str: Normalized valid path or ':memory:'.
+
+    Raises:
+        TypeError: If db_path is None, a mock object, or not a Path/str/os.PathLike.
+        ValueError: If db_path is an empty string or a stringified mock representation.
+    """
+    if db_path is None:
+        raise TypeError("db_path cannot be None")
+
+    import unittest.mock
+    if isinstance(db_path, unittest.mock.Base) or "mock" in type(db_path).__module__.lower():
+        raise TypeError("Mock objects are not valid database paths")
+
+    if not isinstance(db_path, (str, Path, os.PathLike)):
+        raise TypeError("db_path must be str, Path, or os.PathLike")
+
+    s = str(db_path).strip()
+    if not s:
+        raise ValueError("db_path cannot be empty string")
+
+    if s.startswith(("<MagicMock", "<Mock")) or "MagicMock name=" in s:
+        raise ValueError("Stringified mock representation detected in db_path")
+
+    if s == ":memory:" or s.startswith("file::memory:"):
+        return ":memory:"
+
+    return Path(db_path)
+
+
 @contextmanager
 def connect(db_path: str | os.PathLike[str], *, read_only: bool = False) -> Iterator[sqlite3.Connection]:
-    path = Path(db_path)
-    if not read_only:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(path), timeout=BUSY_TIMEOUT_MS / 1000)
+    path_or_str = validate_db_path(db_path)
+    if str(path_or_str) == ":memory:":
+        conn = sqlite3.connect(":memory:", timeout=BUSY_TIMEOUT_MS / 1000)
     else:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=BUSY_TIMEOUT_MS / 1000)
+        path = Path(path_or_str)
+        if not read_only:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(path), timeout=BUSY_TIMEOUT_MS / 1000)
+        else:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -475,7 +515,10 @@ def wal_checkpoint_passive(db_path: str | os.PathLike[str] | Path) -> tuple[int,
     Returns:
         tuple[int, int, int]: (busy, log_pages, checkpointed_pages) where busy is 0 if non-blocked.
     """
-    path = Path(db_path)
+    path_or_str = validate_db_path(db_path)
+    if str(path_or_str) == ":memory:":
+        return (0, 0, 0)
+    path = Path(path_or_str)
     if not path.exists():
         return (0, 0, 0)
     with connect(path) as conn:
@@ -715,7 +758,8 @@ def backup_database(
 
 class QueueRepository:
     def __init__(self, db_path: str | os.PathLike[str]):
-        self.db_path = str(db_path)
+        self.db_path = str(validate_db_path(db_path))
+
 
     def initialize(self) -> MigrationReport:
         return migrate_database(self.db_path)

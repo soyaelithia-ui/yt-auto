@@ -97,13 +97,13 @@ def clamp_and_smooth_tension_curve(
 
 def segment_narration_into_scenes(
     narration_text: str,
-    wpm: float = 160.0,
-    min_scene_dur: float = 8.0,
-    max_scene_dur: float = 15.0,
+    wpm: float = 165.0,
+    min_scene_dur: float = 7.0,
+    max_scene_dur: float = 12.0,
 ) -> List[Dict[str, Any]]:
     """
-    Segments narration text into semantic scene acts respecting 8.0s <= duration <= 15.0s
-    at 150-175 WPM. Automatically merges sub-8.0s orphan phrases into preceding scenes.
+    Segments narration text into semantic scene acts respecting 7.0s <= duration <= 12.0s
+    at 160-175 WPM. Automatically merges sub-7.0s orphan phrases into preceding scenes.
     """
     clean_text = narration_text.strip()
     if not clean_text:
@@ -115,7 +115,7 @@ def segment_narration_into_scenes(
     if not sentences:
         sentences = [clean_text]
 
-    target_words = int(round((11.0 / 60.0) * wpm))
+    target_words = int(round((9.0 / 60.0) * wpm))
     max_words = int(round((max_scene_dur / 60.0) * wpm))
     min_words = int(round((min_scene_dur / 60.0) * wpm))
 

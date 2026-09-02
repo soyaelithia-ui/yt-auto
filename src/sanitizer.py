@@ -318,13 +318,16 @@ CRINGE_INTRO_PATTERNS = [
     r'(?i)^\s*(?:[*#_\~\s]*)(?:¡|¿)?Hola\s+(?:a\s+todos|fanáticos|fanaticos|seguidores|comunidad)\b\s*[,.\n!?:=\-\*\s]*',
 ]
 
-# Strictly prohibited editorial elements (Greetings, CTAs, Farewells, Channel presentation)
+# Strictly prohibited editorial elements (Greetings, CTAs, Farewells, Channel presentation, Outro archive plugs)
 FORBIDDEN_EDITORIAL_PATTERNS = [
     r'(?i)\b(?:hola|saludos|bienvenidos|bienvenido|te\s+damos\s+la\s+bienvenida)\b',
     r'(?i)\b(?:hoy\s+les\s+traigo|hoy\s+veremos|hoy\s+vamos\s+a\s+ver|hoy\s+hablaremos\s+de|esta\s+es\s+una\s+historia\s+de\s+terror)\b',
     r'(?i)\b(?:suscr[íi]bete|suscribirte|dale\s+a?\s+like|deja\s+tu\s+like|deja\s+un\s+comentario|comenta\s+abajo|s[íi]guenos)\b',
     r'(?i)\b(?:hasta\s+el\s+pr[óo]ximo|nos\s+vemos\s+en|hasta\s+la\s+pr[óo]xima|chao|adi[óo]s)\b',
     r'(?i)\b(?:HISTORIA\s+DE\s+TERROR|VIDEO\s+DE\s+MIEDO|ALGO\s+ATERRADOR)\b',
+    r'(?i)\b(?:todos\s+los\s+)?(?:expedientes|archivos|relatos)\s+(?:y\s+(?:archivos|grabaciones)\s+)?(?:se\s+encuentran|permanecen\s+archivados)\s+(?:bajo\s+estricta\s+custodia\s+)?en\s+@?\w+\b',
+    r'(?i)\b(?:permanecen\s+archivados|se\s+encuentran\s+archivados)\s+bajo\s+estricta\s+custodia\b',
+    r'(?i)@?(?:MokuRedit|Moku\s*Reddit|Aelithia)\b',
 ]
 
 # Optional operator-extensible rules (config/editorial_rules.yaml). Falls back

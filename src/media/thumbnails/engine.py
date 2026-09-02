@@ -15,7 +15,7 @@ from src.core.channel_profile import ChannelProfile, ChannelProfileRegistry
 from src.media.thumbnails.extractor import ClimaxFrameExtractor
 from src.media.thumbnails.grading import ChiaroscuroColorGrader
 from src.media.thumbnails.layout import AspectLayoutManager
-from src.media.thumbnails.subject_extractor import RimLightCompositor
+from src.media.thumbnails.subject_extractor import RimLightCompositor, AdaptiveSubjectCompositor
 from src.media.thumbnails.typography import DynamicTypographyEngine
 
 logger = logging.getLogger("thumbnail_engine")
@@ -34,6 +34,8 @@ class ThumbnailConfig:
     contrast_boost: float = 1.35
     primary_color: Optional[str] = None
     accent_color: Optional[str] = None
+    archetype: Optional[str] = None
+    template: Optional[str] = None
 
 
 class ThumbnailEngine:
@@ -110,11 +112,19 @@ class ThumbnailEngine:
             accent_color_hex=accent,
         )
 
-        # 3. Enhance Focal Subject with Rim Light Glow
-        rim_lit = self.subject_comp.apply_rim_light_to_frame(
+        # 3. Enhance Focal Subject with Adaptive Thematic Silhouette & Rim Light Glow
+        eff_archetype = config.archetype or config.template or config.title or config.channel_id
+        subject_composited = AdaptiveSubjectCompositor.composite_thematic_subject(
             base_img=graded_bg,
+            channel_id=config.channel_id,
+            archetype=eff_archetype,
             accent_color_hex=accent,
-            intensity=1.1,
+            intensity=0.95,
+        )
+        rim_lit = self.subject_comp.apply_rim_light_to_frame(
+            base_img=subject_composited,
+            accent_color_hex=accent,
+            intensity=0.6,
         )
 
         # 4. Render Dynamic Typography

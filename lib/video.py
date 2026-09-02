@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+logger = logging.getLogger(__name__)
+
 from lib.ffmpeg import (
     FFmpegError,
     FFmpegExecutionError,
@@ -863,6 +865,8 @@ def create_video_thumbnail(
             output_path=output_path,
             width=target_w,
             height=target_h,
+            archetype=kwargs.get("archetype") or kwargs.get("template") or kwargs.get("category"),
+            template=kwargs.get("template"),
         )
         res = engine.generate(
             config=cfg,

@@ -42,7 +42,7 @@ LANE_CURATION_CONFIGS = {
     "moku-scp-shorts": {
         "channel": "moku",
         "target_format": "short",
-        "default_wpm": 160.0,
+        "default_wpm": 165.0,
         "target_scene_dur": 11.0,
         "min_scene_dur": 8.0,
         "max_scene_dur": 15.0,
@@ -655,7 +655,7 @@ class CinematicScriptCuratorAgent:
             )
 
     def _sanitize_text(self, text: str) -> str:
-        """Sanitizes text, removing markdown headers, meta chatter, emojis, and artifacts."""
+        """Sanitizes text, removing markdown headers, meta chatter, emojis, clichés, and artifacts."""
         if not text:
             return ""
         try:
@@ -667,5 +667,12 @@ class CinematicScriptCuratorAgent:
         t = re.sub(r"\[.*?\]", "", t)
         t = re.sub(r"\(http.*?\)", "", t)
         t = re.sub(r"[\*\_~`]", "", t)
+        
+        # Anti-cliché and boilerplate filter
+        t = re.sub(r"(?i)\ben este video veremos\b", "", t)
+        t = re.sub(r"(?i)\bbajo una universidad ordinaria\b", "en una instalación subterránea", t)
+        t = re.sub(r"(?i)\bsuscr[íi]bete para m[áa]s\b", "", t)
+        t = re.sub(r"(?i)\bpermanece bajo custodia oficial en\s*@\w+\.?\b", "", t)
+        
         t = re.sub(r"\s+", " ", t).strip()
         return t

@@ -18,6 +18,7 @@ from src.core.repository import (
     connect,
     migrate_database,
     simhash_hamming_distance,
+    validate_db_path,
     wal_checkpoint_passive as repo_wal_checkpoint_passive,
 )
 from src.log import get_logger
@@ -34,14 +35,19 @@ def get_db_connection(db_path: str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connec
 
 def _get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     """Legacy helper; callers own the returned short-lived connection."""
-    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=15.0)
+    path_or_str = validate_db_path(db_path)
+    if str(path_or_str) != ":memory:":
+        parent = os.path.dirname(os.path.abspath(str(path_or_str)))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    conn = sqlite3.connect(str(path_or_str), timeout=15.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA busy_timeout=15000;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
+
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
