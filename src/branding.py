@@ -14,9 +14,9 @@ logger = get_logger("branding")
 
 @dataclass
 class ChannelBranding:
-    channel_key: str              # Canonical key: "moku" or "aelithia"
-    display_name: str             # Public name: "Moku" or "Aelithia"
-    handle: str                   # Channel handle: "@MokuRedit" or "@Aelithia-c1f"
+    channel_key: str              # Canonical key: e.g. "moku" or "aelithia"
+    display_name: str             # Public name: e.g. "Moku" or "Aelithia"
+    handle: str                   # Channel handle: e.g. "@ChannelHandle"
     channel_url: str              # Full YouTube URL
     voice_name: str               # Edge-TTS / Azure Voice name
     default_title_fallback: str   # Default title fallback
@@ -27,7 +27,7 @@ class ChannelBranding:
     category_id: str = "24"       # YouTube Category ID (24 = Entertainment)
     primary_color: str = "#E50914"  # Default Crimson Red
     accent_color: str = "#FFD700"   # Default Gold
-    watermark_text: str = "@MokuRedit"
+    watermark_text: str = ""
     watermark_position: Dict[str, Any] = field(default_factory=lambda: {"x": 20, "y": 40, "opacity": 0.65})
 
     def generate_title(self, raw_title: str) -> str:
@@ -40,7 +40,7 @@ class ChannelBranding:
             clean_t = self.default_title_fallback
 
         if self.channel_key == "aelithia":
-            suffix = " | Historias Reales en Aelithia" if (not clean_t.startswith("¿") and not clean_t.startswith("[")) else " | Aelithia"
+            suffix = f" | Historias Reales en {self.display_name}" if (not clean_t.startswith("¿") and not clean_t.startswith("[")) else f" | {self.display_name}"
             full = f"{clean_t}{suffix}"
             if len(full) > 100:
                 max_clean_len = max(1, 100 - len(suffix) - 3)
@@ -48,8 +48,8 @@ class ChannelBranding:
                 full = f"{clean_t}{suffix}"
             return full
         else:
-            prefix = "[RELATO DE TERROR] " if not clean_t.startswith("[") else ""
-            suffix = " | Moku"
+            prefix = "[RELATO DE TERROR] " if (not clean_t.startswith("[") and self.channel_key == "moku") else ""
+            suffix = f" | {self.display_name}"
             full = f"{prefix}{clean_t}{suffix}"
             if len(full) > 100:
                 max_clean_len = max(1, 100 - len(prefix) - len(suffix) - 3)
@@ -64,21 +64,24 @@ class ChannelBranding:
         channel handle links, and targeted Spanish hashtags.
         """
         summary_text = (summary or f"Una impactante narración en español para la comunidad de {self.display_name}.").strip()
+        clean_handle_tag = self.handle.lstrip("@").replace("-", "").replace("_", "")
+        clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
 
         if self.channel_key == "aelithia":
             desc = (
-                f"💭 {title} | Historias Reales y Confesiones en Aelithia\n\n"
+                f"💭 {title} | Historias Reales y Confesiones en {self.display_name}\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Historias fascinantes, dilemas morales y experiencias reales narradas en español.\n\n"
                 f"📌 RESUMEN DE LA HISTORIA:\n{summary_text}\n\n"
-                f"🔔 ÚNETE A LA COMUNIDAD DE AELITHIA:\n"
+                f"🔔 ÚNETE A LA COMUNIDAD DE {self.display_name.upper()}:\n"
                 f"Suscríbete para disfrutar de más relatos y dramas de la vida real:\n"
                 f"👉 {self.channel_url}\n"
                 f"¡Haz clic en la campanita 🔔 y comparte tu punto de vista!\n\n"
                 f"💬 ¿TÚ QUÉ OPINAS?:\n"
                 f"¿Crees que actuó de la manera correcta? Cuéntanos en los comentarios.\n\n"
-                f"#Aelithia #HistoriasReales #DramasDeLaVidaReal #Confesiones #HistoriasEnEspañol #AelithiaC1f"
+                f"#{clean_name_tag} #HistoriasReales #DramasDeLaVidaReal #Confesiones #HistoriasEnEspañol"
+                + (f" #{clean_handle_tag}" if clean_handle_tag and clean_handle_tag.lower() != clean_name_tag.lower() else "")
             )
-        else:
+        elif self.channel_key == "moku":
             desc = (
                 f"😱 {title} | Relato de Terror y Suspenso en Español\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Una experiencia inmersiva para escuchar en la oscuridad.\n\n"
@@ -89,7 +92,18 @@ class ChannelBranding:
                 f"¡Activa la campanita 🔔 para no perderte ningún nuevo relato!\n\n"
                 f"💬 COMUNIDAD:\n"
                 f"¿Has vivido alguna experiencia paranormal similar? Déjanos tu historia en los comentarios.\n\n"
-                f"#HistoriasDeTerror #CreepypastaEnEspañol #RelatosDeTerror #Paranormal #Suspenso #MokuRedit"
+                f"#HistoriasDeTerror #CreepypastaEnEspañol #RelatosDeTerror #Paranormal #Suspenso"
+            )
+        else:
+            tag_block = " ".join(f"#{t.replace(' ', '')}" for t in self.tags[:5]) if self.tags else f"#{clean_name_tag}"
+            desc = (
+                f"🎬 {title} | {self.display_name}\n\n"
+                f"Bienvenidos a {self.display_name} ({self.handle}).\n\n"
+                f"📌 RESUMEN:\n{summary_text}\n\n"
+                f"🔔 SUSCRÍBETE:\n"
+                f"👉 {self.channel_url}\n"
+                f"¡Activa la campanita 🔔 y comparte tu opinión!\n\n"
+                f"{tag_block}"
             )
         return desc
 
@@ -115,11 +129,15 @@ class ChannelBranding:
         else:
             short_title = clean_t
 
+        clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
         if self.channel_key == "aelithia":
-            hashtag_block = "#Shorts #HistoriasReales #Aelithia #DilemasMorales"
+            hashtag_block = f"#Shorts #HistoriasReales #{clean_name_tag} #DilemasMorales"
+            full_title = f"{short_title} #Shorts"
+        elif self.channel_key == "moku":
+            hashtag_block = f"#Shorts #Horror #HistoriasDeTerror #{clean_name_tag}"
             full_title = f"{short_title} #Shorts"
         else:
-            hashtag_block = "#Shorts #Horror #HistoriasDeTerror #Moku"
+            hashtag_block = f"#Shorts #{clean_name_tag}"
             full_title = f"{short_title} #Shorts"
 
         if len(full_title) > 100:
@@ -143,62 +161,6 @@ class ChannelBranding:
         }
 
 
-_CHANNEL_BRANDING_REGISTRY: Dict[str, ChannelBranding] = {
-    "moku": ChannelBranding(
-        channel_key="moku",
-        display_name="Moku",
-        handle="@MokuRedit",
-        channel_url="https://www.youtube.com/@MokuRedit",
-        voice_name="es-MX-JorgeNeural",
-        default_title_fallback="Historia de Terror",
-        narration_style="oscura, inmersiva, de suspenso perturbador y terror psicológico",
-        intro_hook_template="En la oscuridad más profunda, una presencia inexplicable comienza a manifestarse...",
-        outro_cta_template="",
-        tags=[
-            "historias de terror",
-            "creepypasta en español",
-            "relatos de terror",
-            "historias de suspenso",
-            "paranormal",
-            "relatos de la noche",
-            "terror psicológico",
-            "historias de miedo",
-            "leyendas urbanas",
-            "MokuRedit"
-        ],
-        primary_color="#E50914",
-        accent_color="#FFD700",
-        watermark_text="@MokuRedit",
-        watermark_position={"x": 20, "y": 40, "opacity": 0.65}
-    ),
-    "aelithia": ChannelBranding(
-        channel_key="aelithia",
-        display_name="Aelithia",
-        handle="@Aelithia-c1f",
-        channel_url="https://www.youtube.com/@Aelithia-c1f",
-        voice_name="es-MX-DaliaNeural",
-        default_title_fallback="Relato de Aelithia",
-        narration_style="emotiva, expresiva, envolvente para dramas interpersonales y reflexiones reales",
-        intro_hook_template="Todo comenzó cuando descubrí el secreto que mi propia familia intentaba ocultarme...",
-        outro_cta_template="",
-        tags=[
-            "aelithia",
-            "historias reales",
-            "dramas de la vida real",
-            "confesiones",
-            "historias de la vida real",
-            "dilemas morales",
-            "historias en español",
-            "relatos impactantes",
-            "Aelithia-c1f"
-        ],
-        primary_color="#00E5FF",
-        accent_color="#FF007F",
-        watermark_text="@Aelithia-c1f",
-        watermark_position={"x": 20, "y": 40, "opacity": 0.65}
-    )
-}
-
 _CHANNEL_ALIASES: Dict[str, str] = {
     alias: target.value for alias, target in CHANNEL_ALIASES.items()
 }
@@ -206,7 +168,8 @@ _CHANNEL_ALIASES: Dict[str, str] = {
 
 def resolve_channel_key(channel: Optional[str]) -> str:
     """Normalize a compatibility input alias without guessing unknown values."""
-    return canonical_channel(channel or "").value
+    res = canonical_channel(channel or "")
+    return res.value if hasattr(res, "value") else str(res)
 
 
 def get_channel_branding(channel: str) -> ChannelBranding:
@@ -218,6 +181,12 @@ def get_channel_branding(channel: str) -> ChannelBranding:
     vis = prof.visual
     aud = prof.audio
 
+    intro_hook = (
+        "Todo comenzó cuando descubrí el secreto que mi propia familia intentaba ocultarme..."
+        if cid == "aelithia"
+        else "Una presencia inexplicable comienza a manifestarse..."
+    )
+
     return ChannelBranding(
         channel_key=cid,
         display_name=ed.public_name,
@@ -226,7 +195,7 @@ def get_channel_branding(channel: str) -> ChannelBranding:
         voice_name=aud.default_voice_profile,
         default_title_fallback=ed.default_title_fallback,
         narration_style=ed.tone,
-        intro_hook_template="Una presencia inexplicable comienza a manifestarse...",
+        intro_hook_template=intro_hook,
         outro_cta_template="",
         tags=list(ed.tags),
         category_id=ed.category_id,
@@ -235,3 +204,40 @@ def get_channel_branding(channel: str) -> ChannelBranding:
         watermark_text=vis.watermark_text or ed.handle,
         watermark_position={"x": 20, "y": 40, "opacity": 0.65},
     )
+
+
+class _LazyChannelBrandingRegistry(dict):
+    """Dynamic registry backed by ChannelProfileRegistry without hardcoded identities."""
+    def __getitem__(self, key: Any) -> ChannelBranding:
+        cid = key.value if hasattr(key, "value") else str(key)
+        return get_channel_branding(cid)
+
+    def __contains__(self, key: object) -> bool:
+        try:
+            cid = key.value if hasattr(key, "value") else str(key)
+            get_channel_branding(cid)
+            return True
+        except Exception:
+            return False
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        try:
+            cid = key.value if hasattr(key, "value") else str(key)
+            return get_channel_branding(cid)
+        except Exception:
+            return default
+
+    def items(self):
+        from src.core.channel_profile import ChannelProfileRegistry
+        return [(cid, get_channel_branding(cid)) for cid in ChannelProfileRegistry.list_active_channel_ids()]
+
+    def values(self):
+        from src.core.channel_profile import ChannelProfileRegistry
+        return [get_channel_branding(cid) for cid in ChannelProfileRegistry.list_active_channel_ids()]
+
+    def keys(self):
+        from src.core.channel_profile import ChannelProfileRegistry
+        return ChannelProfileRegistry.list_active_channel_ids()
+
+
+_CHANNEL_BRANDING_REGISTRY: Dict[str, ChannelBranding] = _LazyChannelBrandingRegistry()

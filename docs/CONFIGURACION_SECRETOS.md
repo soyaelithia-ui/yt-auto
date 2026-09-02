@@ -1,7 +1,9 @@
 # Configuración, Variables de Entorno y Secretos
 
 > **Estado:** REPOSITORIO / OFICIAL  
-> **Última actualización:** 2026-08  
+> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
+> **Gobernanza:** Repositorio privado con resolución dinámica de identidades y secretos desacoplados.  
+> **Última actualización:** 2026-09  
 
 Inventario estructurado de variables de entorno y directivas de seguridad para `yt-auto`.
 
@@ -36,11 +38,16 @@ Inventario estructurado de variables de entorno y directivas de seguridad para `
 | `DRIVE_USE_GCLOUD` | Utilizar credenciales activas de `gcloud auth`. | `0` (inactivo) / `1` (activo). |
 | `DRIVE_KEY_PATH` | Ruta al archivo JSON de credenciales Service Account. | `/run/secrets/drive_key.json` |
 
-### D. Canales de YouTube y Publicación
-| Variable | Descripción | Detalle |
+### D. Canales de YouTube, Identidades y Publicación
+| Variable | Descripción | Detalle / Dinámico |
 |---|---|---|
+| `CHANNEL_HANDLE` | Handle global dinámico del canal activo (`@Canal`). | Override genérico para el carril en ejecución. |
+| `CHANNEL_URL` | URL de YouTube del canal activo. | Override genérico (`https://youtube.com/@Canal`). |
+| `CHANNEL_NAME` | Nombre público del canal activo. | Override genérico. |
+| `MOKU_HANDLE` | Handle específico para canal Moku. | Por defecto resuelto de `config/channels/moku.json`. |
 | `MOKU_YOUTUBE_CHANNEL_ID` | ID de canal de YouTube para Moku. | Identificador `UC...` |
 | `MOKU_YOUTUBE_TOKEN_PATH` | Ruta al token OAuth2 de Moku. | `/run/secrets/youtube_token.json` |
+| `AELITHIA_HANDLE` | Handle específico para canal Aelithia. | Por defecto resuelto de `config/channels/aelithia.json`. |
 | `AELITHIA_YOUTUBE_CHANNEL_ID`| ID de canal de YouTube para Aelithia. | Identificador `UC...` |
 | `AELITHIA_YOUTUBE_TOKEN_PATH`| Ruta al token OAuth2 de Aelithia. | `/run/secrets/youtube_token_aelithia.json` |
 

@@ -272,14 +272,17 @@ def main() -> int:
     # Step A6: SEO Metadata & Synchronized Timestamps
     acts_manifest = [{"start_sec": a.start_sec, "title": a.title} for a in long_acts]
     long_timestamps = SeoOptimizerAgent.build_synchronized_timestamps(acts_manifest, long_dur)
+    from src.branding import get_channel_branding
+    branding = get_channel_branding("moku")
+
     long_title = "SCP-5000: ¿Por Qué? - La Guerra de la Fundación contra la Humanidad"
     long_desc = (
         f"{long_title}\n\n"
         "Dentro del Sitio-62C fue hallado un traje mecánico chamuscado con el cadáver de un técnico y una grabación imposible: "
         "la historia de cuando la Fundación SCP decidió exterminar deliberadamente a toda la especie humana tras descubrir un parásito cósmico en el alma humana.\n\n"
         f"{long_timestamps}\n\n"
-        "🔔 Suscríbete a @MokuRedit para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
-        "#SCP #SCP5000 #FundacionSCP #TerrorPsicologico #DocumentalSCP #Creepypasta #MokuRedit"
+        f"🔔 Suscríbete a {branding.handle} para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
+        "#SCP #SCP5000 #FundacionSCP #TerrorPsicologico #DocumentalSCP #Creepypasta"
     )
 
     # Step A7: QA Audit

@@ -1,7 +1,9 @@
 # Base de Conocimiento Técnica — yt-auto
 
 > **Estado:** OFICIAL (Índice Central)  
-> **Última actualización:** 2026-08  
+> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
+> **Gobernanza:** Repositorio privado para infraestructura, producción y publicación automatizada multi-canal.  
+> **Última actualización:** 2026-09  
 
 Índice y mapa de navegación para el sistema de producción automatizada de videos de YouTube (`yt-auto` + `review`).
 

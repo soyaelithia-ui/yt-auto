@@ -289,7 +289,7 @@ PROMPT_LEAK_PATTERNS = [
 
 # Legacy branding intros and intro greetings to strip
 LEGACY_BRANDING_PATTERNS = [
-    r'(?i)^\s*(?:[*#_\~\s]*)(?:¡|¿)?(?:Hola,?\s*|Bienvenidos a?\s*|Te damos la bienvenida a?\s*)?(?:está?s en|a)?\s*(?:Moku|Aelithia)\b\s*[,.\n!?:=\-\*\s]*',
+    r'(?i)^\s*(?:[*#_\~\s]*)(?:¡|¿)?(?:Hola,?\s*|Bienvenidos a?\s*|Te damos la bienvenida a?\s*)(?:está?s en|a)?\s*[\w\-.]+\b\s*[,.\n!?:=\-\*\s]*',
     r'(?i)^\s*(?:[*#_\~\s]*)(?:¡|¿)?(?:Hola|Bienvenidos|Bienvenido|Te damos la bienvenida)\b[^\n!?:=]*[,.\n!?:=\-\*\s]*',
     r'(?i)Apaga las luces y escucha con atenció?n\.\.\.?',
 ]
@@ -325,36 +325,50 @@ FORBIDDEN_EDITORIAL_PATTERNS = [
     r'(?i)\b(?:suscr[íi]bete|suscribirte|dale\s+a?\s+like|deja\s+tu\s+like|deja\s+un\s+comentario|comenta\s+abajo|s[íi]guenos)\b',
     r'(?i)\b(?:hasta\s+el\s+pr[óo]ximo|nos\s+vemos\s+en|hasta\s+la\s+pr[óo]xima|chao|adi[óo]s)\b',
     r'(?i)\b(?:HISTORIA\s+DE\s+TERROR|VIDEO\s+DE\s+MIEDO|ALGO\s+ATERRADOR)\b',
-    r'(?i)\b(?:todos\s+los\s+)?(?:expedientes|archivos|relatos)\s+(?:y\s+(?:archivos|grabaciones)\s+)?(?:se\s+encuentran|permanecen\s+archivados)\s+(?:bajo\s+estricta\s+custodia\s+)?en\s+@?\w+\b',
+    r'(?i)\b(?:todos\s+los\s+)?(?:expedientes|archivos|relatos)\s+(?:y\s+(?:archivos|grabaciones)\s+)?(?:se\s+encuentran|permanecen\s+archivados)\s+(?:bajo\s+estricta\s+custodia\s+)?en\s+@?[\w\-.]+\b',
     r'(?i)\b(?:permanecen\s+archivados|se\s+encuentran\s+archivados)\s+bajo\s+estricta\s+custodia\b',
-    r'(?i)@?(?:MokuRedit|Moku\s*Reddit|Aelithia)\b',
+    r'(?i)@[\w\-.]+\b',
+    r'(?i)\b\w+\s+Reddit\b',
 ]
 
-# Optional operator-extensible rules (config/editorial_rules.yaml). Falls back
+# Optional operator-extensible rules (config/editorial_rules.json). Falls back
 # to the built-in list when the file is absent or invalid, so the barrier can
 # never be weakened by a broken config.
-_EXTRA_PATTERNS_CACHE: Optional[list] = None
+_FILE_RULES_CACHE: Optional[list] = None
 
 
 def _editorial_patterns() -> list:
-    global _EXTRA_PATTERNS_CACHE
-    if _EXTRA_PATTERNS_CACHE is not None:
-        return FORBIDDEN_EDITORIAL_PATTERNS + _EXTRA_PATTERNS_CACHE
-    extra: list = []
-    try:
-        import json
-        from pathlib import Path
+    global _FILE_RULES_CACHE
+    if _FILE_RULES_CACHE is None:
+        file_rules: list = []
+        try:
+            import json
+            from pathlib import Path
 
-        rules_path = Path(__file__).resolve().parent.parent / "config" / "editorial_rules.json"
-        if rules_path.exists():
-            data = json.loads(rules_path.read_text(encoding="utf-8")) or {}
-            for item in data.get("forbidden_extra", []) or []:
-                compiled = re.compile(str(item))
-                extra.append(compiled.pattern)
-    except Exception as exc:  # noqa: BLE001 - barrier must never break on config
-        logging.getLogger(__name__).warning("editorial_rules.json ignorado: %s", exc)
-    _EXTRA_PATTERNS_CACHE = extra
-    return FORBIDDEN_EDITORIAL_PATTERNS + extra
+            rules_path = Path(__file__).resolve().parent.parent / "config" / "editorial_rules.json"
+            if rules_path.exists():
+                data = json.loads(rules_path.read_text(encoding="utf-8")) or {}
+                for item in data.get("forbidden_extra", []) or []:
+                    compiled = re.compile(str(item))
+                    file_rules.append(compiled.pattern)
+        except Exception as exc:  # noqa: BLE001 - barrier must never break on config
+            logging.getLogger(__name__).warning("editorial_rules.json ignorado: %s", exc)
+        _FILE_RULES_CACHE = file_rules
+
+    dynamic_channel_patterns: list = []
+    try:
+        from src.core.channel_profile import ChannelProfileRegistry
+        for ch in ChannelProfileRegistry.list_active_channels():
+            name = ch.editorial.public_name
+            handle = ch.editorial.handle.lstrip("@")
+            if name:
+                dynamic_channel_patterns.append(rf'(?i)\b{re.escape(name)}\s*Reddit\b')
+            if handle:
+                dynamic_channel_patterns.append(rf'(?i)@{re.escape(handle)}\b')
+    except Exception:
+        pass
+
+    return FORBIDDEN_EDITORIAL_PATTERNS + _FILE_RULES_CACHE + dynamic_channel_patterns
 
 
 def check_forbidden_editorial_elements(text: str) -> Optional[str]:

@@ -34,6 +34,16 @@ class TestOutroSanitizer:
             assert "@MokuRedit" not in cleaned
             assert "@Aelithia" not in cleaned
 
+    def test_drops_hyphenated_and_dynamic_handles(self):
+        texts = [
+            "Para más relatos suscríbete a @Aelithia-c1f ahora mismo.",
+            "Visita @canal-relatos-2026 para el siguiente episodio.",
+        ]
+        for t in texts:
+            cleaned, _ = repair_forbidden_editorial(t)
+            assert "@Aelithia-c1f" not in cleaned
+            assert "@canal-relatos-2026" not in cleaned
+
     def test_preserves_valid_narrative_context(self):
         clean_narrative = (
             "El archivo confidencial fue encontrado en el sótano del hospital. "

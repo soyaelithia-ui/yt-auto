@@ -142,48 +142,122 @@ class RuntimeSettings:
 
     def channel(self, value: str | CanonicalChannel) -> ChannelSettings:
         key = canonical_channel(value)
-        if key in self.channels:
-            return self.channels[key]
-        if isinstance(key, str):
-            for k, ch in self.channels.items():
-                if k == key or getattr(k, "value", None) == key:
-                    return ch
-        return self._resolve_dynamic_channel(key)
+        return _resolve_dynamic_channel(key)
 
-    def _resolve_dynamic_channel(self, key: str | CanonicalChannel) -> ChannelSettings:
-        cid = key.value if hasattr(key, "value") else str(key)
-        from src.core.channel_profile import ChannelProfileRegistry
-        profile = ChannelProfileRegistry.get_channel(cid)
-        return ChannelSettings(
-            key=profile.id,
-            public_name=profile.editorial.public_name,
-            handle=profile.editorial.handle,
-            topic=profile.editorial.topic,
-            voice=profile.audio.default_voice_profile,
-            tts_provider=profile.audio.default_tts_provider,
-            tone=profile.editorial.tone,
-            intro=profile.editorial.persona_system_prompt,
-            cta=profile.editorial.community_question,
-            seo_tags=profile.editorial.tags,
-            subtitle=SubtitleSettings(
-                template=profile.id,
-                font_name=profile.visual.typography.font_subtitles,
-                font_size=profile.visual.typography.subtitle_font_size,
-                primary_colour=profile.visual.typography.subtitle_primary_color,
-                outline_colour=profile.visual.typography.subtitle_outline_color,
-            ),
-            design=DesignSettings(
-                style=profile.visual.style_id,
-                primary_colour=profile.visual.palette.primary,
-                accent_colour=profile.visual.palette.accent,
-                font_bold=profile.visual.typography.font_bold,
-                font_regular=profile.visual.typography.font_regular,
-            ),
-            cookies_path=profile.auth.cookies_path,
-            youtube_token_path=profile.auth.youtube_token_path,
-            expected_youtube_channel_id=profile.auth.expected_youtube_channel_id,
-            source_feed=profile.auth.source_feed,
-        )
+
+class _DynamicChannelsDict(dict):
+    """Dynamic mapping resolving channel settings on-the-fly without static caching."""
+    def __getitem__(self, key: Any) -> ChannelSettings:
+        from src.core.domain import canonical_channel
+        try:
+            can_key = canonical_channel(key)
+            return _resolve_dynamic_channel(can_key)
+        except Exception:
+            return _resolve_dynamic_channel(key)
+
+    def __contains__(self, key: object) -> bool:
+        from src.core.domain import canonical_channel
+        try:
+            canonical_channel(key)
+            return True
+        except Exception:
+            return False
+
+    def __len__(self) -> int:
+        from src.core.domain import CanonicalChannel
+        return len(CanonicalChannel)
+
+    def __iter__(self):
+        from src.core.domain import CanonicalChannel
+        for c in CanonicalChannel:
+            yield c
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except Exception:
+            return default
+
+    def items(self):
+        from src.core.domain import CanonicalChannel
+        return [(c, _resolve_dynamic_channel(c)) for c in CanonicalChannel]
+
+    def values(self):
+        from src.core.domain import CanonicalChannel
+        return [_resolve_dynamic_channel(c) for c in CanonicalChannel]
+
+    def keys(self):
+        from src.core.domain import CanonicalChannel
+        return list(CanonicalChannel)
+
+
+def _resolve_dynamic_channel(key: str | CanonicalChannel) -> ChannelSettings:
+    cid = key.value if hasattr(key, "value") else str(key)
+    from src.core.channel_profile import ChannelProfileRegistry
+    profile = ChannelProfileRegistry.get_channel(cid)
+    prefix = cid.upper()
+    active_channel_env = os.environ.get("CHANNEL_KEY", "").strip().lower()
+    use_generic_env = (active_channel_env == cid or not active_channel_env)
+
+    handle = (
+        os.environ.get(f"{prefix}_HANDLE")
+        or (os.environ.get("CHANNEL_HANDLE") if use_generic_env and "CHANNEL_HANDLE" in os.environ else None)
+        or profile.editorial.handle
+    )
+    public_name = (
+        os.environ.get(f"{prefix}_NAME")
+        or os.environ.get(f"{prefix}_PUBLIC_NAME")
+        or (os.environ.get("CHANNEL_NAME") if use_generic_env and "CHANNEL_NAME" in os.environ else None)
+        or profile.editorial.public_name
+    )
+    voice = os.environ.get(f"{prefix}_TTS_VOICE") or profile.audio.default_voice_profile
+    tts_provider = os.environ.get(f"{prefix}_TTS_PROVIDER") or profile.audio.default_tts_provider
+    cookies_path = (
+        _env_path(f"{prefix}_COOKIES_PATH", profile.auth.cookies_path)
+        if f"{prefix}_COOKIES_PATH" in os.environ
+        else profile.auth.cookies_path
+    )
+    youtube_token_path = (
+        _env_path(f"{prefix}_YOUTUBE_TOKEN_PATH", profile.auth.youtube_token_path)
+        if f"{prefix}_YOUTUBE_TOKEN_PATH" in os.environ
+        else profile.auth.youtube_token_path
+    )
+    expected_channel_id = (
+        os.environ.get(f"{prefix}_YOUTUBE_CHANNEL_ID")
+        or profile.auth.expected_youtube_channel_id
+    ).strip()
+    source_feed = os.environ.get(f"{prefix}_SOURCE_FEED") or profile.auth.source_feed
+
+    return ChannelSettings(
+        key=CanonicalChannel(cid) if cid in [c.value for c in CanonicalChannel] else cid,
+        public_name=public_name,
+        handle=handle,
+        topic=profile.editorial.topic,
+        voice=voice,
+        tts_provider=tts_provider,
+        tone=profile.editorial.tone,
+        intro=profile.editorial.persona_system_prompt,
+        cta=profile.editorial.community_question,
+        seo_tags=profile.editorial.tags,
+        subtitle=SubtitleSettings(
+            template=profile.id,
+            font_name=profile.visual.typography.font_subtitles,
+            font_size=profile.visual.typography.subtitle_font_size,
+            primary_colour=profile.visual.typography.subtitle_primary_color,
+            outline_colour=profile.visual.typography.subtitle_outline_color,
+        ),
+        design=DesignSettings(
+            style=profile.visual.style_id,
+            primary_colour=profile.visual.palette.primary,
+            accent_colour=profile.visual.palette.accent,
+            font_bold=profile.visual.typography.font_bold,
+            font_regular=profile.visual.typography.font_regular,
+        ),
+        cookies_path=cookies_path,
+        youtube_token_path=youtube_token_path,
+        expected_youtube_channel_id=expected_channel_id,
+        source_feed=source_feed,
+    )
 
 
 BOT_HOME_PATH = _env_path("BOT_HOME", BASE_DIR / ".bot_home")
@@ -192,89 +266,8 @@ ANTIGRAVITY_AGENTS_APP_DATA_DIR = _env_path(
 )
 SECRETS_DIR = _env_path("SECRETS_DIR", BASE_DIR / "secrets")
 
-MOKU = ChannelSettings(
-    key=CanonicalChannel.MOKU,
-    public_name="Moku",
-    handle=os.environ.get("MOKU_HANDLE", "@MokuRedit"),
-    topic="terror psicológico, relatos inquietantes y creepypasta",
-    voice=os.environ.get("MOKU_TTS_VOICE", "es-MX-JorgeNeural"),
-    tts_provider=os.environ.get("MOKU_TTS_PROVIDER", "edge-tts"),
-    tone="oscuro, cinematográfico, inmersivo y sobrio",
-    intro="Apaga las luces y escucha con atención.",
-    cta="Suscríbete a Moku y cuéntanos en comentarios qué parte te inquietó más.",
-    seo_tags=(
-        "Moku",
-        "historias de terror",
-        "creepypasta en español",
-        "terror psicológico",
-        "relatos de miedo",
-    ),
-    subtitle=SubtitleSettings(
-        template="moku",
-        font_name="DejaVu Sans",
-        font_size=46,
-        primary_colour="&H00FFFFFF",
-        outline_colour="&H00100B08",
-    ),
-    design=DesignSettings(
-        style="dark_cinematic",
-        primary_colour="#0D1117",
-        accent_colour="#D43B32",
-        font_bold="DejaVuSans-Bold.ttf",
-        font_regular="DejaVuSans.ttf",
-    ),
-    cookies_path=_env_path("MOKU_COOKIES_PATH", SECRETS_DIR / "decrypted_cookies.json"),
-    youtube_token_path=_env_path(
-        "MOKU_YOUTUBE_TOKEN_PATH", SECRETS_DIR / "youtube_token.json"
-    ),
-    expected_youtube_channel_id=os.environ.get(
-        "MOKU_YOUTUBE_CHANNEL_ID", ""
-    ).strip(),
-    source_feed=os.environ.get("MOKU_SOURCE_FEED", "nosleep"),
-)
-
-AELITHIA = ChannelSettings(
-    key=CanonicalChannel.AELITHIA,
-    public_name="Aelithia",
-    handle=os.environ.get("AELITHIA_HANDLE", "@Aelithia-c1f"),
-    topic="historias personales, dilemas morales y relaciones humanas",
-    voice=os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural"),
-    tts_provider=os.environ.get("AELITHIA_TTS_PROVIDER", "edge-tts"),
-    tone="emocional, moderno, empático y reflexivo",
-    intro="Bienvenidos a Aelithia. Hoy escucharemos una historia que merece ser debatida.",
-    cta="Suscríbete a Aelithia y dinos con respeto qué habrías hecho tú.",
-    seo_tags=(
-        "Aelithia",
-        "historias reales",
-        "dilemas morales",
-        "relaciones humanas",
-        "relatos en español",
-    ),
-    subtitle=SubtitleSettings(
-        template="aelithia",
-        font_name="DejaVu Sans",
-        font_size=44,
-        primary_colour="&H00FFFFFF",
-        outline_colour="&H00412623",
-    ),
-    design=DesignSettings(
-        style="emotional_modern",
-        primary_colour="#31263E",
-        accent_colour="#FF8FA3",
-        font_bold="DejaVuSans-Bold.ttf",
-        font_regular="DejaVuSans.ttf",
-    ),
-    cookies_path=_env_path(
-        "AELITHIA_COOKIES_PATH", SECRETS_DIR / "cookies_channel2.json"
-    ),
-    youtube_token_path=_env_path(
-        "AELITHIA_YOUTUBE_TOKEN_PATH", SECRETS_DIR / "youtube_token_aelithia.json"
-    ),
-    expected_youtube_channel_id=os.environ.get(
-        "AELITHIA_YOUTUBE_CHANNEL_ID", ""
-    ).strip(),
-    source_feed=os.environ.get("AELITHIA_SOURCE_FEED", "AmItheAsshole"),
-)
+MOKU = _resolve_dynamic_channel(CanonicalChannel.MOKU)
+AELITHIA = _resolve_dynamic_channel(CanonicalChannel.AELITHIA)
 
 # ---------------------------------------------------------------------------
 # Runtime profiles (WP1): production vs CLI sandbox isolation.
@@ -346,7 +339,7 @@ SETTINGS = RuntimeSettings(
     drive_rejected_folder_id=os.environ.get("DRIVE_REJECTED_FOLDER_ID", "").strip(),
     drive_archive_folder_id=os.environ.get("DRIVE_ARCHIVE_FOLDER_ID", "").strip(),
     drive_key_path=_env_path("DRIVE_KEY_PATH", SECRETS_DIR / "drive_key.json"),
-    channels={CanonicalChannel.MOKU: MOKU, CanonicalChannel.AELITHIA: AELITHIA},
+    channels=_DynamicChannelsDict(),
     short_compositor=os.environ.get("SHORT_COMPOSITOR", os.environ.get("VIDEO_ENGINE", os.environ.get("COMPOSITOR", "loop"))),
     video_engine=os.environ.get("VIDEO_ENGINE", os.environ.get("COMPOSITION_ENGINE", "loop")),
     enable_subtitles=os.environ.get("ENABLE_SUBTITLES", "0").strip().lower() in ("1", "true", "yes"),
@@ -454,7 +447,7 @@ TOKEN_CHANNEL2_PATH = os.environ.get(
     os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH", TOKEN_AELITHIA_PATH),
 )
 CHANNELS_CONFIG = {
-    channel.value: settings.public_dict()
+    (channel.value if hasattr(channel, "value") else str(channel)): settings.public_dict()
     for channel, settings in SETTINGS.channels.items()
 }
 DEFAULT_SUBREDDIT = MOKU.source_feed

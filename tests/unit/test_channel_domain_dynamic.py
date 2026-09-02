@@ -47,3 +47,84 @@ def test_runtime_settings_channel_dynamic_scifi():
     assert ch_scifi.public_name != ""
     assert ch_scifi.subtitle is not None
     assert ch_scifi.design is not None
+
+
+def test_channel_settings_dynamic_env_override(monkeypatch):
+    from src.config import SETTINGS, get_channel_settings, _resolve_dynamic_channel
+    monkeypatch.setenv("MOKU_HANDLE", "@TestMokuHandleEnv")
+    monkeypatch.setenv("MOKU_NAME", "TestMokuNameEnv")
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+    ch = _resolve_dynamic_channel("moku")
+    assert ch.handle == "@TestMokuHandleEnv"
+    assert ch.public_name == "TestMokuNameEnv"
+
+    # Verify SETTINGS.channel and get_channel_settings also resolve dynamically
+    ch_settings = SETTINGS.channel("moku")
+    assert ch_settings.handle == "@TestMokuHandleEnv"
+    assert ch_settings.public_name == "TestMokuNameEnv"
+
+    ch_facade = get_channel_settings("moku")
+    assert ch_facade.handle == "@TestMokuHandleEnv"
+    assert ch_facade.public_name == "TestMokuNameEnv"
+
+    # Verify SETTINGS.channels mapping resolves dynamically
+    ch_dict = SETTINGS.channels[CanonicalChannel.MOKU]
+    assert ch_dict.handle == "@TestMokuHandleEnv"
+    assert ch_dict.public_name == "TestMokuNameEnv"
+
+    # Cleanup reload
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+
+def test_channel_settings_generic_channel_handle_override(monkeypatch):
+    from src.config import SETTINGS, get_channel_settings, _resolve_dynamic_channel
+    monkeypatch.setenv("CHANNEL_KEY", "aelithia")
+    monkeypatch.setenv("CHANNEL_HANDLE", "@GenericAelithia")
+    monkeypatch.setenv("CHANNEL_NAME", "Generic Aelithia")
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+    ch = _resolve_dynamic_channel("aelithia")
+    assert ch.handle == "@GenericAelithia"
+    assert ch.public_name == "Generic Aelithia"
+
+    ch_settings = SETTINGS.channel("aelithia")
+    assert ch_settings.handle == "@GenericAelithia"
+    assert ch_settings.public_name == "Generic Aelithia"
+
+    ch_facade = get_channel_settings("aelithia")
+    assert ch_facade.handle == "@GenericAelithia"
+    assert ch_facade.public_name == "Generic Aelithia"
+
+    # Cleanup reload
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+
+def test_settings_channels_dynamic_iteration():
+    from src.config import SETTINGS
+    active_keys = [k for k in SETTINGS.channels.keys()]
+    assert CanonicalChannel.MOKU in active_keys or "moku" in [str(k) for k in active_keys]
+    values = list(SETTINGS.channels.values())
+    assert len(values) >= 2
+    items = list(SETTINGS.channels.items())
+    assert len(items) >= 2
+
+
+def test_channel_profile_registry_unknown_channel_raises_key_error():
+    with pytest.raises(KeyError, match="Canal desconocido o no configurado"):
+        ChannelProfileRegistry.get_channel("completely_unknown_channel_999")
+
+
+def test_channel_profile_registry_audio_and_auth_env_overrides(monkeypatch):
+    monkeypatch.setenv("MOKU_TTS_VOICE", "es-ES-CustomVoice")
+    monkeypatch.setenv("MOKU_YOUTUBE_CHANNEL_ID", "UC_CUSTOM_MOKU_123")
+    monkeypatch.setenv("MOKU_SOURCE_FEED", "r/custom_feed")
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+    prof = ChannelProfileRegistry.get_channel("moku")
+    assert prof.audio.default_voice_profile == "es-ES-CustomVoice"
+    assert prof.auth.expected_youtube_channel_id == "UC_CUSTOM_MOKU_123"
+    assert prof.auth.source_feed == "r/custom_feed"
+
+    ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
