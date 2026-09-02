@@ -68,8 +68,20 @@ The narrative curator and art director MUST map each curated scene's theme lane 
 - **And** the color temperature MUST evaluate to nominal Kelvin calibration ($6500\text{K}$)
 - **And** the output schema MUST strictly validate against `schemas/art_director.schema.json`.
 
-#### Scenario: Unknown or custom theme lane fallback (Edge Case)
-- **Given** a script specifying an unmapped custom theme lane `"cyber_dystopia_unknown"`
-- **When** visual planning is invoked
-- **Then** the art director MUST fall back to canonical default palette (`"cosmic_horror"`)
-- **And** the resulting plan MUST pass schema validation without throwing key errors.
+### Requirement 5: High-Retention Conversational and Incident Narrative Hook Synthesis
+The narrative curator MUST synthesize Short narrative scripts calibrated strictly between 115 and 145 words (40–55 seconds duration at 160–175 WPM) utilizing conversational 0–2s opening hooks, canonical incident crossovers (e.g. Incident 096-1-A, Incident Clef-Kondraki, SCP-1048, SCP-027, SCP-001), and seamless syntactic loop connectors ending with open trailing clauses without channel handle outro CTAs.
+
+#### Scenario: Generation of SCP Short with high-retention hook and seamless loop (Happy Path)
+- **Given** an SCP topic request for `"SCP-1048"` or `"Incidente 096-1-A"`
+- **When** `MokuHorrorCurator.build_short_narrative` generates the script
+- **Then** the resulting text word count MUST satisfy $115 \le \text{word\_count} \le 145$
+- **And** the narration MUST end with an open loop connector (`...`)
+- **And** the text MUST NOT contain handle outros (e.g. `@moku`) or subscribe CTAs.
+
+#### Scenario: General horror creepypasta fallback with retention mechanics (Edge Case)
+- **Given** a non-SCP creepypasta topic `"la criatura del sotano"`
+- **When** `MokuHorrorCurator.build_short_narrative` generates the script
+- **Then** the narrative MUST open with an immediate atmospheric hook within the first sentence
+- **And** the word count MUST satisfy $115 \le \text{word\_count} \le 145$
+- **And** the script MUST terminate on a seamless syntactic connector.
+

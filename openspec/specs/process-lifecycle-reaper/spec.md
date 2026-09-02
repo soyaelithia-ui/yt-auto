@@ -1,7 +1,7 @@
 # Specification: Process Lifecycle Reaper
 
 ## Capability Overview
-The `process-lifecycle-reaper` capability provides a safety net against orphaned child processes (such as FFmpeg or browsers) during fatal interpreter crashes or `SIGKILL` events. It is a lightweight, `atexit`-registered module that tracks active child PIDs and forces termination at shutdown if they remain running.
+The `process-lifecycle-reaper` capability provides a safety net against orphaned child processes (such as FFmpeg or worker subprocesses) during fatal interpreter crashes or `SIGKILL` events. It is a lightweight, `atexit`-registered module that tracks active child PIDs and forces termination at shutdown if they remain running.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ The reaper MUST provide thread-safe mechanisms to register and unregister spawne
 
 #### Scenario: Registering a new child process (Happy Path)
 - **Given** an initialized reaper module
-- **When** a media render module spawns a new FFmpeg or browser process
+- **When** a media render module spawns a new FFmpeg or worker process
 - **Then** the module MUST register the process PID with the reaper
 - **And** the PID MUST be stored in the reaper's active tracking set.
 

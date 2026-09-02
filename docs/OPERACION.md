@@ -55,40 +55,17 @@ docker compose ps
 
 ---
 
-## 3. Unidades Systemd (`deploy/systemd/`)
+## 3. Unidades Systemd (`deploy/systemd/`) y Mantenimiento SQLite
 
-Para despliegues nativos en VPS:
-
-| Unidad Systemd | Función | Comando Ejecutado |
-|---|---|---|
-| `yt-lanes-daemon.service` | Daemon autónomo de producción multi-carril. | `python3 main.py daemon --interval 60` |
-| `yt-review-bot.service` | Bot de revisión interactiva Telegram. | `python3 review/review_bot_daemon.py` |
+Para despliegues en VPS:
+- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`python3 main.py daemon --interval 60`).
+- `yt-review-bot.service`: Bot interactivo Telegram (`python3 review/review_bot_daemon.py`).
 
 ```bash
-# Instalación y habilitación
-sudo cp deploy/systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
+# Systemd setup
+sudo cp deploy/systemd/*.service /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo systemctl enable --now yt-lanes-daemon.service yt-review-bot.service
 
-# Monitoreo
-systemctl status yt-lanes-daemon.service
-journalctl -u yt-lanes-daemon.service --follow
-```
-
----
-
-## 4. Mantenimiento, Respaldo y Recuperación de SQLite
-
-```bash
-# 1. Respaldo verificado con PRAGMA quick_check
-python3 main.py backup
-
-# 2. Simular migraciones de esquema
-python3 main.py migrate -d
-
-# 3. Aplicar migraciones
-python3 main.py migrate
-
-# 4. Barrido de auto-publicación de revisiones pendientes (6 horas)
-python3 main.py queue sweep
+# Respaldo SQLite verificado y barrido de cola
+python3 main.py backup && python3 main.py queue sweep
 ```
