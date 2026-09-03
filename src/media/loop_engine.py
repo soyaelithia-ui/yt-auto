@@ -834,6 +834,12 @@ class LoopVideoEngine(BaseVideoCompositor):
         valid_scenes = [p for p in (scene_images or []) if p and Path(p).is_file() and Path(p).stat().st_size > 0]
         if len(valid_scenes) > 1 and shot_durations and len(shot_durations) == len(valid_scenes):
             try:
+                explicit_keys = {
+                    "scene_images", "shot_durations", "fps", "crf", "preset",
+                    "music_volume", "ducking_threshold", "ducking_ratio",
+                    "ducking_attack_ms", "ducking_release_ms", "master_loudness",
+                }
+                extra_ms_kwargs = {k: v for k, v in kwargs.items() if k not in explicit_keys}
                 cmd = self.build_multi_shot_filter_graph(
                     scene_images=valid_scenes,
                     shot_durations=[float(d) for d in shot_durations],
@@ -852,7 +858,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                     ducking_attack_ms=ducking_attack_ms,
                     ducking_release_ms=ducking_release_ms,
                     master_loudness=master_loudness,
-                    **kwargs,
+                    **extra_ms_kwargs,
                 )
                 cmd.append(str(out_path))
                 logger.info("Executing Multi-Shot LoopVideoEngine composition command: %s", " ".join(cmd))
