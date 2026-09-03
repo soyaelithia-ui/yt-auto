@@ -18,7 +18,7 @@
 - [x] 3.3 Execute `./scripts/verify_integrity.sh` and verify all 8 invariants pass with 0 failures.
 
 ## Phase 4: Multi-Environment Synchronization (VPS & GitHub)
-- [ ] 4.1 Commit sanitized changes to Git with conventional message `fix(hygiene): eradicate legacy test artifacts and enforce anti-resurrection guardrails`.
-- [ ] 4.2 Merge into `/srv/projects/yt-auto` (`main`).
-- [ ] 4.3 Push clean `main` to GitHub `origin/main`.
-- [ ] 4.4 Run `git worktree prune` and verify VPS permissions for group `developers`.
+- [x] 4.1 Commit sanitized changes to Git with conventional message `fix(hygiene): eradicate legacy test artifacts and enforce anti-resurrection guardrails`.
+- [x] 4.2 Merge into `/srv/projects/yt-auto` (`main`).
+- [x] 4.3 Push clean `main` to GitHub `origin/main`.
+- [x] 4.4 Run `git worktree prune` and verify VPS permissions for group `developers`.
