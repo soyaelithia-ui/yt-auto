@@ -44,5 +44,14 @@ if [ ${#VIOLATING_FILES[@]} -gt 0 ]; then
     exit 1
 fi
 
-echo "✅ [pre-commit] All anti-regression checks passed cleanly."
+# 4. Anti-Bloat Policy: Prohibit committing minified files or third-party skill bundles
+FORBIDDEN_BLOAT=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.min\.js$|^\.github/skills/|^assets/vendor/' || true)
+if [ -n "$FORBIDDEN_BLOAT" ]; then
+    echo "❌ ERROR: Attempting to commit vendored bloat (*.min.js or third-party bundles):"
+    echo "$FORBIDDEN_BLOAT"
+    echo "Policy Mandate: External tools, minified bundles, and third-party skills must not be committed to this repository."
+    exit 1
+fi
+
+echo "✅ [pre-commit] All anti-regression and anti-bloat checks passed cleanly."
 exit 0

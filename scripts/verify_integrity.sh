@@ -64,6 +64,14 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# 7. Check for Vendored Bloat and Minified Bundles
+if [ -d ".github/skills" ] || [ -d "assets/vendor" ] || git ls-files | grep -E '\.min\.js$' > /dev/null 2>&1; then
+    echo "❌ [FAIL] Vendored bloat detected (.github/skills, assets/vendor, or *.min.js)!"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "✅ [PASS] Anti-Bloat: zero vendored skills or third-party minified libraries."
+fi
+
 echo "======================================================================"
 if [ "$FAILURES" -gt 0 ]; then
     echo "🛑 [REFUSAL TRIGGERED] $FAILURES integrity checks failed!"

@@ -56,3 +56,19 @@ Para verificar el cumplimiento en cualquier momento:
 
 - **Código de salida `0`**: Sistema saludable. Autorizado para proceder con desarrollo o generación.
 - **Código de salida `1`**: Violación de gobernanza. El script detalla los puntos fallidos y activa el rechazo de trabajo.
+
+---
+
+## 5. Prioridad de Valor de Producto y Política Anti-Bloat
+
+> [!IMPORTANT]
+> **Mandato de Enfoque**: Los agentes de IA y desarrolladores deben priorizar la entrega de **valor real de producto** (videos publicados y funcionando) sobre la estética o reducción cosmética del código.
+
+### Directivas Clave:
+1. **Prohibición de Refactorización Prematura**:
+   - Queda terminantemente prohibido emprender reescrituras masivas o fusiones de módulos en `src/` con el único fin de 'reducir líneas de código' si el código actual ya cumple con sus pruebas y contratos de rendimiento.
+   - Cualquier refactorización estructural debe estar justificada por un cuello de botella real en producción y aprobada explícitamente por el usuario.
+2. **Política Anti-Bloat (Cero Grasa de Terceros)**:
+   - Queda terminantemente prohibido hacer commit de librerías minificadas (`*.min.js`), bundles compilados externos o conjuntos de herramientas de terceros (skills ajenos con cientos de archivos `.mjs` o `.js`) dentro del repositorio.
+   - Todo módulo auxiliar debe mantenerse como dependencia declarada en `requirements.txt` o ejecutarse fuera del árbol de Git.
+   - El candado pre-commit (`.githooks/pre-commit`) abortará automáticamente cualquier commit que contenga archivos minificados o bundles en `.github/skills/` o `assets/vendor/`.
