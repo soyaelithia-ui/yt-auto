@@ -219,3 +219,38 @@ class TestContractSchemaGuardrails:
             f"REG-09 VIOLATION: Archetype tokens mismatch between schema and Pydantic:\n"
             f"Schema: {schema_archetypes}\nPydantic: {pydantic_archetypes}"
         )
+
+
+# ==============================================================================
+# REG-10 & REG-11: Eradication of Retired Subsystems and Accurate Config
+# ==============================================================================
+
+class TestRetiredSubsystemGuardrails:
+    """Ensures retired legacy subsystems and outdated configs are never reintroduced."""
+
+    def test_reg10_zero_imports_of_retired_legacy_subsystems(self) -> None:
+        """Assert zero imports of src.rendering, src.compositing, or src.export across src/ and tests/."""
+        all_py_files = list((REPO_ROOT / "src").glob("**/*.py")) + list((REPO_ROOT / "tests").glob("**/*.py"))
+        forbidden_prefixes = ("src.rendering", "src.compositing", "src.export")
+
+        violations = []
+        for py_file in all_py_files:
+            imports = scan_module_imports(py_file)
+            for imp in imports:
+                if any(imp == f or imp.startswith(f + ".") for f in forbidden_prefixes):
+                    violations.append(f"{py_file.relative_to(REPO_ROOT)} imports '{imp}'")
+
+        assert not violations, (
+            "REG-10 VIOLATION: Retired legacy subsystem re-imported in codebase:\n"
+            + "\n".join(violations)
+        )
+
+    def test_reg11_zero_playwright_in_openspec_config(self) -> None:
+        """Assert openspec/config.yaml context does not claim Playwright or Pillow in its media stack."""
+        config_path = REPO_ROOT / "openspec" / "config.yaml"
+        if not config_path.is_file():
+            return
+        content = config_path.read_text(encoding="utf-8")
+        assert "Playwright" not in content, "REG-11 VIOLATION: openspec/config.yaml still declares Playwright!"
+        assert "Pillow" not in content, "REG-11 VIOLATION: openspec/config.yaml still declares Pillow!"
+

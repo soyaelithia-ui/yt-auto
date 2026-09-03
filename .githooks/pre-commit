@@ -53,5 +53,24 @@ if [ -n "$FORBIDDEN_BLOAT" ]; then
     exit 1
 fi
 
+# 5. Prohibit imports of retired legacy subsystems (src.rendering, src.compositing, src.export)
+RETIRED_IMPORT_FILES=()
+for file in $STAGED_PY_FILES; do
+    if [ -f "$file" ]; then
+        if grep -E 'from[[:space:]]+src\.(rendering|compositing|export)|import[[:space:]]+src\.(rendering|compositing|export)' "$file" > /dev/null 2>&1; then
+            RETIRED_IMPORT_FILES+=("$file")
+        fi
+    fi
+done
+
+if [ ${#RETIRED_IMPORT_FILES[@]} -gt 0 ]; then
+    echo "❌ ERROR: Import from retired legacy subsystem detected in staged file(s):"
+    for rf in "${RETIRED_IMPORT_FILES[@]}"; do
+        echo "   - $rf"
+    done
+    echo "Namespaces src.rendering, src.compositing, and src.export are permanently retired."
+    exit 1
+fi
+
 echo "✅ [pre-commit] All anti-regression and anti-bloat checks passed cleanly."
 exit 0

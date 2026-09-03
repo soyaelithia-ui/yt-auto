@@ -125,16 +125,16 @@ class TestLongformResolutionCurrent:
     """
 
     def test_longform_1920x1080_with_playres_1920_passes(self, monkeypatch, tmp_path):
-        _mock_probe_helpers(monkeypatch, width=1920, height=1080, duration_sec=605.0)
-        # 55 scenes x 11.0s = 605s, all within [7.5, 15.5] cadence
-        kwargs = _build_gate_inputs(tmp_path, 605.0, ass_playres=(1920, 1080), scene_duration=11.0, scene_count=55)
+        _mock_probe_helpers(monkeypatch, width=1920, height=1080, duration_sec=600.0)
+        # 30 scenes x 20.0s = 600s, all within [15.0, 45.0] cadence
+        kwargs = _build_gate_inputs(tmp_path, 600.0, ass_playres=(1920, 1080), scene_duration=20.0, scene_count=30)
         report = validate_prepublication(**kwargs, video_mode="longform")
         assert report.passed, report.issues
         assert not any("resolución ASS" in issue for issue in report.issues)
 
     def test_longform_legacy_1280x720_is_rejected(self, monkeypatch, tmp_path):
-        _mock_probe_helpers(monkeypatch, width=1280, height=720, duration_sec=605.0)
-        kwargs = _build_gate_inputs(tmp_path, 605.0, ass_playres=(1280, 720), scene_duration=11.0, scene_count=55)
+        _mock_probe_helpers(monkeypatch, width=1280, height=720, duration_sec=600.0)
+        kwargs = _build_gate_inputs(tmp_path, 600.0, ass_playres=(1280, 720), scene_duration=20.0, scene_count=30)
         report = validate_prepublication(**kwargs, video_mode="longform")
         assert any(
             "resolución de video distinta de 1920x1080" in issue for issue in report.issues

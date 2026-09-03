@@ -2,7 +2,7 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Python 3.13, FFmpeg, Playwright, Edge-TTS, Pillow, SQLite (WAL)
+  Tech stack: Python 3.12/3.13, FFmpeg (Stream-Copy & libass), Edge-TTS, SQLite (WAL), WebGPU (wgpu-py), resvg-py
   Architecture: Multi-lane automated video generation pipeline (agents, media DSP, sanitizers)
   Testing: pytest (pytest-asyncio, pytest-timeout), 4-tier test architecture
   Style: Modular Python, dataclasses/Pydantic, strict schema validation, offline mockable

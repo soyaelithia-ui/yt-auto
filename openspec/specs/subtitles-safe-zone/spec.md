@@ -10,7 +10,7 @@ For 9:16 portrait video formats ($1080\times 1920$), subtitle styling headers MU
 
 #### Scenario: Generation of portrait ASS subtitles with safe vertical margin under camera drift (Happy Path)
 - **Given** a 9:16 video canvas ($1080\times 1920$) with active 2.5D downward camera drift ($\Delta y = +30\text{px}$)
-- **When** `TerminalKaraokeSubtitleGenerator` or `MultiActVideoRenderer.generate_ass_subtitles` builds the style header
+- **When** `ASSSubtitleGenerator` (`src/media/subtitles_ass.py`) builds the style header
 - **Then** the `Style` definition MUST set $MarginV \ge 480$ (scaled to $\ge 510\text{px}$ with camera drift compensation)
 - **And** rendered subtitle lines MUST remain fully visible strictly above the 450px mobile UI danger zone.
 

@@ -40,12 +40,21 @@ else
     echo "✅ [PASS] Architecture docs: zero obsolete blueprints."
 fi
 
-# 3. Check for Retired Legacy Subsystems
+# 3. Check for Retired Legacy Subsystems and Imports
+RETIRED_DIRS=0
 if [ -d "src/rendering" ] || [ -d "src/compositing" ] || [ -d "src/export" ]; then
     echo "❌ [FAIL] Retired v2 legacy directories detected (src/rendering, src/compositing, src/export)!"
     FAILURES=$((FAILURES + 1))
-else
-    echo "✅ [PASS] Subsystem isolation: zero legacy rendering directories."
+    RETIRED_DIRS=1
+fi
+
+RETIRED_IMPORTS=$(grep -rn --exclude-dir=".venv" --exclude-dir=".git" -E "from[[:space:]]+src\.(rendering|compositing|export)|import[[:space:]]+src\.(rendering|compositing|export)" src/ tests/ || true)
+if [ -n "$RETIRED_IMPORTS" ]; then
+    echo "❌ [FAIL] Imports from retired legacy subsystems detected in codebase:"
+    echo "$RETIRED_IMPORTS"
+    FAILURES=$((FAILURES + 1))
+elif [ "$RETIRED_DIRS" -eq 0 ]; then
+    echo "✅ [PASS] Subsystem isolation: zero legacy rendering directories and zero retired imports."
 fi
 
 # 4. Check for Forbidden Playwright Imports in Media/Pipeline
@@ -67,8 +76,7 @@ else
     echo "✅ [PASS] Git pre-commit hook is active and enforced via .githooks."
 fi
 
-# 6. Run Fast Anti-Regression Test Suite
-echo "⏳ Running automated anti-regression test suite..."
+# 6. Run Fast Anti-Regression Test Suite and Verify Test Collectability
 PYTEST_CMD=""
 if [ -x ".venv/bin/pytest" ]; then
     PYTEST_CMD=".venv/bin/pytest"
@@ -80,8 +88,17 @@ elif command -v pytest > /dev/null 2>&1; then
     PYTEST_CMD="pytest"
 fi
 
+echo "⏳ Checking test suite collectability across all modules..."
+if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" --collect-only -q > /dev/null 2>&1; then
+    echo "✅ [PASS] Test suite collectability: 100% collectable with zero import errors."
+else
+    echo "❌ [FAIL] Pytest collection errors detected! Unimportable or broken test files present."
+    FAILURES=$((FAILURES + 1))
+fi
+
+echo "⏳ Running automated anti-regression test suite..."
 if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" tests/unit/test_anti_regression_guardrails.py -q > /dev/null 2>&1; then
-    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-30) passed 100%."
+    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-11) passed 100%."
 else
     echo "❌ [FAIL] Anti-regression test suite failed or pytest not executable!"
     FAILURES=$((FAILURES + 1))
