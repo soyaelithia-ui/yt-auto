@@ -1031,6 +1031,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "background_path",
             "background_image",
             "scene_images",
+            "shot_durations",
         }
         forward_kwargs = {k: v for k, v in extra_kwargs.items() if k not in BOUND_KEYS}
 
