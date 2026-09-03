@@ -84,9 +84,9 @@ def test_review_video_with_drive_url_includes_button_and_caption(tmp_path, monke
     assert "Generado:" not in caption
 
     keyboard = json.loads(post_data["reply_markup"])
-    assert len(keyboard["inline_keyboard"]) == 3
-    assert keyboard["inline_keyboard"][2][0]["text"] == "📁 Ver en Drive"
-    assert keyboard["inline_keyboard"][2][0]["url"] == fake_drive_url
+    assert len(keyboard["inline_keyboard"]) == 2
+    assert keyboard["inline_keyboard"][0][0]["text"] == "✅ Publicar"
+    assert keyboard["inline_keyboard"][0][1]["text"] == "❌ Rechazar"
 
 
 def test_reject_callback_is_authorized_and_transitions_job(tmp_path, monkeypatch):

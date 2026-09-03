@@ -17,11 +17,28 @@ Audio mastering MUST execute in a single consolidated FFmpeg `filter_complex` pa
 - **When** `master_audio_track` runs
 - **Then** FFmpeg MUST emit a stereo 48 kHz master audio file in a single execution pass.
 
-## Requirement: Dynamic Pillow Subtitle Geometry and Safe Area
-Subtitles generated for 9:16 vertical Shorts MUST respect the bottom UI Safe Area ($MarginV \ge 260\text{px}$) and utilize dynamic Pillow font metrics (`font.getlength`) to split and wrap text with `\N` whenever rendered cue width exceeds 960 pixels on a 1080x1920 canvas.
+## Requirement: Native Procedural and Vector Rendering (Zero-Browser Policy)
+Video synthesis MUST utilize deterministic WebGPU fragment shaders (`wgpu-py`) with CPU software rasterizer fallback (Mesa Lavapipe) and declarative SVG rasterization (`resvg-py`). Headless browser runtimes (Playwright, Puppeteer, Chromium, SwiftShader) and HTML/CSS web templates are strictly prohibited in the media generation pipeline.
 
-### Scenario: Long Spanish Text Auto-Wrapping
-- **Given** a subtitle cue with long Spanish phrasing
-- **When** `create_ass_subtitles` renders ASS event lines
-- **Then** Pillow bounding box measurement MUST detect width exceeding 960px
-- **And** insert `\N` linebreaks so text remains centered and completely within safe viewing boundaries.
+### Scenario: Procedural Rendering without Browser Subprocesses
+- **Given** a video scene requiring procedural backgrounds or HUD telemetry
+- **When** the media pipeline generates visual frames
+- **Then** frames MUST be rendered via native WebGPU shaders or `resvg-py`
+- **And** zero browser subprocesses or Chromium dependencies MUST be spawned.
+
+## Requirement: libass Subtitle Rendering and Safe Area
+Subtitles generated for 9:16 vertical Shorts MUST be compiled into Advanced SubStation Alpha (`.ass`) scripts and burned natively via FFmpeg `libass`. Subtitles MUST enforce bottom UI Safe Area ($MarginV \ge 240\text{px}$, canonical $260\text{px}$) and word-level karaoke timing (`{\kf}`). Frame-by-frame Python/Pillow text rasterization loops are strictly prohibited.
+
+### Scenario: Native libass Subtitle Burn
+- **Given** word-level narration timestamps
+- **When** subtitles are generated
+- **Then** `ASSSubtitleGenerator` MUST emit a compliant `.ass` script with `MarginV >= 240`
+- **And** FFmpeg MUST burn subtitles during the unified encoding pass via `libass`.
+
+## Requirement: Atomic Single-Pass Video Transcoding and Asynchronous Pipe Drain
+Video encoding MUST execute in a single atomic FFmpeg `-filter_complex` pass combining raw RGBA video streaming, `libass` subtitle burning, audio sidechain ducking, and EBU R128 normalization. The encoder process MUST drain `stderr` asynchronously in a background thread to prevent OS pipe buffer deadlocks. Intermediate MP4 video chunks on disk are strictly prohibited.
+
+### Scenario: Single-Pass Video Generation
+- **Given** raw video frames and master audio tracks
+- **When** `UnifiedEncoder` renders the final video
+- **Then** FFmpeg MUST stream directly to the target MP4 container in a single pass without intermediate disk chunks.

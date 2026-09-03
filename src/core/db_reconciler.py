@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 from review.domain import ReviewStatus
 from src.core.domain import JobStatus
+from src.core.repository import validate_db_path
 from src.log import get_logger
 
 logger = get_logger("db_reconciler")
@@ -37,8 +38,11 @@ class DBReconciler:
         queue_db_path: Optional[Union[str, Path]] = None,
         review_db_path: Optional[Union[str, Path]] = None,
     ) -> None:
-        self.queue_db = Path(queue_db_path) if queue_db_path else DEFAULT_QUEUE_DB
-        self.review_db = Path(review_db_path) if review_db_path else DEFAULT_REVIEW_DB
+        raw_queue = queue_db_path if queue_db_path else DEFAULT_QUEUE_DB
+        raw_review = review_db_path if review_db_path else DEFAULT_REVIEW_DB
+        self.queue_db = Path(validate_db_path(raw_queue))
+        self.review_db = Path(validate_db_path(raw_review))
+
 
     def reconcile_publication(
         self,

@@ -57,22 +57,33 @@ class ChannelLock:
     def __init__(
         self,
         channel_name: str = "global",
-        lock_file_path: Optional[str] = None,
+        lock_file_path: Optional[str | Path] = None,
+        lock_dir: Optional[str | Path] = None,
         timeout: Optional[float] = None,
         poll_interval: float = 0.5,
     ) -> None:
         self.channel_name = channel_name if channel_name else "global"
-        base_lock = lock_file_path or _get_default_lock_path()
-        if self.channel_name in ("global", None, ""):
-            self.lock_file = str(base_lock)
-        else:
-            self.lock_file = f"{base_lock}.{self.channel_name}"
-
         self.timeout = timeout
         self.poll_interval = max(0.05, float(poll_interval))
         self._file_handle: Optional[Any] = None
         self._acquired: bool = False
         self._is_reentrant: bool = False
+
+        # Path Resolution Cascade
+        if lock_file_path is not None:
+            base_lock = str(lock_file_path)
+            self.lock_file = base_lock if self.channel_name in ("global", None, "") else f"{base_lock}.{self.channel_name}"
+        elif lock_dir is not None:
+            dir_path = Path(lock_dir)
+            filename = "youtube_automation.lock" if self.channel_name in ("global", None, "") else f"youtube_automation.lock.{self.channel_name}"
+            self.lock_file = str(dir_path / filename)
+        elif "YT_LOCK_DIR" in os.environ:
+            dir_path = Path(os.environ["YT_LOCK_DIR"])
+            filename = "youtube_automation.lock" if self.channel_name in ("global", None, "") else f"youtube_automation.lock.{self.channel_name}"
+            self.lock_file = str(dir_path / filename)
+        else:
+            base_lock = _get_default_lock_path()
+            self.lock_file = str(base_lock) if self.channel_name in ("global", None, "") else f"{base_lock}.{self.channel_name}"
 
     @property
     def is_acquired(self) -> bool:
@@ -187,17 +198,28 @@ _active_locks: dict[str, ChannelLock] = {}
 _legacy_active_channel: str = "global"
 
 
-def acquire_lock(channel_name: str = "global", timeout: Optional[float] = None) -> None:
+def acquire_lock(
+    channel_name: str = "global",
+    timeout: Optional[float] = None,
+    lock_dir: Optional[str | Path] = None,
+    lock_file_path: Optional[str | Path] = None,
+) -> None:
     """Legacy compatibility function for acquiring a lock."""
     global _legacy_active_channel
     _legacy_active_channel = channel_name if channel_name else "global"
-    lock = ChannelLock(channel_name=_legacy_active_channel, timeout=timeout)
+    lock = ChannelLock(
+        channel_name=_legacy_active_channel,
+        lock_file_path=lock_file_path,
+        lock_dir=lock_dir,
+        timeout=timeout,
+    )
     try:
         lock.acquire()
         _active_locks[_legacy_active_channel] = lock
     except ChannelLockError as exc:
         print(str(exc))
         sys.exit(1)
+
 
 
 def release_lock(channel_name: str | None = None) -> None:

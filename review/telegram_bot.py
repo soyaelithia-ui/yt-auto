@@ -145,8 +145,6 @@ def _build_review_keyboard(job_id: Optional[str] = None, drive_url: Optional[str
             {"text": "ℹ️ Ver Detalles", "callback_data": f"info{suffix}"},
         ],
     ]
-    if drive_url:
-        rows.append([{"text": "📁 Ver en Drive", "url": str(drive_url)}])
     return {"inline_keyboard": rows}
 
 
@@ -563,6 +561,10 @@ class TelegramReviewBot:
             try:
                 uri_payload = dict(payload)
                 uri_payload["video"] = f"file://{abs_path}"
+                if thumbnail_path and os.path.exists(thumbnail_path):
+                    abs_thumb = os.path.abspath(thumbnail_path)
+                    uri_payload["thumb"] = f"file://{abs_thumb}"
+                    uri_payload["thumbnail"] = f"file://{abs_thumb}"
                 logger.info(
                     "Sending video via local file URI reference: %s (%.1f MB)",
                     abs_path,
@@ -603,7 +605,9 @@ class TelegramReviewBot:
                 files_dict["video"] = (os.path.basename(abs_path), vf, "video/mp4")
                 if thumbnail_path and os.path.exists(thumbnail_path):
                     with open(thumbnail_path, "rb") as tf:
-                        files_dict["thumb"] = (os.path.basename(thumbnail_path), tf, "image/jpeg")
+                        thumb_data = tf.read()
+                        files_dict["thumb"] = (os.path.basename(thumbnail_path), thumb_data, "image/jpeg")
+                        files_dict["thumbnail"] = (os.path.basename(thumbnail_path), thumb_data, "image/jpeg")
                         resp = self.client.request(
                             "POST",
                             "sendVideo",
@@ -823,6 +827,17 @@ class TelegramReviewBot:
 
         keyboard = _build_review_keyboard(job_id, drive_url=effective_drive_url)
         thumbnail_path = kwargs.get("thumbnail_path")
+
+        # Explicitly deliver cover photo preview if present
+        if thumbnail_path and os.path.exists(thumbnail_path):
+            try:
+                self.send_photo(
+                    photo_path=thumbnail_path,
+                    caption=f"🖼️ *Portada:* {base_title}",
+                    chat_id=self.chat_id,
+                )
+            except Exception as photo_exc:
+                logger.debug("Non-fatal error sending cover photo preview: %s", photo_exc)
 
         # Delegate to send_video
         res = self.send_video(

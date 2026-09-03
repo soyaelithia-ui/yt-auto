@@ -1,5 +1,8 @@
 # Sistema Unificado de Automatización de YouTube — yt-auto
 
+> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
+> **Gobernanza:** Repositorio privado para infraestructura, producción y publicación automatizada multi-canal.
+
 Sistema de producción y publicación automatizada para **YouTube Shorts verticales (9:16)** y **Videos Largos (16:9, 10+ min)** en español, con revisión interactiva en Telegram (`review`), respaldo verificado en Google Drive y control atómico en SQLite WAL.
 
 ---
@@ -26,9 +29,9 @@ Sistema de producción y publicación automatizada para **YouTube Shorts vertica
 
 | Canal | Carril (`--lane`) | Enfoque Narrativo | Orientación y Formato | Plantilla Visual | Perfil de Voz TTS |
 |---|---|---|---|---|---|
-| **MOKU** (`moku`, `@MokuRedit`) | `moku-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` |
-| **MOKU** (`moku`, `@MokuRedit`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` |
-| **AELITHIA** (`aelithia`, `@Aelithia-c1f`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` |
+| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` |
+| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` |
+| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` |
 
 - **Shorts Verticales (9:16)**: Canvas `1080x1920` @30fps, subtítulos ASS Karaoke en franja segura inferior (`MarginV 240-250`).
 - **Longform Horizontal (16:9)**: Canvas `1920x1080` @30fps, duración ≥600s auto-expandible por compilación multihistoria y carrusel dinámico director.

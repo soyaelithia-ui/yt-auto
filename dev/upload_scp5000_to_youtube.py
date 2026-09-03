@@ -40,8 +40,11 @@ def main():
     long_video = OUTPUT_DIR / "scp5000_why_longform_1080p.mp4"
     long_thumb = OUTPUT_DIR / "scp5000_thumbnail_hd.jpg"
     long_title = "SCP-5000: ¿Por Qué? - La Guerra de la Fundación contra la Humanidad"
+    from src.branding import get_channel_branding
+    branding = get_channel_branding("moku")
+
     long_desc = (
-        f"{long_title}\n\n"
+        "El Archivo Más Aterrador de la Fundación SCP: SCP-5000 Explicado Completo en Español.\n\n"
         "Dentro del Sitio-62C fue hallado un traje mecánico chamuscado con el cadáver de un técnico y una grabación imposible: "
         "la historia de cuando la Fundación SCP decidió exterminar deliberadamente a toda la especie humana tras descubrir un parásito cósmico en el alma humana.\n\n"
         "TIMESTAMPS:\n"
@@ -53,13 +56,13 @@ def main():
         "06:08 - La Caída de Ganzir y la Extinción de la Humanidad\n"
         "07:22 - La Odisea de Pietro Wilson con la Maleta SCP-055\n"
         "08:36 - El Sacrificio Final en SCP-579 y el Reinicio Temporal\n\n"
-        "🔔 Suscríbete a @MokuRedit para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
-        "#SCP #SCP5000 #FundacionSCP #TerrorPsicologico #DocumentalSCP #Creepypasta #MokuRedit"
+        f"🔔 Suscríbete a {branding.handle} para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
+        "#SCP #SCP5000 #FundacionSCP #TerrorPsicologico #DocumentalSCP #Creepypasta"
     )
     long_tags = [
         "SCP", "SCP-5000", "SCP 5000", "Por Que", "Fundacion SCP",
         "Terror Psicologico", "Documental SCP", "Creepypasta", "Pietro Wilson",
-        "Proyecto Pneuma", "Consejo O5", "MokuRedit"
+        "Proyecto Pneuma", "Consejo O5", branding.display_name
     ]
 
     logger.info("🚀 [1/2] Subiendo Video Largo: %s (%s)", long_title, long_video.name)
@@ -97,11 +100,11 @@ def main():
     short_desc = (
         "En el año 2020, el Consejo O5 tomó la decisión más aterradora de la historia: "
         "liberar a todos los monstruos para exterminar a la humanidad. Un solo técnico sobrevivió dentro del traje SCP-5000 para reiniciar la realidad.\n\n"
-        "#Shorts #SCP #SCP5000 #FundacionSCP #Terror #Creepypasta #MokuRedit"
+        f"#Shorts #SCP #SCP5000 #FundacionSCP #Terror #Creepypasta #{branding.display_name}"
     )
     short_tags = [
         "Shorts", "SCP", "SCP-5000", "SCP 5000", "Fundacion SCP",
-        "Terror", "Creepypasta", "MokuRedit"
+        "Terror", "Creepypasta", branding.display_name
     ]
 
     logger.info("🚀 [2/2] Subiendo Short Vertical: %s (%s)", short_title, short_video.name)

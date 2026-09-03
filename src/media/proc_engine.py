@@ -22,7 +22,6 @@ from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger
-from src.media.web_renderer import WebVideoRenderer, RenderSpec
 from src.scene_manifest import (
     ProceduralConfig,
     SceneConfig,
@@ -56,10 +55,10 @@ class ProceduralVideoEngine(BaseVideoCompositor):
 
     def __init__(
         self,
-        renderer: Optional[WebVideoRenderer] = None,
+        renderer: Optional[Any] = None,
         catalog: Optional[LoopCatalogRepository] = None,
     ) -> None:
-        self.renderer = renderer or WebVideoRenderer()
+        self.renderer = renderer
         self.catalog = catalog or LoopCatalogRepository()
 
     def render(
@@ -203,23 +202,24 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 **(cfg.uniforms if hasattr(cfg, "uniforms") and isinstance(cfg.uniforms, dict) else {}),
             }
 
-            spec = RenderSpec(
-                template_name=cfg.template_name,
-                category=category,
-                orientation=orientation,
-                width=width,
-                height=height,
-                duration_sec=6.0,
-                fps=fps,
-                output_path=synth_mp4,
-                params=render_params,
-            )
-
-            try:
-                loop_rec = self.renderer.render_loop(spec)
-                loop_file = Path(getattr(loop_rec, "file_path", loop_rec))
-            except Exception as e:
-                logger.warning("Procedural on-demand rendering failed (%s). Using MONOLITHS_RAYMARCHING fallback generator.", e)
+            if self.renderer is not None and hasattr(self.renderer, "render_loop"):
+                try:
+                    loop_rec = self.renderer.render_loop(
+                        template_name=cfg.template_name,
+                        category=category,
+                        orientation=orientation,
+                        width=width,
+                        height=height,
+                        duration_sec=6.0,
+                        fps=fps,
+                        output_path=synth_mp4,
+                        params=render_params,
+                    )
+                    loop_file = Path(getattr(loop_rec, "file_path", loop_rec))
+                except Exception as e:
+                    logger.warning("Procedural on-demand rendering failed (%s). Using fallback generator.", e)
+                    loop_file = self._generate_fallback_loop(category, width, height, fps, 6.0, synth_mp4)
+            else:
                 loop_file = self._generate_fallback_loop(category, width, height, fps, 6.0, synth_mp4)
 
         # 3. Stream-loop or concatenate to reach exact scene duration
@@ -342,7 +342,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
 
         return out_path
 
-    def _resolve_category(self, env_name: Optional[str], template_name: str, lane_id: str) -> str:
+    def _resolve_category(self, env_name: Optional[str], template_name: Optional[str], lane_id: str) -> str:
         """Resolves thematic procedural category or universal archetype."""
         if template_name:
             t_norm = template_name.lower().replace(".html", "").replace("archetype_", "")
@@ -362,7 +362,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             ]:
                 if cat in norm or norm in cat:
                     return cat
-        if "three" in template_name.lower():
+        if template_name and "three" in template_name.lower():
             return "cosmic_singularity"
         if "scp" in lane_id.lower():
             return "classified_terminal"

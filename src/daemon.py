@@ -197,7 +197,7 @@ def _preflight_disk_or_pause(
 
 
 def run_pipeline_once(
-    channel: str,
+    channel: str = "moku",
     db_path: str | None = None,
     generate_only: bool = False,
     story_id: str | None = None,
@@ -212,7 +212,7 @@ def run_pipeline_once(
     with _RENDER_SEMAPHORE:
         try:
             res = safe_run(
-                channel=canonical_channel(channel).value,
+                channel=canonical_channel(channel or "moku").value,
                 db_path=db_path,
                 generate_only=generate_only,
                 story_id=story_id,

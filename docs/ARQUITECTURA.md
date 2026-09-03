@@ -11,53 +11,15 @@ Arquitectura modular, persistencia atómica en SQLite WAL, catálogo de assets o
 
 ```mermaid
 graph TD
-    subgraph Dominio y Configuración
-        Lanes[config/lanes.json: Perfiles LaneProfile]
-        Config[src/config.py: Canales moku & aelithia]
-        Domain[src/core/domain.py: Estados JobStatus]
-    end
-    subgraph Persistencia, Cola y Resiliencia
-        DB[(data/shorts_queue.db: SQLite WAL)]
-        Repo[src/core/repository.py: QueueRepository & Lane Leases]
-        Reaper[src/core/lease_reaper.py: Auto-Reaper PID Daemon]
-        Reconciler[src/core/db_reconciler.py: 2PC Atomic Reconciler]
-        LoopDB[(data/shorts_queue.db: tabla video_loops)]
-        LoopCat[src/core/loop_catalog.py: LoopCatalogRepository]
-    end
-    subgraph Generación Visual y Audio Streamlined
-        LoopWorker[src/media/loop_worker.py: Buffer Activo Batch]
-        TTSRouter[src/audio/tts_router.py: Multi-Tier Fallback]
-        Subs[lib/subtitles.py: ASS Karaoke Safe Area 260px]
-        Video[src/media/loop_engine.py: LoopVideoEngine FFmpeg]
-    end
-    subgraph Pipeline de Producción (13 Etapas)
-        Pipe[src/pipeline.py: Orquestador Canónico]
-        Agents[src/agents/: Agentes Gemini 3.7 Flash arnés agy]
-        TTS[lib/tts.py: Edge-TTS & Masterización EBU R128 en /dev/shm]
-    end
-    subgraph Puerta de Revisión y Veredicto
-        ReviewDB[(data/review_state.db)]
-        Adapter[src/core/db_reconciler.py: 2PC Reconciler]
-        TelegramBot[review: Bot Client /health]
-        LocalAPI[telegram-bot-api :8081: Servidor Local 2 GB]
-    end
-    subgraph Destinos Remotos Verificados
-        Drive[src/drive.py: Google Drive API v3 Backup]
-        YouTube[src/youtube/session_uploader.py: Sesión Persistente / Cookies]
-    end
-
-    Lanes --> Pipe
-    Config --> Pipe
-    Repo <--> DB
-    Reaper --> Repo
-    LoopCat <--> LoopDB
-    Pipe --> LoopCat
-    Pipe --> Repo & Agents & TTS & Subs & Video
-    Pipe --> Drive & Adapter
-    Adapter <--> ReviewDB & TelegramBot
-    TelegramBot -->|Transporte Dual: file:/// 0-Copy & Multipart| LocalAPI
-    TelegramBot -- APPROVED --> Reconciler
-    Reconciler --> YouTube
+    Lanes[config/lanes.json] --> Pipe[src/pipeline.py]
+    Config[src/config.py] --> Pipe
+    Pipe --> Media[src/media/ Procedural & Loops]
+    Pipe --> Audio[src/audio/ TTS & EBU R128]
+    Pipe --> Subs[src/media/subtitles_ass.py]
+    Pipe --> Encoder[src/media/unified_encoder.py]
+    Pipe --> DB[(data/shorts_queue.db SQLite WAL)]
+    Pipe --> Review[Telegram Bot & Review]
+    Review --> YouTube[YouTube Uploader]
 ```
 
 ---
@@ -152,10 +114,12 @@ Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical
 
 ---
 
-## 9. Directorio Centralizado de Herramientas (`dev/`)
+## 9. Políticas Arquitectónicas Anti-Regresión (REG-01 a REG-09)
 
-- `generate_scp_short.py`: Generador vertical integral de Shorts con los 6 agentes.
-- `test_pipeline_harness.py`: Suite de diagnóstico local sin consumo de cuota LLM.
-- `produce_batch.py`: Generador de lotes multi-canal (`moku`, `aelithia`).
-- `run_telegram_bot.py`: Daemon ejecutor del bot interactivo.
-- `audit_assets.py`: Auditor independiente de activos visuales.
+El sistema impone invariantes arquitectónicos nativos verificados automáticamente en CI/pytest:
+- **Renderizado Procedural Nativo**: Pipeline gráfico 100% nativo acelerado por GPU utilizando `wgpu-py` con fragment shaders en WGSL, respaldado por fallback en CPU mediante Mesa Lavapipe.
+- **Tipografía Vectorizada y Overlays Dinámicos**: Rasterización SVG de alto rendimiento vía `resvg-py` y composición de overlays con técnica zero-copy.
+- **Subtítulos Nativos Atómicos (`libass`)**: Generación directa de archivos `.ass` con temporización karaoke (`{\kf}`) y márgenes de seguridad para UI móvil (`MarginV >= 240px`), integrados nativamente en la cadena de filtros de FFmpeg.
+- **Transcodificación Atómica en Pase Único**: Pipeline unificado de FFmpeg (`-filter_complex`) con drenaje asíncrono de flujo `stderr` para evitar bloqueos por buffers de tubería del SO.
+- **Compositor de Memoria Determinista**: Reutilización estricta de buffers contiguos de NumPy preasignados ($\le 140$ MB RAM) para garantizar ausencia de fugas de memoria y rendimiento predecible en streaming de frames.
+

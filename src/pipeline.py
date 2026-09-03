@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
 import os
 import shutil
 import socket
@@ -865,41 +866,74 @@ def run_pipeline_once(
         else:
             with profiler.phase(CanonicalStage.MOOD_THEME):
                 from src.media.loop_engine import LoopVideoEngine
+                from src.core.scenic_detector import detect_adaptive_theme
                 loop_engine = LoopVideoEngine()
+                adaptive_theme = detect_adaptive_theme(
+                    topic=title or story.get("title", ""),
+                    script=script or story.get("raw_content", ""),
+                    niche=getattr(lane, "story_type", "") or channel_name,
+                )
 
-                # Resolve category: loop_category arg -> lane loop_category -> lane story_type -> channel default
+                # Resolve category: loop_category arg -> adaptive theme -> lane loop_category -> lane story_type -> channel default
                 target_category = (
                     loop_category
+                    or adaptive_theme
                     or getattr(lane, "loop_category", None)
                     or getattr(lane, "story_type", None)
-                    or ("cosmic_horror" if channel_name == "moku" else "dark_ambient")
+                    or ("tactical_chamber" if channel_name == "moku" else "cozy_hearth")
                 )
+                total_audio_sec = float(audio["duration_sec"])
                 resolved_loop_path = loop_engine.resolve_loop_video(
                     target_category,
                     allow_fallback=True,
                     orientation=lane.orientation,
                 )
-                scene_bg_list = [str(resolved_loop_path)]
-                shot_durations = [float(audio["duration_sec"])]
+
+                # Dynamic multi-camera shot progression for loop videos
+                if total_audio_sec > 14.0:
+                    shot_count = max(2, min(4, int(math.ceil(total_audio_sec / 11.0))))
+                    per_shot_dur = round(total_audio_sec / shot_count, 3)
+                    shot_durations = [per_shot_dur] * (shot_count - 1)
+                    shot_durations.append(round(total_audio_sec - sum(shot_durations), 3))
+
+                    scene_bg_list = []
+                    scenes_plan = []
+                    for s_idx in range(shot_count):
+                        shot_path = loop_engine.resolve_loop_video(
+                            target_category,
+                            allow_fallback=True,
+                            orientation=lane.orientation,
+                            seed=s_idx * 101,
+                        )
+                        scene_bg_list.append(str(shot_path))
+                        scenes_plan.append({
+                            "duration": shot_durations[s_idx],
+                            "source": str(shot_path),
+                            "category": str(target_category),
+                            "shot_index": s_idx,
+                        })
+                else:
+                    scene_bg_list = [str(resolved_loop_path)]
+                    shot_durations = [total_audio_sec]
+                    scenes_plan = [{
+                        "duration": total_audio_sec,
+                        "source": str(resolved_loop_path),
+                        "category": str(target_category),
+                    }]
+
                 scene_prompts = []
 
-                # Write single-scene loop visual plan
+                # Write multi-scene loop visual plan
                 visual_plan_payload = {
                     "video_engine": "loop",
                     "loop": True,
                     "mode": "loop",
                     "category": str(target_category),
-                    "scenes": [
-                        {
-                            "duration": float(audio["duration_sec"]),
-                            "source": str(resolved_loop_path),
-                            "category": str(target_category),
-                        }
-                    ],
-                    "covered_seconds": float(audio["duration_sec"]),
+                    "scenes": scenes_plan,
+                    "covered_seconds": total_audio_sec,
                     "black_fallbacks": 0,
                     "scene_prompts": [],
-                    "shot_durations": [float(audio["duration_sec"])],
+                    "shot_durations": shot_durations,
                 }
                 visual_plan_path.write_text(json.dumps(visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -1025,8 +1059,11 @@ def run_pipeline_once(
                 channel_name,
                 str(thumbnail_path),
                 template=template,
+                archetype=target_category,
                 strict_official_sdk=False,
                 video_mode="longform" if is_long_lane else "short",
+                video_path=str(video_path),
+                manifest_path=str(scene_manifest_path),
             )
             metadata_path.write_text(
                 json.dumps(

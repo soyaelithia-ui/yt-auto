@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+from src.core.resolution import SHORT_RESOLUTION
+
 _MAX_WORDS_PER_SRT_CUE = 4
 
 PORTRAIT_MIN_MARGIN_V = 480
@@ -103,19 +105,19 @@ def _clean_word_for_karaoke(word: str) -> tuple[str, str]:
 
 
 def _resolve_video_resolution(video_res=None) -> tuple[int, int]:
-    """Return (width, height), default 1080x1920. Accepts tuple, list or 'WxH' string."""
+    """Return (width, height), default SHORT_RESOLUTION (1080x1920). Accepts tuple, list or 'WxH' string."""
     if video_res is None:
-        return 1080, 1920
+        return SHORT_RESOLUTION
     if isinstance(video_res, (tuple, list)) and len(video_res) >= 2:
         try:
             return int(video_res[0]), int(video_res[1])
         except (TypeError, ValueError):
-            return 1080, 1920
+            return SHORT_RESOLUTION
     if isinstance(video_res, str):
         match = re.match(r"\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\s*", video_res)
         if match:
             return int(match.group(1)), int(match.group(2))
-    return 1080, 1920
+    return SHORT_RESOLUTION
 
 
 def _format_srt_timestamp(seconds: float) -> str:
@@ -504,11 +506,12 @@ def create_ass_subtitles(
     play_w, play_h = _resolve_video_resolution(video_res)
     style = _ass_style_spec(template, font_name, play_w, play_h, **kwargs)
     group_size = int(group_size or style["group_size"])
+    resolved_max_chars = int(max_chars if max_chars is not None else style.get("max_chars", 25))
     max_width = float(play_w - style.get("margin_l", 40) - style.get("margin_r", 40))
     events = _ass_dialogues(
         word_timestamps,
         group_size=group_size,
-        max_chars=int(max_chars) if max_chars is not None else int(style.get("max_chars", 35)),
+        max_chars=resolved_max_chars,
         max_width_px=max_width,
         font_name=style.get("font_name", "Montserrat Black"),
         font_size=style.get("font_size", 40),

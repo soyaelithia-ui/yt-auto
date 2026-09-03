@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
+from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository
 from src.log import get_logger
@@ -93,17 +94,17 @@ class LoopVideoEngine(BaseVideoCompositor):
     )
 
     RESOLUTIONS: dict[str, tuple[int, int]] = {
-        "vertical": (1080, 1920),     # 9:16 Shorts / Reels / TikTok
-        "horizontal": (1920, 1080),   # 16:9 Longform YouTube
-        "short": (1080, 1920),
-        "longform": (1920, 1080),
-        "9:16": (1080, 1920),
-        "16:9": (1920, 1080),
-        "portrait": (1080, 1920),
-        "landscape": (1920, 1080),
+        "vertical": SHORT_RESOLUTION,     # 9:16 Shorts / Reels / TikTok
+        "horizontal": LONGFORM_RESOLUTION,   # 16:9 Longform YouTube
+        "short": SHORT_RESOLUTION,
+        "longform": LONGFORM_RESOLUTION,
+        "9:16": SHORT_RESOLUTION,
+        "16:9": LONGFORM_RESOLUTION,
+        "portrait": SHORT_RESOLUTION,
+        "landscape": LONGFORM_RESOLUTION,
     }
 
-    DEFAULT_RESOLUTION: tuple[int, int] = (1080, 1920)
+    DEFAULT_RESOLUTION: tuple[int, int] = SHORT_RESOLUTION
 
     def __init__(
         self,
@@ -159,35 +160,46 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         # 1. Scan predefined thematic category folders
         for cat in self.THEMATIC_CATEGORIES:
-            cat_dir = root / cat
-            if cat_dir.is_dir():
-                for f in sorted(cat_dir.iterdir()):
-                    try:
-                        if (
-                            f.is_file()
-                            and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
-                            and f.stat().st_size > 0
-                        ):
-                            library[cat].append(f)
-                    except OSError:
-                        continue
+            for cat_dir in (root / cat, root / "procedural" / cat, root / "vertical" / cat, root / "horizontal" / cat):
+                if cat_dir.is_dir():
+                    for f in sorted(cat_dir.iterdir()):
+                        try:
+                            if (
+                                f.is_file()
+                                and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
+                                and f.stat().st_size > 0
+                                and f not in library[cat]
+                            ):
+                                library[cat].append(f)
+                        except OSError:
+                            continue
 
-        # 2. Also discover any extra subdirectories under root
-        for entry in sorted(root.iterdir()):
-            if entry.is_dir() and entry.name not in library:
-                cat_videos: list[Path] = []
-                for f in sorted(entry.iterdir()):
-                    try:
-                        if (
-                            f.is_file()
-                            and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
-                            and f.stat().st_size > 0
-                        ):
-                            cat_videos.append(f)
-                    except OSError:
-                        continue
-                if cat_videos:
-                    library[entry.name] = cat_videos
+        # 2. Also discover any extra subdirectories under root and root/procedural
+        scan_dirs = [root]
+        if (root / "procedural").is_dir():
+            scan_dirs.append(root / "procedural")
+        if (root / "vertical").is_dir():
+            scan_dirs.append(root / "vertical")
+        if (root / "horizontal").is_dir():
+            scan_dirs.append(root / "horizontal")
+
+        for parent_dir in scan_dirs:
+            for entry in sorted(parent_dir.iterdir()):
+                if entry.is_dir() and entry.name not in ("procedural", "vertical", "horizontal"):
+                    c_name = entry.name
+                    if c_name not in library:
+                        library[c_name] = []
+                    for f in sorted(entry.iterdir()):
+                        try:
+                            if (
+                                f.is_file()
+                                and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
+                                and f.stat().st_size > 0
+                                and f not in library[c_name]
+                            ):
+                                library[c_name].append(f)
+                        except OSError:
+                            continue
 
         return library
 
@@ -201,7 +213,7 @@ class LoopVideoEngine(BaseVideoCompositor):
     ) -> Path:
         """
         Resolves a background video path for a given category and optional orientation.
-        Queries the local SQLite loop catalog first for web-procedural loops with smart rotation.
+        Queries the local SQLite loop catalog repository first for web-procedural loops with smart rotation.
         If missing, searches across filesystem directories, or fallback backgrounds.
         """
         norm_cat = self.normalize_category(category)
@@ -224,14 +236,29 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         root = Path(asset_root).expanduser().resolve() if asset_root else self.loops_root_dir
 
-
         # 1. Check orientation subdirectory if specified (e.g. horizontal / vertical)
         if orientation:
             orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
-            orient_cat_dir = root / orient_name / norm_cat
-            if orient_cat_dir.is_dir():
+            for orient_cat_dir in (root / orient_name / norm_cat, root / "procedural" / norm_cat, root / norm_cat):
+                if orient_cat_dir.is_dir():
+                    videos = [
+                        f for f in sorted(orient_cat_dir.iterdir())
+                        if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
+                    ]
+                    matched = [v for v in videos if orient_name in v.name or f"_{orient_name[:1]}_" in v.name]
+                    if matched:
+                        videos = matched
+                    if videos:
+                        if seed is not None:
+                            rng = random.Random(seed)
+                            return rng.choice(videos)
+                        return videos[0]
+
+        # 2. Check requested category directory across possible subtrees
+        for cat_dir in (root / norm_cat, root / "procedural" / norm_cat):
+            if cat_dir.is_dir():
                 videos = [
-                    f for f in sorted(orient_cat_dir.iterdir())
+                    f for f in sorted(cat_dir.iterdir())
                     if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
                 ]
                 if videos:
@@ -239,19 +266,6 @@ class LoopVideoEngine(BaseVideoCompositor):
                         rng = random.Random(seed)
                         return rng.choice(videos)
                     return videos[0]
-
-        # 2. Check requested category directory
-        cat_dir = root / norm_cat
-        if cat_dir.is_dir():
-            videos = [
-                f for f in sorted(cat_dir.iterdir())
-                if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
-            ]
-            if videos:
-                if seed is not None:
-                    rng = random.Random(seed)
-                    return rng.choice(videos)
-                return videos[0]
 
         # If fallback is disallowed, fail immediately
         if not allow_fallback:
@@ -369,7 +383,7 @@ class LoopVideoEngine(BaseVideoCompositor):
 
     def build_video_filter(
         self,
-        target_resolution: tuple[int, int] = (1080, 1920),
+        target_resolution: tuple[int, int] = SHORT_RESOLUTION,
         fps: int = 30,
         subtitle_path: str | Path | None = None,
         include_subtitles: bool = False,
@@ -502,7 +516,7 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         filter_complex = f"{video_filter};{audio_filter}"
         crf = kwargs.get("crf", 23)
-        preset = kwargs.get("preset", "ultrafast")
+        preset = kwargs.get("preset", "fast")
         threads = kwargs.get("threads") or min(os.cpu_count() or 4, 4)
         filter_threads = kwargs.get("filter_threads") or min(threads, 2)
 
@@ -512,9 +526,9 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-map", "[aout]",
             "-t", f"{max(0.1, duration_sec):.3f}",
             "-c:v", "libx264",
+            "-profile:v", "main",
             "-pix_fmt", "yuv420p",
             "-preset", preset,
-            "-tune", "fastdecode",
             "-threads", str(threads),
             "-filter_threads", str(filter_threads),
             "-crf", str(crf),
@@ -525,6 +539,110 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-movflags", "+faststart",
         ])
 
+        return cmd
+
+    def build_multi_shot_filter_graph(
+        self,
+        scene_images: list[str | Path],
+        shot_durations: list[float],
+        audio_path: Path,
+        bgm_path: Path | None,
+        target_resolution: tuple[int, int],
+        duration_sec: float,
+        include_subtitles: bool = False,
+        subtitle_path: Path | None = None,
+        **kwargs,
+    ) -> list[str]:
+        """
+        Builds FFmpeg command for multi-shot video composition with dynamic camera cuts across scenes.
+        """
+        w, h = target_resolution
+        fps = kwargs.get("fps", 30)
+        cmd: list[str] = ["ffmpeg", "-y"]
+
+        filter_inputs = []
+        for idx, (s_path, s_dur) in enumerate(zip(scene_images, shot_durations)):
+            cmd.extend(["-stream_loop", "-1", "-t", f"{max(0.1, float(s_dur)):.3f}", "-i", str(Path(s_path).resolve())])
+            filter_inputs.append(
+                f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1,format=yuv420p[v_shot_{idx}];"
+            )
+
+        n_scenes = len(scene_images)
+        concat_clause = "".join([f"[v_shot_{i}]" for i in range(n_scenes)]) + f"concat=n={n_scenes}:v=1:a=0[vbase];"
+
+        # Narration audio input
+        audio_idx = n_scenes
+        cmd.extend(["-i", str(Path(audio_path).resolve())])
+
+        has_music = False
+        bgm_idx = -1
+        if bgm_path:
+            bg_p = Path(bgm_path)
+            if bg_p.is_file() and bg_p.stat().st_size > 0:
+                cmd.extend(["-stream_loop", "-1", "-i", str(bg_p.resolve())])
+                bgm_idx = audio_idx + 1
+                has_music = True
+
+        # Subtitle overlay on [vbase]
+        if include_subtitles and subtitle_path and Path(subtitle_path).is_file():
+            sub_escaped = str(Path(subtitle_path)).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+            fonts_clause = ""
+            fonts_dir = kwargs.get("fonts_dir")
+            resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
+            if resolved_fonts.exists() and resolved_fonts.is_dir():
+                fonts_esc = str(resolved_fonts).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+                fonts_clause = f":fontsdir='{fonts_esc}'"
+            is_ass = Path(subtitle_path).suffix.lower() == ".ass"
+            if is_ass:
+                sub_filter = f"[vbase]ass=filename='{sub_escaped}'{fonts_clause}[vout];"
+            else:
+                sub_filter = f"[vbase]subtitles='{sub_escaped}'{fonts_clause}[vout];"
+        else:
+            sub_filter = "[vbase]null[vout];"
+
+        audio_filter = self.build_audio_filter(
+            has_music=has_music,
+            music_volume=kwargs.get("music_volume", 0.04),
+            ducking_threshold=kwargs.get("ducking_threshold", 0.035),
+            ducking_ratio=kwargs.get("ducking_ratio", 8.0),
+            ducking_attack_ms=kwargs.get("ducking_attack_ms", 20.0),
+            ducking_release_ms=kwargs.get("ducking_release_ms", 350.0),
+            lowpass_freq=kwargs.get("lowpass_freq", 12000),
+            master_loudness=kwargs.get("master_loudness", True),
+            target_lufs=kwargs.get("target_lufs", -14.0),
+            max_tp=kwargs.get("max_tp", -1.5),
+            lra=kwargs.get("lra", 11.0),
+        )
+        if has_music:
+            audio_filter = audio_filter.replace("[1:a]", f"[{audio_idx}:a]").replace("[2:a]", f"[{bgm_idx}:a]")
+        else:
+            audio_filter = audio_filter.replace("[1:a]", f"[{audio_idx}:a]")
+
+        filter_complex = "".join(filter_inputs) + concat_clause + sub_filter + audio_filter
+
+        crf = kwargs.get("crf", 23)
+        preset = kwargs.get("preset", "fast")
+        threads = kwargs.get("threads") or min(os.cpu_count() or 4, 4)
+        filter_threads = kwargs.get("filter_threads") or min(threads, 2)
+
+        cmd.extend([
+            "-filter_complex", filter_complex,
+            "-map", "[vout]",
+            "-map", "[aout]",
+            "-t", f"{max(0.1, duration_sec):.3f}",
+            "-c:v", "libx264",
+            "-profile:v", "main",
+            "-pix_fmt", "yuv420p",
+            "-preset", preset,
+            "-threads", str(threads),
+            "-filter_threads", str(filter_threads),
+            "-crf", str(crf),
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-ar", "48000",
+            "-ac", "2",
+            "-movflags", "+faststart",
+        ])
         return cmd
 
     def build_stream_copy_composition_cmd(
@@ -604,7 +722,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         video_loop_path: str | Path | None = None,
         fps: int = 30,
         crf: int = 23,
-        preset: str = "ultrafast",
+        preset: str = "fast",
         music_volume: float = 0.04,
         ducking_threshold: float = 0.035,
         ducking_ratio: float = 8.0,
@@ -702,6 +820,39 @@ class LoopVideoEngine(BaseVideoCompositor):
                     return str(out_path)
             except Exception as exc:
                 logger.warning("Stream-Copy failed (%s); falling back to re-encoding filtergraph.", exc)
+
+        # Check for multi-shot scene composition
+        scene_images = kwargs.get("scene_images")
+        shot_durations = kwargs.get("shot_durations")
+        valid_scenes = [p for p in (scene_images or []) if p and Path(p).is_file() and Path(p).stat().st_size > 0]
+        if len(valid_scenes) > 1 and shot_durations and len(shot_durations) == len(valid_scenes):
+            try:
+                cmd = self.build_multi_shot_filter_graph(
+                    scene_images=valid_scenes,
+                    shot_durations=[float(d) for d in shot_durations],
+                    audio_path=a_path,
+                    bgm_path=Path(bg_music_path) if bg_music_path else None,
+                    target_resolution=target_res,
+                    duration_sec=duration_sec,
+                    include_subtitles=include_subtitles,
+                    subtitle_path=Path(subtitle_path) if subtitle_path else None,
+                    fps=fps,
+                    crf=crf,
+                    preset=preset,
+                    music_volume=music_volume,
+                    ducking_threshold=ducking_threshold,
+                    ducking_ratio=ducking_ratio,
+                    ducking_attack_ms=ducking_attack_ms,
+                    ducking_release_ms=ducking_release_ms,
+                    master_loudness=master_loudness,
+                    **kwargs,
+                )
+                cmd.append(str(out_path))
+                logger.info("Executing Multi-Shot LoopVideoEngine composition command: %s", " ".join(cmd))
+                run_ffmpeg(cmd, timeout=timeout, check=True)
+                return str(out_path)
+            except Exception as m_exc:
+                logger.warning("Multi-shot composition encountered an issue (%s); falling back to single loop.", m_exc)
 
         cmd = self.build_composition_filter_graph(
             video_path=v_path,
@@ -900,6 +1051,9 @@ class LoopVideoEngine(BaseVideoCompositor):
         except Exception:
             pass
 
+        scene_images = extra_kwargs.get("scene_images") or manifest_data.get("scene_images")
+        shot_durations = extra_kwargs.get("shot_durations") or manifest_data.get("shot_durations")
+
         rendered_file = self.compose(
             audio_path=audio_path,
             output_video_path=out_p,
@@ -910,6 +1064,8 @@ class LoopVideoEngine(BaseVideoCompositor):
             subtitle_path=subtitle_path,
             include_subtitles=include_subtitles,
             video_loop_path=video_loop_path,
+            scene_images=scene_images,
+            shot_durations=shot_durations,
             **forward_kwargs,
         )
 

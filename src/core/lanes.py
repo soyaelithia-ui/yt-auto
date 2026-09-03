@@ -18,14 +18,15 @@ from typing import Any, Final, Mapping, Sequence
 
 from src.core.domain import CanonicalChannel, canonical_channel
 from src.core.repository import connect
+from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_LANES_PATH = os.environ.get("LANES_CONFIG_PATH", "config/lanes.json")
 
 ALLOWED_RESOLUTIONS: Final[dict[str, tuple[int, int]]] = {
-    "vertical": (1080, 1920),
-    "horizontal": (1920, 1080),
+    "vertical": SHORT_RESOLUTION,
+    "horizontal": LONGFORM_RESOLUTION,
 }
 ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset({"beats", "director"})
 ALLOWED_STORY_TYPES: Final[frozenset[str]] = frozenset(

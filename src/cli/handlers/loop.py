@@ -13,7 +13,6 @@ from typing import Any
 from src.config import DEFAULT_DB_PATH
 from src.core.catalog import LoopCatalogRepository
 from src.media.loop_worker import LoopSynthesizerWorker, maintain_loop_buffer
-from src.media.web_renderer import RenderSpec, WebVideoRenderer
 
 logger = logging.getLogger("cli.loop")
 
@@ -27,8 +26,7 @@ def handle_loop(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
     as_json = getattr(args, "json", False)
 
     catalog = LoopCatalogRepository(db_path=db_path)
-    renderer = WebVideoRenderer(db_path=db_path)
-    worker = LoopSynthesizerWorker(db_path=db_path, renderer=renderer)
+    worker = LoopSynthesizerWorker(db_path=db_path)
 
     if action in ("list", "catalog"):
         category = getattr(args, "category", None)
@@ -87,14 +85,20 @@ def handle_loop(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
         seed = getattr(args, "seed", 42) or 42
         output = getattr(args, "output", None) or f"assets/loops/preview_{category}_{orientation}.png"
 
-        out_path = renderer.render_preview_image(
-            category=category,
-            output_image_path=output,
-            orientation=orientation,
-            seed=seed,
-        )
-        print(f"🖼️ Vista previa generada en: {out_path}")
-        return 0
+        rec = catalog.get_best_loop(category=category, orientation=orientation)
+        if rec and Path(rec.file_path).exists():
+            out_p = Path(output).resolve()
+            out_p.parent.mkdir(parents=True, exist_ok=True)
+            import subprocess
+            subprocess.run([
+                "ffmpeg", "-y", "-ss", "0.5", "-i", str(rec.file_path),
+                "-vframes", "1", str(out_p)
+            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"🖼️ Vista previa generada en: {out_p}")
+            return 0
+        else:
+            print(f"⚠️ No se encontró loop en catálogo para '{category}' [{orientation}].")
+            return 1
 
     elif action == "audit":
         cleanup = getattr(args, "cleanup", False)

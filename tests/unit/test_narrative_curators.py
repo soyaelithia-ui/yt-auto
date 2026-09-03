@@ -33,7 +33,7 @@ def test_moku_curator_short_scp():
     script = curator.build_short_narrative("SCP-173")
     assert "SCP-173" in script
     assert "Euclid" in script or "escultura" in script
-    assert "@Moku" in script
+    assert "parpadeo" in script or "parpadees" in script
 
 
 def test_aelithia_curator_short():

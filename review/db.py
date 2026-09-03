@@ -14,6 +14,7 @@ from review.domain import (
     ReviewStatus,
     validate_status_name,
 )
+from src.core.repository import validate_db_path
 
 REVIEW_SCHEMA = """
 CREATE TABLE IF NOT EXISTS review_jobs (
@@ -75,23 +76,26 @@ def _migrate_add_metadata(db_path: str) -> None:
         conn.execute("ALTER TABLE review_jobs ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
 
 
-def init_review_db(db_path: str) -> None:
-    parent = os.path.dirname(os.path.abspath(db_path))
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with sqlite3.connect(db_path, timeout=30.0) as conn:
+def init_review_db(db_path: str | os.PathLike[str]) -> None:
+    path_or_str = validate_db_path(db_path)
+    if str(path_or_str) != ":memory:":
+        parent = os.path.dirname(os.path.abspath(str(path_or_str)))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    with sqlite3.connect(str(path_or_str), timeout=30.0) as conn:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=15000;")
         conn.execute(REVIEW_SCHEMA)
         conn.commit()
-    _migrate_legacy_schema(db_path)
-    _migrate_add_metadata(db_path)
+    _migrate_legacy_schema(str(path_or_str))
+    _migrate_add_metadata(str(path_or_str))
 
 
 @contextmanager
-def get_db_connection(db_path: str) -> Iterator[sqlite3.Connection]:
+def get_db_connection(db_path: str | os.PathLike[str]) -> Iterator[sqlite3.Connection]:
     """Yield a row-factory connection inside an autocommit transaction."""
-    conn = sqlite3.connect(db_path, timeout=30.0)
+    path_or_str = validate_db_path(db_path)
+    conn = sqlite3.connect(str(path_or_str), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA busy_timeout=15000;")
@@ -116,11 +120,13 @@ def _default_review_db() -> str:
 
 
 class ReviewStateStore:
-    def __init__(self, db_path: str | None = None):
-        self.db_path = db_path or os.environ.get(
+    def __init__(self, db_path: str | os.PathLike[str] | None = None):
+        raw_path = db_path or os.environ.get(
             "VIDEO_REVIEW_DB_PATH"
         ) or _default_review_db()
+        self.db_path = str(validate_db_path(raw_path))
         init_review_db(self.db_path)
+
 
     def create_job(self, job: ReviewJob) -> ReviewJob:
         now = _now_iso()

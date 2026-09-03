@@ -79,9 +79,16 @@ def _sync_queue_db(
         import os
         import sqlite3
         from datetime import datetime, timezone
+        from src.core.repository import validate_db_path
 
-        target_db = db_path or str(getattr(SETTINGS, "database_path", ""))
-        if not os.path.exists(target_db):
+        raw_db = db_path or str(getattr(SETTINGS, "database_path", ""))
+        if not raw_db:
+            return
+        try:
+            target_db = str(validate_db_path(raw_db))
+        except (TypeError, ValueError):
+            return
+        if target_db != ":memory:" and not os.path.exists(target_db):
             return
 
         video_id = str(youtube_result.get("video_id") or youtube_result.get("id") or "").strip()
@@ -93,6 +100,7 @@ def _sync_queue_db(
         now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         with sqlite3.connect(target_db, timeout=30.0) as conn:
+
             conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA busy_timeout=15000;")
             conn.execute("PRAGMA synchronous=NORMAL;")

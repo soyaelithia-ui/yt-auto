@@ -19,9 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.core.domain import JobStatus
+from src.core.repository import validate_db_path
 from src.log import get_logger
 
 logger = get_logger("lease_reaper")
+
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "shorts_queue.db"
 
@@ -43,20 +45,17 @@ def is_pid_alive(pid: int) -> bool:
 
 
 def extract_pid_from_owner(owner: str) -> Optional[int]:
-    """Parse PID integer from owner string formats (e.g., 'hostname:1234', 'worker:1234', '1234')."""
-    if not owner or not isinstance(owner, str):
+    """Extract integer PID from lease owner string (e.g., 'worker:moku:12345' -> 12345, 'server_node_42' -> 42)."""
+    if not owner:
         return None
-    match = re.search(r"(?::|_|^)(\d+)$", owner.strip())
+    match = re.search(r"[:_](\d+)$", owner)
     if match:
-        try:
-            return int(match.group(1))
-        except (ValueError, TypeError):
-            pass
+        return int(match.group(1))
     return None
 
 
 def is_local_hostname(owner: str) -> bool:
-    """Check if owner string indicates the process ran on the current host."""
+    """Return True if lease belongs to current host (for multi-node safety)."""
     current_host = socket.gethostname()
     if ":" in owner:
         host_part = owner.split(":", 1)[0]
@@ -66,11 +65,15 @@ def is_local_hostname(owner: str) -> bool:
     return True
 
 
+is_local_lease = is_local_hostname
+
+
 class LeaseReaper:
     """Proactive reaper of orphaned locks and crashed worker leases."""
 
     def __init__(self, db_path: Optional[Union[str, Path]] = None) -> None:
-        self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        raw_path = db_path if db_path else DEFAULT_DB_PATH
+        self.db_path = Path(validate_db_path(raw_path))
 
     def reap_once(self) -> int:
         """Scan leases and lane_leases; delete leases owned by dead local processes."""

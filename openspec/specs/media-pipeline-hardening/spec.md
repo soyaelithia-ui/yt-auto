@@ -54,7 +54,7 @@ All external FFmpeg and media generation subprocesses MUST be monitored by a non
 - **And** the pipeline MUST raise `FFmpegTimeoutError` and release all associated file descriptors and memory buffers.
 
 ### Requirement 7: Exception Guards for Direct Popen Chains
-All media render modules (including `proc_engine.py`, `subtitles.py`, `stream_renderer.py`, and `web_renderer.py`) MUST wrap dual `subprocess.Popen` pipe chains and browser sessions in robust `try/finally` blocks to ensure cleanup on exceptions.
+All media render modules (including `proc_engine.py`, `unified_encoder.py`, `native_procedural.py`, and `inmemory_compositor.py`) MUST wrap `subprocess.Popen` pipe chains in robust `try/finally` blocks to ensure cleanup on exceptions.
 
 #### Scenario: Clean execution of dual Popen chain (Happy Path)
 - **Given** a successful rendering operation involving two piped `Popen` subprocesses
@@ -62,15 +62,31 @@ All media render modules (including `proc_engine.py`, `subtitles.py`, `stream_re
 - **Then** the `finally` block MUST safely invoke `wait()` on the processes
 - **And** the processes MUST terminate cleanly without leaking resources.
 
-#### Scenario: Exception during browser and FFmpeg processing (Edge Case)
-- **Given** an active rendering session involving an FFmpeg `Popen` process and an open browser
+#### Scenario: Exception during rendering subprocess execution (Edge Case)
+- **Given** an active rendering session involving an FFmpeg `Popen` process and rendering subprocesses
 - **When** an unexpected exception occurs during the render loop
 - **Then** the `finally` block MUST execute
 - **And** it MUST explicitly invoke `kill()` and `wait()` on the FFmpeg subprocess
-- **And** it MUST invoke `close()` on the browser instance before propagating the exception.
+- **And** it MUST ensure all child subprocesses and allocated buffers are closed before propagating the exception.
 
 #### Scenario: Cleanup failure during exception handling (Error State)
 - **Given** an exception occurred in the render loop triggering the `finally` cleanup block
 - **When** the `kill()` or `close()` operations themselves raise an exception (e.g., process already dead)
 - **Then** the cleanup block MUST suppress these secondary cleanup exceptions
 - **And** the original render loop exception MUST be correctly re-raised to the caller.
+
+### Requirement 8: Multi-Layer Procedural Atmospheric Shaders
+The visual engine MUST support 9 canonical procedural WGSL shader archetypes (`tactical_chamber`, `dark_forest`, `arctic_desolation`, `cosmic_singularity`, `arcade_vector_flight`, `parkour_runner`, `cozy_hearth`, `synaptic_network`, `maritime_lighthouse`). The `maritime_lighthouse` shader MUST render a celestial nocturnal moon with soft radial halo, multi-frequency undulating ocean waves with specular reflection, a rocky cliff with tapered lighthouse tower, and a 360-degree volumetric rotating light beam.
+
+#### Scenario: Maritime Narrative Shader Compilation (Happy Path)
+- **Given** a story referencing maritime, lighthouse, or coastal settings
+- **When** the procedural loop engine resolves the video
+- **Then** `maritime_lighthouse.wgsl` compiles on Mesa Lavapipe without errors and produces valid 1080x1920 RGBA frames.
+
+### Requirement 9: Setting-Adaptive Thumbnail Composition
+The `ThumbnailEngine` and `AdaptiveSubjectCompositor` MUST composite setting-accurate anatomical and architectural silhouettes matching the detected narrative archetype without duplicating background celestial or structural elements.
+
+#### Scenario: Coastal Story Thumbnail Generation (Happy Path)
+- **Given** a story set at a lighthouse or sea cliff
+- **When** a thumbnail is generated
+- **Then** the compositor places a solitary coastal keeper with lantern overlooking the sea with accent rim lighting.

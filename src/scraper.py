@@ -215,7 +215,7 @@ PRESET_CANONICAL_STORIES: List[Dict[str, Any]] = [
 
 
 def _load_canonical_stories(
-    subreddit: str = "nosleep",
+    subreddit: Optional[str] = None,
     limit: int = 50,
     min_length: int = 10,
 ) -> List[Dict[str, Any]]:
@@ -293,7 +293,35 @@ def _load_canonical_stories(
         logger.warning("No canonical story files found on disk in data/worksets/canonical/. Using preset built-in fallback stories.")
         loaded_stories = [s for s in PRESET_CANONICAL_STORIES if len(s["content"]) >= min_length]
 
-    return loaded_stories[:limit]
+    # Filter stories to strictly match the requested subreddit/niche
+    sub_lower = (subreddit or "").lower()
+    is_horror_niche = any(k in sub_lower for k in ("nosleep", "scp", "horror", "creepypasta", "scary", "terror", "moku"))
+    is_confession_niche = any(k in sub_lower for k in ("amitheasshole", "aita", "confession", "relationship", "tifu", "aelithia", "drama"))
+
+    def story_matches_niche(story: Dict[str, Any]) -> bool:
+        s_id = str(story.get("id") or "").lower()
+        s_title = str(story.get("title") or "").lower()
+        s_url = str(story.get("url") or "").lower()
+        s_tags = [str(t).lower() for t in story.get("tags") or []]
+        combined = f"{s_id} {s_title} {s_url} {' '.join(s_tags)}"
+        
+        if is_horror_niche:
+            if any(k in combined for k in ("aita", "amitheasshole", "confesion", "confesión", "heredado", "hermano", "pareja", "esposo")):
+                return False
+            return True
+        if is_confession_niche:
+            if any(k in combined for k in ("terror", "scp", "anomalia", "monstruo", "tunel", "estacion", "creepy")):
+                return False
+            return True
+        return True
+
+    matched_stories = [s for s in loaded_stories if story_matches_niche(s)]
+    if not matched_stories:
+        preset_matched = [s for s in PRESET_CANONICAL_STORIES if len(s["content"]) >= min_length and story_matches_niche(s)]
+        if preset_matched:
+            return preset_matched[:limit]
+
+    return (matched_stories or loaded_stories)[:limit]
 
 
 def _is_deleted_or_removed(text: Optional[str]) -> bool:

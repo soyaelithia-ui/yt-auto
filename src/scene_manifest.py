@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 import jsonschema
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from src.core.resolution import SHORT_RESOLUTION
+from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.log import get_logger
 
 logger = get_logger("scene_manifest")
@@ -153,8 +153,17 @@ class ProceduralUniforms(BaseModel):
     u_glow_intensity: float = 0.8
 
 
+VisualArchetypeId = Literal[
+    "cosmic_singularity",
+    "dark_forest",
+    "synaptic_network",
+    "tactical_chamber",
+]
+
+
 class ProceduralConfig(BaseModel):
-    template_name: str = "cosmic_horror_three.html"
+    archetype_id: VisualArchetypeId = "cosmic_singularity"
+    template_name: Optional[str] = None
     seed: int = 42
     palette: Optional[ProceduralPalette] = Field(default_factory=ProceduralPalette)
     uniforms: Optional[ProceduralUniforms] = Field(default_factory=ProceduralUniforms)
@@ -435,7 +444,7 @@ def build_scene_manifest_v2(
     music_volume: float = 0.04,
     scenes: Optional[List[Dict[str, Any]]] = None,
     subtitles: Optional[List[Dict[str, Any]]] = None,
-    resolution: Tuple[int, int] = (1920, 1080),
+    resolution: Tuple[int, int] = LONGFORM_RESOLUTION,
     fps: int = 30,
     safe_area: Optional[Dict[str, int]] = None,
     color_profile: Optional[Dict[str, str]] = None,

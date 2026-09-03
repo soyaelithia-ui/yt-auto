@@ -1,49 +1,58 @@
 # Original User Request
 
-## 2026-08-28T04:42:04Z
+## 2026-09-02T08:42:17Z
 
-<USER_REQUEST>
-Exploración y optimización integral de recursos en yt-auto: reducción segura de huella en disco (~5.2 GB en work/ y output/), optimización de pipelines de renderizado y medios (FFmpeg/Three.js/Pipes), y eliminación de cuellos de botella de concurrencia y memoria sin regresiones.
+This is a single self-contained fix; keep it small and focused.
 
-Working directory: /home/tzpnyahvsj/project/yt-auto
+Reconcile and consolidate recent codebase changes: unify contracts and duplicate constants into a single source of truth (SSOT), align function signatures, remove dead code and temporary files, and ensure 100% of the test suite passes green without introducing new features.
+
+Working directory: /home/moku/projects/yt-auto
 Integrity mode: development
-
-## Context & Baseline
-El Milestone 1 (R1 - Profiling y Telemetría) ya ha sido implementado y verificado en `src/core/profiling.py`, `src/pipeline.py` y `src/cli/handlers/profile.py`. Proceder inmediatamente con la ejecución paralela y coordinada de los siguientes hitos:
 
 ## Requirements
 
-### R2. Reducción Segura de Huella en Disco y Retención Automatizada
-- Purgar y depurar de forma segura los archivos temporales huérfanos, fragmentos de prueba de desarrollo y buffers intermedios acumulados en `work/` (~1.4 GB) y `output/` (~3.8 GB), preservando estrictamente los videos maestros terminados y las miniaturas esenciales.
-- Reforzar y automatizar en `src/cleaner.py` y `src/retention.py` las políticas de auto-limpieza post-render para evitar que futuros runs acumulen gigabytes de temporales innecesarios.
+### R1. Single Source of Truth (SSOT) Consolidation
+Unify overlapping contracts, schemas, and duplicate constants across modules into canonical definitions without changing external public interfaces required by the system.
 
-### R3. Optimización de Rendimiento en Motores de Video y Medios
-- Optimizar los flujos de `lib/ffmpeg.py`, `src/media/realtime_video_engine.py`, `src/media/loop_engine.py` y `src/media/compositor.py`:
-  - Configurar particionamiento óptimo de hilos (`-threads`), aceleración y presets balanceados de compresión.
-  - Reemplazar la escritura intermedia de frames individuales a disco por pipes directos/streaming hacia FFmpeg donde sea aplicable.
-  - Eliminar dobles codificaciones y normalizaciones redundantes de audio.
+### R2. Function Signature Alignment & Dead Code Removal
+Align mismatched function and method signatures across updated modules, remove orphaned functions, deleted template references, dead code, and temporary build/test artifacts.
 
-### R4. Eficiencia de Memoria, Concurrencia y Persistencia
-- Optimizar el consumo de RAM en el procesamiento de frames e imágenes en memoria por lotes.
-- Garantizar que las transacciones en SQLite WAL bajo concurrencia multi-carril (*multi-lane*) operen sin bloqueos (`database is locked`) ni contención de hilos.
-
-## Verification Resources
-
-- Suite de pruebas de regresión y E2E: `tests/e2e/test_r1_r4_e2e.py`, `tests/unit/test_profiling.py`, `tests/unit/test_scoring.py`, `tests/unit/test_db.py`.
-- Módulos de limpieza y retención: `src/cleaner.py`, `src/retention.py`.
-- Motores de medios y ffmpeg: `lib/ffmpeg.py`, `src/media/`, `src/audio_processor.py`.
+### R3. Test Suite Integrity & 100% Green Verification
+Ensure all active unit, integration, and E2E tests in the test suite pass with zero regressions or skipped failures, strictly without adding new business features or changing expected behavior.
 
 ## Acceptance Criteria
 
-### Huella en Disco
-- [ ] Reducción drástica del espacio ocupado en `work/` y `output/` eliminando temporales de desarrollo sin afectar los videos maestros ni miniaturas existentes.
-- [ ] Pruebas unitarias de limpieza demostrando que `cleaner.py` elimina temporales expirados y respeta artefactos protegidos.
+### Test Verification
+- [ ] `.venv/bin/pytest` passes 100% with 0 failures and 0 errors across all active test suites.
 
-### Optimización de Medios y Pipeline
-- [ ] Mejora medible en el tiempo de renderizado/compresión de video mediante pipes y presets eficientes sin pérdida perceptible de calidad visual o sonora.
-- [ ] Eliminación de escrituras innecesarias a disco de archivos intermedios de frame.
+### Codebase Cleanliness
+- [ ] No duplicate constant definitions or duplicate schema contracts remaining in `src/` and `schemas/`.
+- [ ] All deleted/deprecated media templates or temporary scratch scripts are properly unlinked and pruned from active imports.
+- [ ] No new functional feature or breaking behavioral change introduced.
 
-### Estabilidad y Cero Regresiones
-- [ ] Toda la suite de pruebas del proyecto (`pytest`) ejecuta satisfactoriamente al 100% tras las optimizaciones.
-- [ ] Cero errores de contención en base de datos (`database is locked`) bajo estrés concurrente multi-carril.
-</USER_REQUEST>
+## 2026-09-02T15:39:16Z
+
+This is a single self-contained fix; keep it small and focused. Refactor hardcoded legacy channel handles, references to obsolete '@Moku' branding, and update repository configuration and project policies to use standard environment-driven variables.
+
+Working directory: /home/moku/projects/yt-auto
+Integrity mode: development
+
+## Requirements
+
+### R1. Dynamic Channel Identifiers & Metadata Resolution
+Replace all hardcoded '@Moku' and '@MokuRedit' references across runtime configuration (`src/branding.py`, `src/config.py`, prompt templates, dev scripts) with dynamic resolution backed by channel configuration (`config/channels/{channel}.json`) and standard environment variables (`CHANNEL_HANDLE`, `CHANNEL_URL`, `CHANNEL_NAME`). No channel identity should be hardcoded as global constants or default fallbacks.
+
+### R2. Repository Settings & Project Policies Alignment
+Synchronize project documentation, operational guides, and policy references with the current repository (`https://github.com/Ade-ia2005/yt-auto.git`), removing stale public/external handles and clarifying private repo governance.
+
+### R3. Codebase Anti-Pattern & Hardcoding Audit
+Audit and eliminate similar anti-patterns across `src/` and `review/`, ensuring URLs, branding tags, and channel-specific paths are parameterized rather than hardcoded.
+
+## Acceptance Criteria
+
+### Automated Codebase Audit
+- [ ] A recursive case-insensitive search for `@Moku` or `@MokuRedit` in `src/` returns zero hardcoded runtime occurrences (excluding explicit channel config files in `config/channels/`).
+- [ ] `src/branding.py` and `src/config.py` resolve channel handles, URLs, and watermarks dynamically from environment variables or channel config without hardcoded defaults to '@MokuRedit'.
+- [ ] All documentation files (`README.md`, `docs/`) and policy guides reference `https://github.com/Ade-ia2005/yt-auto.git` and generic channel variables rather than obsolete handles.
+- [ ] The full test suite passes with zero regressions:
+  `.venv/bin/pytest tests/unit/ tests/integration/ -q`

@@ -865,6 +865,8 @@ def create_video_thumbnail(
             output_path=output_path,
             width=target_w,
             height=target_h,
+            archetype=kwargs.get("archetype") or kwargs.get("template") or kwargs.get("category"),
+            template=kwargs.get("template"),
         )
         res = engine.generate(
             config=cfg,

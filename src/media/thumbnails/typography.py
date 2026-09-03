@@ -141,9 +141,13 @@ class DynamicTypographyEngine:
         if abs(tilt_angle) > 0.1:
             txt_composite = txt_composite.rotate(tilt_angle, resample=Image.Resampling.BICUBIC, expand=True)
 
-        # Composite onto canvas
-        paste_x = pos_x - temp_pad + 20
-        paste_y = pos_y - temp_pad
+        # Precision composite onto canvas
+        rot_w, rot_h = txt_composite.size
+        center_x = pos_x + max_width // 2
+        center_y = pos_y + (len(lines) * line_height) // 2
+        paste_x = center_x - rot_w // 2
+        paste_y = center_y - rot_h // 2
+        
         canvas_rgba = canvas.convert("RGBA")
         canvas_rgba.paste(txt_composite, (paste_x, paste_y), txt_composite)
 

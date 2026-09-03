@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from src.config import DEFAULT_DB_PATH
+from src.core.repository import validate_db_path
 from src.log import get_logger
 
 logger = get_logger("loop_catalog")
@@ -26,6 +27,7 @@ __all__ = [
     "LoopCatalogRepository",
     "compute_file_sha256",
 ]
+
 
 
 def compute_file_sha256(path: str | Path) -> str:
@@ -94,12 +96,15 @@ class LoopCatalogRepository:
     """
 
     def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
-        self.db_path = str(Path(db_path).expanduser().resolve())
+        path_or_str = validate_db_path(db_path)
+        self.db_path = ":memory:" if str(path_or_str) == ":memory:" else str(Path(path_or_str).expanduser().resolve())
         self._ensure_table()
 
     def _get_connection(self) -> sqlite3.Connection:
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        if self.db_path != ":memory:":
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = sqlite3.connect(self.db_path, timeout=15.0)
+
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=15000;")

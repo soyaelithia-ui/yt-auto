@@ -56,8 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         type=str,
         default=None,
-        choices=["prod", "cli", "test"],
-        help="Perfil de ejecución ('prod', 'cli', 'test')",
+        choices=["prod", "cli", "dev", "test"],
+        help="Perfil de ejecución ('prod', 'cli', 'dev', 'test')",
     )
     global_parent.add_argument(
         "--db-path",
@@ -81,8 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         type=str,
         default=argparse.SUPPRESS,
-        choices=["prod", "cli", "test"],
-        help="Perfil de ejecución ('prod', 'cli', 'test')",
+        choices=["prod", "cli", "dev", "test"],
+        help="Perfil de ejecución ('prod', 'cli', 'dev', 'test')",
     )
     subparser_parent.add_argument(
         "--db-path",

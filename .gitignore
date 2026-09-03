@@ -13,6 +13,10 @@ data/*.sqlite3
 data/queue.db
 data/queue.db-*
 data/backups/
+data/cli/
+data/dev
+data/prod/
+data/test/
 data/worksets/*
 !data/worksets/canonical/
 !data/worksets/canonical/*

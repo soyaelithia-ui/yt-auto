@@ -11,7 +11,6 @@ from src.compositing.stream_renderer import DirectStreamCompositor
 from src.core.lifecycle import get_tracked_pids
 from src.media.proc_engine import ProceduralVideoEngine
 from src.media.subtitles import SubtitleCue, apply_code_subtitles_to_video
-from src.media.web_renderer import RenderSpec, WebVideoRenderer
 from src.scene_manifest import SceneConfig, ProceduralConfig
 
 
@@ -146,49 +145,6 @@ def test_stream_renderer_exception_cleans_up_ffmpeg_and_browser(tmp_path):
     mock_browser.close.assert_called()
     assert 43001 not in get_tracked_pids()
 
-
-def test_web_renderer_exception_cleans_up_ffmpeg_and_browser(tmp_path):
-    """Verify that web_renderer cleans up FFmpeg and browser on exception."""
-    renderer = WebVideoRenderer()
-
-    mock_proc = MagicMock()
-    mock_proc.pid = 44001
-    mock_proc.poll.return_value = None
-
-    mock_browser = MagicMock()
-    mock_page = MagicMock()
-    mock_page.evaluate.side_effect = RuntimeError("Shader execution failed")
-    mock_browser.new_page.return_value = mock_page
-
-    mock_playwright_ctx = MagicMock()
-    mock_playwright_ctx.__enter__.return_value.chromium.launch.return_value = mock_browser
-
-    mock_spec = RenderSpec(
-        category="classified_terminal",
-        duration_sec=2.0,
-        fps=30,
-        width=1080,
-        height=1920,
-        seed=123,
-        orientation="vertical",
-        output_path=tmp_path / "out.mp4",
-    )
-
-    template_file = tmp_path / "template.html"
-    template_file.write_text("<html></html>")
-
-    with patch("src.media.web_renderer.subprocess.Popen", return_value=mock_proc), \
-         patch("playwright.sync_api.sync_playwright", return_value=mock_playwright_ctx), \
-         patch.object(renderer, "resolve_template_path", return_value=template_file):
-
-        with pytest.raises(RuntimeError, match="Shader execution failed"):
-            renderer.render_loop(
-                spec=mock_spec,
-            )
-
-    mock_proc.terminate.assert_called()
-    mock_browser.close.assert_called()
-    assert 44001 not in get_tracked_pids()
 
 
 def test_stream_renderer_backpressure_timeout():
