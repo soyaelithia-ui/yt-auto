@@ -1,14 +1,18 @@
 # Configuración, Variables de Entorno y Secretos
 
-> **Estado:** REPOSITORIO / OFICIAL  
-> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
-> **Gobernanza:** Repositorio privado con resolución dinámica de identidades y secretos desacoplados.  
+> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git) | **Gobernanza:** Repositorio privado con resolución dinámica de identidades y secretos desacoplados.  
 > **Última actualización:** 2026-09  
 
-Inventario estructurado de variables de entorno y directivas de seguridad para `yt-auto`.
+Inventario estructurado de variables de entorno, directivas de seguridad y políticas contra hardcoding para `yt-auto`.
 
 > [!CAUTION]
-> **REGLA ABSOLUTA DE SEGURIDAD**: Ningún valor real de claves API, tokens OAuth, cookies o contraseñas debe incluirse en el repositorio. Los secretos deben residir en `.env` (local con `chmod 600`) o montarse en `/run/secrets` (Docker/VPS).
+> **REGLAS ABSOLUTAS DE SEGURIDAD (POLÍTICA DE CERO HARDCODING)**:
+> 1. Ningún valor real de claves API, tokens OAuth, cookies o contraseñas debe incluirse en el repositorio ni escribirse como constante hardcodeada en el código fuente.
+> 2. Los secretos deben residir exclusivamente en `.env` (local con `chmod 600`) o montarse en `/run/secrets` (Docker/VPS en modo lectura `ro`).
+> 3. El archivo `.env` y el directorio `secrets/` NUNCA deben commitearse (deben permanecer en `.gitignore`).
+> 4. Solo el archivo plantilla `.env.example` debe versionarse, conteniendo únicamente nombres de variables con valores vacíos (`VARIABLE=`).
+> 5. Los diccionarios y logs públicos (como `ChannelSettings.public_dict()`) NUNCA deben exponer rutas de disco a secretos ni valores de cookies/tokens; solo indicadores booleanos de disponibilidad.
+> 6. Las sesiones automatizadas de Playwright deben purgar sus cookies de memoria (`context.clear_cookies()`) antes del cierre para evitar residuos en memoria.
 
 ---
 

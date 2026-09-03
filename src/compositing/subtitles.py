@@ -10,21 +10,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from lib.subtitles import (
+    format_ass_timestamp,
+    PORTRAIT_MIN_MARGIN_V,
+    LANDSCAPE_MIN_MARGIN_V,
+)
 from src.log import get_logger
 
 logger = get_logger("karaoke_subtitles")
-
-
-def format_ass_timestamp(seconds: float) -> str:
-    """Formats float seconds into ASS timestamp format: H:MM:SS.cs (centiseconds)."""
-    total_cs = max(0, int(round(seconds * 100)))
-    hours = total_cs // 360000
-    remainder = total_cs % 360000
-    minutes = remainder // 6000
-    remainder = remainder % 6000
-    secs = remainder // 100
-    cs = remainder % 100
-    return f"{hours}:{minutes:02d}:{secs:02d}.{cs:02d}"
 
 
 def hex_to_ass_color(hex_str: str, alpha: str = "00") -> str:
@@ -171,7 +164,11 @@ class TerminalKaraokeSubtitleGenerator:
     def _build_header(self, width: int, height: int, downward_drift_px: int = 0) -> str:
         # Centered vertically in the lower-middle safe zone (alignment = 2 / bottom-center with margin)
         # Guarantees >= 480px margin for portrait (clearing mobile UI controls) and >= 130px for landscape.
-        base_margin_v = max(480, int(height * 0.25)) if height > width else max(130, int(height * 0.12))
+        base_margin_v = (
+            max(PORTRAIT_MIN_MARGIN_V, int(height * 0.25))
+            if height > width
+            else max(LANDSCAPE_MIN_MARGIN_V, int(height * 0.12))
+        )
         margin_v = base_margin_v + max(0, int(downward_drift_px))
         font_size = int(height * 0.038) if height > width else int(height * 0.055)
 

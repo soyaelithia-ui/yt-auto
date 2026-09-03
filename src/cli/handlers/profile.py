@@ -17,7 +17,11 @@ def handle_profile(
     args: argparse.Namespace, parser: argparse.ArgumentParser | None = None
 ) -> int:
     """Execute benchmarking runs or display historical stage profiling metrics."""
-    db_path = getattr(args, "db_path", DEFAULT_DB_PATH)
+    raw_db_path = getattr(args, "db_path", None)
+    if isinstance(raw_db_path, (str, Path)):
+        db_path = str(raw_db_path)
+    else:
+        db_path = DEFAULT_DB_PATH
 
     if getattr(args, "history", False):
         return _display_profiling_history(

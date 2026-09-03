@@ -9,6 +9,9 @@ from src.core.resolution import SHORT_RESOLUTION
 
 _MAX_WORDS_PER_SRT_CUE = 4
 
+PORTRAIT_MIN_MARGIN_V = 480
+LANDSCAPE_MIN_MARGIN_V = 130
+
 _TEMPLATE_NAME_DEFAULTS = {
     "scp_classified": {
         "font_name": "Montserrat Black",
@@ -129,7 +132,7 @@ def _format_srt_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
-def _format_ass_timestamp(seconds: float) -> str:
+def format_ass_timestamp(seconds: float) -> str:
     """Format seconds into ASS centisecond timestamps (0:00:00.12 format)."""
     seconds = max(0.0, float(seconds))
     hours = int(seconds // 3600)
@@ -143,6 +146,9 @@ def _format_ass_timestamp(seconds: float) -> str:
         secs -= 60
         minutes += 1
     return f"{hours}:{minutes:02d}:{secs:02d}.{cents:02d}"
+
+
+_format_ass_timestamp = format_ass_timestamp
 
 
 def _word_stamp_range(stamp: dict) -> tuple[float, float]:
@@ -278,7 +284,7 @@ def _ass_style_spec(template, font_name, play_w: int, play_h: int, **kwargs) -> 
     if kwargs.get("downward_drift_px"):
         spec["margin_v"] = int(spec.get("margin_v", 230)) + max(0, int(kwargs["downward_drift_px"]))
     if play_h > play_w:
-        spec["margin_v"] = max(480, int(spec.get("margin_v", 480)))
+        spec["margin_v"] = max(PORTRAIT_MIN_MARGIN_V, int(spec.get("margin_v", PORTRAIT_MIN_MARGIN_V)))
     spec["outline"] = max(3, int(spec.get("outline", 4)))
     spec["margin_l"] = max(40, int(spec.get("margin_l", 40)))
     spec["margin_r"] = max(40, int(spec.get("margin_r", 40)))
