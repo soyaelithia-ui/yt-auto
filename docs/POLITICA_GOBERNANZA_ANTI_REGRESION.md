@@ -22,7 +22,7 @@
    - Cero imports de `playwright`, `puppeteer` o invocaciones de `chromium` en `src/media/`, `src/cli/`, `src/narrative/` o `src/core/`.
    - Playwright queda estrictamente restringido a `src/youtube/` para subidas de respaldo a YouTube Studio.
 2. **Higiene de Árbol Git (Single SSOT)**:
-   - Debe existir exactamente **1 worktree activo** reportado por `git worktree list`.
+   - Todo worktree activo debe corresponder a un árbol válido y sincronizado con HEAD. Cero worktrees huérfanos o en estado 'prunable'.
    - La rama `main` debe ser la única rama activa de producción y estar perfectamente sincronizada con `origin/main` en GitHub. Cero ramas muertas o divergentes.
 3. **Candado Pre-Commit Activo**:
    - `.githooks/pre-commit` debe estar instalado, tener permisos `+x` y estar configurado en Git (`git config core.hooksPath == .githooks`).

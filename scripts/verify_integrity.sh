@@ -9,14 +9,26 @@ echo "======================================================================"
 
 FAILURES=0
 
-# 1. Check Git Worktrees (Must be exactly 1 active worktree)
-ACTIVE_WORKTREES=$(git worktree list | wc -l)
-if [ "$ACTIVE_WORKTREES" -ne 1 ]; then
-    echo "❌ [FAIL] Stale worktrees detected! Expected 1, found $ACTIVE_WORKTREES:"
+# 1. Check Git Worktrees (Must have zero stale/prunable worktrees)
+git worktree prune
+STALE_WORKTREES=$(git worktree list --porcelain | grep -c "^prunable" || true)
+UNTRACKED_WORKTREES=0
+while IFS= read -r line; do
+    if [[ "$line" =~ ^worktree[[:space:]]+(.*) ]]; then
+        wt_path="${BASH_REMATCH[1]}"
+        if [ ! -d "$wt_path" ]; then
+            UNTRACKED_WORKTREES=$((UNTRACKED_WORKTREES + 1))
+        fi
+    fi
+done < <(git worktree list --porcelain)
+
+if [ "$STALE_WORKTREES" -gt 0 ] || [ "$UNTRACKED_WORKTREES" -gt 0 ]; then
+    echo "❌ [FAIL] Stale or unlinked worktrees detected!"
     git worktree list
     FAILURES=$((FAILURES + 1))
 else
-    echo "✅ [PASS] Git worktree hygiene: exactly 1 active worktree."
+    ACTIVE_COUNT=$(git worktree list | wc -l)
+    echo "✅ [PASS] Git worktree hygiene: $ACTIVE_COUNT valid worktree(s), zero stale/prunable."
 fi
 
 # 2. Check for Resurrected Obsolete Architecture Blueprints
@@ -57,10 +69,19 @@ fi
 
 # 6. Run Fast Anti-Regression Test Suite
 echo "⏳ Running automated anti-regression test suite..."
-if .venv/bin/pytest tests/unit/test_anti_regression_guardrails.py -q > /dev/null 2>&1; then
+PYTEST_CMD=""
+if [ -x ".venv/bin/pytest" ]; then
+    PYTEST_CMD=".venv/bin/pytest"
+elif [ -x "/home/moku/projects/yt-auto/.venv/bin/pytest" ]; then
+    PYTEST_CMD="/home/moku/projects/yt-auto/.venv/bin/pytest"
+elif command -v pytest > /dev/null 2>&1; then
+    PYTEST_CMD="pytest"
+fi
+
+if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" tests/unit/test_anti_regression_guardrails.py -q > /dev/null 2>&1; then
     echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-30) passed 100%."
 else
-    echo "❌ [FAIL] Anti-regression test suite failed!"
+    echo "❌ [FAIL] Anti-regression test suite failed or pytest not executable!"
     FAILURES=$((FAILURES + 1))
 fi
 

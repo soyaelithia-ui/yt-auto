@@ -41,8 +41,11 @@ cookies/
 !.env.example
 *.pem
 venv/
+venv
 env/
+env
 .venv/
+.venv
 
 # Logs
 logs/
@@ -60,10 +63,18 @@ tmp/
 .DS_Store
 .vscode/
 .idea/
+.config/
 
 # Agent/Local System files
 .agents/
 .atl/
+.claude/
+.copilot/
+.gemini/
+.hermes/
+.mcp.json
+.codex/*
+!.codex/hooks.json
 cookies.json
 PIPELINE_STATE.json
 payload.json
