@@ -72,6 +72,8 @@ echo "⏳ Running automated anti-regression test suite..."
 PYTEST_CMD=""
 if [ -x ".venv/bin/pytest" ]; then
     PYTEST_CMD=".venv/bin/pytest"
+elif [ -x "/srv/projects/yt-auto/.venv/bin/pytest" ]; then
+    PYTEST_CMD="/srv/projects/yt-auto/.venv/bin/pytest"
 elif [ -x "/home/moku/projects/yt-auto/.venv/bin/pytest" ]; then
     PYTEST_CMD="/home/moku/projects/yt-auto/.venv/bin/pytest"
 elif command -v pytest > /dev/null 2>&1; then
