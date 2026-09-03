@@ -33,7 +33,7 @@ def get_auth_url(
     scopes: Optional[list[str]] = None,
 ) -> str:
     """Generate the official Google OAuth 2.0 authorization URL."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
     if not client_id:
         raise RuntimeError("GOOGLE_CLIENT_ID no está configurado")
 
@@ -47,6 +47,20 @@ def get_auth_url(
         access_type="offline",
         include_granted_scopes="true",
     )
+    if getattr(flow, "code_verifier", None):
+        verifier_path = BASE_DIR / "secrets" / ".oauth_pkce_verifier.json"
+        try:
+            verifiers = {}
+            if verifier_path.is_file():
+                try:
+                    verifiers = json.loads(verifier_path.read_text(encoding="utf-8"))
+                except Exception:
+                    verifiers = {}
+            verifiers[redirect_uri] = flow.code_verifier
+            verifier_path.write_text(json.dumps(verifiers), encoding="utf-8")
+            os.chmod(verifier_path, 0o600)
+        except Exception:
+            pass
     return auth_url
 
 
@@ -57,13 +71,24 @@ def exchange_code(
     scopes: Optional[list[str]] = None,
 ) -> None:
     """Exchange authorization code for tokens and save in official Google format."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_secret = CLIENT_SECRET or os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
         raise RuntimeError(
             "GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben proporcionarse por entorno"
         )
     target_path = token_path or TOKEN_PATH
+
+    verifier_path = BASE_DIR / "secrets" / ".oauth_pkce_verifier.json"
+    verifiers = {}
+    if verifier_path.is_file():
+        try:
+            verifiers = json.loads(verifier_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Try matching redirect_uri or localhost default
+    code_verifier = verifiers.get(redirect_uri) or verifiers.get("http://localhost:8585/")
 
     flow = create_oauth_flow(
         client_id=client_id,
@@ -71,21 +96,37 @@ def exchange_code(
         scopes=scopes or DEFAULT_SCOPES,
         redirect_uri=redirect_uri,
     )
+    if code_verifier:
+        flow.code_verifier = code_verifier
+
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
         logger.warning("fetch_token with redirect_uri=%s failed: %s. Trying fallback uri...", redirect_uri, exc)
         # Try alternate redirect URI if OOB or localhost failed
         alt_uri = "http://localhost:8585/" if redirect_uri != "http://localhost:8585/" else "urn:ietf:wg:oauth:2.0:oob"
+        alt_verifier = verifiers.get(alt_uri) or code_verifier
         flow = create_oauth_flow(
             client_id=client_id,
             client_secret=client_secret,
             scopes=scopes or DEFAULT_SCOPES,
             redirect_uri=alt_uri,
         )
-        flow.fetch_token(code=code)
+        if alt_verifier:
+            flow.code_verifier = alt_verifier
+        try:
+            flow.fetch_token(code=code)
+        except Exception:
+            # Fallback: retry without verifier in case it was a plain auth URL
+            flow.code_verifier = None
+            flow.fetch_token(code=code)
 
     save_credentials(flow.credentials, target_path)
+    if verifier_path.is_file():
+        try:
+            verifier_path.unlink()
+        except Exception:
+            pass
     print(f"Credentials saved successfully to {target_path}!")
 
 
@@ -95,8 +136,8 @@ def run_local_login_flow(
     scopes: Optional[list[str]] = None,
 ) -> None:
     """Run official Google InstalledAppFlow local server for 1-click browser login."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_secret = CLIENT_SECRET or os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
         raise RuntimeError(
             "GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben proporcionarse por entorno"

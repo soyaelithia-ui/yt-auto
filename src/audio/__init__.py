@@ -35,11 +35,13 @@ from lib.audio import (
     master_audio_track,
 )
 
+from src.config import EBU_R128_TARGET_LUFS
+
 # Backward-compatibility alias
 AudioMasteringError = AudioProcessingError
 
 # Default Mastering Constants
-DEFAULT_TARGET_LUFS: float = -14.0
+DEFAULT_TARGET_LUFS: float = EBU_R128_TARGET_LUFS
 DEFAULT_MAX_TP: float = -1.5
 DEFAULT_MAX_LRA: float = 11.0
 

@@ -287,7 +287,7 @@ class TestBenchmarkAndCli:
             assert metrics.duration_sec > 0
             assert metrics.success is True
 
-    def test_cli_handle_profile_mock_table(self, capsys):
+    def test_cli_handle_profile_mock_table(self, capsys, tmp_path):
         args = MagicMock()
         args.mock = True
         args.iterations = 1
@@ -298,6 +298,7 @@ class TestBenchmarkAndCli:
         args.output = None
         args.lane = None
         args.stages = None
+        args.db_path = str(tmp_path / "test_profiling.db")
 
         code = handle_profile(args)
         assert code == 0
@@ -305,7 +306,7 @@ class TestBenchmarkAndCli:
         assert "PROFILING REPORT" in captured.out
         assert "TOTAL" in captured.out
 
-    def test_cli_handle_profile_mock_json(self, capsys):
+    def test_cli_handle_profile_mock_json(self, capsys, tmp_path):
         args = MagicMock()
         args.mock = True
         args.iterations = 1
@@ -316,6 +317,7 @@ class TestBenchmarkAndCli:
         args.output = None
         args.lane = None
         args.stages = None
+        args.db_path = str(tmp_path / "test_profiling.db")
 
         code = handle_profile(args)
         assert code == 0

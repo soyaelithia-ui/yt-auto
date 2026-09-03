@@ -512,7 +512,7 @@ def test_f09_generate_ass_file_structure(tmp_path: Path):
 
 @pytest.mark.tier1
 def test_f09_word_karaoke_kf_tags(tmp_path: Path):
-    """Verify generated dialogue events contain karaoke highlight timing tags ({\kf...} or {\k...})."""
+    r"""Verify generated dialogue events contain karaoke highlight timing tags ({\kf...} or {\k...})."""
     sub_file = PROJECT_ROOT / "src" / "media" / "subtitles_ass.py"
     if sub_file.exists():
         from src.media.subtitles_ass import ASSSubtitleGenerator

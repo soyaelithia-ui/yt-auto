@@ -879,6 +879,10 @@ def upload_video_via_playwright(
                         logger.warning(f"Error closing page: {page_err}")
                 if context:
                     try:
+                        context.clear_cookies()
+                    except Exception:
+                        pass
+                    try:
                         context.close()
                     except Exception as ctx_err:
                         logger.warning(f"Error closing browser context: {ctx_err}")
