@@ -24,6 +24,7 @@ from lib.qa.gates import (
     VisualQualityGate,
     XfadeCoverageGate,
 )
+from lib.qa.diversity_gate import LuminanceContrastGate, SceneDiversityGate
 from lib.qa.models import (
     GateResult,
     GateStatus,
@@ -60,6 +61,8 @@ class QualityAuditEngine:
             SceneCadenceGate(),
             XfadeCoverageGate(),
             VisualIntegrityROIGate(),
+            SceneDiversityGate(),
+            LuminanceContrastGate(),
         ]
 
     def audit_media(

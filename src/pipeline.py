@@ -904,36 +904,28 @@ def run_pipeline_once(
                 )
 
                 # Dynamic multi-camera shot progression for loop videos
-                if total_audio_sec > 14.0:
-                    shot_count = max(2, min(4, int(math.ceil(total_audio_sec / 11.0))))
-                    per_shot_dur = round(total_audio_sec / shot_count, 3)
-                    shot_durations = [per_shot_dur] * (shot_count - 1)
-                    shot_durations.append(round(total_audio_sec - sum(shot_durations), 3))
-
-                    scene_bg_list = []
-                    scenes_plan = []
-                    for s_idx in range(shot_count):
-                        shot_path = loop_engine.resolve_loop_video(
-                            target_category,
-                            allow_fallback=True,
-                            orientation=lane.orientation,
-                            seed=s_idx * 101,
-                        )
-                        scene_bg_list.append(str(shot_path))
-                        scenes_plan.append({
-                            "duration": shot_durations[s_idx],
-                            "source": str(shot_path),
-                            "category": str(target_category),
-                            "shot_index": s_idx,
-                        })
-                else:
-                    scene_bg_list = [str(resolved_loop_path)]
+                from src.media.pacing import compute_dynamic_shot_pacing
+                shot_durations = compute_dynamic_shot_pacing(total_audio_sec, orientation=lane.orientation)
+                if not shot_durations:
                     shot_durations = [total_audio_sec]
-                    scenes_plan = [{
-                        "duration": total_audio_sec,
-                        "source": str(resolved_loop_path),
+                shot_count = len(shot_durations)
+
+                scene_bg_list = []
+                scenes_plan = []
+                for s_idx in range(shot_count):
+                    shot_path = loop_engine.resolve_loop_video(
+                        target_category,
+                        allow_fallback=True,
+                        orientation=lane.orientation,
+                        seed=s_idx * 101,
+                    )
+                    scene_bg_list.append(str(shot_path))
+                    scenes_plan.append({
+                        "duration": shot_durations[s_idx],
+                        "source": str(shot_path),
                         "category": str(target_category),
-                    }]
+                        "shot_index": s_idx,
+                    })
 
                 scene_prompts = []
 
@@ -1008,6 +1000,8 @@ def run_pipeline_once(
                     orientation=lane.orientation,
                     include_subtitles=burn_subtitles,
                     stream_copy=stream_copy_mode,
+                    scene_images=scene_bg_list,
+                    shot_durations=shot_durations,
                 )
                 visual_integrity_report = {
                     "passed": True,

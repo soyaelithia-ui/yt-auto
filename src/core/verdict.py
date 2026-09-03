@@ -225,6 +225,8 @@ def _roi_gate(video_path: str) -> GateResultLite:
         from PIL import Image
         import tempfile
 
+        from lib.qa.diversity_gate import audit_frame_luminance
+
         verifier = VisualIntegrityVerifier(sample_fps=1.0)
         with tempfile.TemporaryDirectory(prefix="code_review_roi_") as tmp:
             frames = verifier.extract_frames(video_path, tmp, fps=1.0)
@@ -237,41 +239,57 @@ def _roi_gate(video_path: str) -> GateResultLite:
                     message="ROI gate skipped (no frames extracted)",
                 )
             metrics = []
+            lum_failures = 0
+            valid_frames = 0
             for fp in frames:
                 try:
                     with Image.open(fp) as im:
                         metrics.append(verifier.analyze_frame_roi(im))
+                        valid_frames += 1
+                        lum_ok, _, _, _ = audit_frame_luminance(im)
+                        if not lum_ok:
+                            lum_failures += 1
                 except Exception:
                     continue
-        if not metrics:
+
+            if valid_frames > 0 and (lum_failures / valid_frames >= 0.70):
+                return GateResultLite(
+                    gate_id="visual_integrity_roi",
+                    passed=False,
+                    severity="CRITICAL",
+                    code="ERR_QA_UNDER_ILLUMINATED_SCENE",
+                    message=f"Over 70% of frames ({lum_failures}/{valid_frames}) are under-illuminated / near pitch-black",
+                    threshold_limit=22.0,
+                )
+            if not metrics:
+                return GateResultLite(
+                    gate_id="visual_integrity_roi",
+                    passed=True,
+                    severity="INFO",
+                    code="OK_ROI_NO_METRICS",
+                    message="ROI gate skipped (no frame metrics)",
+                )
+            avg_edge = sum(m.get("edge_density", 0) for m in metrics) / len(metrics)
+            avg_ent = sum(m.get("entropy", 0) for m in metrics) / len(metrics)
+            is_critical = (avg_edge < 1.5) or (avg_ent < 4.0)
+            if is_critical:
+                return GateResultLite(
+                    gate_id="visual_integrity_roi",
+                    passed=False,
+                    severity="CRITICAL",
+                    code="ERR_QA_ROI_LOW_DETAIL",
+                    message=f"ROI fail edge={avg_edge:.2f} ent={avg_ent:.2f}",
+                    metric_value=avg_edge,
+                    threshold_limit=4.0,
+                )
             return GateResultLite(
                 gate_id="visual_integrity_roi",
                 passed=True,
                 severity="INFO",
-                code="OK_ROI_NO_METRICS",
-                message="ROI gate skipped (no frame metrics)",
-            )
-        avg_edge = sum(m.get("edge_density", 0) for m in metrics) / len(metrics)
-        avg_ent = sum(m.get("entropy", 0) for m in metrics) / len(metrics)
-        is_critical = (avg_edge < 1.5) or (avg_ent < 4.0)
-        if is_critical:
-            return GateResultLite(
-                gate_id="visual_integrity_roi",
-                passed=False,
-                severity="CRITICAL",
-                code="ERR_QA_ROI_LOW_DETAIL",
-                message=f"ROI fail edge={avg_edge:.2f} ent={avg_ent:.2f}",
+                code="OK_ROI",
+                message=f"ROI pass edge={avg_edge:.2f} ent={avg_ent:.2f}",
                 metric_value=avg_edge,
-                threshold_limit=4.0,
             )
-        return GateResultLite(
-            gate_id="visual_integrity_roi",
-            passed=True,
-            severity="INFO",
-            code="OK_ROI",
-            message=f"ROI pass edge={avg_edge:.2f} ent={avg_ent:.2f}",
-            metric_value=avg_edge,
-        )
     except Exception as exc:  # noqa: BLE001
         return GateResultLite(
             gate_id="visual_integrity_roi",
@@ -279,6 +297,51 @@ def _roi_gate(video_path: str) -> GateResultLite:
             severity="WARNING",
             code="ERR_QA_ROI_EXCEPTION",
             message=f"ROI gate crashed (treated as warning): {exc}",
+        )
+
+
+def _scene_diversity_gate(work_dir: Optional[str], video_path: str) -> Optional[GateResultLite]:
+    """Audits scene diversity and asset dominance from scene manifest."""
+    if not work_dir:
+        return None
+    wd = Path(work_dir)
+    manifest_p = wd / "scene_manifest.json"
+    if not manifest_p.is_file():
+        manifest_p = wd / "visual_plan.json"
+    if not manifest_p.is_file():
+        return None
+    try:
+        from lib.qa.diversity_gate import audit_scene_diversity
+        dur = 0.0
+        try:
+            from lib.ffmpeg import probe_media
+            pr = probe_media(video_path)
+            dur = pr.duration or 0.0
+        except Exception:
+            dur = 0.0
+        passed, code, msg, _ = audit_scene_diversity(manifest_p, duration_sec=dur)
+        if not passed:
+            return GateResultLite(
+                gate_id="scene_diversity",
+                passed=False,
+                severity="CRITICAL",
+                code=code,
+                message=msg,
+            )
+        return GateResultLite(
+            gate_id="scene_diversity",
+            passed=True,
+            severity="INFO",
+            code=code,
+            message=msg,
+        )
+    except Exception as exc:
+        return GateResultLite(
+            gate_id="scene_diversity",
+            passed=True,
+            severity="WARNING",
+            code="ERR_QA_DIVERSITY_EXCEPTION",
+            message=f"Scene diversity check failed: {exc}",
         )
 
 
@@ -340,6 +403,10 @@ def evaluate_video(
 
     roi = _roi_gate(video_path)
     gates["visual_integrity_roi"] = roi
+
+    scene_div = _scene_diversity_gate(work_dir, video_path)
+    if scene_div is not None:
+        gates["scene_diversity"] = scene_div
 
     thumb = _safe_thumbnail_dimensions(thumbnail_path, video_mode=video_mode)
     if thumb is not None:

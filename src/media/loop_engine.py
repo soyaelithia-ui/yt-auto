@@ -289,7 +289,10 @@ class LoopVideoEngine(BaseVideoCompositor):
                     if f.is_file() and f.stat().st_size > 0
                 ]
                 if valid_files:
-                    logger.info("Found fallback loop video in category '%s': %s", cat_name, valid_files[0].name)
+                    logger.info("Found fallback loop video in category '%s'", cat_name)
+                    if seed is not None:
+                        rng = random.Random(seed)
+                        return rng.choice(valid_files)
                     return valid_files[0]
 
         # 3. Check loose video files in loops root
@@ -562,7 +565,11 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         filter_inputs = []
         for idx, (s_path, s_dur) in enumerate(zip(scene_images, shot_durations)):
-            cmd.extend(["-stream_loop", "-1", "-t", f"{max(0.1, float(s_dur)):.3f}", "-i", str(Path(s_path).resolve())])
+            p = Path(s_path).resolve()
+            if p.suffix.lower() in self.SUPPORTED_IMAGE_EXTENSIONS:
+                cmd.extend(["-loop", "1", "-t", f"{max(0.1, float(s_dur)):.3f}", "-i", str(p)])
+            else:
+                cmd.extend(["-stream_loop", "-1", "-t", f"{max(0.1, float(s_dur)):.3f}", "-i", str(p)])
             filter_inputs.append(
                 f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1,format=yuv420p[v_shot_{idx}];"
             )
@@ -1052,7 +1059,11 @@ class LoopVideoEngine(BaseVideoCompositor):
             pass
 
         scene_images = extra_kwargs.get("scene_images") or manifest_data.get("scene_images")
+        if not scene_images and manifest_data.get("scenes"):
+            scene_images = [sc.get("image_path") or sc.get("source") for sc in manifest_data["scenes"] if isinstance(sc, dict)]
         shot_durations = extra_kwargs.get("shot_durations") or manifest_data.get("shot_durations")
+        if not shot_durations and manifest_data.get("scenes"):
+            shot_durations = [sc.get("duration_sec") or sc.get("duration") for sc in manifest_data["scenes"] if isinstance(sc, dict)]
 
         rendered_file = self.compose(
             audio_path=audio_path,
