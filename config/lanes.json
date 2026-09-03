@@ -60,7 +60,7 @@
       },
       "topic_filter": { "mode": "off" },
       "multistory_collection": true,
-      "visual_pipeline": "director",
+      "visual_pipeline": "loop",
       "qa_profile": "longform",
       "review_content_type": "long_video",
       "padding_themes": ["bosques niebla", "casas abandonadas", "carreteras nocturnas"],
@@ -99,7 +99,7 @@
         "keywords": ["aita", "wibta", "soy el malo", "familia", "boda", "herencia"]
       },
       "multistory_collection": true,
-      "visual_pipeline": "director",
+      "visual_pipeline": "loop",
       "qa_profile": "longform",
       "review_content_type": "long_video",
       "padding_themes": ["salas de estar cálidas", "cafeterías", "oficinas al atardecer"],

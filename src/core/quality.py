@@ -630,10 +630,10 @@ def validate_prepublication(
                 or (len(scenes) == 1 and str(plan.get("mode", "")).lower() == "loop")
             )
             if not is_loop_plan:
-                min_cadence = 2.0 if video_mode == "short" else 7.5
-                max_cadence = 16.5
+                min_cadence = 2.0 if video_mode == "short" else 15.0
+                max_cadence = 16.5 if video_mode == "short" else 45.0
                 if any(value < min_cadence or value > max_cadence for value in scene_durations):
-                    report.issues.append("cadencia visual fuera del intervalo 8-15 segundos")
+                    report.issues.append(f"cadencia visual fuera del intervalo {int(min_cadence)}-{int(max_cadence)} segundos")
             if duration <= 0 or abs(covered - duration) > 1.0:
                 report.issues.append("el plan visual no cubre toda la duración")
             if any(not Path(str(scene.get("source") or "")).is_file() for scene in scenes):
