@@ -2,9 +2,17 @@
 import asyncio
 import os
 import subprocess
+import sys
 import time
 import pytest
 from playwright.async_api import async_playwright
+
+
+def _get_headless_chromium_pids() -> set[str]:
+    res = subprocess.run(["pgrep", "-f", "chromium.*--headless"], capture_output=True, text=True)
+    if res.returncode == 0 and res.stdout.strip():
+        return set(res.stdout.strip().split())
+    return set()
 
 @pytest.mark.asyncio
 async def test_concurrent_headless_contexts_under_stress():
@@ -102,9 +110,10 @@ async def test_multiple_viewports_and_screenshot_rendering():
 
 def test_no_zombie_chromium_processes():
     """Verify all browser instances properly terminate without leaving orphaned processes."""
+    pids_before = _get_headless_chromium_pids()
     # Run a quick isolated subprocess
     subprocess.run([
-        "/home/moku/projects/yt-auto/.venv/bin/python", "-c",
+        sys.executable, "-c",
         "import asyncio\nfrom playwright.async_api import async_playwright\n"
         "async def m():\n"
         "  async with async_playwright() as p:\n"
@@ -114,9 +123,9 @@ def test_no_zombie_chromium_processes():
     ], check=True)
     time.sleep(0.5)
     # Check running chromium processes
-    res = subprocess.run(["pgrep", "-f", "chromium.*--headless"], capture_output=True, text=True)
-    # If any process is running, ensure it's not a leaked zombie from completed tests
-    assert res.returncode != 0 or len(res.stdout.strip()) == 0, f"Detected lingering chromium processes: {res.stdout}"
+    pids_after = _get_headless_chromium_pids()
+    leaked = pids_after - pids_before
+    assert len(leaked) == 0, f"Detected newly leaked chromium processes: {leaked}"
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

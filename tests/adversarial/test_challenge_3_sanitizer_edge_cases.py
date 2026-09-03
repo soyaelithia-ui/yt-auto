@@ -72,7 +72,7 @@ def test_roman_numerals_exhaustive():
         assert cleaned == f"Relato número {rn}"
 
 def test_acto_spacing_edge_case_behavior():
-    """
+    r"""
     Adversarial finding: RE_ACT_CHAPTER_LABELS strips 'Acto 1:' and 'Acto 1-La caída'
     but requires no space before '-' because of pattern:
     r'(?i)\b(?:acto|cap[ií]tulo|secci[oó]n|parte)\s+[a-záéíóú0-9IVXLCDMivxlcdm]+[:\.\-–—]\s*'

@@ -33,7 +33,7 @@ def get_auth_url(
     scopes: Optional[list[str]] = None,
 ) -> str:
     """Generate the official Google OAuth 2.0 authorization URL."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
     if not client_id:
         raise RuntimeError("GOOGLE_CLIENT_ID no está configurado")
 
@@ -71,8 +71,8 @@ def exchange_code(
     scopes: Optional[list[str]] = None,
 ) -> None:
     """Exchange authorization code for tokens and save in official Google format."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_secret = CLIENT_SECRET or os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
         raise RuntimeError(
             "GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben proporcionarse por entorno"
@@ -136,8 +136,8 @@ def run_local_login_flow(
     scopes: Optional[list[str]] = None,
 ) -> None:
     """Run official Google InstalledAppFlow local server for 1-click browser login."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
+    client_id = CLIENT_ID or os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
+    client_secret = CLIENT_SECRET or os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
         raise RuntimeError(
             "GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben proporcionarse por entorno"

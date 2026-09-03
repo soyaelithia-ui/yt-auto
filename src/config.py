@@ -434,11 +434,18 @@ def is_test_environment() -> bool:
 
 # Compatibility constants used by existing modules while the pipeline is migrated.
 BOT_HOME = str(SETTINGS.bot_home)
-PLAYWRIGHT_BROWSERS_PATH = os.environ.get(
-    "PLAYWRIGHT_BROWSERS_PATH",
-    str(SETTINGS.bot_home / ".cache" / "ms-playwright"),
-)
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = PLAYWRIGHT_BROWSERS_PATH
+# Resolve Playwright browsers path without poisoning environment if directory does not exist
+_pw_env = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+if _pw_env:
+    PLAYWRIGHT_BROWSERS_PATH = _pw_env
+elif (SETTINGS.bot_home / ".cache" / "ms-playwright").is_dir():
+    PLAYWRIGHT_BROWSERS_PATH = str(SETTINGS.bot_home / ".cache" / "ms-playwright")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = PLAYWRIGHT_BROWSERS_PATH
+elif (Path.home() / ".cache" / "ms-playwright").is_dir():
+    PLAYWRIGHT_BROWSERS_PATH = str(Path.home() / ".cache" / "ms-playwright")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = PLAYWRIGHT_BROWSERS_PATH
+else:
+    PLAYWRIGHT_BROWSERS_PATH = str(SETTINGS.bot_home / ".cache" / "ms-playwright")
 DEFAULT_DB_PATH = str(SETTINGS.database_path)
 
 # R6: bound FFmpeg thread pools inside the cgroup (cpus=4) unless overridden.
