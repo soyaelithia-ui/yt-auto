@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit - Deterministic anti-regression gate for yt-auto
+# Prevents re-introduction of browser-based rendering or resurrected architecture docs.
+set -euo pipefail
+
+echo "🛡️  [pre-commit] Running yt-auto anti-regression verification..."
+
+# 1. Prohibit any files in docs/architecture/0*.md
+FORBIDDEN_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^docs/architecture/0[1-9].*\.md$' || true)
+if [ -n "$FORBIDDEN_DOCS" ]; then
+    echo "❌ ERROR: Attempting to commit obsolete architecture blueprint:"
+    echo "$FORBIDDEN_DOCS"
+    echo "Please discard these resurrected blueprints. See docs/ARQUITECTURA.md instead."
+    exit 1
+fi
+
+# 2. Prohibit legacy directories from being resurrected
+FORBIDDEN_DIRS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/(rendering|compositing|export)/' || true)
+if [ -n "$FORBIDDEN_DIRS" ]; then
+    echo "❌ ERROR: Attempting to commit to retired legacy subsystem (src/rendering, src/compositing, src/export):"
+    echo "$FORBIDDEN_DIRS"
+    echo "Rendering in v3.1 is handled exclusively by src/media/ (NativeProceduralEngine / LoopVideoEngine)."
+    exit 1
+fi
+
+# 3. Prohibit playwright imports in any media or pipeline source code outside src/youtube/
+VIOLATING_FILES=()
+STAGED_PY_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' | grep -v '^src/youtube/' | grep -v '^tests/' || true)
+
+for file in $STAGED_PY_FILES; do
+    if [ -f "$file" ]; then
+        if grep -E 'import.*playwright|from[[:space:]]+playwright' "$file" > /dev/null 2>&1; then
+            VIOLATING_FILES+=("$file")
+        fi
+    fi
+done
+
+if [ ${#VIOLATING_FILES[@]} -gt 0 ]; then
+    echo "❌ ERROR: Playwright import detected outside src/youtube/ in the following staged file(s):"
+    for vf in "${VIOLATING_FILES[@]}"; do
+        echo "   - $vf"
+    done
+    echo "Playwright is strictly prohibited for media synthesis and pipeline composition."
+    exit 1
+fi
+
+echo "✅ [pre-commit] All anti-regression checks passed cleanly."
+exit 0
