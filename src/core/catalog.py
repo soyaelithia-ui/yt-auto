@@ -248,8 +248,25 @@ class LoopCatalogRepository:
 
         records = [self._row_to_record(r) for r in rows]
 
-        # Validating file existence on disk
-        valid_records = [r for r in records if Path(r.file_path).is_file() and Path(r.file_path).stat().st_size > 0]
+        def _resolve_and_validate(rec: LoopRecord) -> Optional[LoopRecord]:
+            p = Path(rec.file_path)
+            if not p.is_file():
+                if "/home/moku/projects/yt-auto" in str(p):
+                    alt = Path(str(p).replace("/home/moku/projects/yt-auto", "/srv/projects/yt-auto"))
+                    if alt.is_file():
+                        rec.file_path = str(alt)
+                        p = alt
+                elif not p.is_absolute():
+                    alt = Path("/srv/projects/yt-auto") / p
+                    if alt.is_file():
+                        rec.file_path = str(alt)
+                        p = alt
+            if p.is_file() and p.stat().st_size >= 25_000:
+                return rec
+            return None
+
+        # Validating file existence on disk (minimum 25KB to exclude dummy/corrupt loops)
+        valid_records = [r for rec in records if (r := _resolve_and_validate(rec)) is not None]
         if not valid_records:
             return None
 

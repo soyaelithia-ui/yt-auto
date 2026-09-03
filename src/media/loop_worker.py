@@ -136,10 +136,21 @@ class LoopSynthesizerWorker:
         width, height = SHORT_RESOLUTION if orientation in ("vertical", "9:16") else LONGFORM_RESOLUTION
         synth_mp4 = synth_dir / f"loop_{category}_{orientation}_{seed_val}.mp4"
 
+        category_palettes = {
+            "drama_aita": ("0x2d3436", "0x636e72"),
+            "cosmic_horror": ("0x0c101c", "0x2c1f3d"),
+            "scp": ("0x1a252f", "0x34495e"),
+            "dark_forest": ("0x0f2417", "0x1e452e"),
+            "dark_ambient": ("0x181a1b", "0x2f3542"),
+            "monsters": ("0x231515", "0x452222"),
+            "space_abyss": ("0x0a0e17", "0x1d273a"),
+        }
+        c0, c1 = category_palettes.get(category, ("0x181a1b", "0x34495e"))
         import subprocess
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={duration_sec}:r={fps}",
+            "-f", "lavfi", "-i",
+            f"gradients=s={width}x{height}:d={duration_sec}:r={fps}:c0={c0}:c1={c1}:x0=0:y0=0:x1={width}:y1={height}:type=radial:speed=0.02",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "fast",
             "-movflags", "+faststart", str(synth_mp4)
         ]
