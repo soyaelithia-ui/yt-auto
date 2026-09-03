@@ -71,3 +71,13 @@ src/agents/
 > - Todo el contenido animado de fondo debe originarse en motores procedurales WebGL/Canvas (código puro).
 > - Se prohíbe el uso de imágenes fijas de stock para 'rellenar' el video.
 > - Si se requiere presentar entidades reales o marcas oficiales (ej. Fundación SCP, NASA, MIT, OpenAI), deben proyectarse como **badges vectoriales o emblemas en canvas** respetando márgenes seguros y opacidad calibrada.
+
+---
+
+## 5. Cadencia de Verificación y Cláusula de Negativa (Kill Switch)
+
+> [!CAUTION]
+> **Obligación Profesional de Negativa**:
+> Cada **25 commits** o antes de iniciar sesiones mayores y pipelines de producción, es mandatario ejecutar `./scripts/verify_integrity.sh`. Si se detecta cualquier worktree huérfano, import de navegador en renderizado o plano obsoleto, el agente **DEBE NEGARSE A TRABAJAR**, abortar la ejecución y alertar al operador.
+>
+> Ver especificación completa en [docs/POLITICA_GOBERNANZA_ANTI_REGRESION.md](file:///home/moku/projects/yt-auto/docs/POLITICA_GOBERNANZA_ANTI_REGRESION.md).
