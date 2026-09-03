@@ -202,7 +202,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let vignette = 1.0 - smoothstep(0.38, 0.88, d_center) * 0.40;
     color *= vignette;
 
-    color = clamp(color, vec3<f32>(0.0), vec3<f32>(0.85));
+    // --- 9. Photometric Luminance Floor & sRGB Gamma Calibration ---
+    let ambient_floor = vec3<f32>(0.035, 0.055, 0.085);
+    color = max(color, ambient_floor);
+
+    // Convert linear shader output to sRGB gamma transfer characteristic
+    color = pow(color, vec3<f32>(1.0 / 2.2));
+    color = clamp(color, vec3<f32>(0.0), vec3<f32>(0.95));
 
     return vec4<f32>(color, 1.0);
 }

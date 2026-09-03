@@ -375,14 +375,31 @@ def build_moku_longform_narrative(
             "La curiosidad humana nos empuja con frecuencia a explorar territorios prohibidos, pero hay umbrales que jamás deberían ser cruzados por nuestra propia integridad mental y espiritual. "
             "El costo de mirar fijamente hacia el abismo es que tarde o temprano el abismo encuentra la manera de devolverte la mirada."
         ),
-        # Beat 12: Final Philosophical Conclusion
+        # Beat 12: Anomalous Audio Decryption & Mimetic Feedback
+        (
+            "Al revisar los registros de audio digitalizados semanas después de abandonar el valle, descubrí una anomalía aún más perturbadora en las pistas de baja frecuencia que la consola había guardado automáticamente en los discos magnéticos. "
+            "Al aplicar un filtro de paso bajo y ralentizar la velocidad de reproducción a la mitad, los crujidos que al principio parecían simple ruido de estática revelaban frases completas moduladas en un tono monótono y desprovisto de entonación biológica. "
+            "Eran fragmentos de conversaciones que yo mismo había mantenido en la intimidad de mi cabina meses atrás, repitiendo palabras exactas que jamás pronuncié frente a los micrófonos de transmisión abierta. "
+            "Aquella entidad no solo emitía señales para desorientar a los guardias forestales, sino que absorbía, procesaba y reconfiguraba la acústica del entorno inmediato como un organismo mimético que aprende a replicar la psique de sus presas. "
+            "La confirmación de que la estación entera funcionaba como una caja de resonancia para amplificar esa captación me provocó un escalofrío que todavía hoy me paraliza cuando intento conciliar el sueño en la oscuridad de mi dormitorio."
+        ),
+        # Beat 13: Classified Scientific Reports & Containment Protocols
+        (
+            "Un antiguo informe técnico redactado en mil novecientos setenta y ocho por un comité científico independiente señalaba que las lecturas electromagnéticas del cuadrante norte mostraban picos de resonancia imposibles de reproducir con generadores convencionales. "
+            "El documento advertía textualmente sobre fluctuaciones dimensionales periódicas que alteran la percepción temporal de los observadores y provocan la descomposición gradual de los circuitos de silicio en los equipos de medición. "
+            "El protocolo recomendado por los especialistas militares de la época no era la intervención directa ni el desmantelamiento de la estructura, sino el aislamiento perimetral estricto y la evacuación silenciosa de cualquier testigo presencial para evitar histeria colectiva. "
+            "Comprender que mi labor en la estación formaba parte de una cadena ininterrumpida de experimentos sacrificables me despojó de cualquier fe residual en los protocolos oficiales de seguridad institucional. "
+            "Las autoridades prefirieron mantener en funcionamiento una estación fantasma antes que admitir ante la opinión pública la presencia de una manifestación que desafía las leyes conocidas de la física cuántica."
+        ),
+        # Beat 14: Final Philosophical Conclusion
         (
             "El mundo que creemos conocer y controlar mediante la tecnología no es más que una delgada capa superficial sobre realidades mucho más antiguas y oscuras que escapan a nuestro entendimiento. "
             "Aprender a escuchar las advertencias del entorno y respetar los límites de lo desconocido es una lección que aprendí al borde del abismo y que jamás olvidaré mientras viva. "
             "Si alguna vez te encuentras en un camino solitario y escuchas que tu propio nombre resuena en una frecuencia muerta, no intentes buscar una explicación lógica: apaga el receptor y corre de inmediato. "
-            "No permitas que la duda te paralice ni intentes averiguar quién está al otro lado de la línea, porque algunas transmisiones están diseñadas para atrapar tu mente antes de que puedas darte cuenta."
+            "No permitas que la duda te paralice ni intentes averiguar quién está al otro lado de la línea, porque algunas transmisiones están diseñadas para atrapar tu mente antes de que puedas darte cuenta. "
+            "La frontera entre la curiosidad y la condenación es a menudo tan estrecha como una sola frecuencia mal sintonizada en la noche."
         ),
-        # Beat 13: Outro & Community Conclusion
+        # Beat 15: Outro & Community Conclusion
         (
             "Llegamos al final de este testimonio sobrecogedor y los registros de audio quedan archivados para el análisis de los investigadores en anomalías. "
             f"El expediente completo y las actualizaciones sobre este fenómeno en la estación de montaña permanecen custodiados en {ch_handle}."
@@ -521,9 +538,43 @@ def build_aelithia_longform_narrative(
             "En primer lugar, mantén siempre tus finanzas personales independientes y no compartas contraseñas bancarias ni firmes como aval de créditos ajenos bajo ninguna circunstancia. "
             "En segundo lugar, comunica tus decisiones con calma y sin justificaciones excesivas; un 'no' firme y educado no necesita un discurso defensivo para ser válido ante la insistencia ajena. "
             "Y en tercer lugar, busca apoyo en círculos externos de confianza que puedan ofrecerte una perspectiva objetiva y libre del sesgo emocional propio de los conflictos familiares. "
+            "Asimismo, establece un fondo de emergencia reservado exclusivamente para imprevistos personales que nadie más pueda reclamar o condicionar en momentos de tensión. "
+            "Aprender a tolerar el silencio incómodo tras una negativa es mucho más saludable que pronunciar un sí apresurado del que te arrepentirás durante los próximos diez años de tu vida adulta. "
             "Recordar que proteger tu propio bienestar y tu estabilidad financiera es una responsabilidad personal ineludible te brindará la fuerza necesaria para sostener tus convicciones frente a cualquier intento de manipulación afectiva."
         ),
-        # Beat 14: Outro & Community Perspective
+        # Beat 14: The Pattern of Enmeshment in Toxic Dynamics
+        (
+            "Al profundizar en el trasfondo de estos tres casos, los especialistas en dinámicas relacionales identifican un patrón común denominado apego disfuncional por derecho adquirido. "
+            "En este tipo de entornos, la individualidad de los miembros con mayor éxito o disciplina financiera es percibida como una afrenta directa a la cohesión del grupo familiar. "
+            "La familia no tolera que uno de sus integrantes establezca prioridades personales que se aparten del rescate colectivo, pues cualquier avance independiente es interpretado como un acto de deserción intolerable. "
+            "Quienes ejercen esta manipulación recurren a frases cargadas de chantaje moral como: 'Recuerda de dónde vienes', 'Nunca olvides lo que la familia hizo por ti', o 'El dinero te ha cambiado por completo'. "
+            "Estas expresiones buscan sembrar una duda paralizante en quien intenta actuar con sensatez, haciéndole sentir culpable por proteger lo que le pertenece legítimamente. "
+            "Superar este condicionamiento exige comprender que la verdadera gratitud filial no se demuestra hipotecando tu presente ni permitiendo que otros vivan por encima de sus posibilidades a costa de tu salud física y mental."
+        ),
+        # Beat 15: The Critical Distinction Between Help and Complicity
+        (
+            "Una de las conclusiones más esclarecedoras que emergen del análisis de estos dilemas es la diferencia tajante entre la ayuda solidaria y la complicidad destructiva. "
+            "Ayudar a un ser querido significa brindarle herramientas para que supere una crisis temporal imprevista, como una enfermedad grave o un accidente inevitable. "
+            "Por el contrario, asumir deudas contraídas por negligencia reiterada, rescatar a parientes que se niegan a trabajar con seriedad o ceder ante exigencias caprichosas para mantener una falsa imagen social ante el vecindario no es ayuda: es alimentar una adicción a la irresponsabilidad que nunca tendrá fondo. "
+            "Cada vez que cedes a un rescate forzado, estás privando a la otra persona de la oportunidad indispensable de madurar y asumir el costo de sus propias decisiones vitales. "
+            "Los límites firmes, aunque sean recibidos con insultos y acusaciones de falta de empatía al principio, constituyen en última instancia el único acto de amor auténtico y transformador que puede salvar a un sistema familiar de la ruina compartida."
+        ),
+        # Beat 16: Audience Verdicts and Collective Wisdom
+        (
+            "En los foros de debate y en los comentarios de nuestra comunidad, miles de personas que atravesaron encrucijadas semejantes han dejado testimonios que reflejan una profunda sabiduría colectiva. "
+            "Un usuario resumía con gran lucidez: 'Pasé quince años pagando los créditos de mi hermano menor para que mis padres no sufrieran, hasta que me quedé sin trabajo y ninguno de ellos estuvo dispuesto a prestarme ni para la comida del mes; ese día abrí los ojos y entendí que mi valor para ellos solo era económico'. "
+            "Otro testimonio recurrente señalaba: 'Cancelar una boda a tiempo o demandar a un pariente usurpador parece el fin del mundo cuando estás en medio del ojo del huracán, pero cinco años después agradeces de rodillas haber tenido el coraje de no condenar tu futuro'. "
+            "Escuchar estas experiencias compartidas nos recuerda que no estamos solos en el dolor de poner límites y que el rechazo temporal de parientes manipuladores es un precio insignificante comparado con la paz innegociable de vivir según tus propios términos y principios éticos."
+        ),
+        # Beat 17: Concluding Philosophical Reflections on Self-Preservation
+        (
+            "La vida adulta nos coloca inevitablemente frente a la prueba decisiva de definir quiénes somos y qué estamos dispuestos a tolerar en nombre del afecto filial. "
+            "Nadie tiene el derecho de exigir que sacrifiques tus años de juventud, tu tranquilidad nocturna o el patrimonio destinado a tus propios hijos simplemente para evitar una escena incómoda en una reunión de fin de año. "
+            "La lealtad debe ser un camino de ida y vuelta sustentado en el respeto irrestricto, la reciprocidad y la honestidad más profunda. "
+            "Cuando un vínculo exige que te anules a ti mismo para que otros prosperen sin esfuerzo, deja de ser una relación familiar para convertirse en un régimen de explotación emocional inaceptable. "
+            "Aprende a bendecir el camino de quienes deciden apartarse porque no pudieron obtener ventajas materiales de tu presencia, y camina con la serenidad absoluta de quien ha actuado con integridad, prudencia y amor propio."
+        ),
+        # Beat 18: Outro & Community Perspective
         (
             f"El debate en torno a los límites personales, las herencias y los acuerdos patrimoniales continúa abierto para toda la comunidad de reflexiones éticas y relaciones en el espacio de {ch_handle}."
         ),

@@ -316,7 +316,14 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         # MP4 con moov atom, resolución exacta y miniatura válida.
         report = MagicMock()
         report.require_pass.return_value = None
-        with patch("src.pipeline.validate_prepublication", return_value=report):
+        def fake_multiscene(manifest_path, output_video_path, **kwargs):
+            from pathlib import Path
+            out = Path(output_video_path)
+            out.write_bytes(b"MP4")
+            return {"rendered_scenes": 5, "output_path": str(out), "duration_sec": 605.0}
+
+        with patch("src.pipeline.validate_prepublication", return_value=report), \
+             patch("src.media.compositor.MultiSceneCompositor.render", side_effect=fake_multiscene):
             res = run_pipeline_once(channel="aelithia", db_path=self.db_path, lane_id="aelithia-aita-long")
 
         self.assertEqual(res["status"], "SUCCESS")

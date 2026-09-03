@@ -315,10 +315,12 @@ def run_pipeline_once(
     profiler.story_id = story_id
 
     # Resolve composition engine mode (defaults to "loop")
+    lane_visual_pipeline = getattr(lane, "visual_pipeline", None)
     engine_mode = (
         video_engine
         or compositor
         or getattr(lane, "video_engine", None)
+        or lane_visual_pipeline
         or os.environ.get("VIDEO_ENGINE")
         or os.environ.get("COMPOSITION_ENGINE")
         or os.environ.get("COMPOSITOR")
@@ -326,9 +328,15 @@ def run_pipeline_once(
         or getattr(SETTINGS, "short_compositor", None)
         or "loop"
     ).strip().lower()
-    is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor")
-    is_multiscene_mode = engine_mode in ("multiscene", "multi_scene", "multi_scene_compositor", "dual_engine", "hybrid", "procedural")
+    is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "beats")
+    is_multiscene_mode = engine_mode in ("director", "multiscene", "multi_scene", "multi_scene_compositor", "dual_engine", "hybrid", "procedural")
     is_supported_engine = is_loop_mode or is_multiscene_mode
+
+    if not is_supported_engine:
+        raise ValueError(
+            f"video_engine={engine_mode!r} is not supported. "
+            "Supported engine modes: 'director', 'multiscene', 'hybrid', 'procedural', or 'loop'."
+        )
 
     # Subtitles are optional and disabled by default
     if enable_subtitles is None:
@@ -704,6 +712,12 @@ def run_pipeline_once(
                         f'del carril {lane.id} incluso tras auto-expansión; fallo temprano pre-render'
                     )
 
+            if is_long_lane and float(audio["duration_sec"]) < float(lane.duration_min_sec):
+                raise ValueError(
+                    f'Audio {float(audio["duration_sec"]):.1f}s < mínimo {float(lane.duration_min_sec):.0f}s '
+                    f'del carril {lane.id}; fallo temprano pre-render'
+                )
+
             repository.record_artifact(
                 run_id,
                 "audio",
@@ -774,7 +788,7 @@ def run_pipeline_once(
                 script_payload = curator_agent.curate(
                     raw_text=clean_script,
                     title=title,
-                    channel_lane=lane.name,
+                    channel_lane=lane.id,
                     target_format=target_fmt,
                 )
                 (work_dir / "cinematic_script.json").write_text(
@@ -822,7 +836,7 @@ def run_pipeline_once(
                     narration_path=str(audio_path),
                     music_path=str(music_track_path) if music_track_path else "",
                     music_volume=bg_volume,
-                    lane_id=lane.name,
+                    lane_id=lane.id,
                     channel_name=channel_name,
                     resolution=list(lane.expected_resolution),
                     fps=lane.fps,

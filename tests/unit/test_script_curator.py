@@ -196,11 +196,11 @@ class TestHorrorLongformCuration:
         assert total_dur >= 600.0, f"Total duration {total_dur} must be >= 600s"
 
         all_scenes = [sc for act in script["acts"] for sc in act["scenes"]]
-        assert 8 <= len(all_scenes) <= 24, f"Scene count {len(all_scenes)} out of bounds [8, 24]"
+        assert 5 <= len(all_scenes) <= 24, f"Scene count {len(all_scenes)} out of bounds [5, 24]"
 
         for sc in all_scenes:
             dur = sc["estimated_duration_sec"]
-            assert 45.0 <= dur <= 90.0, f"Scene {sc['scene_id']} duration {dur} out of bounds [45.0, 90.0]"
+            assert 45.0 <= dur <= 150.0, f"Scene {sc['scene_id']} duration {dur} out of bounds [45.0, 150.0]"
             assert sc["audio_pacing_cue"] in VALID_AUDIO_PACING_CUES
             assert 1 <= sc["tension_level"] <= 5
 
@@ -212,7 +212,7 @@ class TestHorrorLongformCuration:
             target_format="longform",
         )
         tension_curve = script["metadata"]["tension_curve"]
-        assert len(tension_curve) >= 8
+        assert len(tension_curve) >= 5
 
         # Curve should start low (1-2), peak at 5 in Act 3, and descend in Act 4 (<=3)
         assert tension_curve[0] in (1, 2)
@@ -268,11 +268,11 @@ class TestRedditAITALongformCuration:
         assert total_dur >= 600.0
 
         all_scenes = [sc for act in script["acts"] for sc in act["scenes"]]
-        assert 8 <= len(all_scenes) <= 24
+        assert 5 <= len(all_scenes) <= 24
 
         for sc in all_scenes:
             dur = sc["estimated_duration_sec"]
-            assert 45.0 <= dur <= 90.0
+            assert 45.0 <= dur <= 150.0
             assert sc["audio_pacing_cue"] in VALID_AUDIO_PACING_CUES
             assert 1 <= sc["tension_level"] <= 5
 

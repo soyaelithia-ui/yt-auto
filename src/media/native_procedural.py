@@ -224,10 +224,23 @@ class NativeProceduralEngine:
                     custom_2 = float(params["custom_2"])
                 if "custom_3" in params:
                     custom_3 = float(params["custom_3"])
-                if "accent_color" in params:
-                    ac = params["accent_color"]
-                    if isinstance(ac, (list, tuple)) and len(ac) >= 3:
-                        accent_r, accent_g, accent_b = float(ac[0]), float(ac[1]), float(ac[2])
+                if "kelvin" in params:
+                    try:
+                        custom_1 = float(params["kelvin"]) / 10000.0
+                    except (ValueError, TypeError):
+                        pass
+
+                raw_accent = params.get("accent_color") or params.get("accentColor") or params.get("u_palette_accent")
+                if raw_accent is not None:
+                    if isinstance(raw_accent, (list, tuple)) and len(raw_accent) >= 3:
+                        accent_r, accent_g, accent_b = float(raw_accent[0]), float(raw_accent[1]), float(raw_accent[2])
+                    elif isinstance(raw_accent, str) and raw_accent.startswith("#") and len(raw_accent) == 7:
+                        try:
+                            accent_r = int(raw_accent[1:3], 16) / 255.0
+                            accent_g = int(raw_accent[3:5], 16) / 255.0
+                            accent_b = int(raw_accent[5:7], 16) / 255.0
+                        except ValueError:
+                            pass
                 if "accent_r" in params:
                     accent_r = float(params["accent_r"])
                 if "accent_g" in params:
@@ -342,7 +355,7 @@ class NativeProceduralEngine:
             str(out_p),
         ]
 
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         buf = np.empty((height, width, 4), dtype=np.uint8)
 
         try:
@@ -363,13 +376,52 @@ class NativeProceduralEngine:
                     proc.stdin.write(buf.tobytes())
             if proc.stdin:
                 proc.stdin.close()
-            proc.wait()
+            stderr = proc.stderr.read() if proc.stderr else b""
+            ret = proc.wait()
+            if ret != 0:
+                err_msg = stderr.decode("utf-8", errors="replace") if stderr else "Unknown error"
+                raise RuntimeError(f"FFmpeg render failed with exit code {ret}: {err_msg}")
         except Exception:
             if proc.poll() is None:
                 proc.kill()
+                try:
+                    proc.wait(timeout=2.0)
+                except Exception:
+                    pass
             raise
 
         return out_p
+
+    def render_loop(
+        self,
+        template_name: Optional[str] = None,
+        category: Optional[str] = None,
+        orientation: Optional[str] = None,
+        width: int = 1080,
+        height: int = 1920,
+        duration_sec: float = 6.0,
+        fps: int = 30,
+        output_path: Union[str, Path] = "output.mp4",
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Path:
+        """Compatibility wrapper conforming to ProceduralVideoEngine renderer contract."""
+        arch_id = template_name if (template_name and template_name in VALID_ARCHETYPES) else (category or "dark_forest")
+        if arch_id not in VALID_ARCHETYPES:
+            arch_id = "dark_forest"
+        tension = int(params.get("tension", 1)) if params else 1
+        seed = int(params.get("seed", 42)) if params else 42
+        return self.render_video_loop(
+            archetype_id=arch_id,
+            output_path=output_path,
+            duration_sec=duration_sec,
+            fps=fps,
+            width=width,
+            height=height,
+            tension=tension,
+            seed=seed,
+            params=params,
+        )
 
     def close(self) -> None:
         """Release device resources and cached buffers."""

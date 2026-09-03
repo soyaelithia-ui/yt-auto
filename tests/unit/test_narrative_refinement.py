@@ -22,8 +22,8 @@ def test_moku_longform_first_person_no_headers():
     topic = "La Estación de Radio Olvidada"
     script = build_moku_longform_narrative(topic, channel="moku")
     
-    # Assert rich length and first-person perspective
-    assert len(script.split()) >= 1000
+    # Assert rich length and first-person perspective (calibrated for >=10 minutes)
+    assert len(script.split()) >= 2800
     assert "mi memoria" in script or "mi labor" in script or "mi puesto" in script
     # Assert absence of robotic section headers
     assert "Sección Primera" not in script
@@ -36,8 +36,8 @@ def test_aelithia_longform_multi_case_with_dialogue():
     topic = "El Testamento de la Abuela"
     script = build_aelithia_longform_narrative(topic, channel="aelithia")
     
-    # Assert multi-case structure
-    assert len(script.split()) >= 900
+    # Assert multi-case structure calibrated for >=10 minutes (>=2800 words)
+    assert len(script.split()) >= 2800
     assert "primer caso" in script.lower()
     assert "segundo caso" in script.lower()
     assert "tercer" in script.lower()

@@ -124,6 +124,9 @@
                     "intense_urgent",
                     "whispered_grave"
                   ]
+                },
+                "transition_reason": {
+                  "type": "string"
                 }
               },
               "required": [

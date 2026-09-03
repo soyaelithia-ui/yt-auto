@@ -141,3 +141,90 @@ def conn_one(db_path: str, sql: str) -> str | None:
     with connect(db_path, read_only=True) as conn:
         row = conn.execute(sql).fetchone()
     return row[0] if row else None
+
+
+def test_directed_longform_enforces_minimum_duration_gate(db_path, monkeypatch):
+    """Test that a directed run on a longform lane fails closed when audio < min_sec."""
+    from unittest.mock import MagicMock
+    from src.pipeline import run_pipeline_once
+
+    _seed_story(db_path, "directed-short-audio-01", channel="aelithia")
+
+    monkeypatch.setattr("src.llm.curate_script", lambda *a, **kw: "Guion corto.")
+    monkeypatch.setattr("src.llm.curate_batch_json", lambda *a, **kw: {
+        "title": "Titulo", "script": "Guion corto.", "seo": {"description": "Desc"}
+    })
+    monkeypatch.setattr("src.llm.translate_title", lambda *a, **kw: "Titulo Traducido")
+
+    def fake_short_audio(*args, **kwargs):
+        from pathlib import Path
+        out_path = args[1] if len(args) > 1 else kwargs.get("out_path", "/tmp/short.wav")
+        Path(out_path).write_bytes(b"WAV")
+        return {"duration_sec": 180.0, "word_timestamps": []}
+
+    monkeypatch.setattr("lib.tts.generate_audio", fake_short_audio)
+
+    res = run_pipeline_once(
+        channel="aelithia",
+        story_id="directed-short-audio-01",
+        lane_id="aelithia-aita-long",
+        db_path=db_path,
+        generate_only=True,
+    )
+    assert res["status"] == "RETRYABLE_FAILED"
+    assert "Audio 180.0s < mínimo 600s" in res["reason"]
+
+
+def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeypatch):
+    """Test that a directed run on a longform lane passes duration gate when audio >= min_sec."""
+    from unittest.mock import MagicMock
+    from pathlib import Path
+    from src.pipeline import run_pipeline_once
+
+    _seed_story(db_path, "directed-long-audio-01", channel="aelithia")
+
+    monkeypatch.setattr("src.llm.curate_script", lambda *a, **kw: "Guion suficientemente largo.")
+    monkeypatch.setattr("src.llm.curate_batch_json", lambda *a, **kw: {
+        "title": "Titulo", "script": "Guion suficientemente largo.", "seo": {"description": "Desc"}
+    })
+    monkeypatch.setattr("src.llm.translate_title", lambda *a, **kw: "Titulo Traducido")
+
+    def fake_long_audio(*args, **kwargs):
+        out_path = args[1] if len(args) > 1 else kwargs.get("out_path", "/tmp/long.wav")
+        Path(out_path).write_bytes(b"WAV")
+        return {"duration_sec": 605.0, "word_timestamps": []}
+
+    def fake_subs(*args, **kwargs):
+        out_path = args[1] if len(args) > 1 else kwargs.get("out_path", "/tmp/sub.ass")
+        Path(out_path).write_text("[Script Info]\n", encoding="utf-8")
+
+    def fake_multiscene(*args, **kwargs):
+        out_p = kwargs.get("output_video_path") or (args[2] if len(args) > 2 else args[1])
+        out = Path(out_p)
+        out.write_bytes(b"MP4")
+        return {"rendered_scenes": 5, "output_path": str(out), "duration_sec": 605.0}
+
+    def fake_thumb(*args, **kwargs):
+        from PIL import Image
+        out_path = args[-1] if args else kwargs.get("output_path", "/tmp/thumb.jpg")
+        Image.new("RGB", (768, 1360), "red").save(out_path)
+        return str(out_path)
+
+    report = MagicMock()
+    report.require_pass.return_value = None
+
+    monkeypatch.setattr("lib.tts.generate_audio", fake_long_audio)
+    monkeypatch.setattr("lib.subtitles.create_subtitles", fake_subs)
+    monkeypatch.setattr("lib.subtitles.create_ass_subtitles", fake_subs)
+    monkeypatch.setattr("lib.video.create_video_thumbnail", fake_thumb)
+    monkeypatch.setattr("src.media.compositor.MultiSceneCompositor.render", fake_multiscene)
+    monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
+
+    res = run_pipeline_once(
+        channel="aelithia",
+        story_id="directed-long-audio-01",
+        lane_id="aelithia-aita-long",
+        db_path=db_path,
+        generate_only=True,
+    )
+    assert res["status"] in {"RENDERED", "SUCCESS"}

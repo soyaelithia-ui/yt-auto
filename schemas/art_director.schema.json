@@ -230,6 +230,23 @@
               "negative_prompt"
             ],
             "additionalProperties": false
+          },
+          "archetype_id": {
+            "type": "string",
+            "enum": [
+              "arcade_vector_flight",
+              "arctic_desolation",
+              "cosmic_singularity",
+              "cozy_hearth",
+              "dark_forest",
+              "maritime_lighthouse",
+              "parkour_runner",
+              "synaptic_network",
+              "tactical_chamber"
+            ]
+          },
+          "uniform_params": {
+            "type": "object"
           }
         },
         "required": [

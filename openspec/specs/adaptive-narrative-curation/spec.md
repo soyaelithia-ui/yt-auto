@@ -42,8 +42,8 @@ The narrative engine MUST evaluate and assign discrete tension scores strictly b
 - **Then** the engine MUST clamp all values to $[1, 5]$
 - **And** the engine MUST smooth abrupt step jumps ($\Delta T > 2$) using monotonic easing to preserve narrative dramatic pacing.
 
-### Requirement 3: Semantic Scene Segmentation and Timing Bounds
-The narrative curator MUST segment full narration scripts into discrete semantic scene acts where each individual scene duration satisfies $8.0\text{s} \le \text{duration} \le 15.0\text{s}$ for vertical Short formats (or $45.0\text{s} \le \text{duration} \le 90.0\text{s}$ for longform formats). Scene splitting MUST occur along natural linguistic boundaries (sentences, clauses, or terminal punctuation) and MUST calculate durations using calibrated delivery rates ($150\text{ WPM} \le \text{WPM} \le 175\text{ WPM}$).
+### Requirement 3: Semantic Scene Segmentation, Storyboard Montage, and Timing Bounds
+The narrative curator MUST segment full narration scripts into discrete semantic scene acts based on narrative storyboarding rather than fixed arithmetic intervals. For vertical Shorts, each scene duration MUST satisfy $8.0\text{s} \le \text{duration} \le 15.0\text{s}$ (3 to 5 scenes). For longform productions (10–15 minutes), the curator MUST define between 5 and 8 semantic story scenes ($60.0\text{s} \le \text{duration} \le 150.0\text{s}$) corresponding to major plot milestones, each specifying narrative location, dramatic objective, and scene transition reason. Scene cuts MUST occur strictly at sentence or paragraph boundaries and MUST NOT split sentences mid-clause.
 
 #### Scenario: Semantic segmentation of vertical Short narration (Happy Path)
 - **Given** a voiceover script containing 120 words configured for vertical format at 160 WPM (~45 seconds total)
@@ -57,6 +57,13 @@ The narrative curator MUST segment full narration scripts into discrete semantic
 - **When** scene segmentation executes
 - **Then** the curator MUST merge the short phrase with the preceding scene rather than creating a sub-8.0s orphan scene
 - **And** the resulting merged scene duration MUST NOT exceed the 15.0s ceiling.
+
+#### Scenario: Longform storyboard montage structure compilation (Happy Path)
+- **Given** a 12-minute longform narrative script
+- **When** the curator compiles the narrative storyboard
+- **Then** the curator MUST produce between 5 and 8 sequential scene acts
+- **And** each scene act MUST have an assigned duration between 60.0s and 150.0s
+- **And** each scene act MUST declare an explicit transition reason and setting archetype.
 
 ### Requirement 4: Rec.709 Color-Palette and Visual Atmosphere Mapping
 The narrative curator and art director MUST map each curated scene's theme lane and tension score to an ITU-R BT.709 (Rec.709) compliant color palette specification. The visual specification MUST define primary, secondary, accent, shadow, and highlight hex colors, color temperature in Kelvin ($3000\text{K} \le K \le 7000\text{K}$), designated 3D LUT profile names, and volumetric atmospheric particle parameters.
@@ -85,3 +92,35 @@ The narrative curator MUST synthesize Short narrative scripts calibrated strictl
 - **And** the word count MUST satisfy $115 \le \text{word\_count} \le 145$
 - **And** the script MUST terminate on a seamless syntactic connector.
 
+### Requirement 6: Upstream Archetype and Visual Intent Resolution
+The narrative curator and art director MUST explicitly resolve and assign visual archetype tokens and tension ratings during script curation, eliminating downstream heuristic regex keyword matching in scene planning.
+
+#### Scenario: Explicit archetype propagation to scene contract (Happy Path)
+- **Given** a curated narrative act set in an underground bunker
+- **When** the art director generates the scene visual contract
+- **Then** the contract MUST contain explicit archetype `"tactical_chamber"` and tension level
+- **And** the planner MUST use the assigned archetype without evaluating regex pattern rules on voiceover text.
+
+#### Scenario: Unrecognized setting intent fallback (Edge Case)
+- **Given** an abstract or surreal scene description without a direct archetype mapping
+- **When** visual archetype resolution runs
+- **Then** the engine MUST assign the closest atmospheric fallback archetype (`"dark_forest"` or `"cosmic_singularity"`) based on tension score.
+
+
+### Requirement 7: Longform Narrative Word Budget and Minimum Duration Gate
+Longform narrative generation templates MUST provide at least 2,800 words across structured dramatic beats to ensure speech synthesis reliably reaches at least 600 seconds (10 minutes) at Spanish speech delivery cadence. Furthermore, the pipeline orchestrator MUST enforce an early pre-render gate validating that audio duration is at least 600.0s for all longform lanes, including directed runs.
+
+#### Scenario: Longform narrative template word count calibration (Happy Path)
+- **Given** a longform topic for Aelithia or Moku
+- **When** narrative generation is executed
+- **Then** the produced script MUST contain >= 2,800 words across structured dramatic beats.
+
+#### Scenario: Directed execution minimum duration enforcement (Happy Path)
+- **Given** a directed run on a longform lane
+- **When** the synthesized audio duration is < 600.0s
+- **Then** the pipeline MUST fail closed with early pre-render rejection.
+
+#### Scenario: Directed execution passes gate when duration meets threshold (Happy Path)
+- **Given** a directed run on a longform lane with audio >= 600.0s
+- **When** duration validation executes
+- **Then** the pipeline MUST proceed to subtitle and video rendering.

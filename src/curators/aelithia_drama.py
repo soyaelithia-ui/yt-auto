@@ -35,7 +35,7 @@ class AelithiaDramaCurator(INarrativeCurator):
         return f"{hook}\n\n{body}\n\n{outro}"
 
     def build_longform_narrative(
-        self, topic: str, target_words: int = 1800, **kwargs: Any
+        self, topic: str, target_words: int = 2600, **kwargs: Any
     ) -> str:
         from src.templates.narratives import build_aelithia_longform_narrative
         return build_aelithia_longform_narrative(topic, channel=self.channel, **kwargs)

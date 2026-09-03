@@ -90,3 +90,27 @@ The `ThumbnailEngine` and `AdaptiveSubjectCompositor` MUST composite setting-acc
 - **Given** a story set at a lighthouse or sea cliff
 - **When** a thumbnail is generated
 - **Then** the compositor places a solitary coastal keeper with lantern overlooking the sea with accent rim lighting.
+
+### Requirement 10: Orchestrator Pipeline Mode and Lane Config Alignment
+The orchestrator in `src/pipeline.py` MUST correctly resolve lane video engine specifications across both `visual_pipeline` and `video_engine` configuration keys. When a lane specifies `"director"` or `"multiscene"`, the pipeline MUST instantiate and dispatch the render workflow through `MultiSceneCompositor` connected to `NativeProceduralEngine`. If a channel config specifies an unrecognized engine mode, the pipeline MUST fail early with a clear validation error rather than silently defaulting to a 6-second static loop.
+
+#### Scenario: Channel with director pipeline dispatches multiscene compositor (Happy Path)
+- **Given** a channel lane configuration specifying `"visual_pipeline": "director"`
+- **When** the pipeline orchestrator initializes the video render phase
+- **Then** `engine_mode` MUST resolve to `"director"` (or `"multiscene"`)
+- **And** the pipeline MUST invoke `MultiSceneCompositor` rather than `LoopVideoEngine`.
+
+#### Scenario: Unrecognized engine mode configuration detection (Error State)
+- **Given** a channel configuration with an invalid engine string `"unknown_engine"`
+- **When** the pipeline validates configuration during initialization
+- **Then** the pipeline MUST raise a `ValueError` detailing the invalid engine mode
+- **And** execution MUST NOT proceed with silent fallback to static loop mode.
+
+### Requirement 11: Unit Test Compositor Isolation and Hermetic Execution
+Unit tests verifying daemon orchestration, CLI commands, and safety assertions MUST NOT invoke live WebGPU software rasterization (Lavapipe) or FFmpeg encoding for longform video durations (>=600s). MultiSceneCompositor.render MUST be mocked to return a placeholder video artifact in unit tests, preserving sub-second execution speed and zero orphan processes.
+
+#### Scenario: Multi-scene compositor isolation in unit test suite (Happy Path)
+- **Given** a unit test orchestrating daemon or safety pipeline execution
+- **When** pipeline execution triggers video rendering on a longform lane
+- **Then** the compositor MUST be mocked to return placeholder video without invoking FFmpeg or WebGPU software rasterization
+- **And** the unit test MUST complete in under 4 seconds.

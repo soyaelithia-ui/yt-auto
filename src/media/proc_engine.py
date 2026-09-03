@@ -167,7 +167,13 @@ class ProceduralVideoEngine(BaseVideoCompositor):
         category = self._resolve_category(scene.environment_name, cfg.template_name, lane_id)
 
         # 2. Check catalog for pre-rendered loop only if template_name is not an explicit archetype
-        is_archetype_template = bool(cfg.template_name and "archetype_" in cfg.template_name)
+        wgsl_archetypes = {
+            "tactical_chamber", "dark_forest", "arctic_desolation", "cosmic_singularity",
+            "arcade_vector_flight", "parkour_runner", "cozy_hearth", "synaptic_network", "maritime_lighthouse",
+        }
+        is_archetype_template = bool(
+            cfg.template_name and ("archetype_" in cfg.template_name or cfg.template_name in wgsl_archetypes)
+        )
         matching_loop = None if is_archetype_template else self.catalog.get_best_loop(category=category, orientation=orientation)
         
         loop_file: Optional[Path] = None
@@ -186,11 +192,15 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             pal_shadow = getattr(palette_obj, "shadow", getattr(palette_obj, "base_dark", "#020604"))
             pal_highlight = getattr(palette_obj, "highlight", "#ffffff")
 
+            uniforms_data = (
+                cfg.uniforms.model_dump(exclude_unset=True)
+                if hasattr(cfg, "uniforms") and hasattr(cfg.uniforms, "model_dump")
+                else (cfg.uniforms if hasattr(cfg, "uniforms") and isinstance(cfg.uniforms, dict) else {})
+            )
             render_params = {
-                "seed": cfg.seed,
+                "lane_id": lane_id,
                 "tension": scene.tension_level,
-                "u_tension": float(scene.tension_level) / 5.0,
-                "u_resolution": [width, height],
+                "seed": cfg.seed,
                 "u_palette_primary": pal_primary,
                 "u_palette_secondary": pal_secondary,
                 "u_palette_accent": pal_accent,
@@ -199,7 +209,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 "accentColor": pal_accent,
                 "secondaryColor": pal_secondary,
                 "shadowDark": pal_shadow,
-                **(cfg.uniforms if hasattr(cfg, "uniforms") and isinstance(cfg.uniforms, dict) else {}),
+                **uniforms_data,
             }
 
             if self.renderer is not None and hasattr(self.renderer, "render_loop"):

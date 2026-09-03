@@ -60,7 +60,11 @@ class MultiSceneCompositor(BaseVideoCompositor):
         procedural_engine: Optional[ProceduralVideoEngine] = None,
     ) -> None:
         self.hybrid_engine = hybrid_engine or HybridVideoEngine()
-        self.procedural_engine = procedural_engine or ProceduralVideoEngine()
+        if procedural_engine is not None:
+            self.procedural_engine = procedural_engine
+        else:
+            from src.media.native_procedural import NativeProceduralEngine
+            self.procedural_engine = ProceduralVideoEngine(renderer=NativeProceduralEngine())
 
     def render(
         self,
@@ -104,7 +108,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
 
         import concurrent.futures
 
-        worker_count = min(4, len(manifest.scenes)) if manifest.scenes else 1
+        worker_count = min(2, len(manifest.scenes)) if manifest.scenes else 1
         cpu_count = os.cpu_count() or 4
         threads_per_worker = max(1, cpu_count // max(1, worker_count))
 

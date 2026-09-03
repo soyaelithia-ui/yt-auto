@@ -491,6 +491,11 @@ def test_non_short_pipeline_creates_srt_before_validation(monkeypatch, tmp_path)
     monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
     monkeypatch.setattr("lib.subtitles.create_ass_subtitles", ass_subtitles)
     monkeypatch.setattr("lib.subtitles.validate_subtitle_artifact", validate)
+    def fake_multiscene(self, manifest_path, output_video_path, **kwargs):
+        Path(output_video_path).write_bytes(b"mp4")
+        return {"rendered_scenes": 5, "output_path": str(output_video_path), "duration_sec": 605.0}
+
+    monkeypatch.setattr("src.media.compositor.MultiSceneCompositor.render", fake_multiscene)
     monkeypatch.setattr("lib.video.compose_video", video)
     monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)

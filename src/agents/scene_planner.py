@@ -299,8 +299,9 @@ class ScenePlannerCompositorAgent:
             tension = max(1, min(5, int(sc_script.get("tension_level", 3))))
             env_name = sc_plan.get("environment_name", sc_script.get("environmental_mood", "Scene Atmosphere"))
 
-            # Calculate granular sub-shots if scene duration exceeds 15 seconds in longform and subdivision enabled
-            if do_subdivide and is_longform and scene_total_dur > 15.0:
+            # If storyboard scenes are explicitly curated with semantic duration or transition reasons, preserve scenes
+            has_storyboard = bool(sc_script.get("transition_reason") or sc_plan.get("archetype_id"))
+            if do_subdivide and is_longform and scene_total_dur > 15.0 and not has_storyboard:
                 target_sub_dur = 11.0  # ideal 8-15s sweet spot
                 num_subshots = max(1, int(round(scene_total_dur / target_sub_dur)))
                 sub_duration = round(scene_total_dur / num_subshots, 2)
@@ -328,14 +329,20 @@ class ScenePlannerCompositorAgent:
                     # For Longform: exclude the immediate previous archetype to prevent static back-to-back loops
                     excluded = set(used_archetypes_short) if not is_longform else ({prev_archetype} if prev_archetype else set())
 
-                    category, template_name, custom_params = self._resolve_scene_archetype(
-                        env_name=f"{env_name} {narration_snippet}",
-                        tension=tension,
-                        dramatic_role=dram_role,
-                        lane_id=lane,
-                        scene_idx=global_scene_idx,
-                        excluded_archetypes=excluded,
-                    )
+                    upstream_archetype = sc_plan.get("archetype_id")
+                    if upstream_archetype:
+                        category = upstream_archetype
+                        template_name = upstream_archetype
+                        custom_params = sc_plan.get("uniform_params", {})
+                    else:
+                        category, template_name, custom_params = self._resolve_scene_archetype(
+                            env_name=f"{env_name} {narration_snippet}",
+                            tension=tension,
+                            dramatic_role=dram_role,
+                            lane_id=lane,
+                            scene_idx=global_scene_idx,
+                            excluded_archetypes=excluded,
+                        )
                     used_archetypes_short.add(category)
                     prev_archetype = category
 

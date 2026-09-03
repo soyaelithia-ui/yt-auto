@@ -101,13 +101,13 @@ LANE_CURATION_CONFIGS = {
         "channel": "moku",
         "target_format": "longform",
         "default_wpm": 140.0,
-        "target_scene_dur": 60.0,
+        "target_scene_dur": 90.0,
         "min_scene_dur": 45.0,
-        "max_scene_dur": 90.0,
+        "max_scene_dur": 150.0,
         "min_total_dur": 600.0,
         "max_total_dur": 1800.0,
-        "min_scenes": 8,
-        "max_scenes": 24,
+        "min_scenes": 5,
+        "max_scenes": 8,
         "acts": [
             {
                 "act_number": 1,
@@ -159,13 +159,13 @@ LANE_CURATION_CONFIGS = {
         "channel": "aelithia",
         "target_format": "longform",
         "default_wpm": 145.0,
-        "target_scene_dur": 60.0,
+        "target_scene_dur": 90.0,
         "min_scene_dur": 45.0,
-        "max_scene_dur": 90.0,
+        "max_scene_dur": 150.0,
         "min_total_dur": 600.0,
         "max_total_dur": 1800.0,
-        "min_scenes": 8,
-        "max_scenes": 24,
+        "min_scenes": 5,
+        "max_scenes": 8,
         "acts": [
             {
                 "act_number": 1,
@@ -323,6 +323,7 @@ class CinematicScriptCuratorAgent:
                     "estimated_duration_sec": sc_dur,
                     "environmental_mood": mood,
                     "audio_pacing_cue": pacing_cue,
+                    "transition_reason": self._derive_transition_reason(act_num, dramatic_role, tension, sc_offset),
                 }
                 act_scenes.append(scene_obj)
                 global_scene_idx += 1
@@ -404,6 +405,20 @@ class CinematicScriptCuratorAgent:
             return "Consola CRT militar de vigilancia táctica con radar y telemetría"
         return fallback_mood
 
+    @staticmethod
+    def _derive_transition_reason(act_number: int, dramatic_role: str, tension: int, scene_offset: int) -> str:
+        """Derives semantic transition motivation for scene changes."""
+        reasons = {
+            "exposition_inception": "Establecimiento del escenario inicial y presentación de anomalía contextual",
+            "rising_action_dread": "Escalada de tensión dramática y desplazamiento hacia zona de peligro inminente",
+            "climax_confrontation": "Punto de máxima confrontación y ruptura crítica del entorno",
+            "aftermath_revelation": "Desenlace de la crisis y consecuencias permanentes en el entorno",
+        }
+        base_reason = reasons.get(dramatic_role, "Evolución narrativa y progresión de la atmósfera escénica")
+        if tension >= 4:
+            return f"{base_reason} (Ruptura crítica bajo tensión nivel {tension})"
+        return f"{base_reason} (Transición de plano {scene_offset + 1})"
+
     def _slice_into_scenes(
         self,
         clean_text: str,
@@ -446,22 +461,31 @@ class CinematicScriptCuratorAgent:
         # Convert buckets to scene strings
         scenes = [" ".join(b).strip() for b in scene_buckets if b]
 
-        # Enforce minimum scene count by splitting longer scenes if needed
+        # Enforce minimum scene count by splitting longer scenes on sentence boundaries
         while len(scenes) < min_scenes:
             longest_idx = max(range(len(scenes)), key=lambda i: len(scenes[i].split()))
             longest_text = scenes[longest_idx]
-            words = longest_text.split()
-            if len(words) < 8:
-                # If cannot split further, duplicate or partition
-                mid = max(1, len(words) // 2)
-                part1 = " ".join(words[:mid])
-                part2 = " ".join(words[mid:]) if mid < len(words) else part1
+            sub_sents = self._split_into_sentences(longest_text)
+            if len(sub_sents) > 1:
+                mid = len(sub_sents) // 2
+                scenes[longest_idx] = " ".join(sub_sents[:mid]).strip()
+                scenes.insert(longest_idx + 1, " ".join(sub_sents[mid:]).strip())
+            else:
+                words = longest_text.split()
+                if len(words) < 8:
+                    break
+                comma_idx = -1
+                for w_i in range(len(words) // 3, 2 * len(words) // 3):
+                    if words[w_i].endswith((",", ";", ":")):
+                        comma_idx = w_i + 1
+                        break
+                split_at = comma_idx if comma_idx > 0 else len(words) // 2
+                part1 = " ".join(words[:split_at]).strip()
+                if not part1.endswith((".", "!", "?")):
+                    part1 += "."
+                part2 = " ".join(words[split_at:]).strip()
                 scenes[longest_idx] = part1
                 scenes.insert(longest_idx + 1, part2)
-            else:
-                mid = len(words) // 2
-                scenes[longest_idx] = " ".join(words[:mid])
-                scenes.insert(longest_idx + 1, " ".join(words[mid:]))
 
         # Enforce maximum scene count by merging shortest adjacent scenes if needed
         while len(scenes) > max_scenes:
@@ -549,7 +573,10 @@ class CinematicScriptCuratorAgent:
 
     def _interpolate_tension(self, profile: List[int], offset: int, total: int) -> int:
         """Interpolates smooth progressive tension levels (1..5)."""
-        if total <= 1 or len(profile) == 1:
+        if total <= 1:
+            # If an act has only 1 scene, use its peak tension if it's a climax act (has 5), else median
+            return max(1, min(5, max(profile) if 5 in profile else profile[len(profile) // 2]))
+        if len(profile) == 1:
             return max(1, min(5, profile[0]))
         step = (len(profile) - 1) * (offset / (total - 1))
         idx = int(round(step))
