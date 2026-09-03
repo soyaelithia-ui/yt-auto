@@ -5,16 +5,17 @@ After=network.target yt-review-bot.service
 [Service]
 Type=simple
 User=moku
-WorkingDirectory=/home/moku/projects/yt-auto
+Group=developers
+WorkingDirectory=/srv/projects/yt-auto
 Environment=YT_PROFILE=prod
 Environment=PYTHONUNBUFFERED=1
-Environment=YOUTUBE_AUTOMATION_DB=/home/moku/projects/yt-auto/data/shorts_queue.db
-Environment=VIDEO_REVIEW_DB_PATH=/home/moku/projects/yt-auto/data/review_state.db
+Environment=YOUTUBE_AUTOMATION_DB=/srv/projects/yt-auto/data/shorts_queue.db
+Environment=VIDEO_REVIEW_DB_PATH=/srv/projects/yt-auto/data/review_state.db
 # Refuerzo de recursos y anti-doble-polling: este unit es el ÚNICO productor;
 # el poller de Telegram vive en yt-review-bot.service.
 Environment=ENABLE_TELEGRAM_CALLBACK_POLLING=0
 # Un solo proceso produce todos los carriles (shorts + longform) con hilos.
-ExecStart=/home/moku/projects/yt-auto/.venv/bin/python main.py daemon --interval 60
+ExecStart=/srv/projects/yt-auto/.venv/bin/python main.py daemon --interval 60
 Restart=always
 RestartSec=15
 Nice=10

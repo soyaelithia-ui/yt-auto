@@ -25,6 +25,7 @@ from src.cli.handlers import (
     handle_run,
     handle_service,
     handle_status,
+    handle_test,
 )
 from src.config import BASE_DIR, DEFAULT_DB_PATH, RUNTIME_PROFILE
 
@@ -44,6 +45,7 @@ CANONICAL_SUBCOMMANDS = {
     "loop",
     "profile",
     "benchmark",
+    "test",
 }
 
 
@@ -609,6 +611,13 @@ def build_parser() -> argparse.ArgumentParser:
             help="Salida en formato JSON estructurado",
         )
 
+    # 13. test (Unified Canonical Test & Integrity Runner)
+    subparsers.add_parser(
+        "test",
+        parents=[subparser_parent],
+        help="Ejecutar la suite integral de pruebas y auditoría de integridad (scripts/test.sh)",
+    )
+
     return parser
 
 
@@ -877,6 +886,8 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_loop(args, parser)
     if subcommand in ("profile", "benchmark"):
         return handle_profile(args, parser)
+    if subcommand == "test":
+        return handle_test(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

@@ -11,6 +11,7 @@ from src.cli.handlers.queue import handle_queue
 from src.cli.handlers.run import handle_run
 from src.cli.handlers.service import handle_service
 from src.cli.handlers.status import handle_status
+from src.cli.handlers.test import handle_test
 
 __all__ = [
     "handle_run",
@@ -25,5 +26,6 @@ __all__ = [
     "handle_lanes",
     "handle_loop",
     "handle_profile",
+    "handle_test",
 ]
 
