@@ -2,7 +2,7 @@
 src/media/proc_engine.py - Procedural / catalog scene renderer (FFmpeg default).
 
 Renders deterministic scene segments from the local loop catalog or FFmpeg lavfi.
-Optional NativeProceduralEngine (wgpu) may be injected only when ENABLE_NATIVE_PROCEDURAL=1;
+Optional quarantined NativeProceduralEngine (src.media._legacy / wgpu) may be injected only when ENABLE_NATIVE_PROCEDURAL=1;
 production default constructs no WebGPU. Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations

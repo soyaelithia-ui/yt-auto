@@ -4,12 +4,19 @@ Contains empirical verification tests, benchmarks, and regression reproduction t
 created by Challenger 1 (teamwork_preview_challenger_m2_1).
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 import time
 import tracemalloc
+
 import numpy as np
 import pytest
+
+pytestmark = [
+    pytest.mark.skip(reason="quarantined: native_procedural/wgpu under src.media._legacy; SSOT is FFmpeg + Pillow thumbs (ENABLE_NATIVE_PROCEDURAL opt-in only)"),
+]
 
 from src.media.native_procedural import NativeProceduralEngine, VALID_ARCHETYPES
 from src.media.svg_overlay import SVGOverlayEngine

@@ -3,7 +3,7 @@ src/media/loop_worker.py - Autonomous Background Loop Synthesizer & Buffer Maint
 
 Continuously monitors the local SQLite loop catalog and synthesizes new background
 video loops via FFmpeg lavfi (default hot path). An injected renderer may be used for
-opt-in experiments; NativeProceduralEngine/wgpu is NOT constructed by default
+opt-in experiments; quarantined NativeProceduralEngine/wgpu (_legacy) is NOT constructed by default
 (SSOT PDF v2.4.0).
 """
 from __future__ import annotations

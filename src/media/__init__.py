@@ -49,11 +49,10 @@ from src.media.unified_encoder import (
     UnifiedEncoder,
 )
 
-# NativeProceduralEngine pulls in wgpu at module import time; keep it lazy so
-# `import src.media` / pytest collection of unrelated media tests do not require
-# wgpu unless the engine is actually used.
+# NativeProceduralEngine is QUARANTINED under src.media._legacy (wgpu opt-in only).
+# Keep it lazy so `import src.media` never requires wgpu.
 if TYPE_CHECKING:
-    from src.media.native_procedural import NativeProceduralEngine as NativeProceduralEngine
+    from src.media._legacy.native_procedural import NativeProceduralEngine as NativeProceduralEngine
 
 __all__ = [
     "check_local_templates",
@@ -87,6 +86,7 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name == "NativeProceduralEngine":
+        # Quarantined: DEPRECATED shim (guarded) -> src.media._legacy.
         from src.media.native_procedural import NativeProceduralEngine
 
         return NativeProceduralEngine
