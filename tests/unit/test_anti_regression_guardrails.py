@@ -101,6 +101,18 @@ class TestSubtitleAndTypographyGuardrails:
         assert sanitize_timestamps is not None
         assert format_ass_timestamp is not None
 
+    def test_reg03_pillow_subtitle_bridge_is_opt_in_only(self) -> None:
+        """Assert Pillow subtitle bridge stays opt-in; default prefers libass helpers."""
+        from src.media import force_pillow_subtitles_enabled, write_ass_from_cues_or_words
+        assert force_pillow_subtitles_enabled() is False
+        assert callable(write_ass_from_cues_or_words)
+        # compositor must prefer libass helpers
+        comp_src = (MEDIA_DIR / "compositor.py").read_text(encoding="utf-8")
+        assert "force_pillow_subtitles_enabled" in comp_src
+        assert "write_ass_from_cues_or_words" in comp_src or "ass=" in comp_src
+        proc_src = (MEDIA_DIR / "proc_engine.py").read_text(encoding="utf-8")
+        assert "force_pillow_subtitles_enabled" in proc_src
+
     def test_reg05_ass_generator_enforces_safe_area_margin(self, tmp_path: Path) -> None:
         """Assert ASSSubtitleGenerator enforces MarginV >= 240px for YouTube Shorts UI."""
         from src.media.subtitles_ass import ASSSubtitleGenerator

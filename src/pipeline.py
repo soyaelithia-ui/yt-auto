@@ -847,11 +847,17 @@ def run_pipeline_once(
                 )
 
             with profiler.phase(CanonicalStage.VIDEO_RENDERING):
+                burn_subtitles_ms = bool(
+                    lane.orientation == "vertical" and subtitles_active and ass_path.is_file()
+                )
                 compositor_metrics = multi_compositor.render(
                     manifest_path=scene_manifest_path,
                     output_video_path=video_path,
                     crf=18,
                     preset="slow",
+                    # Prefer libass ASS burn in MultiSceneCompositor master assembly
+                    # (never pass Pillow subtitle_cues / word_timestamps by default).
+                    subtitle_path=ass_path if burn_subtitles_ms else None,
                 )
                 visual_integrity_report = {
                     "passed": True,

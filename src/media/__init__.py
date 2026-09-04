@@ -39,6 +39,8 @@ from src.media.subtitles_ass import (
     ASSSubtitleGenerator,
     sanitize_timestamps,
     format_ass_timestamp,
+    force_pillow_subtitles_enabled,
+    write_ass_from_cues_or_words,
 )
 from src.media.unified_encoder import (
     UnifiedEncoder,
@@ -66,5 +68,7 @@ __all__ = [
     "ASSSubtitleGenerator",
     "sanitize_timestamps",
     "format_ass_timestamp",
+    "force_pillow_subtitles_enabled",
+    "write_ass_from_cues_or_words",
     "UnifiedEncoder",
 ]
