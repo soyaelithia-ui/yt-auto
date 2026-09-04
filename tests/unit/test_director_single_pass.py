@@ -190,3 +190,152 @@ def test_resolve_loop_no_glob_fallback(tmp_path, monkeypatch):
         environment_name="dark_forest",
     )
     assert comp._resolve_procedural_loop_path(scene, width=1280, height=720, lane_id="lane") is None
+
+def test_encode_counts_hud_forces_one_assembly_encode():
+    no_hud = count_director_video_encodes(
+        n_scenes=5, single_pass=True, use_xfade=False, needs_scale=False, has_hud=False
+    )
+    assert no_hud.mode == "loop_stream_copy"
+    assert no_hud.total_video_encodes(has_ass_burn=False) == 0
+    hud = count_director_video_encodes(
+        n_scenes=5, single_pass=True, use_xfade=False, needs_scale=False, has_hud=True
+    )
+    assert hud.mode == "loop_filter_hud"
+    assert hud.assembly_video_encodes == 1
+    assert hud.scene_video_encodes == 0
+    assert hud.total_video_encodes(has_ass_burn=False) == 1
+
+
+def test_hud_concat_graph_is_one_filter_not_n_encodes():
+    from src.media.director_single_pass import build_hud_concat_video_filters
+    snippets = ["drawbox=x=0:y=0:w=10:h=10:color=red:t=fill,drawtext=text='SITIO'", None]
+    parts, out = build_hud_concat_video_filters(2, snippets)
+    joined = ";".join(parts)
+    assert "concat=n=2" in joined and out == "[vout]"
+    assert "drawtext=" in joined and "drawbox=" in joined
+    assert joined.count("drawtext=") == 1  # HUD on the scene that provided it, still one graph
+
+
+def _homogeneous_probe(width=1280, height=720):
+    vs = MagicMock(width=width, height=height, codec_name="h264", pix_fmt="yuv420p")
+    return MagicMock(
+        video_streams=[vs],
+        primary_video=vs,
+        raw_payload={"streams": [{"codec_type": "video", "time_base": "1/90000"}]},
+    )
+
+
+def test_compositor_single_pass_burns_niche_hud(tmp_path, monkeypatch):
+    """Planner niche_hud is burned on DIRECTOR_SINGLE_PASS via one FFmpeg HUD filter."""
+    from src.media.compositor import MultiSceneCompositor
+    from src.media.encode_defaults import default_render_crf, default_render_preset
+    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+
+    monkeypatch.delenv("RENDER_PRESET", raising=False)
+    monkeypatch.delenv("RENDER_CRF", raising=False)
+    loop = tmp_path / "cat.mp4"; loop.write_bytes(b"\0"*64)
+    cmds = []
+    def fake_run(cmd, **kw):
+        cmds.append(list(cmd)); Path(cmd[-1]).write_bytes(b"mp4"); return MagicMock(returncode=0)
+    monkeypatch.setattr("src.media.compositor.probe_media", lambda *a, **k: _homogeneous_probe())
+    monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("DIRECTOR_XFADE", "0")
+    hud = {
+        "lane_id": "moku-scp-shorts",
+        "story_type": "scp",
+        "hud_badge": "NIVEL 5 // KETER",
+        "hud_site": "SITIO-19",
+        "telemetry_label": "CAM-01",
+        "accent_color_hex": "#00FF66",
+        "tension_level": 5,
+    }
+    scene = SceneConfig(
+        scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=5,
+        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(), niche_hud=hud,
+    )
+    scene2 = scene.model_copy(update={"scene_index": 2, "scene_id": "s2", "start_sec": 1.0})
+    manifest = SceneManifestV2(
+        story_id="t", lane_id="moku-scp-shorts", channel_name="moku",
+        resolution=[1280, 720], fps=30, total_duration_sec=2.0, scenes=[scene, scene2],
+        audio_tracks=AudioTracks(narration_path=str(tmp_path / "n.wav")), safe_area=SafeArea(),
+    )
+    (tmp_path / "n.wav").write_bytes(b"RIFF" + b"\0" * 40)
+    comp = MultiSceneCompositor()
+    monkeypatch.setattr(comp, "_resolve_procedural_loop_path", lambda *a, **k: loop)
+    ok = comp._assemble_procedural_loops_single_pass(
+        manifest=manifest, output_mp4=tmp_path / "a.mp4", width=1280, height=720, fps=30,
+        crf=26, preset="ultrafast", tmp_dir=tmp_path,
+    )
+    assert ok and comp._last_assembly_plan.mode == "loop_filter_hud"
+    fc_cmds = [c for c in cmds if "-filter_complex" in c]
+    assert len(fc_cmds) == 1
+    fc = fc_cmds[0][fc_cmds[0].index("-filter_complex") + 1]
+    assert "drawtext=" in fc and "drawbox=" in fc
+    assert "SITIO-19" in fc
+    assert "concat=n=2" in fc
+    assert fc_cmds[0][fc_cmds[0].index("-c:v") + 1] == "libx264"
+    assert fc_cmds[0][fc_cmds[0].index("-preset") + 1] == default_render_preset() == "veryfast"
+    assert fc_cmds[0][fc_cmds[0].index("-crf") + 1] == str(default_render_crf()) == "21"
+    # Not N per-scene copy trims / not N encodes
+    assert not any("-c:v" in c and c[c.index("-c:v") + 1] == "copy" and "-stream_loop" in c for c in cmds)
+
+
+def test_compositor_no_hud_still_stream_copy_when_geometry_matches(tmp_path, monkeypatch):
+    """No niche_hud → homogeneous loops still use -c:v copy (existing single-pass contract)."""
+    from src.media.compositor import MultiSceneCompositor
+    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    loop = tmp_path / "cat.mp4"; loop.write_bytes(b"\0"*64)
+    cmds = []
+    def fake_run(cmd, **kw):
+        cmds.append(list(cmd)); Path(cmd[-1]).write_bytes(b"mp4"); return MagicMock(returncode=0)
+    monkeypatch.setattr("src.media.compositor.probe_media", lambda *a, **k: _homogeneous_probe())
+    monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("DIRECTOR_XFADE", "0")
+    scene = SceneConfig(
+        scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2,
+        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(),
+    )
+    assert scene.niche_hud is None
+    scene2 = scene.model_copy(update={"scene_index": 2, "scene_id": "s2", "start_sec": 1.0})
+    manifest = SceneManifestV2(
+        story_id="t", lane_id="lane", channel_name="moku", resolution=[1280, 720], fps=30,
+        total_duration_sec=2.0, scenes=[scene, scene2],
+        audio_tracks=AudioTracks(narration_path=str(tmp_path / "n.wav")), safe_area=SafeArea(),
+    )
+    (tmp_path / "n.wav").write_bytes(b"RIFF" + b"\0" * 40)
+    comp = MultiSceneCompositor()
+    monkeypatch.setattr(comp, "_resolve_procedural_loop_path", lambda *a, **k: loop)
+    ok = comp._assemble_procedural_loops_single_pass(
+        manifest=manifest, output_mp4=tmp_path / "a.mp4", width=1280, height=720, fps=30,
+        crf=26, preset="ultrafast", tmp_dir=tmp_path,
+    )
+    assert ok and comp._last_assembly_plan.mode == "loop_stream_copy"
+    assert not any("-filter_complex" in c for c in cmds)
+    assert sum(1 for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v")+1]=="copy") == 2
+
+
+def test_single_pass_hud_has_no_browser_or_wgpu_imports():
+    """HUD burn must stay FFmpeg-only (no Playwright, wgpu, per-frame Pillow)."""
+    import ast
+    files = [
+        Path("src/media/compositor.py"),
+        Path("src/media/director_single_pass.py"),
+        Path("src/media/multi_act_renderer.py"),
+    ]
+    banned_mods = {"playwright", "chromium", "wgpu", "PIL", "PIL.Image", "PIL.ImageDraw"}
+    for f in files:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.add(alias.name.split(".")[0])
+                    imported.add(alias.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".")[0])
+                imported.add(node.module)
+        hits = imported & banned_mods
+        assert not hits, f"{f} imports {hits}"
+
