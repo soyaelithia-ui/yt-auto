@@ -8,7 +8,7 @@ Enforces strict architectural invariants from docs/PLAN_MAESTRO_PIPELINE_VISUAL.
 - REG-04: Single-pass atomic FFmpeg encoding without intermediate disk chunks.
 - REG-05: Subtitle safe area margins >= 240px (MarginV) for mobile UI compliance.
 - REG-06: Asynchronous stderr draining to prevent OS pipe deadlocks.
-- REG-07: Shaders must compile with wgpu-py and support software Vulkan fallback.
+- REG-07: Quarantined WGSL shaders live under src/media/_legacy/shaders (not prod path).
 - REG-08: In-memory compositor must use pre-allocated contiguous numpy buffers.
 - REG-09: Strongly typed VisualArchetypeId in schema and Pydantic models.
 """
@@ -184,8 +184,11 @@ class TestCompositorAndProceduralGuardrails:
     """Ensures deterministic memory bounds and zero-allocation frame buffering."""
 
     def test_reg07_wgsl_shader_catalog_completeness(self) -> None:
-        """Assert all 4 required WGSL shaders exist and are non-empty."""
-        shaders_dir = MEDIA_DIR / "shaders"
+        """Assert WGSL shaders remain quarantined under _legacy (not production path)."""
+        assert not (MEDIA_DIR / "shaders").exists(), (
+            "REG-07 VIOLATION: src/media/shaders must be quarantined under src/media/_legacy/shaders"
+        )
+        shaders_dir = MEDIA_DIR / "_legacy" / "shaders"
         required_shaders = [
             "cosmic_singularity.wgsl",
             "dark_forest.wgsl",
@@ -194,7 +197,7 @@ class TestCompositorAndProceduralGuardrails:
         ]
         for s_name in required_shaders:
             s_file = shaders_dir / s_name
-            assert s_file.is_file(), f"REG-07 VIOLATION: Missing shader: {s_name}"
+            assert s_file.is_file(), f"REG-07 VIOLATION: Missing quarantined shader: {s_name}"
             content = s_file.read_text(encoding="utf-8")
             assert "@fragment" in content, f"REG-07 VIOLATION: Shader {s_name} missing @fragment entry point"
 

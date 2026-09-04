@@ -25,7 +25,7 @@ FEATURE_DEFINITIONS = {
     "F01": "Legacy Code & Template Deletion",
     "F02": "Media Exports & Registry Refactor",
     "F03": "Pipeline Branch Pruning",
-    "F04": "Native Procedural Engine (wgpu-py)",
+    "F04": "Native Procedural Engine (quarantined/_legacy; wgpu opt-in)",
     "F05": "WGSL Shaders Catalog",
     "F06": "SVG Overlay Engine (resvg-py)",
     "F07": "SVG Vector Assets Catalog",

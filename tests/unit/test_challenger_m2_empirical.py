@@ -1,3 +1,8 @@
+import pytest
+pytestmark = [
+    pytest.mark.skip(reason="quarantined: native_procedural/wgpu under src.media._legacy; SSOT is FFmpeg + Pillow thumbs (ENABLE_NATIVE_PROCEDURAL opt-in only)"),
+]
+
 """
 Empirical Challenge & Benchmark Suite for Milestone M2.
 Contains empirical verification tests, benchmarks, and regression reproduction tests

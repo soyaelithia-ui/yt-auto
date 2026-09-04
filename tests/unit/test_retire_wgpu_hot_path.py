@@ -26,7 +26,14 @@ def test_enable_native_procedural_defaults_off(monkeypatch):
 def test_multiscene_compositor_default_does_not_load_wgpu(monkeypatch):
     monkeypatch.delenv("ENABLE_NATIVE_PROCEDURAL", raising=False)
     for key in list(sys.modules):
-        if key == "wgpu" or key.startswith("wgpu.") or key == "src.media.native_procedural" or key.startswith("src.media.native_procedural."):
+        if (
+            key == "wgpu"
+            or key.startswith("wgpu.")
+            or key == "src.media.native_procedural"
+            or key.startswith("src.media.native_procedural.")
+            or key == "src.media._legacy.native_procedural"
+            or key.startswith("src.media._legacy.native_procedural.")
+        ):
             del sys.modules[key]
         if key in ("src.media.compositor", "src.media.proc_engine", "src.media.hybrid_engine"):
             del sys.modules[key]
@@ -36,6 +43,7 @@ def test_multiscene_compositor_default_does_not_load_wgpu(monkeypatch):
     compositor = MultiSceneCompositor()
     assert compositor.procedural_engine.renderer is None
     assert "src.media.native_procedural" not in sys.modules
+    assert "src.media._legacy.native_procedural" not in sys.modules
     assert "wgpu" not in sys.modules
 
 

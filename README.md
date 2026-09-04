@@ -78,11 +78,11 @@ python3 main.py daemon --interval 60
 
 El stack visual de **producción** es **FFmpeg-first y determinista** (sin navegador headless, sin WebGPU en el hot path):
 - **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** (stream-copy, casi cero reencode) cuando la orientación es horizontal y no se queman subtítulos.
-- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`**, HUDs/overlays y ensamble master FFmpeg; `ENABLE_NATIVE_PROCEDURAL` default **off** (opt-in experimental únicamente).
+- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`**, HUDs/overlays y ensamble master FFmpeg; `ENABLE_NATIVE_PROCEDURAL` default **off** (código quarantined en `_legacy`; no SSOT).
 - **Catálogo de bucles** (SQLite `video_loops` + `loop_worker.py`): micro-bucles **6–10 s** (~2–5 MB) sintetizados con FFmpeg lavfi (`technology=ffmpeg_lavfi`), expandidos con `-stream_loop -1`.
 - **Temáticas**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). Cero Canvas/Three.js/WebGL en el camino activo.
 - **Agentes vs píxeles**: los agentes emiten texto/JSON; el código de media es dueño de los píxeles (ASS + **libass** cuando hay subtítulos).
-- **Experimental**: `src/media/native_procedural.py` (`wgpu-py`/WGSL) permanece en el repo pero **no** se instancia en producción salvo `ENABLE_NATIVE_PROCEDURAL=1`.
+- **Quarantined (no prod)**: `src/media/_legacy/native_procedural.py` + WGSL shaders (`wgpu`/Lavapipe). SSOT = FFmpeg + Pillow thumbs. Opt-in only via `ENABLE_NATIVE_PROCEDURAL=1`; default off.
 
 > [!NOTE]
 > Para compatibilidad con despliegues previos, `python3 manage.py` reenvía de forma transparente todos los comandos al CLI unificado. Consulta [docs/OPERACION.md](docs/OPERACION.md) para la referencia completa de subcomandos y alias.
@@ -117,4 +117,4 @@ Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
 2. **Auto-Publicación Segura**: Ventana de revisión de 6h configurable. Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
-3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). WebGPU/`native_procedural` es opt-in experimental (`ENABLE_NATIVE_PROCEDURAL=0` por defecto).
+3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). `native_procedural`/wgpu está **quarantined** bajo `src/media/_legacy` (`ENABLE_NATIVE_PROCEDURAL=0` por defecto; no forma parte del SSOT de producción).

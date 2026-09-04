@@ -78,10 +78,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
         if procedural_engine is not None:
             self.procedural_engine = procedural_engine
         elif _native_procedural_hot_path_enabled():
-            # Opt-in only (SSOT PDF v2.4.0): never construct WebGPU on default prod path.
-            from src.media.native_procedural import NativeProceduralEngine
+            # Opt-in only (SSOT PDF v2.4.0): quarantined under src.media._legacy.
+            from src.media._legacy.native_procedural import NativeProceduralEngine
             logger.warning(
-                "ENABLE_NATIVE_PROCEDURAL=1: wiring NativeProceduralEngine (wgpu) into MultiSceneCompositor"
+                "ENABLE_NATIVE_PROCEDURAL=1: wiring quarantined NativeProceduralEngine (wgpu) from src.media._legacy"
             )
             self.procedural_engine = ProceduralVideoEngine(renderer=NativeProceduralEngine())
         else:

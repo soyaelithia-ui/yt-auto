@@ -9,7 +9,7 @@ import pytest
 from src.agents.script_curator import CinematicScriptCuratorAgent
 from src.agents.art_director import ArtDirectorMoodAgent
 from src.agents.scene_planner import ScenePlannerCompositorAgent
-from src.media.native_procedural import VALID_ARCHETYPES
+from src.core.scenic_detector import VALID_ARCHETYPES  # avoid quarantined native_procedural
 
 
 @pytest.fixture

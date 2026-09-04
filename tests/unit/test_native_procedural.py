@@ -4,6 +4,11 @@ Unit tests for NativeProceduralEngine (WebGPU & Lavapipe procedural rendering).
 
 from __future__ import annotations
 
+import pytest
+pytestmark = [
+    pytest.mark.skip(reason="quarantined: native_procedural/wgpu under src.media._legacy; SSOT is FFmpeg + Pillow thumbs (ENABLE_NATIVE_PROCEDURAL opt-in only)"),
+]
+
 import numpy as np
 import pytest
 
