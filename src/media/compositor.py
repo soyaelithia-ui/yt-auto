@@ -7,7 +7,11 @@ delegating scene segments to either the Hybrid Cinematic AI Engine or the Pure P
 Default assembly (DIRECTOR_SINGLE_PASS=1): when every scene is procedural and catalog loops
 resolve, skip per-scene libx264 re-encodes and assemble via stream-copy trim + concat demuxer
 (-c:v copy; near-zero CPU) or one filter_complex scale+concat when loops need resize.
-Real FFmpeg xfade is opt-in (DIRECTOR_XFADE=1) because it shortens the timeline.
+Planner ``niche_hud`` (SCP / Reddit-AITA / abyssal) is burned with one extra FFmpeg
+drawtext/drawbox stage on that concat graph (encode_defaults veryfast/CRF21) — not N
+per-scene encodes, no Playwright, no wgpu, no per-frame Pillow. No HUD keeps -c:v copy
+when geometry matches. Real FFmpeg xfade is opt-in (DIRECTOR_XFADE=1) because it shortens
+the timeline.
 
 Legacy multi-pass (per-scene encode → concat stream-copy → master) remains for hybrid scenes
 or when DIRECTOR_SINGLE_PASS=0. Master still applies EBU R128 audio (-14 LUFS, -1.5 dBTP)
@@ -48,11 +52,13 @@ from lib.ffmpeg import (
     run_ffmpeg,
 )
 from src.media.director_single_pass import (
+    build_hud_concat_video_filters,
     build_scale_concat_video_filters,
     build_xfade_video_filters,
     count_director_video_encodes,
     director_single_pass_enabled,
     director_xfade_enabled,
+    hud_filter_snippets_for_scenes,
     manifest_eligible_for_loop_single_pass,
 )
 
@@ -414,6 +420,9 @@ class MultiSceneCompositor(BaseVideoCompositor):
     ) -> bool:
         """Assemble all-procedural scenes from catalog loops without per-scene re-encodes.
 
+        Planner ``niche_hud`` is applied as one FFmpeg filter_complex (drawtext/drawbox)
+        on the concat/xfade graph. No HUD + homogeneous geometry keeps ``-c:v copy``.
+
         Returns True on success (output_mp4 written). Raises or returns False on ineligibility.
         """
         loop_paths: List[Path] = []
@@ -432,31 +441,36 @@ class MultiSceneCompositor(BaseVideoCompositor):
             loop_paths.append(lp)
             durations.append(max(0.5, float(scene.duration_sec)))
 
-        # Stream-copy only when every loop matches target WxH AND is codec/pix_fmt/timebase-homogeneous.
-        # Otherwise explicitly fall back to one scale+concat encode (or xfade encode).
+        # Stream-copy only when every loop matches target WxH AND is codec/pix_fmt/timebase-homogeneous
+        # AND no planner niche HUD (HUD requires a drawtext/drawbox re-encode).
+        # Otherwise one scale+concat / concat+HUD / xfade encode.
         needs_scale = not self._loops_homogeneous_for_stream_copy(
             loop_paths, width, height
         )
         use_xfade = director_xfade_enabled() and len(loop_paths) > 1
+        hud_snippets = hud_filter_snippets_for_scenes(manifest.scenes, width, height)
+        has_hud = any(bool(s) for s in hud_snippets)
 
         plan = count_director_video_encodes(
             n_scenes=len(loop_paths),
             single_pass=True,
             use_xfade=use_xfade,
             needs_scale=needs_scale,
+            has_hud=has_hud,
         )
         self._last_assembly_plan = plan
         logger.info(
-            "DIRECTOR_SINGLE_PASS mode=%s scenes=%d needs_scale=%s xfade=%s "
+            "DIRECTOR_SINGLE_PASS mode=%s scenes=%d needs_scale=%s xfade=%s hud=%s "
             "(eliminates %d per-scene encodes)",
             plan.mode,
             len(loop_paths),
             needs_scale,
             use_xfade,
+            has_hud,
             len(loop_paths),
         )
 
-        if not needs_scale and not use_xfade:
+        if not needs_scale and not use_xfade and not has_hud:
             # Near-zero CPU: stream-copy trim each loop, then concat demuxer -c:v copy.
             trimmed: List[Path] = []
             for i, (lp, dur) in enumerate(zip(loop_paths, durations)):
@@ -482,11 +496,13 @@ class MultiSceneCompositor(BaseVideoCompositor):
             )
             return output_mp4.is_file()
 
-        # One filter_complex encode (scale+concat or xfade).
+        # One filter_complex encode (scale+concat, concat+HUD, or xfade). HUD is fused
+        # into this graph — never N per-scene encodes. Re-encode uses encode_defaults.
         cmd: List[str] = ["ffmpeg", "-y"]
         for lp, dur in zip(loop_paths, durations):
             cmd.extend(["-stream_loop", "-1", "-t", f"{dur:.3f}", "-i", str(lp)])
 
+        hud_arg = hud_snippets if has_hud else None
         if use_xfade:
             # Use first scene transition duration when present.
             t_req = 0.75
@@ -494,12 +510,19 @@ class MultiSceneCompositor(BaseVideoCompositor):
             if t0 is not None and getattr(t0, "duration_sec", None):
                 t_req = float(t0.duration_sec)
             parts, v_out, _out_dur = build_xfade_video_filters(
-                durations, width, height, fps, transition_sec=t_req
+                durations, width, height, fps, transition_sec=t_req, hud_snippets=hud_arg
+            )
+        elif needs_scale:
+            parts, v_out = build_scale_concat_video_filters(
+                len(loop_paths), width, height, fps, hud_snippets=hud_arg
             )
         else:
-            parts, v_out = build_scale_concat_video_filters(
-                len(loop_paths), width, height, fps
-            )
+            # Homogeneous loops + HUD: one extra drawtext/drawbox stage on concat (no scale).
+            parts, v_out = build_hud_concat_video_filters(len(loop_paths), hud_snippets)
+
+        if has_hud:
+            crf = default_render_crf()
+            preset = default_render_preset()
 
         cmd.extend([
             "-filter_complex", ";".join(parts),

@@ -127,9 +127,9 @@ def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudC
 def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
     """Resolve niche HUD: prefer planner ``act.niche_hud`` dict, else theme mapping.
 
-    Note: DIRECTOR_SINGLE_PASS / MultiSceneCompositor stream-copy path does **not**
-    burn these overlays (avoids forced re-encode). Consumption is on MultiAct
-    filtergraph renders and any caller that builds NicheHudConfig explicitly.
+    DIRECTOR_SINGLE_PASS / MultiSceneCompositor burns the same overlay when
+    planner ``niche_hud`` is present (one filter_complex encode). Stream-copy
+    is kept only when no HUD is provided and loop geometry matches.
     """
     from_planner = niche_hud_from_mapping(getattr(act, "niche_hud", None))
     if from_planner is not None:
@@ -151,6 +151,73 @@ def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
     )
 
 
+def build_niche_hud_filter(
+    width: int,
+    height: int,
+    hud_cfg: NicheHudConfig,
+    duration_sec: float,
+) -> str:
+    """Build FFmpeg drawtext/drawbox HUD snippet (shared with DIRECTOR_SINGLE_PASS)."""
+    accent = hud_cfg.accent_color_hex or "#00FF88"
+    site_esc = _escape_drawtext(hud_cfg.hud_site)
+    badge_esc = _escape_drawtext(hud_cfg.hud_badge)
+    telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
+    story = (hud_cfg.story_type or hud_cfg.lane_id or "").lower()
+    filters: List[str] = []
+    is_vertical = height > width
+
+    if "scp" in story:
+        bar_h = 70 if not is_vertical else 90
+        bar_y = 40 if not is_vertical else 120
+        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.7:t=fill")
+        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.8:t=2")
+        filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
+        filters.append(f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=18:x={width-360}:y={bar_y+15}:box=0")
+        if telemetry_esc:
+            filters.append(
+                f"drawtext=text='{telemetry_esc}':fontcolor=white@0.8:fontsize=16:x=60:y={bar_y+bar_h-28}:box=0"
+            )
+        if hud_cfg.tension_level >= 4:
+            filters.append(
+                f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=red@0.25:enable='gte(t,0)':t=fill"
+            )
+            filters.append(
+                f"drawtext=text='[ALERT // ANOMALOUS TENSION]':fontcolor=red:fontsize=16:x={width-400}:y={bar_y+bar_h-28}:box=0"
+            )
+    elif "aita" in story or "reddit" in story or "drama" in story:
+        card_w = min(width - 80, 860)
+        card_h = 95 if not is_vertical else 120
+        card_x = (width - card_w) // 2
+        card_y = 50 if not is_vertical else 140
+        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
+        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
+        filters.append(
+            f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=22:x={card_x+25}:y={card_y+15}:box=0"
+        )
+        filters.append(
+            f"drawtext=text='{site_esc}':fontcolor=white@0.9:fontsize=18:x={card_x+25}:y={card_y+45}:box=0"
+        )
+        if telemetry_esc:
+            filters.append(
+                f"drawtext=text='{telemetry_esc}':fontcolor=#FFAA00:fontsize=16:x={card_x+25}:y={card_y+75}:box=0"
+            )
+    else:
+        bar_h = 75
+        bar_y = height - 120 if not is_vertical else height - 260
+        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.75:t=fill")
+        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.6:t=2")
+        filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
+        filters.append(
+            f"drawtext=text='{telemetry_esc}':fontcolor=white:fontsize=18:x=60:y={bar_y+45}:box=0"
+        )
+        if badge_esc:
+            filters.append(
+                f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=18:x={width-320}:y={bar_y+25}:box=0"
+            )
+
+    return ",".join(filters)
+
+
 class MultiActVideoRenderer:
     """Composites sequential procedural scenes into a unified cinematic master video."""
 
@@ -166,64 +233,7 @@ class MultiActVideoRenderer:
         duration_sec: float,
     ) -> str:
         """Build FFmpeg filtergraph snippet for niche HUD (SCP / Reddit / abyssal)."""
-        accent = hud_cfg.accent_color_hex or "#00FF88"
-        site_esc = _escape_drawtext(hud_cfg.hud_site)
-        badge_esc = _escape_drawtext(hud_cfg.hud_badge)
-        telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
-        story = (hud_cfg.story_type or hud_cfg.lane_id or "").lower()
-        filters: List[str] = []
-        is_vertical = height > width
-
-        if "scp" in story:
-            bar_h = 70 if not is_vertical else 90
-            bar_y = 40 if not is_vertical else 120
-            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.7:t=fill")
-            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.8:t=2")
-            filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
-            filters.append(f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=18:x={width-360}:y={bar_y+15}:box=0")
-            if telemetry_esc:
-                filters.append(
-                    f"drawtext=text='{telemetry_esc}':fontcolor=white@0.8:fontsize=16:x=60:y={bar_y+bar_h-28}:box=0"
-                )
-            if hud_cfg.tension_level >= 4:
-                filters.append(
-                    f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=red@0.25:enable='gte(t,0)':t=fill"
-                )
-                filters.append(
-                    f"drawtext=text='[ALERT // ANOMALOUS TENSION]':fontcolor=red:fontsize=16:x={width-400}:y={bar_y+bar_h-28}:box=0"
-                )
-        elif "aita" in story or "reddit" in story or "drama" in story:
-            card_w = min(width - 80, 860)
-            card_h = 95 if not is_vertical else 120
-            card_x = (width - card_w) // 2
-            card_y = 50 if not is_vertical else 140
-            filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
-            filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
-            filters.append(
-                f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=22:x={card_x+25}:y={card_y+15}:box=0"
-            )
-            filters.append(
-                f"drawtext=text='{site_esc}':fontcolor=white@0.9:fontsize=18:x={card_x+25}:y={card_y+45}:box=0"
-            )
-            if telemetry_esc:
-                filters.append(
-                    f"drawtext=text='{telemetry_esc}':fontcolor=#FFAA00:fontsize=16:x={card_x+25}:y={card_y+75}:box=0"
-                )
-        else:
-            bar_h = 75
-            bar_y = height - 120 if not is_vertical else height - 260
-            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.75:t=fill")
-            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.6:t=2")
-            filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
-            filters.append(
-                f"drawtext=text='{telemetry_esc}':fontcolor=white:fontsize=18:x=60:y={bar_y+45}:box=0"
-            )
-            if badge_esc:
-                filters.append(
-                    f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=18:x={width-320}:y={bar_y+25}:box=0"
-                )
-
-        return ",".join(filters)
+        return build_niche_hud_filter(width, height, hud_cfg, duration_sec)
 
 
     def resolve_loop_for_theme(self, category: str, is_vertical: bool = False) -> Path:
