@@ -132,3 +132,11 @@ HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21).
 - **When** `MultiSceneCompositor` assembles via single-pass
 - **Then** assembly MUST use stream-copy (`-c:v copy` / `loop_stream_copy`) without a HUD `filter_complex`
 
+#### Scenario: Shorts niche HUD respects shared safe-zone margins
+- **Given** a vertical Shorts canvas (e.g. 1080x1920) and any niche HUD (`scp` / `reddit_aita` / `horror`)
+- **When** `build_niche_hud_filter` / `MultiActVideoRenderer.build_scene_hud_filter` runs
+- **Then** drawbox/drawtext HUD geometry MUST stay inside the shared thumbnail `AspectLayoutManager` safe-zone (clear of YouTube Shorts top chrome, right rail, and bottom caption/channel UI)
+- **And** fontsize/stroke MUST use the shared HUD typography constants across niches
+- **And** missing/default accents MUST resolve from lane/channel palette when available
+- **And** MUST NOT reintroduce slow presets, wgpu, Pillow frame loops, or default-on `DIRECTOR_XFADE`
+

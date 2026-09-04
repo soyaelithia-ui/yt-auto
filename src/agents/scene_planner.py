@@ -426,34 +426,45 @@ class ScenePlannerCompositorAgent:
                 hud_badge = sc_plan.get("hud_badge") or sc_script.get("hud_badge")
                 hud_site = sc_plan.get("hud_site") or sc_script.get("hud_site")
                 telemetry = sc_plan.get("telemetry_label") or sc_script.get("telemetry_label")
+                from src.media.multi_act_renderer import resolve_hud_accent_color
+                plan_accent = sc_plan.get("palette", {}).get("accent") if isinstance(sc_plan.get("palette"), dict) else None
                 if "scp" in lane_l or "scp" in str(meta.get("story_type", "")).lower():
+                    story_type = "scp"
                     niche_hud = {
                         "lane_id": lane,
-                        "story_type": "scp",
+                        "story_type": story_type,
                         "hud_badge": hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO",
                         "hud_site": hud_site or "SITIO-19 // SECTOR-04",
                         "telemetry_label": telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA",
-                        "accent_color_hex": sc_plan.get("palette", {}).get("accent", "#00FF66"),
+                        "accent_color_hex": resolve_hud_accent_color(
+                            str(plan_accent or ""), lane_id=lane, story_type=story_type
+                        ),
                         "tension_level": tension,
                     }
                 elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l:
+                    story_type = "reddit_aita"
                     niche_hud = {
                         "lane_id": lane,
-                        "story_type": "reddit_aita",
+                        "story_type": story_type,
                         "hud_badge": hud_badge or "r/AmItheAsshole",
                         "hud_site": hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}",
                         "telemetry_label": telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments",
-                        "accent_color_hex": "#FF4500",
+                        "accent_color_hex": resolve_hud_accent_color(
+                            str(plan_accent or ""), lane_id=lane, story_type=story_type
+                        ),
                         "tension_level": tension,
                     }
                 else:
+                    story_type = "horror"
                     niche_hud = {
                         "lane_id": lane,
-                        "story_type": "horror",
+                        "story_type": story_type,
                         "hud_badge": hud_badge or "ABYSSAL SONAR // REC",
                         "hud_site": hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M",
                         "telemetry_label": telemetry or "ECO NO IDENTIFICADO",
-                        "accent_color_hex": "#00E5FF",
+                        "accent_color_hex": resolve_hud_accent_color(
+                            str(plan_accent or ""), lane_id=lane, story_type=story_type
+                        ),
                         "tension_level": tension,
                     }
 
