@@ -1,6 +1,10 @@
 """
 src/media/__init__.py - Media engines, compositors, and video renderers.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 from src.media.assets import (
     check_local_templates,
     search_reference_image_web,
@@ -26,9 +30,6 @@ from src.media.loop_engine import (
     LoopVideoAssetError,
     LoopCompositionError,
 )
-from src.media.native_procedural import (
-    NativeProceduralEngine,
-)
 from src.media.svg_overlay import (
     SVGOverlayEngine,
 )
@@ -45,6 +46,12 @@ from src.media.subtitles_ass import (
 from src.media.unified_encoder import (
     UnifiedEncoder,
 )
+
+# NativeProceduralEngine pulls in wgpu at module import time; keep it lazy so
+# `import src.media` / pytest collection of unrelated media tests do not require
+# wgpu unless the engine is actually used.
+if TYPE_CHECKING:
+    from src.media.native_procedural import NativeProceduralEngine as NativeProceduralEngine
 
 __all__ = [
     "check_local_templates",
@@ -72,3 +79,15 @@ __all__ = [
     "write_ass_from_cues_or_words",
     "UnifiedEncoder",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "NativeProceduralEngine":
+        from src.media.native_procedural import NativeProceduralEngine
+
+        return NativeProceduralEngine
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)
