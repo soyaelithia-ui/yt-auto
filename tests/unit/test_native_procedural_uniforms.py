@@ -6,26 +6,35 @@ and subprocess security / exception guards.
 from __future__ import annotations
 
 import struct
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
 from src.media.native_procedural import (
     NativeProceduralEngine,
-    VALID_ARCHETYPES,
+    pack_uniform_bytes,
 )
+
+
+def _make_engine(**kwargs):
+    """Construct engine or skip cleanly when no WebGPU/Lavapipe adapter exists."""
+    try:
+        return NativeProceduralEngine(**kwargs)
+    except RuntimeError as exc:
+        if "No WebGPU adapter available" in str(exc):
+            pytest.skip(f"WebGPU/Lavapipe adapter unavailable: {exc}")
+        raise
 
 
 @pytest.fixture
 def engine():
-    eng = NativeProceduralEngine()
+    eng = _make_engine()
     yield eng
     eng.close()
 
 
-def test_uniform_buffer_64_byte_packing(engine):
-    """Verify that high-level art direction parameters are packed into exactly 64 bytes (16 floats)."""
+def test_uniform_buffer_64_byte_packing():
+    """Verify art-direction params pack into exactly 64 bytes (16 floats) without a GPU device."""
     params = {
         "tension": 4,
         "speed": 1.25,
@@ -38,18 +47,49 @@ def test_uniform_buffer_64_byte_packing(engine):
         "custom_2": 0.25,
         "custom_3": 0.75,
     }
-    # Rendering a small frame should pack without raising struct errors
-    frame = engine.render_frame(
+    blob = pack_uniform_bytes(
         width=64,
         height=64,
         time_sec=1.0,
         duration_sec=5.0,
-        archetype_id="maritime_lighthouse",
+        seed=42,
         tension=4,
+        archetype_id="maritime_lighthouse",
         params=params,
     )
-    assert frame.shape == (64, 64, 4)
-    assert frame.dtype == np.uint8
+    assert isinstance(blob, (bytes, bytearray))
+    assert len(blob) == 64
+    fields = struct.unpack("16f", blob)
+    assert fields[0] == 64.0
+    assert fields[1] == 64.0
+    assert fields[2] == 1.0
+    assert fields[3] == 5.0
+    assert fields[4] == 42.0
+    assert fields[5] == 4.0
+    assert fields[6] == pytest.approx(1.1)
+    assert fields[7] == pytest.approx(1.25)
+    assert fields[8:11] == pytest.approx((0.0, 0.8, 1.0))
+    assert fields[11] == pytest.approx(1.5)
+    assert fields[12] == pytest.approx(1.8)
+    assert fields[13] == pytest.approx(0.45)
+    assert fields[14] == pytest.approx(0.25)
+    assert fields[15] == pytest.approx(0.75)
+
+
+def test_uniform_buffer_default_accent_without_gpu():
+    """Default accent colors must apply when params omit accent_color."""
+    blob = pack_uniform_bytes(
+        width=32,
+        height=32,
+        time_sec=0.0,
+        duration_sec=1.0,
+        seed=1,
+        tension=1,
+        archetype_id="dark_forest",
+        params=None,
+    )
+    fields = struct.unpack("16f", blob)
+    assert fields[8:11] == pytest.approx((0.1, 0.9, 0.4))
 
 
 def test_maritime_lighthouse_photometric_floor(engine):
@@ -63,8 +103,6 @@ def test_maritime_lighthouse_photometric_floor(engine):
         tension=2,
     )
     rgb = frame[:, :, :3]
-    # In normalized terms, 0.15 * 255 = 38.25. Average non-zero/background luminance should be >= 25
-    # and 90th percentile should show clear visibility.
     mean_val = np.mean(rgb)
     assert mean_val >= 25.0, f"Shader subexposed: mean RGB {mean_val:.2f} < 25.0 (crushed black)"
 

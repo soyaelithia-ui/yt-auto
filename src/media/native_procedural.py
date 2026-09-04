@@ -45,6 +45,100 @@ DEFAULT_ACCENT_COLORS: Dict[str, Tuple[float, float, float]] = {
 }
 
 
+
+def pack_uniform_bytes(
+    width: int,
+    height: int,
+    time_sec: float,
+    duration_sec: float,
+    seed: int,
+    tension: int,
+    archetype_id: str,
+    params: Optional[Dict[str, Any]] = None,
+) -> bytes:
+    """Pack art-direction parameters into a 64-byte std140 uniform blob (16 x float32).
+
+    Pure CPU helper — no WebGPU device required. Safe to unit-test on headless CI.
+    """
+    default_accent = DEFAULT_ACCENT_COLORS.get(archetype_id, (1.0, 1.0, 1.0))
+    accent_r, accent_g, accent_b = default_accent
+
+    noise_scale = 1.0
+    speed = 1.0
+    distortion = 1.0
+    glow_intensity = 1.0
+    custom_1 = 0.0
+    custom_2 = 0.0
+    custom_3 = 0.0
+
+    if params and isinstance(params, dict):
+        if "noise_scale" in params:
+            noise_scale = float(params["noise_scale"])
+        if "speed" in params:
+            speed = float(params["speed"])
+        if "distortion" in params:
+            distortion = float(params["distortion"])
+        if "glow_intensity" in params:
+            glow_intensity = float(params["glow_intensity"])
+        if "custom_1" in params:
+            custom_1 = float(params["custom_1"])
+        if "custom_2" in params:
+            custom_2 = float(params["custom_2"])
+        if "custom_3" in params:
+            custom_3 = float(params["custom_3"])
+        if "kelvin" in params:
+            try:
+                custom_1 = float(params["kelvin"]) / 10000.0
+            except (ValueError, TypeError):
+                pass
+
+        raw_accent = (
+            params.get("accent_color")
+            or params.get("accentColor")
+            or params.get("u_palette_accent")
+        )
+        if raw_accent is not None:
+            if isinstance(raw_accent, (list, tuple)) and len(raw_accent) >= 3:
+                accent_r, accent_g, accent_b = (
+                    float(raw_accent[0]),
+                    float(raw_accent[1]),
+                    float(raw_accent[2]),
+                )
+            elif isinstance(raw_accent, str) and raw_accent.startswith("#") and len(raw_accent) == 7:
+                try:
+                    accent_r = int(raw_accent[1:3], 16) / 255.0
+                    accent_g = int(raw_accent[3:5], 16) / 255.0
+                    accent_b = int(raw_accent[5:7], 16) / 255.0
+                except ValueError:
+                    pass
+        if "accent_r" in params:
+            accent_r = float(params["accent_r"])
+        if "accent_g" in params:
+            accent_g = float(params["accent_g"])
+        if "accent_b" in params:
+            accent_b = float(params["accent_b"])
+
+    return struct.pack(
+        "16f",
+        float(width),
+        float(height),
+        float(time_sec),
+        float(duration_sec),
+        float(seed),
+        float(tension),
+        float(noise_scale),
+        float(speed),
+        float(accent_r),
+        float(accent_g),
+        float(accent_b),
+        float(distortion),
+        float(glow_intensity),
+        float(custom_1),
+        float(custom_2),
+        float(custom_3),
+    )
+
+
 class NativeProceduralEngine:
     """
     WebGPU-based procedural visual engine supporting hardware acceleration
@@ -198,74 +292,15 @@ class NativeProceduralEngine:
                 self._cached_res = (width, height)
 
             # 2. Pack 64-byte Uniform Buffer (std140: 16 x float32)
-            default_accent = DEFAULT_ACCENT_COLORS.get(archetype_id, (1.0, 1.0, 1.0))
-            accent_r, accent_g, accent_b = default_accent
-
-            noise_scale = 1.0
-            speed = 1.0
-            distortion = 1.0
-            glow_intensity = 1.0
-            custom_1 = 0.0
-            custom_2 = 0.0
-            custom_3 = 0.0
-
-            if params and isinstance(params, dict):
-                if "noise_scale" in params:
-                    noise_scale = float(params["noise_scale"])
-                if "speed" in params:
-                    speed = float(params["speed"])
-                if "distortion" in params:
-                    distortion = float(params["distortion"])
-                if "glow_intensity" in params:
-                    glow_intensity = float(params["glow_intensity"])
-                if "custom_1" in params:
-                    custom_1 = float(params["custom_1"])
-                if "custom_2" in params:
-                    custom_2 = float(params["custom_2"])
-                if "custom_3" in params:
-                    custom_3 = float(params["custom_3"])
-                if "kelvin" in params:
-                    try:
-                        custom_1 = float(params["kelvin"]) / 10000.0
-                    except (ValueError, TypeError):
-                        pass
-
-                raw_accent = params.get("accent_color") or params.get("accentColor") or params.get("u_palette_accent")
-                if raw_accent is not None:
-                    if isinstance(raw_accent, (list, tuple)) and len(raw_accent) >= 3:
-                        accent_r, accent_g, accent_b = float(raw_accent[0]), float(raw_accent[1]), float(raw_accent[2])
-                    elif isinstance(raw_accent, str) and raw_accent.startswith("#") and len(raw_accent) == 7:
-                        try:
-                            accent_r = int(raw_accent[1:3], 16) / 255.0
-                            accent_g = int(raw_accent[3:5], 16) / 255.0
-                            accent_b = int(raw_accent[5:7], 16) / 255.0
-                        except ValueError:
-                            pass
-                if "accent_r" in params:
-                    accent_r = float(params["accent_r"])
-                if "accent_g" in params:
-                    accent_g = float(params["accent_g"])
-                if "accent_b" in params:
-                    accent_b = float(params["accent_b"])
-
-            uniform_bytes = struct.pack(
-                "16f",
-                float(width),
-                float(height),
-                float(time_sec),
-                float(duration_sec),
-                float(seed),
-                float(tension),
-                float(noise_scale),
-                float(speed),
-                float(accent_r),
-                float(accent_g),
-                float(accent_b),
-                float(distortion),
-                float(glow_intensity),
-                float(custom_1),
-                float(custom_2),
-                float(custom_3),
+            uniform_bytes = pack_uniform_bytes(
+                width=width,
+                height=height,
+                time_sec=time_sec,
+                duration_sec=duration_sec,
+                seed=seed,
+                tension=tension,
+                archetype_id=archetype_id,
+                params=params,
             )
             self.device.queue.write_buffer(self._uniform_buf, 0, uniform_bytes)
 

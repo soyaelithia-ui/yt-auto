@@ -4,19 +4,40 @@ Unit tests for NativeProceduralEngine (WebGPU & Lavapipe procedural rendering).
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 import numpy as np
 import pytest
 
 from src.media.native_procedural import NativeProceduralEngine, VALID_ARCHETYPES
 
 
+def _make_engine(**kwargs):
+    """Construct engine or skip cleanly when no WebGPU/Lavapipe adapter exists."""
+    try:
+        return NativeProceduralEngine(**kwargs)
+    except RuntimeError as exc:
+        if "No WebGPU adapter available" in str(exc):
+            pytest.skip(f"WebGPU/Lavapipe adapter unavailable: {exc}")
+        raise
+
+
 @pytest.fixture
 def engine():
-    eng = NativeProceduralEngine()
+    eng = _make_engine()
     yield eng
     eng.close()
+
+
+def test_available_archetypes_without_gpu():
+    """Catalog constants must be inspectable without a WebGPU device."""
+    assert len(VALID_ARCHETYPES) >= 4
+    for arch in [
+        "arctic_desolation",
+        "cosmic_singularity",
+        "dark_forest",
+        "synaptic_network",
+        "tactical_chamber",
+    ]:
+        assert arch in VALID_ARCHETYPES
 
 
 def test_native_procedural_init(engine):
@@ -30,14 +51,14 @@ def test_native_procedural_init(engine):
 
 def test_native_procedural_force_software():
     """Verify engine can initialize with force_software=True."""
-    with NativeProceduralEngine(force_software=True) as eng:
+    with _make_engine(force_software=True) as eng:
         assert eng.adapter is not None
         assert eng.device is not None
 
 
 @pytest.mark.parametrize("archetype_id", list(VALID_ARCHETYPES))
 def test_render_frame_all_archetypes(engine, archetype_id):
-    """Verify all 4 archetypes render valid RGBA frames of shape (height, width, 4)."""
+    """Verify all archetypes render valid RGBA frames of shape (height, width, 4)."""
     width, height = 320, 240
     frame = engine.render_frame(
         width=width,
@@ -51,9 +72,7 @@ def test_render_frame_all_archetypes(engine, archetype_id):
     assert isinstance(frame, np.ndarray)
     assert frame.shape == (height, width, 4)
     assert frame.dtype == np.uint8
-    # RGBA: Alpha channel must be 255 (opaque)
     assert np.all(frame[:, :, 3] == 255)
-    # Ensure not completely black (meaningful rendering occurs)
     assert np.any(frame[:, :, :3] > 0)
 
 
@@ -121,18 +140,14 @@ def test_render_frame_resolution_switch(engine):
 
 def test_render_frame_invalid_inputs(engine):
     """Verify invalid parameters raise appropriate exceptions."""
-    # Invalid dimensions
     with pytest.raises(ValueError, match="dimensions"):
         engine.render_frame(width=0, height=100, time_sec=0.0, duration_sec=1.0, archetype_id="cosmic_singularity")
     with pytest.raises(ValueError, match="dimensions"):
         engine.render_frame(width=100, height=-10, time_sec=0.0, duration_sec=1.0, archetype_id="cosmic_singularity")
-    # Invalid duration
     with pytest.raises(ValueError, match="duration_sec"):
         engine.render_frame(width=100, height=100, time_sec=0.0, duration_sec=0.0, archetype_id="cosmic_singularity")
-    # Unknown archetype
     with pytest.raises(KeyError, match="Unknown archetype_id"):
         engine.render_frame(width=100, height=100, time_sec=0.0, duration_sec=1.0, archetype_id="nonexistent_galaxy")
-    # Mismatched out_buffer
     bad_buf = np.zeros((50, 50, 4), dtype=np.uint8)
     with pytest.raises(ValueError, match="out_buffer"):
         engine.render_frame(width=100, height=100, time_sec=0.0, duration_sec=1.0, archetype_id="cosmic_singularity", out_buffer=bad_buf)
@@ -140,7 +155,7 @@ def test_render_frame_invalid_inputs(engine):
 
 def test_context_manager_and_close():
     """Verify context manager cleanly opens and closes resources."""
-    with NativeProceduralEngine() as eng:
+    with _make_engine() as eng:
         frame = eng.render_frame(width=64, height=64, time_sec=0.0, duration_sec=1.0, archetype_id="cosmic_singularity")
         assert frame.shape == (64, 64, 4)
     assert eng._texture is None
@@ -156,7 +171,6 @@ def test_tactical_chamber_even_seed_differentiation(engine):
 
 def test_tactical_chamber_time_progression_in_strobe_dark_phase(engine):
     """Verify tactical_chamber produces distinct frames between different timestamps even during strobe dark phases."""
-    # Test multiple timestamps
     f_t0 = engine.render_frame(width=256, height=256, time_sec=0.1, duration_sec=5.0, archetype_id="tactical_chamber", seed=42)
     f_t1 = engine.render_frame(width=256, height=256, time_sec=0.3, duration_sec=5.0, archetype_id="tactical_chamber", seed=42)
     assert not np.array_equal(f_t0, f_t1)
