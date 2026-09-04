@@ -433,6 +433,7 @@ class ScenePlannerCompositorAgent:
                     niche_hud = {
                         "lane_id": lane,
                         "story_type": story_type,
+                        "hud_layout": "top_bar",
                         "hud_badge": hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO",
                         "hud_site": hud_site or "SITIO-19 // SECTOR-04",
                         "telemetry_label": telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA",
@@ -446,6 +447,7 @@ class ScenePlannerCompositorAgent:
                     niche_hud = {
                         "lane_id": lane,
                         "story_type": story_type,
+                        "hud_layout": "card",
                         "hud_badge": hud_badge or "r/AmItheAsshole",
                         "hud_site": hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}",
                         "telemetry_label": telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments",
@@ -459,6 +461,7 @@ class ScenePlannerCompositorAgent:
                     niche_hud = {
                         "lane_id": lane,
                         "story_type": story_type,
+                        "hud_layout": "bottom_bar",
                         "hud_badge": hud_badge or "ABYSSAL SONAR // REC",
                         "hud_site": hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M",
                         "telemetry_label": telemetry or "ECO NO IDENTIFICADO",

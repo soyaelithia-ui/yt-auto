@@ -2,7 +2,7 @@
 src/media/multi_act_renderer.py - Multi-Act FFmpeg Video Compositor.
 
 Orchestrates sequential catalog/loop video scenes across narrative temporal acts in a
-single FFmpeg filter_complex pass, with niche HUD overlays (SCP / Reddit-AITA / abyssal drawtext/drawbox),
+single FFmpeg filter_complex pass, with theme-agnostic niche HUD overlays (drawtext/drawbox layouts: top_bar / card / bottom_bar),
 real FFmpeg xfade transitions when MULTIACT_XFADE=1 (default; duration-aware via
 calculate_xfade_duration — callers must pass that for total_duration so A/V -t align),
 or fade+concat without timeline shrink when MULTIACT_XFADE=0. Optional ASS subtitles.
@@ -72,7 +72,7 @@ class NarrativeSceneAct:
     """Represents a discrete temporal act with a specific code-driven visual theme.
 
     Optional ``niche_hud`` dict (planner/manifest shape) is preferred when present;
-    otherwise theme_category + hud_* fields drive theme mapping.
+    otherwise act hud_* / color fields use default hud_layout (theme_category is a free label only).
     """
     act_index: int
     start_sec: float
@@ -89,9 +89,14 @@ class NarrativeSceneAct:
 
 @dataclass
 class NicheHudConfig:
-    """Visual HUD telemetry and metadata configuration for niche channel layouts."""
+    """Visual HUD telemetry and metadata for theme-agnostic FFmpeg HUD layouts.
+
+    ``hud_layout`` selects geometry only (top_bar | card | bottom_bar).
+    ``story_type`` is a free label and MUST NOT drive geometry.
+    """
     lane_id: str = ""
     story_type: str = ""
+    hud_layout: str = "top_bar"  # top_bar | card | bottom_bar
     hud_badge: str = ""
     hud_site: str = ""
     telemetry_label: str = ""
@@ -99,7 +104,7 @@ class NicheHudConfig:
     tension_level: int = 1
 
 
-# Shared HUD typography / stroke (coherence across SCP / Reddit / abyssal).
+# Shared HUD typography / stroke (coherence across hud_layout variants).
 HUD_FONT_PRIMARY = 20
 HUD_FONT_SECONDARY = 18
 HUD_FONT_META = 16
@@ -116,7 +121,10 @@ def _escape_drawtext(text: str) -> str:
 
 
 def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", story_type: str = "") -> str:
-    """Prefer explicit accent; else channel palette; else niche-sensible default."""
+    """Prefer explicit accent; else ChannelProfileRegistry by lane_id; else default.
+
+    ``story_type`` is accepted for call-site compatibility but MUST NOT pick colors.
+    """
     raw = (accent_color_hex or "").strip()
     if raw and raw.lower() not in _GENERIC_HUD_ACCENTS:
         return raw
@@ -130,13 +138,6 @@ def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", stor
                 return accent
         except Exception:
             pass
-    story = (story_type or key or "").lower()
-    if "scp" in story:
-        return "#00FF66"
-    if "aita" in story or "reddit" in story or "drama" in story:
-        return "#FF4500"
-    if "horror" in story or "abyss" in story:
-        return "#00E5FF"
     return raw or "#00FF88"
 
 
@@ -179,6 +180,14 @@ def _drawtext(
     )
 
 
+_ALLOWED_HUD_LAYOUTS = frozenset({"top_bar", "card", "bottom_bar"})
+
+
+def _normalize_hud_layout(value: Any) -> str:
+    layout = str(value or "top_bar").strip().lower()
+    return layout if layout in _ALLOWED_HUD_LAYOUTS else "top_bar"
+
+
 def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudConfig]:
     """Build NicheHudConfig from planner/manifest ``niche_hud`` dict when present."""
     if not isinstance(data, dict) or not data:
@@ -189,40 +198,37 @@ def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudC
     lane_id = str(data.get("lane_id") or "")
     return NicheHudConfig(
         lane_id=lane_id,
-        story_type=story or "horror",
+        story_type=story or "generic",
+        hud_layout=_normalize_hud_layout(data.get("hud_layout")),
         hud_badge=str(data.get("hud_badge") or ""),
         hud_site=str(data.get("hud_site") or ""),
         telemetry_label=str(data.get("telemetry_label") or ""),
         accent_color_hex=resolve_hud_accent_color(
             str(data.get("accent_color_hex") or ""),
             lane_id=lane_id,
-            story_type=story or "horror",
+            story_type=story or "generic",
         ),
         tension_level=int(data.get("tension_level") or 1),
     )
 
 
 def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
-    """Resolve niche HUD: prefer planner ``act.niche_hud`` dict, else theme mapping.
+    """Resolve niche HUD: prefer planner ``act.niche_hud`` dict, else defaults.
 
-    DIRECTOR_SINGLE_PASS / MultiSceneCompositor burns the same overlay when
-    planner ``niche_hud`` is present (one filter_complex encode). Stream-copy
-    is kept only when no HUD is provided and loop geometry matches.
+    Does NOT map theme_category keywords (scp/aita/reddit/abyss/horror) to
+    geometry. ``story_type`` remains a free label from theme_category; layout
+    defaults to ``top_bar``. DIRECTOR_SINGLE_PASS / MultiSceneCompositor burn
+    the same overlay when planner ``niche_hud`` is present.
     """
     from_planner = niche_hud_from_mapping(getattr(act, "niche_hud", None))
     if from_planner is not None:
         return from_planner
-    cat = (act.theme_category or "").lower()
-    if "scp" in cat or "found" in cat or "anomaly" in cat:
-        story = "scp"
-    elif "aita" in cat or "reddit" in cat or "drama" in cat:
-        story = "reddit_aita"
-    else:
-        story = "horror"
+    story = str(act.theme_category or "").strip() or "generic"
     lane_id = str(getattr(act, "lane_id", "") or "")
     return NicheHudConfig(
         lane_id=lane_id,
         story_type=story,
+        hud_layout="top_bar",
         hud_badge=act.hud_badge,
         hud_site=act.hud_site,
         telemetry_label=act.hud_telemetry,
@@ -241,7 +247,11 @@ def build_niche_hud_filter(
     hud_cfg: NicheHudConfig,
     duration_sec: float,
 ) -> str:
-    """Build FFmpeg drawtext/drawbox HUD snippet (shared with DIRECTOR_SINGLE_PASS)."""
+    """Build FFmpeg drawtext/drawbox HUD snippet (shared with DIRECTOR_SINGLE_PASS).
+
+    Geometry branches ONLY on ``hud_cfg.hud_layout`` (top_bar | card | bottom_bar).
+    ``story_type`` / niche name strings MUST NOT select geometry.
+    """
     accent = resolve_hud_accent_color(
         hud_cfg.accent_color_hex,
         lane_id=hud_cfg.lane_id,
@@ -250,7 +260,7 @@ def build_niche_hud_filter(
     site_esc = _escape_drawtext(hud_cfg.hud_site)
     badge_esc = _escape_drawtext(hud_cfg.hud_badge)
     telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
-    story = (hud_cfg.story_type or hud_cfg.lane_id or "").lower()
+    layout = _normalize_hud_layout(getattr(hud_cfg, "hud_layout", None))
     filters: List[str] = []
     m = hud_safe_margins(width, height)
     is_vertical = bool(m["is_vertical"])
@@ -261,7 +271,50 @@ def build_niche_hud_filter(
     font_m = int(m["font_meta"])
     text_x = margin_x + 20
 
-    if "scp" in story:
+    if layout == "card":
+        # Former Reddit-card geometry (theme-agnostic).
+        card_w = min(content_w, 860)
+        card_h = 120 if is_vertical else 95
+        card_x = margin_x + max(0, (content_w - card_w) // 2)
+        card_y = int(m["top"])
+        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
+        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
+        filters.append(
+            _drawtext(badge_esc, fontcolor=accent, fontsize=font_p, x=card_x + 25, y=card_y + 15)
+        )
+        filters.append(
+            _drawtext(site_esc, fontcolor="white@0.9", fontsize=font_s, x=card_x + 25, y=card_y + 45)
+        )
+        if telemetry_esc:
+            filters.append(
+                _drawtext(
+                    telemetry_esc,
+                    fontcolor=f"{accent}@0.95",
+                    fontsize=font_m,
+                    x=card_x + 25,
+                    y=card_y + 75,
+                )
+            )
+    elif layout == "bottom_bar":
+        # Bottom bar on landscape; top safe bar on vertical (avoid YT Shorts UI).
+        bar_h = 90 if is_vertical else 75
+        if is_vertical:
+            bar_y = int(m["top"])
+        else:
+            bar_y = max(int(m["top"]), int(m["bottom"]) - bar_h)
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=black@0.75:t=fill")
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color={accent}@0.6:t=2")
+        filters.append(_drawtext(site_esc, fontcolor=accent, fontsize=font_p, x=text_x, y=bar_y + 15))
+        filters.append(
+            _drawtext(telemetry_esc, fontcolor="white", fontsize=font_s, x=text_x, y=bar_y + 45)
+        )
+        if badge_esc:
+            badge_x = max(text_x, int(m["right"]) - 300)
+            filters.append(
+                _drawtext(badge_esc, fontcolor=accent, fontsize=font_s, x=badge_x, y=bar_y + 25)
+            )
+    else:
+        # top_bar — former SCP top-bar geometry (theme-agnostic default).
         bar_h = 90 if is_vertical else 70
         bar_y = int(m["top"])
         filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=black@0.7:t=fill")
@@ -293,47 +346,6 @@ def build_niche_hud_filter(
                     y=bar_y + bar_h - 28,
                 )
             )
-    elif "aita" in story or "reddit" in story or "drama" in story:
-        card_w = min(content_w, 860)
-        card_h = 120 if is_vertical else 95
-        card_x = margin_x + max(0, (content_w - card_w) // 2)
-        card_y = int(m["top"])
-        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
-        filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
-        filters.append(
-            _drawtext(badge_esc, fontcolor=accent, fontsize=font_p, x=card_x + 25, y=card_y + 15)
-        )
-        filters.append(
-            _drawtext(site_esc, fontcolor="white@0.9", fontsize=font_s, x=card_x + 25, y=card_y + 45)
-        )
-        if telemetry_esc:
-            filters.append(
-                _drawtext(
-                    telemetry_esc,
-                    fontcolor=f"{accent}@0.95",
-                    fontsize=font_m,
-                    x=card_x + 25,
-                    y=card_y + 75,
-                )
-            )
-    else:
-        # Abyssal/horror: bottom bar on landscape; top safe bar on Shorts (avoid YT UI).
-        bar_h = 90 if is_vertical else 75
-        if is_vertical:
-            bar_y = int(m["top"])
-        else:
-            bar_y = max(int(m["top"]), int(m["bottom"]) - bar_h)
-        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=black@0.75:t=fill")
-        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color={accent}@0.6:t=2")
-        filters.append(_drawtext(site_esc, fontcolor=accent, fontsize=font_p, x=text_x, y=bar_y + 15))
-        filters.append(
-            _drawtext(telemetry_esc, fontcolor="white", fontsize=font_s, x=text_x, y=bar_y + 45)
-        )
-        if badge_esc:
-            badge_x = max(text_x, int(m["right"]) - 300)
-            filters.append(
-                _drawtext(badge_esc, fontcolor=accent, fontsize=font_s, x=badge_x, y=bar_y + 25)
-            )
 
     return ",".join(filters)
 
@@ -352,7 +364,7 @@ class MultiActVideoRenderer:
         hud_cfg: NicheHudConfig,
         duration_sec: float,
     ) -> str:
-        """Build FFmpeg filtergraph snippet for niche HUD (SCP / Reddit / abyssal)."""
+        """Build FFmpeg filtergraph snippet for niche HUD (layout-driven, theme-agnostic)."""
         return build_niche_hud_filter(width, height, hud_cfg, duration_sec)
 
 

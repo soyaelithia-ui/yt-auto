@@ -28,11 +28,12 @@ from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.layout import AspectLayoutManager
 
 
-def test_niche_hud_scp_filter_escaping():
+def test_niche_hud_top_bar_filter_escaping():
     renderer = MultiActVideoRenderer()
     scp_cfg = NicheHudConfig(
         lane_id="moku-scp-shorts",
         story_type="scp",
+        hud_layout="top_bar",
         hud_badge="NIVEL 5 // 'EUCLID': CLASIFICADO",
         hud_site="SITIO-19: SECTOR-04",
         telemetry_label="CAM-02: CONTENCIÓN PRIMARIA",
@@ -48,13 +49,14 @@ def test_niche_hud_scp_filter_escaping():
     assert "SITIO-19\\:" in filter_str or "SITIO-19\\\\:" in filter_str
 
 
-def test_niche_hud_reddit_and_abyssal_lanes():
+def test_niche_hud_card_and_bottom_bar_layouts():
     renderer = MultiActVideoRenderer()
     reddit = renderer.build_scene_hud_filter(
         1920,
         1080,
         NicheHudConfig(
             story_type="reddit_aita",
+            hud_layout="card",
             hud_badge="r/AmItheAsshole",
             hud_site="OP: u/throwaway_dinner",
             telemetry_label="14.8k upvotes",
@@ -70,6 +72,7 @@ def test_niche_hud_reddit_and_abyssal_lanes():
         1080,
         NicheHudConfig(
             story_type="horror",
+            hud_layout="bottom_bar",
             hud_badge="EXPEDICIÓN ABISAL",
             hud_site="FOSA DE LAS MARIANAS",
             telemetry_label="PROFUNDIDAD: 4820m",
@@ -197,25 +200,88 @@ def test_niche_hud_prefers_planner_mapping_on_act():
     planner = {
         "lane_id": "moku-scp-shorts",
         "story_type": "scp",
+        "hud_layout": "top_bar",
         "hud_badge": "NIVEL 5 // KETER",
         "hud_site": "SITIO-19",
         "telemetry_label": "CAM-07",
         "accent_color_hex": "#00FF66",
         "tension_level": 5,
     }
-    assert niche_hud_from_mapping(planner).story_type == "scp"
+    mapped = niche_hud_from_mapping(planner)
+    assert mapped.story_type == "scp"
+    assert mapped.hud_layout == "top_bar"
     act = NarrativeSceneAct(
         act_index=0,
         start_sec=0.0,
         duration_sec=10.0,
         title="t",
-        theme_category="reddit_aita",  # would map to reddit without planner dict
+        theme_category="reddit_aita",
         niche_hud=planner,
     )
     cfg = niche_hud_from_act(act)
     assert cfg.story_type == "scp"
+    assert cfg.hud_layout == "top_bar"
     assert cfg.hud_site == "SITIO-19"
     assert cfg.tension_level == 5
+
+
+def test_niche_hud_from_act_does_not_map_theme_to_layout():
+    act = NarrativeSceneAct(
+        act_index=0,
+        start_sec=0.0,
+        duration_sec=10.0,
+        title="t",
+        theme_category="reddit_aita",
+        hud_badge="BADGE",
+        hud_site="SITE",
+        hud_telemetry="TEL",
+        color_hex="#ABCDEF",
+    )
+    cfg = niche_hud_from_act(act)
+    assert cfg.story_type == "reddit_aita"  # free label preserved
+    assert cfg.hud_layout == "top_bar"  # default; not card from theme keyword
+    assert cfg.hud_badge == "BADGE"
+
+
+def test_hud_geometry_ignores_story_type_strings():
+    """story_type containing scp/aita/reddit must not select geometry."""
+    renderer = MultiActVideoRenderer()
+    # story_type looks like scp but layout is card -> card geometry (centered card, not full-width top bar)
+    card = renderer.build_scene_hud_filter(
+        1920,
+        1080,
+        NicheHudConfig(
+            story_type="scp_found_footage",
+            hud_layout="card",
+            hud_badge="B",
+            hud_site="S",
+            telemetry_label="T",
+            accent_color_hex="#FF4500",
+        ),
+        10.0,
+    )
+    boxes = _hud_boxes(card)
+    assert boxes
+    # card width is min(content_w, 860) — narrower than full safe content width
+    assert any(bw <= 860 for _, _, bw, _ in boxes)
+    # story_type looks like reddit but layout is top_bar -> full-width top bar
+    top = renderer.build_scene_hud_filter(
+        1920,
+        1080,
+        NicheHudConfig(
+            story_type="reddit_aita_drama",
+            hud_layout="top_bar",
+            hud_badge="B",
+            hud_site="S",
+            telemetry_label="T",
+            accent_color_hex="#00FF66",
+            tension_level=1,
+        ),
+        10.0,
+    )
+    top_boxes = _hud_boxes(top)
+    assert top_boxes
+    assert any(bw > 860 for _, _, bw, _ in top_boxes)
 
 
 def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
@@ -296,7 +362,7 @@ def _hud_boxes(filter_str: str):
     ]
 
 
-def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
+def test_shorts_hud_respects_thumbnail_safe_zone_all_layouts():
     """Shorts HUD bars/cards must stay inside AspectLayoutManager safe-zone."""
     w, h = 1080, 1920
     safe = AspectLayoutManager.get_safe_zone(w, h)
@@ -305,6 +371,7 @@ def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
         NicheHudConfig(
             lane_id="moku-scp-shorts",
             story_type="scp",
+            hud_layout="top_bar",
             hud_badge="NIVEL 5",
             hud_site="SITIO-19",
             telemetry_label="CAM-01",
@@ -314,6 +381,7 @@ def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
         NicheHudConfig(
             lane_id="aelithia-aita-shorts",
             story_type="reddit_aita",
+            hud_layout="card",
             hud_badge="r/AmItheAsshole",
             hud_site="OP: u/test",
             telemetry_label="1.2k upvotes",
@@ -322,6 +390,7 @@ def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
         NicheHudConfig(
             lane_id="moku-horror-shorts",
             story_type="horror",
+            hud_layout="bottom_bar",
             hud_badge="ABYSSAL",
             hud_site="PROFUNDIDAD: 4000M",
             telemetry_label="ECO",
@@ -331,12 +400,12 @@ def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
     for cfg in niches:
         filt = renderer.build_scene_hud_filter(w, h, cfg, 12.0)
         boxes = _hud_boxes(filt)
-        assert boxes, cfg.story_type
+        assert boxes, cfg.hud_layout
         for x, y, bw, bh in boxes:
-            assert x >= safe.left - 1, (cfg.story_type, x, safe.left)
-            assert x + bw <= safe.right + 1, (cfg.story_type, x + bw, safe.right)
-            assert y >= safe.top - 1, (cfg.story_type, y, safe.top)
-            assert y + bh <= safe.bottom + 1, (cfg.story_type, y + bh, safe.bottom)
+            assert x >= safe.left - 1, (cfg.hud_layout, x, safe.left)
+            assert x + bw <= safe.right + 1, (cfg.hud_layout, x + bw, safe.right)
+            assert y >= safe.top - 1, (cfg.hud_layout, y, safe.top)
+            assert y + bh <= safe.bottom + 1, (cfg.hud_layout, y + bh, safe.bottom)
         # Must not sit in the Shorts bottom UI collision band
         assert all(y + bh < int(h * 0.75) for _, y, _, bh in boxes)
 
@@ -349,13 +418,14 @@ def test_hud_font_stroke_consistent_across_niches():
         HUD_FONT_SECONDARY,
         HUD_FONT_META,
     }
-    for story, lane in (("scp", "moku-scp-shorts"), ("reddit_aita", "aelithia"), ("horror", "moku")):
+    for layout, lane in (("top_bar", "moku-scp-shorts"), ("card", "aelithia"), ("bottom_bar", "moku")):
         filt = renderer.build_scene_hud_filter(
             1080,
             1920,
             NicheHudConfig(
                 lane_id=lane,
-                story_type=story,
+                story_type="label-only",
+                hud_layout=layout,
                 hud_badge="BADGE",
                 hud_site="SITE",
                 telemetry_label="TEL",
@@ -365,8 +435,8 @@ def test_hud_font_stroke_consistent_across_niches():
         )
         assert f"borderw={HUD_BORDERW}" in filt
         found = {int(m.group(1)) for m in re.finditer(r"fontsize=(\d+)", filt)}
-        assert found, story
-        assert found <= sizes, (story, found, sizes)
+        assert found, layout
+        assert found <= sizes, (layout, found, sizes)
 
 
 def test_resolve_hud_accent_from_channel_when_missing():
@@ -388,7 +458,13 @@ def test_hud_safe_margins_match_thumbnail_layout():
 
 
 def test_build_niche_hud_filter_module_api_matches_renderer():
-    cfg = NicheHudConfig(story_type="scp", hud_badge="B", hud_site="S", accent_color_hex="#00FF66")
+    cfg = NicheHudConfig(
+        story_type="scp",
+        hud_layout="top_bar",
+        hud_badge="B",
+        hud_site="S",
+        accent_color_hex="#00FF66",
+    )
     a = build_niche_hud_filter(1080, 1920, cfg, 8.0)
     b = MultiActVideoRenderer().build_scene_hud_filter(1080, 1920, cfg, 8.0)
     assert a == b

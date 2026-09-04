@@ -100,51 +100,49 @@ def test_climax_frame_extractor_timestamp():
     assert 14.0 <= t <= 15.0
 
 
-def test_niche_layout_scp_found_footage_vertical():
-    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+def test_former_scp_lane_falls_back_to_general_cinematic_vertical():
+    from src.media.thumbnails.layouts.base import LayoutRegistry
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
 
-    layout = ScpFoundFootageLayout()
+    layout = LayoutRegistry.get_layout(channel_id="moku-scp-shorts", archetype="scp")
+    assert isinstance(layout, GeneralCinematicLayout)
     canvas = Image.new("RGB", (1080, 1920), (15, 20, 25))
     safe_zone = AspectLayoutManager.get_safe_zone(1080, 1920)
 
     result = layout.apply_layout(
         canvas=canvas,
         title="SCP-173 BRECHA DE CONTENCIÓN",
-        channel_id="moku",
+        channel_id="moku-scp-shorts",
         safe_zone=safe_zone,
         metadata={"hazard_level": "EUCLID", "site": "SITE-19"},
     )
 
     assert result.size == (1080, 1920)
-    # Verify canvas pixels were mutated by HUD elements
     diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
-    assert diff > 1000
-
-    # Safe-zone check: verify bottom 450px and right 120px interaction zone
-    # Specifically, primary title hook center must be within safe_zone
+    assert diff > 500
     assert safe_zone.bottom <= 1920 - 450
 
 
-def test_niche_layout_reddit_drama_card_horizontal():
-    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
+def test_former_reddit_lane_falls_back_to_general_cinematic_horizontal():
+    from src.media.thumbnails.layouts.base import LayoutRegistry
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
 
-    layout = RedditDramaCardLayout()
+    layout = LayoutRegistry.get_layout(channel_id="aelithia-aita-long", archetype="aita")
+    assert isinstance(layout, GeneralCinematicLayout)
     canvas = Image.new("RGB", (1920, 1080), (25, 25, 30))
     safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
 
     result = layout.apply_layout(
         canvas=canvas,
         title="¿SOY LA MALA POR ARRUINAR LA BODA?",
-        channel_id="aelithia",
+        channel_id="aelithia-aita-long",
         safe_zone=safe_zone,
         metadata={"subreddit": "r/AmItheAsshole", "upvotes": "28.4k"},
     )
 
     assert result.size == (1920, 1080)
     diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
-    assert diff > 1000
-
-    # Safe-zone check: YouTube timestamp zone [1570, 930, 1920, 1080] must be clear of title text
+    assert diff > 500
     assert safe_zone.right <= 1920 * 0.88
     assert safe_zone.bottom <= 1080 * 0.90
 
@@ -191,16 +189,15 @@ def test_niche_layout_general_cinematic_fallback():
 
 def test_layout_registry_dispatch():
     from src.media.thumbnails.layouts.base import LayoutRegistry
-    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
-    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
     from src.media.thumbnails.layouts.analog_horror import AnalogHorrorVhsLayout
     from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
 
+    # Former scp/reddit modules removed — fall back to GeneralCinematicLayout
     layout_scp = LayoutRegistry.get_layout(channel_id="moku-scp-shorts", archetype="scp")
-    assert isinstance(layout_scp, ScpFoundFootageLayout)
+    assert isinstance(layout_scp, GeneralCinematicLayout)
 
     layout_reddit = LayoutRegistry.get_layout(channel_id="aelithia-aita-long", archetype="aita")
-    assert isinstance(layout_reddit, RedditDramaCardLayout)
+    assert isinstance(layout_reddit, GeneralCinematicLayout)
 
     layout_horror = LayoutRegistry.get_layout(channel_id="moku-horror-long", archetype="horror")
     assert isinstance(layout_horror, AnalogHorrorVhsLayout)
@@ -427,16 +424,14 @@ def test_typography_auto_fit_downscale():
     assert diff > 500
 
 
-def test_niche_layouts_custom_metadata_and_colors():
-    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
-    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+def test_general_cinematic_custom_metadata_and_colors():
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
 
     safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
     canvas = Image.new("RGB", (1920, 1080), (20, 20, 20))
 
-    # Reddit layout with custom quote and custom colors
-    reddit_layout = RedditDramaCardLayout()
-    res_reddit = reddit_layout.apply_layout(
+    cinematic = GeneralCinematicLayout()
+    res_h = cinematic.apply_layout(
         canvas=canvas,
         title="MI HISTORIA",
         channel_id="aelithia",
@@ -448,13 +443,11 @@ def test_niche_layouts_custom_metadata_and_colors():
             "accent_color": "#FF9900",
         },
     )
-    assert res_reddit.size == (1920, 1080)
+    assert res_h.size == (1920, 1080)
 
-    # SCP layout with custom colors
     scp_safe = AspectLayoutManager.get_safe_zone(1080, 1920)
     canvas_v = Image.new("RGB", (1080, 1920), (10, 15, 20))
-    scp_layout = ScpFoundFootageLayout()
-    res_scp = scp_layout.apply_layout(
+    res_v = cinematic.apply_layout(
         canvas=canvas_v,
         title="SCP-096",
         channel_id="moku",
@@ -466,14 +459,14 @@ def test_niche_layouts_custom_metadata_and_colors():
             "accent_color": "#FF003B",
         },
     )
-    assert res_scp.size == (1080, 1920)
+    assert res_v.size == (1080, 1920)
 
 
 def test_moku_lane_aspect_ratio_dispatch_and_asset_resolution():
     from PIL import ImageOps
     from src.media.thumbnails.layouts.base import LayoutRegistry
     from src.media.thumbnails.layouts.analog_horror import AnalogHorrorVhsLayout
-    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
     from src.media.thumbnails.asset_resolver import ThematicAssetResolver, TEMPLATES_DIR
 
     # 1. Moku horizontal 16:9 -> AnalogHorrorVhsLayout and horror backdrop
@@ -486,15 +479,26 @@ def test_moku_lane_aspect_ratio_dispatch_and_asset_resolution():
     fit_h = ImageOps.fit(horror_ref, (1920, 1080))
     assert sum(abs(c1 - c2) for c1, c2 in zip(res_h.getpixel((500, 500)), fit_h.getpixel((500, 500)))) == 0
 
-    # 2. Moku vertical 9:16 -> ScpFoundFootageLayout and scp backdrop
+    # 2. Moku vertical 9:16: former scp layout removed — cinematic fallback via channel key "moku"
+    # (analog also registers "moku"; exact key match prefers AnalogHorrorVhsLayout)
     layout_v = LayoutRegistry.get_layout(channel_id="moku", is_vertical=True)
-    assert isinstance(layout_v, ScpFoundFootageLayout)
+    assert isinstance(layout_v, (AnalogHorrorVhsLayout, GeneralCinematicLayout))
 
     res_v = ThematicAssetResolver.resolve_base_image(channel_id="moku", archetype=None, target_size=(1080, 1920))
     assert res_v.size == (1080, 1920)
     scp_ref = Image.open(TEMPLATES_DIR / "scp" / "master_backdrop.jpg")
     fit_v = ImageOps.fit(scp_ref, (1080, 1920))
     assert sum(abs(c1 - c2) for c1, c2 in zip(res_v.getpixel((500, 500)), fit_v.getpixel((500, 500)))) <= 5
+
+    # Explicit former scp/reddit lane ids -> GeneralCinematicLayout
+    assert isinstance(
+        LayoutRegistry.get_layout(channel_id="moku-scp-shorts", archetype="scp"),
+        GeneralCinematicLayout,
+    )
+    assert isinstance(
+        LayoutRegistry.get_layout(channel_id="aelithia-aita-long", archetype="aita"),
+        GeneralCinematicLayout,
+    )
 
 
 def test_qa_auditor_rejects_9_16_shorts_safe_zone_violations(tmp_path: Path):
