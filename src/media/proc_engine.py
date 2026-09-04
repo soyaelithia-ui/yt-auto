@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from src.media.encode_defaults import (
+    default_ffmpeg_threads,
     default_render_crf,
     default_render_preset,
     loop_matches_target_geometry,
@@ -255,7 +256,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                 for _ in range(loop_count):
                     f.write(f"file '{loop_file.resolve()}'\n")
 
-            threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
+            threads_val = str(extra_kwargs.get("threads") or default_ffmpeg_threads())
             if crf is None:
                 crf = default_render_crf()
             preset = str(extra_kwargs.get("preset") or default_render_preset())

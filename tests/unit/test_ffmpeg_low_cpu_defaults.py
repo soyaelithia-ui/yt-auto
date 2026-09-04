@@ -139,3 +139,92 @@ def test_proc_engine_stream_copy_aligned_with_director_pr11():
     assert "force_original_aspect_ratio=increase" in src
     assert '"-preset", "faster"' not in src
     assert "default_render_preset()" in src
+
+
+def test_subtitles_rejects_faster_preset_and_unlimited_threads():
+    """Guardrail: subtitles write_cmd must follow encode_defaults SSOT."""
+    src = Path("src/media/subtitles.py").read_text(encoding="utf-8")
+    assert '"-preset", "faster"' not in src
+    assert '"-threads", "0"' not in src
+    assert "default_render_preset" in src
+    assert "default_render_crf" in src
+    assert "default_ffmpeg_threads" in src
+
+
+def test_compositor_thread_defaults_use_ssot():
+    """Compositor master assembly must use default_ffmpeg_threads(), not arbitrary literal."""
+    src = Path("src/media/compositor.py").read_text(encoding="utf-8")
+    assert "min(os.cpu_count() or 4, 8)" not in src
+    assert "default_ffmpeg_threads" in src
+
+
+def test_proc_engine_thread_defaults_use_ssot():
+    """Procedural engine must use default_ffmpeg_threads(), not (cpu_count // 4)."""
+    src = Path("src/media/proc_engine.py").read_text(encoding="utf-8")
+    assert "(os.cpu_count() or 4) // 4" not in src
+    assert "default_ffmpeg_threads" in src
+
+
+def test_hybrid_engine_thread_defaults_use_ssot():
+    """Hybrid engine must use default_ffmpeg_threads(), not (cpu_count // 4)."""
+    src = Path("src/media/hybrid_engine.py").read_text(encoding="utf-8")
+    assert "(os.cpu_count() or 4) // 4" not in src
+    assert "default_ffmpeg_threads" in src
+
+
+def test_apply_code_subtitles_to_video_cmd_wires_encode_defaults(tmp_path, monkeypatch):
+    """Behavioral test: write_cmd uses preset, crf, and threads from encode_defaults."""
+    monkeypatch.setenv("RENDER_PRESET", "ultrafast")
+    monkeypatch.setenv("RENDER_CRF", "26")
+    monkeypatch.setenv("FFMPEG_THREADS", "3")
+
+    from src.media.subtitles import apply_code_subtitles_to_video, SubtitleCue, SubtitleWord
+
+    captured_cmds = []
+
+    def fake_popen(cmd, *args, **kwargs):
+        captured_cmds.append(cmd)
+        mock_proc = MagicMock()
+        mock_proc.stdout.read.return_value = b""
+        mock_proc.stderr.read.return_value = b""
+        mock_proc.wait.return_value = 0
+        mock_proc.poll.return_value = 0
+        return mock_proc
+
+    in_file = tmp_path / "in.mp4"
+    in_file.write_bytes(b"dummy")
+    out_file = tmp_path / "out.mp4"
+
+    cues = [
+        SubtitleCue(
+            words=[SubtitleWord(text="test", start_sec=0.0, end_sec=1.0)],
+            start_sec=0.0,
+            end_sec=1.0,
+            full_text="test",
+        )
+    ]
+
+    with patch("src.media.subtitles.subprocess.Popen", side_effect=fake_popen), \
+         patch("src.media.subtitles.register_process"), \
+         patch("src.media.subtitles.cleanup_subprocesses"):
+        apply_code_subtitles_to_video(
+            input_mp4=in_file,
+            output_mp4=out_file,
+            subtitle_cues=cues,
+            scene_start_sec=0.0,
+            width=1920,
+            height=1080,
+            fps=30,
+        )
+
+    assert len(captured_cmds) == 2
+    write_cmd = captured_cmds[1]
+    assert "-preset" in write_cmd
+    assert write_cmd[write_cmd.index("-preset") + 1] == "ultrafast"
+    assert "-crf" in write_cmd
+    assert write_cmd[write_cmd.index("-crf") + 1] == "26"
+    assert "-threads" in write_cmd
+    assert write_cmd[write_cmd.index("-threads") + 1] == "3"
+    assert "faster" not in write_cmd
+    assert "-b:v" not in write_cmd
+

@@ -41,7 +41,11 @@ from lib.ffmpeg import (
     probe_media,
     run_ffmpeg,
 )
-from src.media.encode_defaults import default_render_crf, default_render_preset
+from src.media.encode_defaults import (
+    default_ffmpeg_threads,
+    default_render_crf,
+    default_render_preset,
+)
 
 logger = get_logger("hybrid_video_engine")
 
@@ -309,7 +313,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         if crf is None:
             crf = default_render_crf()
         preset = str(extra_kwargs.get("preset") or default_render_preset())
-        threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
+        threads_val = str(extra_kwargs.get("threads") or default_ffmpeg_threads())
         from src.media.subtitles_ass import (
             force_pillow_subtitles_enabled,
             write_ass_from_cues_or_words,
