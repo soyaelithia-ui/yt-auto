@@ -19,6 +19,7 @@ import subprocess
 import time
 import wave
 from pathlib import Path
+from src.media.encode_defaults import default_ffmpeg_threads, default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
@@ -518,9 +519,9 @@ class LoopVideoEngine(BaseVideoCompositor):
         )
 
         filter_complex = f"{video_filter};{audio_filter}"
-        crf = kwargs.get("crf", 23)
-        preset = kwargs.get("preset", "fast")
-        threads = kwargs.get("threads") or min(os.cpu_count() or 4, 4)
+        crf = kwargs.get("crf", default_render_crf())
+        preset = kwargs.get("preset", default_render_preset())
+        threads = kwargs.get("threads") or default_ffmpeg_threads()
         filter_threads = kwargs.get("filter_threads") or min(threads, 2)
 
         cmd.extend([
@@ -627,9 +628,9 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         filter_complex = "".join(filter_inputs) + concat_clause + sub_filter + audio_filter
 
-        crf = kwargs.get("crf", 23)
-        preset = kwargs.get("preset", "fast")
-        threads = kwargs.get("threads") or min(os.cpu_count() or 4, 4)
+        crf = kwargs.get("crf", default_render_crf())
+        preset = kwargs.get("preset", default_render_preset())
+        threads = kwargs.get("threads") or default_ffmpeg_threads()
         filter_threads = kwargs.get("filter_threads") or min(threads, 2)
 
         cmd.extend([
@@ -677,7 +678,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 cmd.extend(["-stream_loop", "-1", "-i", str(bg_p)])
                 has_music = True
 
-        threads = kwargs.get("threads") or min(os.cpu_count() or 4, 4)
+        threads = kwargs.get("threads") or default_ffmpeg_threads()
         if has_music:
             audio_filter = self.build_audio_filter(
                 has_music=True,
@@ -728,8 +729,8 @@ class LoopVideoEngine(BaseVideoCompositor):
         include_subtitles: bool = False,
         video_loop_path: str | Path | None = None,
         fps: int = 30,
-        crf: int = 23,
-        preset: str = "fast",
+        crf: int | None = None,
+        preset: str | None = None,
         music_volume: float = 0.04,
         ducking_threshold: float = 0.035,
         ducking_ratio: float = 8.0,
@@ -744,6 +745,10 @@ class LoopVideoEngine(BaseVideoCompositor):
         Renders the final loop video synchronously via FFmpeg with exact duration synchronization.
         """
         a_path = Path(audio_path).expanduser().resolve()
+        if crf is None:
+            crf = default_render_crf()
+        if preset is None:
+            preset = default_render_preset()
         if not a_path.exists() or a_path.stat().st_size == 0:
             raise LoopCompositionError(f"Narration audio file is missing or empty: {audio_path}")
 

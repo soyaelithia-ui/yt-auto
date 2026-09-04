@@ -10,6 +10,7 @@ import os
 import subprocess
 import threading
 from pathlib import Path
+from src.media.encode_defaults import default_render_crf, default_render_preset
 from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 
@@ -23,8 +24,8 @@ class UnifiedEncoder:
         width: int = 1080,
         height: int = 1920,
         fps: int = 30,
-        crf: int = 18,
-        preset: str = "fast",
+        crf: int | None = None,
+        preset: str | None = None,
         voice_wav: Optional[Union[str, Path]] = None,
         drone_wav: Optional[Union[str, Path]] = None,
         sfx_wavs: Optional[List[Tuple[Union[str, Path], float, float]]] = None,
@@ -36,8 +37,8 @@ class UnifiedEncoder:
         self.width = width
         self.height = height
         self.fps = fps
-        self.crf = crf
-        self.preset = preset
+        self.crf = default_render_crf() if crf is None else crf
+        self.preset = default_render_preset() if preset is None else preset
         self.voice_wav = Path(voice_wav) if voice_wav else None
         self.drone_wav = Path(drone_wav) if drone_wav else None
         self.sfx_wavs = sfx_wavs or []

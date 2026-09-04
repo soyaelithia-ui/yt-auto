@@ -850,11 +850,14 @@ def run_pipeline_once(
                 burn_subtitles_ms = bool(
                     lane.orientation == "vertical" and subtitles_active and ass_path.is_file()
                 )
+                from src.media.encode_defaults import default_render_crf, default_render_preset
                 compositor_metrics = multi_compositor.render(
                     manifest_path=scene_manifest_path,
                     output_video_path=video_path,
-                    crf=18,
-                    preset="slow",
+                    # Low-CPU defaults (compose RENDER_PRESET=veryfast, CRF 21).
+                    # Avoid preset=slow on the hot path — huge CPU/RAM for little YT gain.
+                    crf=default_render_crf(),
+                    preset=default_render_preset(),
                     # Prefer libass ASS burn in MultiSceneCompositor master assembly
                     # (never pass Pillow subtitle_cues / word_timestamps by default).
                     subtitle_path=ass_path if burn_subtitles_ms else None,
