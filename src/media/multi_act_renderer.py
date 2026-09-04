@@ -99,11 +99,84 @@ class NicheHudConfig:
     tension_level: int = 1
 
 
+# Shared HUD typography / stroke (coherence across SCP / Reddit / abyssal).
+HUD_FONT_PRIMARY = 20
+HUD_FONT_SECONDARY = 18
+HUD_FONT_META = 16
+HUD_BORDERW = 2
+HUD_BORDERCOLOR = "black@0.85"
+_GENERIC_HUD_ACCENTS = frozenset({"", "#00ff88"})  # NicheHudConfig default only
+
+
 def _escape_drawtext(text: str) -> str:
     """Escapes text for FFmpeg drawtext filter."""
     if not text:
         return ""
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "").replace("%", "\\%")
+
+
+def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", story_type: str = "") -> str:
+    """Prefer explicit accent; else channel palette; else niche-sensible default."""
+    raw = (accent_color_hex or "").strip()
+    if raw and raw.lower() not in _GENERIC_HUD_ACCENTS:
+        return raw
+    key = (lane_id or "").strip()
+    if key:
+        try:
+            from src.core.channel_profile import ChannelProfileRegistry
+
+            accent = (ChannelProfileRegistry.get_channel(key).visual.palette.accent or "").strip()
+            if accent:
+                return accent
+        except Exception:
+            pass
+    story = (story_type or key or "").lower()
+    if "scp" in story:
+        return "#00FF66"
+    if "aita" in story or "reddit" in story or "drama" in story:
+        return "#FF4500"
+    if "horror" in story or "abyss" in story:
+        return "#00E5FF"
+    return raw or "#00FF88"
+
+
+def hud_safe_margins(width: int, height: int) -> Dict[str, int]:
+    """Video HUD margins aligned with thumbnail Shorts/longform safe-zones.
+
+    Keeps drawtext/drawbox clear of YouTube Shorts UI (top chrome, right rail,
+    bottom caption/channel controls) without slowing the cheap-director path.
+    """
+    from src.media.thumbnails.layout import AspectLayoutManager
+
+    safe = AspectLayoutManager.get_safe_zone(width, height)
+    is_vertical = height > width
+    return {
+        "left": int(safe.left),
+        "right": int(safe.right),
+        "top": int(safe.top),
+        "bottom": int(safe.bottom),
+        "width": int(safe.width),
+        "height": int(safe.height),
+        "is_vertical": 1 if is_vertical else 0,
+        "font_primary": HUD_FONT_PRIMARY + (2 if is_vertical else 0),
+        "font_secondary": HUD_FONT_SECONDARY,
+        "font_meta": HUD_FONT_META,
+    }
+
+
+def _drawtext(
+    text: str,
+    *,
+    fontcolor: str,
+    fontsize: int,
+    x: str | int,
+    y: str | int,
+) -> str:
+    """Consistent drawtext with shared stroke for readability on busy footage."""
+    return (
+        f"drawtext=text='{text}':fontcolor={fontcolor}:fontsize={fontsize}:"
+        f"x={x}:y={y}:box=0:borderw={HUD_BORDERW}:bordercolor={HUD_BORDERCOLOR}"
+    )
 
 
 def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudConfig]:
@@ -113,13 +186,18 @@ def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudC
     story = str(data.get("story_type") or data.get("lane_id") or "").strip()
     if not story and not (data.get("hud_badge") or data.get("hud_site")):
         return None
+    lane_id = str(data.get("lane_id") or "")
     return NicheHudConfig(
-        lane_id=str(data.get("lane_id") or ""),
+        lane_id=lane_id,
         story_type=story or "horror",
         hud_badge=str(data.get("hud_badge") or ""),
         hud_site=str(data.get("hud_site") or ""),
         telemetry_label=str(data.get("telemetry_label") or ""),
-        accent_color_hex=str(data.get("accent_color_hex") or "#00FF88"),
+        accent_color_hex=resolve_hud_accent_color(
+            str(data.get("accent_color_hex") or ""),
+            lane_id=lane_id,
+            story_type=story or "horror",
+        ),
         tension_level=int(data.get("tension_level") or 1),
     )
 
@@ -141,12 +219,18 @@ def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
         story = "reddit_aita"
     else:
         story = "horror"
+    lane_id = str(getattr(act, "lane_id", "") or "")
     return NicheHudConfig(
+        lane_id=lane_id,
         story_type=story,
         hud_badge=act.hud_badge,
         hud_site=act.hud_site,
         telemetry_label=act.hud_telemetry,
-        accent_color_hex=act.color_hex or "#00FF88",
+        accent_color_hex=resolve_hud_accent_color(
+            act.color_hex or "",
+            lane_id=lane_id,
+            story_type=story,
+        ),
         tension_level=1,
     )
 
@@ -158,61 +242,97 @@ def build_niche_hud_filter(
     duration_sec: float,
 ) -> str:
     """Build FFmpeg drawtext/drawbox HUD snippet (shared with DIRECTOR_SINGLE_PASS)."""
-    accent = hud_cfg.accent_color_hex or "#00FF88"
+    accent = resolve_hud_accent_color(
+        hud_cfg.accent_color_hex,
+        lane_id=hud_cfg.lane_id,
+        story_type=hud_cfg.story_type,
+    )
     site_esc = _escape_drawtext(hud_cfg.hud_site)
     badge_esc = _escape_drawtext(hud_cfg.hud_badge)
     telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
     story = (hud_cfg.story_type or hud_cfg.lane_id or "").lower()
     filters: List[str] = []
-    is_vertical = height > width
+    m = hud_safe_margins(width, height)
+    is_vertical = bool(m["is_vertical"])
+    margin_x = int(m["left"])
+    content_w = int(m["width"])
+    font_p = int(m["font_primary"])
+    font_s = int(m["font_secondary"])
+    font_m = int(m["font_meta"])
+    text_x = margin_x + 20
 
     if "scp" in story:
-        bar_h = 70 if not is_vertical else 90
-        bar_y = 40 if not is_vertical else 120
-        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.7:t=fill")
-        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.8:t=2")
-        filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
-        filters.append(f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=18:x={width-360}:y={bar_y+15}:box=0")
+        bar_h = 90 if is_vertical else 70
+        bar_y = int(m["top"])
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=black@0.7:t=fill")
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color={accent}@0.8:t=2")
+        filters.append(_drawtext(site_esc, fontcolor=accent, fontsize=font_p, x=text_x, y=bar_y + 15))
+        badge_x = max(text_x, int(m["right"]) - 340)
+        filters.append(_drawtext(badge_esc, fontcolor="white", fontsize=font_s, x=badge_x, y=bar_y + 15))
         if telemetry_esc:
             filters.append(
-                f"drawtext=text='{telemetry_esc}':fontcolor=white@0.8:fontsize=16:x=60:y={bar_y+bar_h-28}:box=0"
+                _drawtext(
+                    telemetry_esc,
+                    fontcolor="white@0.8",
+                    fontsize=font_m,
+                    x=text_x,
+                    y=bar_y + bar_h - 28,
+                )
             )
         if hud_cfg.tension_level >= 4:
             filters.append(
-                f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=red@0.25:enable='gte(t,0)':t=fill"
+                f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=red@0.25:enable='gte(t,0)':t=fill"
             )
+            alert_x = max(text_x, int(m["right"]) - 380)
             filters.append(
-                f"drawtext=text='[ALERT // ANOMALOUS TENSION]':fontcolor=red:fontsize=16:x={width-400}:y={bar_y+bar_h-28}:box=0"
+                _drawtext(
+                    "[ALERT // ANOMALOUS TENSION]",
+                    fontcolor="red",
+                    fontsize=font_m,
+                    x=alert_x,
+                    y=bar_y + bar_h - 28,
+                )
             )
     elif "aita" in story or "reddit" in story or "drama" in story:
-        card_w = min(width - 80, 860)
-        card_h = 95 if not is_vertical else 120
-        card_x = (width - card_w) // 2
-        card_y = 50 if not is_vertical else 140
+        card_w = min(content_w, 860)
+        card_h = 120 if is_vertical else 95
+        card_x = margin_x + max(0, (content_w - card_w) // 2)
+        card_y = int(m["top"])
         filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
         filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
         filters.append(
-            f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=22:x={card_x+25}:y={card_y+15}:box=0"
+            _drawtext(badge_esc, fontcolor=accent, fontsize=font_p, x=card_x + 25, y=card_y + 15)
         )
         filters.append(
-            f"drawtext=text='{site_esc}':fontcolor=white@0.9:fontsize=18:x={card_x+25}:y={card_y+45}:box=0"
+            _drawtext(site_esc, fontcolor="white@0.9", fontsize=font_s, x=card_x + 25, y=card_y + 45)
         )
         if telemetry_esc:
             filters.append(
-                f"drawtext=text='{telemetry_esc}':fontcolor=#FFAA00:fontsize=16:x={card_x+25}:y={card_y+75}:box=0"
+                _drawtext(
+                    telemetry_esc,
+                    fontcolor=f"{accent}@0.95",
+                    fontsize=font_m,
+                    x=card_x + 25,
+                    y=card_y + 75,
+                )
             )
     else:
-        bar_h = 75
-        bar_y = height - 120 if not is_vertical else height - 260
-        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.75:t=fill")
-        filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.6:t=2")
-        filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
+        # Abyssal/horror: bottom bar on landscape; top safe bar on Shorts (avoid YT UI).
+        bar_h = 90 if is_vertical else 75
+        if is_vertical:
+            bar_y = int(m["top"])
+        else:
+            bar_y = max(int(m["top"]), int(m["bottom"]) - bar_h)
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color=black@0.75:t=fill")
+        filters.append(f"drawbox=x={margin_x}:y={bar_y}:w={content_w}:h={bar_h}:color={accent}@0.6:t=2")
+        filters.append(_drawtext(site_esc, fontcolor=accent, fontsize=font_p, x=text_x, y=bar_y + 15))
         filters.append(
-            f"drawtext=text='{telemetry_esc}':fontcolor=white:fontsize=18:x=60:y={bar_y+45}:box=0"
+            _drawtext(telemetry_esc, fontcolor="white", fontsize=font_s, x=text_x, y=bar_y + 45)
         )
         if badge_esc:
+            badge_x = max(text_x, int(m["right"]) - 300)
             filters.append(
-                f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=18:x={width-320}:y={bar_y+25}:box=0"
+                _drawtext(badge_esc, fontcolor=accent, fontsize=font_s, x=badge_x, y=bar_y + 25)
             )
 
     return ",".join(filters)

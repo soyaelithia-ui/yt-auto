@@ -2,21 +2,30 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from lib.qa.diversity_gate import audit_scene_diversity, evaluate_scene_diversity
+from src.media.encode_defaults import default_render_crf, default_render_preset
 from src.media.multi_act_renderer import (
+    HUD_BORDERW,
+    HUD_FONT_META,
+    HUD_FONT_PRIMARY,
+    HUD_FONT_SECONDARY,
     MultiActVideoRenderer,
     NarrativeSceneAct,
     NicheHudConfig,
+    build_niche_hud_filter,
+    hud_safe_margins,
     niche_hud_from_act,
     niche_hud_from_mapping,
+    resolve_hud_accent_color,
 )
-from lib.qa.diversity_gate import audit_scene_diversity, evaluate_scene_diversity
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
-from src.media.encode_defaults import default_render_crf, default_render_preset
+from src.media.thumbnails.layout import AspectLayoutManager
 
 
 def test_niche_hud_scp_filter_escaping():
@@ -278,3 +287,108 @@ def test_scene_config_does_not_widen_extra_allow():
     src = Path("src/scene_manifest.py").read_text(encoding="utf-8")
     assert "model_config = ConfigDict(extra=" not in src
     assert 'ConfigDict(extra="allow")' not in src
+
+
+def _hud_boxes(filter_str: str):
+    return [
+        tuple(map(int, m.groups()))
+        for m in re.finditer(r"drawbox=x=(\d+):y=(\d+):w=(\d+):h=(\d+)", filter_str)
+    ]
+
+
+def test_shorts_hud_respects_thumbnail_safe_zone_all_niches():
+    """Shorts HUD bars/cards must stay inside AspectLayoutManager safe-zone."""
+    w, h = 1080, 1920
+    safe = AspectLayoutManager.get_safe_zone(w, h)
+    renderer = MultiActVideoRenderer()
+    niches = [
+        NicheHudConfig(
+            lane_id="moku-scp-shorts",
+            story_type="scp",
+            hud_badge="NIVEL 5",
+            hud_site="SITIO-19",
+            telemetry_label="CAM-01",
+            accent_color_hex="#00FF66",
+            tension_level=4,
+        ),
+        NicheHudConfig(
+            lane_id="aelithia-aita-shorts",
+            story_type="reddit_aita",
+            hud_badge="r/AmItheAsshole",
+            hud_site="OP: u/test",
+            telemetry_label="1.2k upvotes",
+            accent_color_hex="#FF4081",
+        ),
+        NicheHudConfig(
+            lane_id="moku-horror-shorts",
+            story_type="horror",
+            hud_badge="ABYSSAL",
+            hud_site="PROFUNDIDAD: 4000M",
+            telemetry_label="ECO",
+            accent_color_hex="#00FF66",
+        ),
+    ]
+    for cfg in niches:
+        filt = renderer.build_scene_hud_filter(w, h, cfg, 12.0)
+        boxes = _hud_boxes(filt)
+        assert boxes, cfg.story_type
+        for x, y, bw, bh in boxes:
+            assert x >= safe.left - 1, (cfg.story_type, x, safe.left)
+            assert x + bw <= safe.right + 1, (cfg.story_type, x + bw, safe.right)
+            assert y >= safe.top - 1, (cfg.story_type, y, safe.top)
+            assert y + bh <= safe.bottom + 1, (cfg.story_type, y + bh, safe.bottom)
+        # Must not sit in the Shorts bottom UI collision band
+        assert all(y + bh < int(h * 0.75) for _, y, _, bh in boxes)
+
+
+def test_hud_font_stroke_consistent_across_niches():
+    renderer = MultiActVideoRenderer()
+    sizes = {
+        HUD_FONT_PRIMARY,
+        HUD_FONT_PRIMARY + 2,  # vertical bump
+        HUD_FONT_SECONDARY,
+        HUD_FONT_META,
+    }
+    for story, lane in (("scp", "moku-scp-shorts"), ("reddit_aita", "aelithia"), ("horror", "moku")):
+        filt = renderer.build_scene_hud_filter(
+            1080,
+            1920,
+            NicheHudConfig(
+                lane_id=lane,
+                story_type=story,
+                hud_badge="BADGE",
+                hud_site="SITE",
+                telemetry_label="TEL",
+                accent_color_hex="#ABCDEF",
+            ),
+            10.0,
+        )
+        assert f"borderw={HUD_BORDERW}" in filt
+        found = {int(m.group(1)) for m in re.finditer(r"fontsize=(\d+)", filt)}
+        assert found, story
+        assert found <= sizes, (story, found, sizes)
+
+
+def test_resolve_hud_accent_from_channel_when_missing():
+    # Code default -> channel palette (moku / aelithia)
+    assert resolve_hud_accent_color("#00FF88", lane_id="moku-scp-shorts", story_type="scp") == "#00FF66"
+    assert resolve_hud_accent_color("", lane_id="aelithia-aita-long", story_type="reddit_aita") == "#FF4081"
+    # Explicit non-default accent is preserved
+    assert resolve_hud_accent_color("#112233", lane_id="moku", story_type="scp") == "#112233"
+
+
+def test_hud_safe_margins_match_thumbnail_layout():
+    for w, h in ((1080, 1920), (1920, 1080)):
+        safe = AspectLayoutManager.get_safe_zone(w, h)
+        m = hud_safe_margins(w, h)
+        assert m["left"] == safe.left
+        assert m["top"] == safe.top
+        assert m["bottom"] == safe.bottom
+        assert m["right"] == safe.right
+
+
+def test_build_niche_hud_filter_module_api_matches_renderer():
+    cfg = NicheHudConfig(story_type="scp", hud_badge="B", hud_site="S", accent_color_hex="#00FF66")
+    a = build_niche_hud_filter(1080, 1920, cfg, 8.0)
+    b = MultiActVideoRenderer().build_scene_hud_filter(1080, 1920, cfg, 8.0)
+    assert a == b
