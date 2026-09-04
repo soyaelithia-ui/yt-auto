@@ -13,7 +13,7 @@ Arquitectura modular, persistencia atómica en SQLite WAL, catálogo de assets o
 graph TD
     Lanes[config/lanes.json] --> Pipe[src/pipeline.py]
     Config[src/config.py] --> Pipe
-    Pipe --> Media[src/media/ native_procedural + FFmpeg loops]
+    Pipe --> Media[src/media/ FFmpeg beats stream-copy + director zoompan]
     Pipe --> Audio[src/audio/ TTS & EBU R128]
     Pipe --> Subs[src/media/subtitles_ass.py]
     Pipe --> Encoder[src/media/unified_encoder.py]
@@ -72,20 +72,20 @@ El sistema implementa una arquitectura desacoplada de 6 agentes orquestados con 
 2. **Agent 2: `ArtDirectorMoodAgent` (`schemas/art_director.schema.json`)**:
    - Selección de paleta cromática Rec.709, atmósfera lumínica volumétrica y dinámicas de partículas.
 3. **Agent 3: `ScenePlannerCompositorAgent` (`schemas/scene_manifest.schema.json`)**:
-   - Compilación del manifiesto de composición multi-escena canónico `SceneManifestV2` (arquetipos procedurales nativos WGSL, overlays, pacing). Los agentes emiten JSON; el motor de media decide píxeles.
+   - Compilación del manifiesto de composición multi-escena canónico `SceneManifestV2` (arquetipos de catálogo FFmpeg/híbrido, overlays, pacing). Los agentes emiten JSON; el motor de media decide píxeles.
 4. **Agent 4: `VisualAudioQAAuditorAgent` (`schemas/video_qa.schema.json`)**:
    - Auditoría forense automatizada: EBU R128 (-14.0 ± 1.0 LUFS para Shorts, -16.0 LUFS para Longform), True Peak (-1.0 dBTP), correlación estéreo y umbrales de luminancia/congelamiento.
 5. **Agent 5: `ImageAuditorAgent` (`schemas/image_auditor.schema.json`)**:
-   - **Política Anti-Filler**: 100% de fondos y sujetos animados deben ser generados proceduralmente (código nativo WGSL/`wgpu-py` + FFmpeg). Prohíbe terminantemente fotos de stock estáticas (`DISCARDED_GENERIC_FILLER`).
+   - **Política Anti-Filler**: 100% de fondos y sujetos animados deben venir del catálogo/loops FFmpeg o del compositor híbrido (Ken Burns `zoompan`); **no** del hot path WebGPU. Prohíbe terminantemente fotos de stock estáticas (`DISCARDED_GENERIC_FILLER`).
    - Autoriza exclusivamente logotipos de marca o emblemas institucionales oficiales (`APPROVED_REFERENCE`) para proyección en insignias overlay no invasivas (SVG / `resvg-py`).
 6. **Agent 6: `SeoOptimizerAgent` (`schemas/seo_metadata.schema.json`)**:
    - Fórmulas algorítmicas de retención: 3 títulos virales para A/B testing, descripción con marcas de tiempo formateadas, tags optimizados, hashtags virales, comentario fijado para disparar interacción comunitaria y blueprints de miniaturas.
 
 ---
 
-## 6. Detección Escénica Procedural (Arquetipos Nativos WGSL)
+## 6. Detección Escénica (Arquetipos de Catálogo)
 
-Ubicado en `src/core/scenic_detector.py`, clasifica el tema hacia arquetipos del motor nativo (`src/media/native_procedural.py`, shaders WGSL vía `wgpu-py` / Lavapipe). No usa Canvas, Three.js ni WebGL de navegador. Arquetipos canónicos (`VALID_ARCHETYPES`):
+Ubicado en `src/core/scenic_detector.py`, clasifica el tema hacia arquetipos canónicos usados por el catálogo FFmpeg / `ProceduralVideoEngine` (sin importar `wgpu` ni `NativeProceduralEngine` en el hot path). No usa Canvas, Three.js ni WebGL de navegador. Arquetipos canónicos (`VALID_ARCHETYPES`):
 - `tactical_chamber`: Túneles, búnkeres, contención y pasillos industriales.
 - `dark_forest`: Bosques, niebla y caminos nocturnos.
 - `arctic_desolation`: Nieve, ventisca y tundra.
@@ -119,7 +119,7 @@ Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical
 ## 9. Políticas Arquitectónicas Anti-Regresión (REG-01 a REG-09)
 
 El sistema impone invariantes arquitectónicos nativos verificados automáticamente en CI/pytest:
-- **Renderizado Procedural Nativo**: Pipeline gráfico 100% nativo acelerado por GPU utilizando `wgpu-py` con fragment shaders en WGSL, respaldado por fallback en CPU mediante Mesa Lavapipe.
+- **Renderizado FFmpeg SSOT (Teología v2.4.0)**: beats = concat demuxer + `-c:v copy`; director = FFmpeg `zoompan`/HUDs + ensamble master. `ENABLE_NATIVE_PROCEDURAL` default off (wgpu solo opt-in experimental).
 - **Tipografía Vectorizada y Overlays Dinámicos**: Rasterización SVG de alto rendimiento vía `resvg-py` y composición de overlays con técnica zero-copy.
 - **Subtítulos Nativos Atómicos (`libass`)**: Generación directa de archivos `.ass` con temporización karaoke (`{\kf}`) y márgenes de seguridad para UI móvil (`MarginV >= 240px`), integrados nativamente en la cadena de filtros de FFmpeg.
 - **Transcodificación Atómica en Pase Único**: Pipeline unificado de FFmpeg (`-filter_complex`) con drenaje asíncrono de flujo `stderr` para evitar bloqueos por buffers de tubería del SO.

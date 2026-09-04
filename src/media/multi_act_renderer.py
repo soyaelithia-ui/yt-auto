@@ -1,9 +1,9 @@
 """
-src/media/multi_act_renderer.py - Code-Based Multi-Scene Procedural Video Compositor.
+src/media/multi_act_renderer.py - Multi-Act FFmpeg Video Compositor.
 
-Orchestrates sequential procedural video scenes (Canvas 2D / Three.js / WebGL / CSS)
-across narrative temporal acts, with tactical SCP HUD overlays, smooth crossfade transitions,
-and dynamic ASS subtitles. 100% code-driven without external static image scraping.
+Orchestrates sequential catalog/loop video scenes across narrative temporal acts in a
+single FFmpeg filter_complex pass, with tactical SCP HUD overlays (drawtext/drawbox),
+fade transitions, and optional ASS subtitles. FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
 """
 from __future__ import annotations
 

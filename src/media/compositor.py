@@ -3,7 +3,7 @@ src/media/multi_scene_compositor.py - Master Multi-Scene Dynamic Video Composito
 
 Orchestrates multi-scene rendering (45-90s pacing for longform, 8-15s for shorts),
 delegating scene segments to either the Hybrid Cinematic AI Engine or the Pure Procedural Engine,
-stitching transitions with xfade, mastering broadcast EBU R128 audio (-14 LUFS, -1.5 dBTP)
+stitching scenes via FFmpeg concat demuxer (stream-copy; not xfade), mastering broadcast EBU R128 audio (-14 LUFS, -1.5 dBTP)
 with dynamic sidechain ducking (-18 dB), and applying master 36-tap Lanczos / de-banding filters.
 Conforms to BaseVideoCompositor interface.
 """
