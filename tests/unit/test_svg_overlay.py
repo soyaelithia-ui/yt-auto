@@ -8,7 +8,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.media.svg_overlay import SVGOverlayEngine
+from src.media.svg_overlay import SVGOverlayEngine, resvg_py
+
+requires_resvg = pytest.mark.skipif(resvg_py is None, reason="resvg-py optional dependency not installed")
 
 
 @pytest.fixture
@@ -59,6 +61,7 @@ def test_render_overlay_none_preset(engine, none_preset):
     assert np.all(res == 0)
 
 
+@requires_resvg
 @pytest.mark.parametrize("preset", ["hud_tactical_telemetry", "scp_classification_stamp", "biometric_wave"])
 def test_render_overlay_all_presets(engine, preset):
     """Verify all 3 catalog presets render valid RGBA frames."""
@@ -77,6 +80,7 @@ def test_render_overlay_all_presets(engine, preset):
     assert np.any(res[:, :, 3] > 0)
 
 
+@requires_resvg
 def test_render_overlay_zero_allocation_out_buffer(engine):
     """Verify out_buffer is written in-place without reallocation."""
     out_buf = np.zeros((1920, 1080, 4), dtype=np.uint8)
@@ -93,6 +97,7 @@ def test_render_overlay_zero_allocation_out_buffer(engine):
     assert np.any(out_buf > 0)
 
 
+@requires_resvg
 def test_render_overlay_raster_caching(engine):
     """Verify identical parameters hit raster cache and avoid re-rasterization."""
     params = {"telemetry_text": "CACHED", "bpm": "60"}
@@ -114,6 +119,7 @@ def test_render_overlay_invalid_out_buffer(engine):
         engine.render_overlay("hud_tactical_telemetry", width=100, height=100, out_buffer=bad_buf)
 
 
+@requires_resvg
 def test_render_overlay_arbitrary_aspect_ratios(engine):
     """Verify arbitrary aspect ratios (e.g. 1:1 square, 16:9 widescreen) return exact requested canvas shape."""
     for width, height in [(200, 200), (640, 360), (300, 500)]:

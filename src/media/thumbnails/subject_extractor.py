@@ -50,6 +50,22 @@ class AdaptiveSubjectCompositor:
             alpha = int(140 * (gy / ground_h) * intensity)
             draw_vig.line([(0, y_pos), (w, y_pos)], fill=(8, 10, 14, alpha))
 
+        # Central chiaroscuro focal presence and atmospheric depth illumination
+        cx, cy = w // 2, int(h * 0.52)
+        focal_w, focal_h = int(w * 0.35), int(h * 0.25)
+        focal_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw_focal = ImageDraw.Draw(focal_layer)
+        for step in range(5, 0, -1):
+            factor = step / 5.0
+            ew = int(focal_w * factor)
+            eh = int(focal_h * factor)
+            alpha = int(24 * (1.0 - factor * 0.7) * intensity)
+            draw_focal.ellipse(
+                [(cx - ew, cy - eh), (cx + ew, cy + eh)],
+                fill=(r_col, g_col, b_col, alpha),
+            )
+        focal_layer = focal_layer.filter(ImageFilter.GaussianBlur(radius=15))
+
         # Accent color rim / ambient glow around lower third
         accent_glow = Image.new("RGBA", (w, h), (r_col, g_col, b_col, 0))
         draw_glow = ImageDraw.Draw(accent_glow)
@@ -60,6 +76,7 @@ class AdaptiveSubjectCompositor:
             draw_glow.line([(0, y_pos), (w, y_pos)], fill=(r_col, g_col, b_col, alpha))
 
         composite = Image.alpha_composite(base_rgba, vignette_layer)
+        composite = Image.alpha_composite(composite, focal_layer)
         composite = Image.alpha_composite(composite, accent_glow)
         return composite.convert("RGB")
 

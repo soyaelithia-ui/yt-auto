@@ -19,7 +19,33 @@ TEMPLATES_DIR = REPO_ROOT / "assets" / "thumbnails" / "templates"
 VISUAL_BANK_DIR = REPO_ROOT / "assets" / "visual_bank"
 
 
-class ThematicAssetResolver:
+class _ThematicAssetResolverMeta(type):
+    """Allow monkeypatching either the class or module-level directories seamlessly."""
+
+    @property
+    def VISUAL_BANK_DIR(cls) -> Path:
+        if "_custom_visual_bank_dir" in cls.__dict__:
+            return cls.__dict__["_custom_visual_bank_dir"]
+        import src.media.thumbnails.asset_resolver as mod
+        return mod.VISUAL_BANK_DIR
+
+    @VISUAL_BANK_DIR.setter
+    def VISUAL_BANK_DIR(cls, val: Path) -> None:
+        cls._custom_visual_bank_dir = Path(val)
+
+    @property
+    def TEMPLATES_DIR(cls) -> Path:
+        if "_custom_templates_dir" in cls.__dict__:
+            return cls.__dict__["_custom_templates_dir"]
+        import src.media.thumbnails.asset_resolver as mod
+        return mod.TEMPLATES_DIR
+
+    @TEMPLATES_DIR.setter
+    def TEMPLATES_DIR(cls, val: Path) -> None:
+        cls._custom_templates_dir = Path(val)
+
+
+class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
     """
     Resolves background imagery through a strict 3-tier local hierarchy:
     - Tier 1: Explicit image path (if specified and valid).
@@ -57,6 +83,8 @@ class ThematicAssetResolver:
         # ---------------------------------------------------------
         norm_arch = str(archetype or "").lower()
         norm_chan = str(channel_id or "").lower()
+        visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
+        templates_dir = Path(cls.TEMPLATES_DIR)
 
         # Map archetype first to specific template folders
         template_keys = []
@@ -70,7 +98,7 @@ class ThematicAssetResolver:
             template_keys.append(norm_arch)
 
         for t_key in template_keys:
-            t_dir = TEMPLATES_DIR / t_key
+            t_dir = templates_dir / t_key
             if t_dir.is_dir():
                 for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
                     candidates = sorted(t_dir.glob(ext))
@@ -121,7 +149,7 @@ class ThematicAssetResolver:
             chan_keys.append("scp" if is_vertical else "horror")
 
         for c_key in chan_keys:
-            c_dir = TEMPLATES_DIR / c_key
+            c_dir = templates_dir / c_key
             if c_dir.is_dir():
                 for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
                     candidates = sorted(c_dir.glob(ext))
@@ -134,7 +162,7 @@ class ThematicAssetResolver:
 
         # Also check assets/visual_bank/<channel>/scenery/
         chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
-        visual_scenery_dir = VISUAL_BANK_DIR / chan_prefix / "scenery"
+        visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
         if visual_scenery_dir.is_dir():
             for ext in ("*.jpg", "*.jpeg", "*.png"):
                 candidates = sorted(visual_scenery_dir.glob(ext))
@@ -188,7 +216,22 @@ class ThematicAssetResolver:
         norm_arch = str(archetype or "").lower()
         norm_chan = str(channel_id or "").lower()
         idx = max(1, int(scene_idx))
+        visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
+        templates_dir = Path(cls.TEMPLATES_DIR)
 
+        # 1. Prioritize visual bank scenery for multi-scene rotational diversity
+        chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
+        if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
+            chan_prefix = "aelithia"
+        scenery_dir = visual_bank_dir / chan_prefix / "scenery"
+        if scenery_dir.is_dir():
+            candidates = []
+            for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
+                candidates.extend(sorted(scenery_dir.glob(ext)))
+            if candidates:
+                return candidates[(idx - 1) % len(candidates)]
+
+        # 2. Fallback to curated templates if visual bank has no scenery
         target_keys: list[str] = []
         if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
             target_keys.append("scp")
@@ -200,24 +243,13 @@ class ThematicAssetResolver:
             target_keys.append(norm_arch)
 
         for key in target_keys:
-            t_dir = TEMPLATES_DIR / key
+            t_dir = templates_dir / key
             if t_dir.is_dir():
                 candidates: list[Path] = []
                 for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
                     candidates.extend(sorted(t_dir.glob(ext)))
                 if candidates:
                     return candidates[(idx - 1) % len(candidates)]
-
-        chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
-        if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
-            chan_prefix = "aelithia"
-        scenery_dir = VISUAL_BANK_DIR / chan_prefix / "scenery"
-        if scenery_dir.is_dir():
-            candidates = []
-            for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
-                candidates.extend(sorted(scenery_dir.glob(ext)))
-            if candidates:
-                return candidates[(idx - 1) % len(candidates)]
 
         try:
             from src.core.catalog import LoopCatalogRepository
@@ -239,6 +271,9 @@ class ThematicAssetResolver:
         if bg.is_file():
             return bg
 
+        horror_backdrop = templates_dir / "horror" / "master_backdrop.jpg"
+        if horror_backdrop.is_file():
+            return horror_backdrop
         return TEMPLATES_DIR / "horror" / "master_backdrop.jpg"
 
 

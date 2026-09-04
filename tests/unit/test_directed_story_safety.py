@@ -860,7 +860,7 @@ def test_critical_qa_accepts_complete_artifacts_and_blocks_placeholders(monkeypa
     Image.new("RGB", (1280, 720), "red").save(thumbnail)
     source = tmp_path / "scene.jpg"
     source.write_bytes(b"image")
-    scenes = build_visual_scene_plan(605.0, [str(source)])
+    scenes = build_visual_scene_plan(605.0, [str(source)], min_seconds=20.0, max_seconds=30.0)
     plan = tmp_path / "visual_plan.json"
     plan.write_text(
         json.dumps(

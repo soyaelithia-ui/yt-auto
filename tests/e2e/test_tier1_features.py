@@ -351,6 +351,7 @@ def test_f06_none_preset_returns_zero_alpha():
 @pytest.mark.tier1
 def test_f06_dynamic_xml_interpolation():
     """Verify XML template parameters (telemetry, timestamps) are interpolated into overlay output."""
+    pytest.importorskip("resvg_py", reason="resvg-py optional dependency not installed")
     engine_file = PROJECT_ROOT / "src" / "media" / "svg_overlay.py"
     if engine_file.exists():
         from src.media.svg_overlay import SVGOverlayEngine

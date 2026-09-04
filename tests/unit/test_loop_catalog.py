@@ -28,7 +28,7 @@ class TestLoopCatalogRepository(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def _create_dummy_video(self, name: str, size: int = 1024) -> str:
+    def _create_dummy_video(self, name: str, size: int = 30_000) -> str:
         p = Path(self.temp_dir.name) / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"0" * size)
