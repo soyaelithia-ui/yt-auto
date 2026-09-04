@@ -14,6 +14,8 @@ from src.media.hybrid_engine import (
     HybridVideoEngine,
     HybridVideoError,
     cubic_bezier_ease,
+    force_pillow_hybrid_frames_enabled,
+    build_ken_burns_zoompan_filter,
 )
 from src.media.proc_engine import (
     ProceduralVideoEngine,
@@ -60,6 +62,8 @@ __all__ = [
     "HybridVideoEngine",
     "HybridVideoError",
     "cubic_bezier_ease",
+    "force_pillow_hybrid_frames_enabled",
+    "build_ken_burns_zoompan_filter",
     "ProceduralVideoEngine",
     "ProceduralVideoError",
     "MultiSceneCompositor",

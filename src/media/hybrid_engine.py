@@ -48,6 +48,8 @@ __all__ = [
     "HybridVideoEngine",
     "HybridVideoError",
     "cubic_bezier_ease",
+    "force_pillow_hybrid_frames_enabled",
+    "build_ken_burns_zoompan_filter",
 ]
 
 
@@ -61,6 +63,61 @@ def cubic_bezier_ease(t: float, p1: float = 0.25, p2: float = 0.1, p3: float = 0
     t = max(0.0, min(1.0, float(t)))
     # 3-term cubic hermite / bezier blend
     return t * t * (3.0 - 2.0 * t)
+
+
+def force_pillow_hybrid_frames_enabled(extra: Optional[Dict[str, Any]] = None) -> bool:
+    """Opt-in only: legacy Pillow rawvideo frame loop for hybrid camera/FX.
+
+    Default path uses FFmpeg zoompan/crop (+ precomputed overlays) to avoid
+    per-frame Python crop/resize/ImageDraw work. Enable the old path with
+    FORCE_PILLOW_HYBRID_FRAMES=1 or force_pillow_hybrid_frames=True in kwargs.
+    """
+    env = os.environ.get("FORCE_PILLOW_HYBRID_FRAMES", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if extra and bool(extra.get("force_pillow_hybrid_frames")):
+        return True
+    return False
+
+
+def build_ken_burns_zoompan_filter(
+    width: int,
+    height: int,
+    fps: int,
+    total_frames: int,
+    zoom_start: float,
+    zoom_end: float,
+    pan_direction: str,
+) -> str:
+    """Build an FFmpeg zoompan expression matching HybridVideoEngine camera easing.
+
+    Uses the same smoothstep easing as ``cubic_bezier_ease`` (t^2*(3-2t)).
+    """
+    denom = max(1, int(total_frames) - 1)
+    e = f"(on/{denom})*(on/{denom})*(3-2*(on/{denom}))"
+    z0 = float(zoom_start)
+    z1 = float(zoom_end)
+    z = f"({z0:.6f}+({z1:.6f}-{z0:.6f})*{e})"
+    pan = (pan_direction or "static").strip().lower()
+    if pan == "left_to_right":
+        x = f"(iw-iw/zoom)*{e}"
+        y = "(ih-ih/zoom)/2"
+    elif pan == "right_to_left":
+        x = f"(iw-iw/zoom)*(1-{e})"
+        y = "(ih-ih/zoom)/2"
+    elif pan == "center_to_top":
+        x = "(iw-iw/zoom)/2"
+        y = f"(ih-ih/zoom)*(1-0.5*{e})"
+    elif pan == "center_to_bottom":
+        x = "(iw-iw/zoom)/2"
+        y = f"(ih-ih/zoom)*(0.5*{e})"
+    else:
+        x = "(iw-iw/zoom)/2"
+        y = "(ih-ih/zoom)/2"
+    return (
+        f"zoompan=z='{z}':x='{x}':y='{y}':"
+        f"d={int(total_frames)}:s={int(width)}x{int(height)}:fps={int(fps)}"
+    )
 
 
 class HybridVideoEngine(BaseVideoCompositor):
@@ -169,6 +226,13 @@ class HybridVideoEngine(BaseVideoCompositor):
     ) -> Path:
         """
         Renders a single scene segment using 3D camera pan, volumetric lighting, and particle simulation.
+
+        Default path: FFmpeg ``zoompan`` for Ken Burns (no per-frame Pillow crop/resize
+        rawvideo pipe). Particles / god rays are precomputed as static RGBA overlays and
+        composited in ``filter_complex``. Ambient flicker uses FFmpeg ``eq``.
+
+        Opt-in fallback: ``FORCE_PILLOW_HYBRID_FRAMES=1`` (or kwarg) restores the legacy
+        Pillow frame loop. Pillow subtitle burn remains opt-in via ``FORCE_PILLOW_SUBTITLES``.
         """
         out_path = Path(output_mp4).resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -181,24 +245,265 @@ class HybridVideoEngine(BaseVideoCompositor):
         particles = cfg.particles or ParticleConfig()
         tension = max(1, min(5, scene.tension_level))
 
-        # 1. Resolve or generate base background image
         bg_image = self._resolve_background_image(cfg.background_image_path, width, height)
 
-        # 2. Camera motion parameters modulated by tension
         zoom_start = float(camera.start_zoom)
         zoom_end = float(camera.end_zoom) + (0.02 * (tension - 1))
         pan_dir = camera.pan_direction
 
-        # 3. Pre-generate particle system state
-        particle_system = self._init_particle_system(particles, width, height, tension)
-
-        # 4. Render frames using direct batch pipe to FFmpeg
         threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
         from src.media.subtitles_ass import (
             force_pillow_subtitles_enabled,
             write_ass_from_cues_or_words,
         )
         use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
+        use_pillow_frames = force_pillow_hybrid_frames_enabled(extra_kwargs) or use_pillow_bridge
+
+        if use_pillow_frames:
+            self._render_scene_pillow_rawvideo(
+                scene=scene,
+                bg_image=bg_image,
+                width=width,
+                height=height,
+                fps=fps,
+                total_frames=total_frames,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                pan_dir=pan_dir,
+                lighting=lighting,
+                particles=particles,
+                tension=tension,
+                out_path=out_path,
+                crf=crf,
+                threads_val=threads_val,
+                subtitle_cues=subtitle_cues if use_pillow_bridge else None,
+                scene_start_sec=scene_start_sec,
+                subtitle_theme=subtitle_theme,
+                use_pillow_bridge=use_pillow_bridge,
+            )
+        else:
+            self._render_scene_ffmpeg_camera(
+                scene=scene,
+                bg_image=bg_image,
+                width=width,
+                height=height,
+                fps=fps,
+                duration=duration,
+                total_frames=total_frames,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                pan_dir=pan_dir,
+                lighting=lighting,
+                particles=particles,
+                tension=tension,
+                out_path=out_path,
+                crf=crf,
+                threads_val=threads_val,
+            )
+
+        if subtitle_cues and not use_pillow_bridge:
+            self._burn_libass_subtitles(
+                out_path=out_path,
+                subtitle_cues=subtitle_cues,
+                width=width,
+                height=height,
+                scene_start_sec=scene_start_sec,
+                crf=crf,
+                threads_val=threads_val,
+                write_ass_from_cues_or_words=write_ass_from_cues_or_words,
+            )
+
+        return out_path
+
+    def _burn_libass_subtitles(
+        self,
+        *,
+        out_path: Path,
+        subtitle_cues: List[SubtitleCue],
+        width: int,
+        height: int,
+        scene_start_sec: float,
+        crf: int,
+        threads_val: str,
+        write_ass_from_cues_or_words: Any,
+    ) -> None:
+        """Native libass burn-in post-pass (avoids Pillow GIL frame bridge)."""
+        burned = out_path.with_name(out_path.stem + "_libass" + out_path.suffix)
+        with tempfile.TemporaryDirectory(prefix="hybrid_ass_") as _ass_dir:
+            ass_path = Path(_ass_dir) / "scene_subs.ass"
+            write_ass_from_cues_or_words(
+                output_path=ass_path,
+                cues=subtitle_cues,
+                video_width=width,
+                video_height=height,
+                time_offset_sec=float(scene_start_sec or 0.0),
+            )
+            sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
+            fonts_dir = Path("assets/fonts").resolve()
+            fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
+            vf = f"ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
+            burn_cmd = [
+                "ffmpeg", "-y",
+                "-i", str(out_path),
+                "-vf", vf,
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-crf", str(crf),
+                "-preset", "faster",
+                "-threads", threads_val,
+                "-an",
+                "-movflags", "+faststart",
+                str(burned),
+            ]
+            run_ffmpeg(burn_cmd)
+        burned.replace(out_path)
+
+    def _render_scene_ffmpeg_camera(
+        self,
+        *,
+        scene: SceneConfig,
+        bg_image: Image.Image,
+        width: int,
+        height: int,
+        fps: int,
+        duration: float,
+        total_frames: int,
+        zoom_start: float,
+        zoom_end: float,
+        pan_dir: str,
+        lighting: LightingConfig,
+        particles: ParticleConfig,
+        tension: int,
+        out_path: Path,
+        crf: int,
+        threads_val: str,
+    ) -> None:
+        """Ken Burns + FX via FFmpeg filter_complex (no Python rawvideo frame loop)."""
+        with tempfile.TemporaryDirectory(prefix="hybrid_ff_") as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+            bg_path = tmp_dir / "bg.png"
+            bg_image.save(bg_path, format="PNG")
+
+            inputs: List[str] = ["-loop", "1", "-i", str(bg_path)]
+            filter_parts: List[str] = []
+            overlay_idx = 1
+
+            zoompan = build_ken_burns_zoompan_filter(
+                width=width,
+                height=height,
+                fps=fps,
+                total_frames=total_frames,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                pan_direction=str(pan_dir),
+            )
+            # Keep RGBA until overlays finish so alpha composites stay correct.
+            filter_parts.append(f"[0:v]{zoompan},format=rgba[base]")
+            current = "base"
+
+            if lighting.volumetric_rays:
+                god = self._create_god_rays_overlay(width, height, lighting)
+                god_path = tmp_dir / "god_rays.png"
+                god.save(god_path, format="PNG")
+                inputs.extend(["-i", str(god_path)])
+                filter_parts.append(f"[{overlay_idx}:v]format=rgba[god]")
+                filter_parts.append(f"[{current}][god]overlay=0:0:format=auto[vgod]")
+                current = "vgod"
+                overlay_idx += 1
+
+            if particles.type != "none":
+                particle_system = self._init_particle_system(particles, width, height, tension)
+                if particle_system:
+                    # Precompute one static particle field (simplifies away per-frame ImageDraw).
+                    particle_img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                    particle_img = self._render_particles(
+                        particle_img, particle_system, t_norm=0.35, width=width, height=height
+                    )
+                    if particle_img.mode != "RGBA":
+                        particle_img = particle_img.convert("RGBA")
+                    # Restore transparency for non-particle pixels drawn as opaque RGB on RGBA canvas.
+                    # _render_particles draws opaque ellipses; keep them, leave empty alpha as-is.
+                    part_path = tmp_dir / "particles.png"
+                    particle_img.save(part_path, format="PNG")
+                    inputs.extend(["-i", str(part_path)])
+                    filter_parts.append(f"[{overlay_idx}:v]format=rgba[parts]")
+                    filter_parts.append(f"[{current}][parts]overlay=0:0:format=auto[vpart]")
+                    current = "vpart"
+                    overlay_idx += 1
+
+            if lighting.flicker_frequency > 0.0:
+                freq = float(lighting.flicker_frequency)
+                # Approximate the dual-sine Pillow brightness flicker in FFmpeg eq space.
+                bright = (
+                    f"0.08*sin(2*PI*{freq:.4f}*t/{duration:.6f})"
+                    f"+0.04*sin(2*PI*{freq:.4f}*2.3*t/{duration:.6f})"
+                )
+                # Escape commas for filtergraph.
+                bright_esc = bright.replace(",", "\\,")
+                filter_parts.append(f"[{current}]eq=brightness='{bright_esc}'[vflick]")
+                current = "vflick"
+
+            filter_parts.append(f"[{current}]format=yuv420p[vout]")
+            filter_complex = ";".join(filter_parts)
+
+            ffmpeg_cmd = [
+                "ffmpeg", "-y",
+                *inputs,
+                "-filter_complex", filter_complex,
+                "-map", "[vout]",
+                "-frames:v", str(total_frames),
+                "-r", str(fps),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-crf", str(crf),
+                "-preset", "faster",
+                "-b:v", "4500k",
+                "-maxrate", "6000k",
+                "-bufsize", "8000k",
+                "-threads", threads_val,
+                "-an",
+                "-movflags", "+faststart",
+                str(out_path),
+            ]
+            logger.info(
+                "Hybrid FFmpeg camera path scene=%s frames=%d filter_len=%d",
+                scene.scene_id,
+                total_frames,
+                len(filter_complex),
+            )
+            run_ffmpeg(ffmpeg_cmd)
+
+    def _render_scene_pillow_rawvideo(
+        self,
+        *,
+        scene: SceneConfig,
+        bg_image: Image.Image,
+        width: int,
+        height: int,
+        fps: int,
+        total_frames: int,
+        zoom_start: float,
+        zoom_end: float,
+        pan_dir: str,
+        lighting: LightingConfig,
+        particles: ParticleConfig,
+        tension: int,
+        out_path: Path,
+        crf: int,
+        threads_val: str,
+        subtitle_cues: Optional[List[SubtitleCue]],
+        scene_start_sec: float,
+        subtitle_theme: Optional[SubtitleTheme],
+        use_pillow_bridge: bool,
+    ) -> None:
+        """Legacy per-frame Pillow crop/resize/FX piped as rawvideo to FFmpeg."""
+        particle_system = self._init_particle_system(particles, width, height, tension)
         ffmpeg_cmd = [
             "ffmpeg", "-y",
             "-f", "rawvideo",
@@ -221,11 +526,12 @@ class HybridVideoEngine(BaseVideoCompositor):
             str(out_path),
         ]
 
-        process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        process = subprocess.Popen(
+            ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
 
         stderr_bytes = b""
         try:
-            # Precompute god rays overlay once per scene segment
             god_rays_overlay = None
             if lighting.volumetric_rays:
                 god_rays_overlay = self._create_god_rays_overlay(width, height, lighting)
@@ -235,12 +541,10 @@ class HybridVideoEngine(BaseVideoCompositor):
                 t_norm = frame_idx / max(1, total_frames - 1)
                 ease_t = cubic_bezier_ease(t_norm)
 
-                # Camera zoom & pan interpolation
                 curr_zoom = zoom_start + (zoom_end - zoom_start) * ease_t
                 crop_w = int(bg_w / curr_zoom)
                 crop_h = int(bg_h / curr_zoom)
 
-                # Pan calculation
                 if pan_dir == "center_to_top":
                     crop_x = (bg_w - crop_w) // 2
                     crop_y = int((bg_h - crop_h) * (1.0 - ease_t * 0.5))
@@ -260,26 +564,24 @@ class HybridVideoEngine(BaseVideoCompositor):
                 crop_x = max(0, min(bg_w - crop_w, crop_x))
                 crop_y = max(0, min(bg_h - crop_h, crop_y))
 
-                # Crop & scale to target viewport
                 frame = bg_image.crop((crop_x, crop_y, crop_x + crop_w, crop_y + crop_h))
                 frame = frame.resize((width, height), Image.Resampling.BILINEAR)
 
-                # Ambient flicker
                 if lighting.flicker_frequency > 0.0:
                     freq = lighting.flicker_frequency
-                    flicker = 1.0 + 0.08 * math.sin(2.0 * math.pi * freq * t_norm) + 0.04 * math.sin(2.0 * math.pi * freq * 2.3 * t_norm)
+                    flicker = (
+                        1.0
+                        + 0.08 * math.sin(2.0 * math.pi * freq * t_norm)
+                        + 0.04 * math.sin(2.0 * math.pi * freq * 2.3 * t_norm)
+                    )
                     frame = ImageEnhance.Brightness(frame).enhance(flicker)
 
-                # Volumetric god rays composite
                 if god_rays_overlay:
                     frame = Image.alpha_composite(frame.convert("RGBA"), god_rays_overlay).convert("RGB")
 
-                # Draw Atmospheric Particles
                 if particles.type != "none" and particle_system:
                     frame = self._render_particles(frame, particle_system, t_norm, width, height)
 
-                # Pillow subtitle bridge is opt-in only (FORCE_PILLOW_SUBTITLES).
-                # Default: burn via libass after the scene encode (see post-pass below).
                 if subtitle_cues and use_pillow_bridge:
                     curr_time = scene_start_sec + (frame_idx / float(fps))
                     frame = self.subtitle_drawer.draw_on_frame(
@@ -289,7 +591,6 @@ class HybridVideoEngine(BaseVideoCompositor):
                         theme_override=subtitle_theme,
                     )
 
-                # Send raw RGB bytes to FFmpeg pipe
                 process.stdin.write(frame.tobytes())
         finally:
             if process.stdin:
@@ -316,44 +617,6 @@ class HybridVideoEngine(BaseVideoCompositor):
                 stderr=err_msg,
                 command=ffmpeg_cmd,
             )
-
-        if subtitle_cues and not use_pillow_bridge:
-            # Native libass burn-in post-pass (avoids Pillow GIL frame bridge).
-            import tempfile as _tempfile
-            burned = out_path.with_name(out_path.stem + "_libass" + out_path.suffix)
-            with _tempfile.TemporaryDirectory(prefix="hybrid_ass_") as _ass_dir:
-                ass_path = Path(_ass_dir) / "scene_subs.ass"
-                write_ass_from_cues_or_words(
-                    output_path=ass_path,
-                    cues=subtitle_cues,
-                    video_width=width,
-                    video_height=height,
-                    time_offset_sec=float(scene_start_sec or 0.0),
-                )
-                sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
-                fonts_dir = Path("assets/fonts").resolve()
-                fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
-                vf = f"ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
-                burn_cmd = [
-                    "ffmpeg", "-y",
-                    "-i", str(out_path),
-                    "-vf", vf,
-                    "-c:v", "libx264",
-                    "-pix_fmt", "yuv420p",
-                    "-colorspace", "bt709",
-                    "-color_primaries", "bt709",
-                    "-color_trc", "bt709",
-                    "-crf", str(crf),
-                    "-preset", "faster",
-                    "-threads", threads_val,
-                    "-an",
-                    "-movflags", "+faststart",
-                    str(burned),
-                ]
-                run_ffmpeg(burn_cmd)
-            burned.replace(out_path)
-
-        return out_path
 
     def _create_god_rays_overlay(self, w: int, h: int, lighting: LightingConfig) -> Image.Image:
         """Precomputes volumetric god rays mask overlay."""
