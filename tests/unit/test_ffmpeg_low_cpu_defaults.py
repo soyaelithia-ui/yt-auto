@@ -12,6 +12,7 @@ from src.media.encode_defaults import (
     default_ffmpeg_threads,
     default_render_crf,
     default_render_preset,
+    loop_matches_target_geometry,
 )
 
 
@@ -106,3 +107,31 @@ def test_lib_video_crf_default_matches_compose(monkeypatch):
     src = Path("lib/video.py").read_text(encoding="utf-8")
     assert 'os.environ.get("RENDER_CRF", "21")' in src
     assert 'os.environ.get("RENDER_PRESET", "veryfast")' in src
+
+
+def test_loop_matches_target_geometry_uses_probe(monkeypatch):
+    """Shared helper must agree with PR #11 compositor geometry predicate."""
+    from types import SimpleNamespace
+
+    class FakeProbe:
+        def __init__(self, w, h):
+            self.primary_video = SimpleNamespace(width=w, height=h)
+            self.video_streams = [self.primary_video]
+
+    def fake_probe(path):
+        return FakeProbe(1920, 1080)
+
+    monkeypatch.setattr("lib.ffmpeg.probe_media", fake_probe)
+    assert loop_matches_target_geometry("/tmp/loop.mp4", 1920, 1080) is True
+    assert loop_matches_target_geometry("/tmp/loop.mp4", 1080, 1920) is False
+
+
+def test_proc_engine_stream_copy_aligned_with_director_pr11():
+    """Guardrail: procedural no-sub path shares geometry helper + PR #11 copy/scale shape."""
+    src = Path("src/media/proc_engine.py").read_text(encoding="utf-8")
+    assert "loop_matches_target_geometry" in src
+    assert "-stream_loop" in src
+    assert '"-c:v", "copy"' in src
+    assert "force_original_aspect_ratio=increase" in src
+    assert '"-preset", "faster"' not in src
+    assert "default_render_preset()" in src

@@ -15,7 +15,8 @@ Policy (near-zero resource goal):
 from __future__ import annotations
 
 import os
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 
 def default_render_crf(fallback: int = 21) -> int:
@@ -46,3 +47,27 @@ def default_ffmpeg_threads(fallback: Optional[int] = None) -> int:
     if fallback is not None:
         return max(1, min(int(fallback), cpu_cap))
     return cpu_cap
+
+
+def loop_matches_target_geometry(
+    loop_path: Union[Path, str],
+    width: int,
+    height: int,
+) -> bool:
+    """Return True when probed video WxH equals the target (safe for ``-c:v copy``).
+
+    Shared by procedural segment render (this PR) and director single-pass assembly
+    (PR #11 ``MultiSceneCompositor._loop_matches_target``) so merges do not fork
+    two incompatible geometry checks. Uses ``probe.primary_video`` (same as
+    ``video_streams[0]`` when present).
+    """
+    try:
+        from lib.ffmpeg import probe_media
+
+        probe = probe_media(Path(loop_path))
+        vs = probe.primary_video
+        if vs is None:
+            return False
+        return int(vs.width) == int(width) and int(vs.height) == int(height)
+    except Exception:
+        return False

@@ -16,9 +16,13 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from src.media.encode_defaults import default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Union
 
+from src.media.encode_defaults import (
+    default_render_crf,
+    default_render_preset,
+    loop_matches_target_geometry,
+)
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.core.lifecycle import cleanup_subprocesses, register_process
@@ -374,33 +378,42 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                         command=write_cmd,
                     )
             else:
-                # Prefer stream-copy when the micro-loop already matches target geometry
-                # (avoids a full libx264 pass on the default procedural hot path).
-                use_stream_copy = False
-                try:
-                    probe = probe_media(loop_file)
-                    pv = probe.primary_video if probe else None
-                    if pv and int(getattr(pv, "width", 0) or 0) == int(width) and int(getattr(pv, "height", 0) or 0) == int(height):
-                        use_stream_copy = True
-                except Exception:
-                    use_stream_copy = False
+                # Prefer stream-copy trim when the catalog/micro-loop already matches
+                # target geometry (near-zero CPU). Same predicate as director
+                # single-pass (PR #11) via loop_matches_target_geometry.
+                # Re-encode only when scale/normalize is required; presets from
+                # encode_defaults (veryfast + CRF 21) — not hardcoded faster/slow.
+                use_stream_copy = loop_matches_target_geometry(loop_file, width, height)
 
                 if use_stream_copy:
+                    # Match PR #11: -stream_loop trim + -c:v copy (no concat remux).
                     ffmpeg_cmd = [
                         "ffmpeg", "-y",
-                        "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                        "-stream_loop", "-1",
+                        "-i", str(loop_file),
                         "-t", f"{duration:.3f}",
                         "-c:v", "copy",
                         "-an",
                         "-movflags", "+faststart",
                         str(out_path),
                     ]
+                    logger.info(
+                        "Procedural scene=%s stream-copy trim (no re-encode) loop=%s dur=%.3f",
+                        scene.scene_id,
+                        loop_file.name,
+                        duration,
+                    )
+                    run_ffmpeg(ffmpeg_cmd)
                 else:
+                    # Compatible with PR #11 scale+crop+fps normalize when WxH differ.
                     ffmpeg_cmd = [
                         "ffmpeg", "-y",
                         "-f", "concat", "-safe", "0", "-i", str(concat_txt),
                         "-t", f"{duration:.3f}",
-                        "-vf", f"scale={width}:{height},format=yuv420p",
+                        "-vf", (
+                            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                            f"crop={width}:{height},fps={fps},format=yuv420p"
+                        ),
                         "-c:v", "libx264",
                         "-crf", str(crf),
                         "-preset", preset,
@@ -415,7 +428,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                         "-movflags", "+faststart",
                         str(out_path),
                     ]
-                run_ffmpeg(ffmpeg_cmd)
+                    run_ffmpeg(ffmpeg_cmd)
 
         return out_path
 
