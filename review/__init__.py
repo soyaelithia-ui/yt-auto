@@ -7,10 +7,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from review.domain import DeliveryResult, ReviewJob, ReviewStatus
-from review.db import ReviewStateStore, get_db_connection, init_review_db
-from review.publication_gate import PublicationGate
-from review.review_manager import ReviewJobManager
-from review.telegram_bot import TelegramReviewBot, send_telegram_message
 
 
 class BaseReviewPublicationAdapter:
@@ -41,6 +37,8 @@ class BaseReviewPublicationAdapter:
         job_id: str, version: int, original_video_path: str
     ) -> None:
         """Atomically claim the approved job through the core publication gate."""
+        from review.db import ReviewStateStore
+        from review.publication_gate import PublicationGate
         store = ReviewStateStore()
         job = store.get_job(job_id, version)
         if job and job.status == ReviewStatus.PUBLISHING.value:
@@ -136,6 +134,12 @@ class BaseReviewPublicationAdapter:
             "cover": cover,
             "metadata": metadata,
         }
+
+
+from review.db import ReviewStateStore, get_db_connection, init_review_db
+from review.publication_gate import PublicationGate
+from review.review_manager import ReviewJobManager
+from review.telegram_bot import TelegramReviewBot, send_telegram_message
 
 
 __all__ = [
