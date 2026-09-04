@@ -2,7 +2,7 @@
 src/media/multi_act_renderer.py - Multi-Act FFmpeg Video Compositor.
 
 Orchestrates sequential catalog/loop video scenes across narrative temporal acts in a
-single FFmpeg filter_complex pass, with tactical SCP HUD overlays (drawtext/drawbox),
+single FFmpeg filter_complex pass, with niche HUD overlays (SCP / Reddit-AITA / abyssal drawtext/drawbox),
 real FFmpeg xfade transitions when MULTIACT_XFADE=1 (default; duration-aware via
 calculate_xfade_duration — callers must pass that for total_duration so A/V -t align),
 or fade+concat without timeline shrink when MULTIACT_XFADE=0. Optional ASS subtitles.
@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
 from src.log import get_logger
+from src.media.encode_defaults import default_render_crf, default_render_preset
 
 logger = get_logger("multi_act_renderer")
 
@@ -80,12 +81,119 @@ class NarrativeSceneAct:
     color_hex: str = "#00FF88"
 
 
+
+@dataclass
+class NicheHudConfig:
+    """Visual HUD telemetry and metadata configuration for niche channel layouts."""
+    lane_id: str = ""
+    story_type: str = ""
+    hud_badge: str = ""
+    hud_site: str = ""
+    telemetry_label: str = ""
+    accent_color_hex: str = "#00FF88"
+    tension_level: int = 1
+
+
+def _escape_drawtext(text: str) -> str:
+    """Escapes text for FFmpeg drawtext filter."""
+    if not text:
+        return ""
+    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "").replace("%", "\\%")
+
+
+def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
+    """Map a NarrativeSceneAct theme to niche HUD story_type."""
+    cat = (act.theme_category or "").lower()
+    if "scp" in cat or "found" in cat or "anomaly" in cat:
+        story = "scp"
+    elif "aita" in cat or "reddit" in cat or "drama" in cat:
+        story = "reddit_aita"
+    else:
+        story = "horror"
+    return NicheHudConfig(
+        story_type=story,
+        hud_badge=act.hud_badge,
+        hud_site=act.hud_site,
+        telemetry_label=act.hud_telemetry,
+        accent_color_hex=act.color_hex or "#00FF88",
+        tension_level=1,
+    )
+
+
 class MultiActVideoRenderer:
     """Composites sequential procedural scenes into a unified cinematic master video."""
 
     def __init__(self, loops_dir: Optional[Path] = None):
         self.iconic_dir = ROOT_DIR / "assets" / "loops" / "thematic_iconic"
         self.loops_dir = loops_dir or (ROOT_DIR / "assets" / "loops" / "web_procedural")
+
+    def build_scene_hud_filter(
+        self,
+        width: int,
+        height: int,
+        hud_cfg: NicheHudConfig,
+        duration_sec: float,
+    ) -> str:
+        """Build FFmpeg filtergraph snippet for niche HUD (SCP / Reddit / abyssal)."""
+        accent = hud_cfg.accent_color_hex or "#00FF88"
+        site_esc = _escape_drawtext(hud_cfg.hud_site)
+        badge_esc = _escape_drawtext(hud_cfg.hud_badge)
+        telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
+        story = (hud_cfg.story_type or hud_cfg.lane_id or "").lower()
+        filters: List[str] = []
+        is_vertical = height > width
+
+        if "scp" in story:
+            bar_h = 70 if not is_vertical else 90
+            bar_y = 40 if not is_vertical else 120
+            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.7:t=fill")
+            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.8:t=2")
+            filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
+            filters.append(f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=18:x={width-360}:y={bar_y+15}:box=0")
+            if telemetry_esc:
+                filters.append(
+                    f"drawtext=text='{telemetry_esc}':fontcolor=white@0.8:fontsize=16:x=60:y={bar_y+bar_h-28}:box=0"
+                )
+            if hud_cfg.tension_level >= 4:
+                filters.append(
+                    f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=red@0.25:enable='gte(t,0)':t=fill"
+                )
+                filters.append(
+                    f"drawtext=text='[ALERT // ANOMALOUS TENSION]':fontcolor=red:fontsize=16:x={width-400}:y={bar_y+bar_h-28}:box=0"
+                )
+        elif "aita" in story or "reddit" in story or "drama" in story:
+            card_w = min(width - 80, 860)
+            card_h = 95 if not is_vertical else 120
+            card_x = (width - card_w) // 2
+            card_y = 50 if not is_vertical else 140
+            filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color=black@0.6:t=fill")
+            filters.append(f"drawbox=x={card_x}:y={card_y}:w={card_w}:h={card_h}:color={accent}@0.75:t=2")
+            filters.append(
+                f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=22:x={card_x+25}:y={card_y+15}:box=0"
+            )
+            filters.append(
+                f"drawtext=text='{site_esc}':fontcolor=white@0.9:fontsize=18:x={card_x+25}:y={card_y+45}:box=0"
+            )
+            if telemetry_esc:
+                filters.append(
+                    f"drawtext=text='{telemetry_esc}':fontcolor=#FFAA00:fontsize=16:x={card_x+25}:y={card_y+75}:box=0"
+                )
+        else:
+            bar_h = 75
+            bar_y = height - 120 if not is_vertical else height - 260
+            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color=black@0.75:t=fill")
+            filters.append(f"drawbox=x=40:y={bar_y}:w={width-80}:h={bar_h}:color={accent}@0.6:t=2")
+            filters.append(f"drawtext=text='{site_esc}':fontcolor={accent}:fontsize=20:x=60:y={bar_y+15}:box=0")
+            filters.append(
+                f"drawtext=text='{telemetry_esc}':fontcolor=white:fontsize=18:x=60:y={bar_y+45}:box=0"
+            )
+            if badge_esc:
+                filters.append(
+                    f"drawtext=text='{badge_esc}':fontcolor={accent}:fontsize=18:x={width-320}:y={bar_y+25}:box=0"
+                )
+
+        return ",".join(filters)
+
 
     def resolve_loop_for_theme(self, category: str, is_vertical: bool = False) -> Path:
         """Finds the best available procedural loop MP4 for the given category."""
@@ -222,16 +330,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for i, act in enumerate(acts):
             scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
 
-            site_esc = act.hud_site.replace(":", "\\:").replace("'", "")
-            badge_esc = act.hud_badge.replace(":", "\\:").replace("'", "")
-
-            hud_filters = (
-                f"{scale_filter},"
-                f"drawbox=x=40:y=40:w={w-80}:h=75:color=black@0.65:t=fill,"
-                f"drawbox=x=40:y=40:w={w-80}:h=75:color={act.color_hex}@0.7:t=2,"
-                f"drawtext=text='{site_esc}':fontcolor={act.color_hex}:fontsize=22:x=60:y=55:box=0,"
-                f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=20:x={w-420}:y=55:box=0"
-            )
+            hud_cfg = niche_hud_from_act(act)
+            hud_overlay = self.build_scene_hud_filter(w, h, hud_cfg, float(act.duration_sec))
+            hud_filters = f"{scale_filter},{hud_overlay}"
             filter_parts.append(f"[{i}:v]{hud_filters}[v_act{i}]")
 
         if len(acts) == 1:
@@ -274,8 +375,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "-map", f"{audio_idx}:a:0",
             "-t", f"{out_dur:.3f}",
             "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "19",
+            "-preset", default_render_preset(),
+            "-crf", str(default_render_crf()),
             "-pix_fmt", "yuv420p",
             "-colorspace", "bt709",
             "-color_primaries", "bt709",

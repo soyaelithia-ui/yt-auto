@@ -101,3 +101,19 @@ The native procedural engine MUST map high-level art director parameters (tensio
 - **When** `MultiSceneCompositor` renders the video sequence
 - **Then** each scene MUST be rendered by `NativeProceduralEngine`
 - **And** maximum concurrent worker threads MUST NOT exceed the configured concurrency ceiling.
+
+### Requirement: Niche HUD Dispatch Without Browser
+The multi-act / director visual path MUST support niche HUD overlays via FFmpeg `drawtext`/`drawbox` only (no Playwright/Chromium), dispatched by lane/story type:
+
+- SCP: CCTV header bar with site, classification badge, optional high-tension alert
+- Reddit-AITA / drama: glassmorphic post card with subreddit badge and OP/telemetry
+- Abyssal / horror (default): sonar telemetry box with depth coordinates
+
+HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21). Director single-pass stream-copy (`-c:v copy`) remains the default when loops match target geometry and no HUD burn is required on that path.
+
+#### Scenario: SCP lane produces CCTV HUD filter
+- **Given** a scene with `niche_hud.story_type = "scp"` and tension ≥ 4
+- **When** `MultiActVideoRenderer.build_scene_hud_filter` runs
+- **Then** the filtergraph MUST include drawbox/drawtext HUD elements and an alert indicator
+- **And** MUST NOT import Playwright or Chromium.
+

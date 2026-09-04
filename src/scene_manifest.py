@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import jsonschema
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.log import get_logger
@@ -183,6 +183,8 @@ class TransitionConfig(BaseModel):
 
 
 class SceneConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     scene_index: int = Field(..., ge=1)
     scene_id: str
     environment_name: Optional[str] = None
@@ -197,6 +199,10 @@ class SceneConfig(BaseModel):
     hybrid_ai_config: Optional[HybridAIConfig] = None
     procedural_config: Optional[ProceduralConfig] = None
     transition_out: Optional[TransitionConfig] = Field(default_factory=TransitionConfig)
+    niche_hud: Optional[Dict[str, Any]] = None
+    camera_motion: Optional[Union[CameraMotionConfig, Dict[str, Any]]] = None
+    image_path: Optional[str] = None
+    asset_path: Optional[str] = None
 
 
 class SubtitleCue(BaseModel):

@@ -348,6 +348,15 @@ class QAGatekeeper:
         if thumb_src:
             self._audit_thumbnail_artifact(str(thumb_src), issues)
 
+        # ---------------- scene diversity gate ----------------
+        manifest_src = kwargs.get("manifest_path") or kwargs.get("scene_manifest_path")
+        if not manifest_src and video_path and os.path.exists(video_path):
+            cand_manifest = Path(video_path).parent / "scene_manifest.json"
+            if cand_manifest.is_file():
+                manifest_src = str(cand_manifest)
+        if manifest_src:
+            self._audit_scene_diversity(str(manifest_src), video_mode, issues)
+
         if self.strict_mode:
             report.passed = not issues
         else:
@@ -356,6 +365,28 @@ class QAGatekeeper:
         return report
 
     # ------------------------------------------------------------------
+
+
+    def _audit_scene_diversity(self, manifest_path: str, video_mode: str, issues: List[QualityReportIssue]) -> None:
+        """Block publish when scene diversity or asset dominance fails."""
+        try:
+            from lib.qa.diversity_gate import evaluate_scene_diversity
+
+            if not os.path.isfile(manifest_path):
+                return
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            is_short = video_mode in ("short", "vertical", "shorts")
+            res = evaluate_scene_diversity(manifest_data, is_short=is_short)
+            if not res.get("is_passed", True):
+                self._issue(
+                    issues,
+                    code=res.get("failure_code") or "ERR_QA_SCENE_DIVERSITY_INSUFFICIENT",
+                    message=res.get("message") or "Visual scene diversity validation failed",
+                    severity=_CRITICAL,
+                )
+        except Exception:
+            return
 
     def _finish(self, report: QualityReportDTO, output_report_path: str | None) -> None:
         if output_report_path:

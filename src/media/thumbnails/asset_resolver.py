@@ -169,3 +169,76 @@ class ThematicAssetResolver:
             draw.line([(0, y), (w, y)], fill=(r, g, b))
 
         return fallback
+
+    @classmethod
+    def resolve_scene_asset_path(
+        cls,
+        channel_id: str,
+        archetype: str = "",
+        scene_idx: int = 1,
+        explicit_path: Optional[Union[str, Path]] = None,
+        is_vertical: bool = False,
+    ) -> Path:
+        """Resolve a concrete asset Path for multi-act scenes; rotate to avoid dominance."""
+        if explicit_path:
+            p = Path(explicit_path).resolve()
+            if p.is_file():
+                return p
+
+        norm_arch = str(archetype or "").lower()
+        norm_chan = str(channel_id or "").lower()
+        idx = max(1, int(scene_idx))
+
+        target_keys: list[str] = []
+        if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
+            target_keys.append("scp")
+        elif any(k in norm_arch or k in norm_chan for k in ("aita", "drama", "confession", "aelithia")):
+            target_keys.append("aita")
+        elif any(k in norm_arch or k in norm_chan for k in ("horror", "vhs", "analog")):
+            target_keys.append("horror")
+        elif norm_arch:
+            target_keys.append(norm_arch)
+
+        for key in target_keys:
+            t_dir = TEMPLATES_DIR / key
+            if t_dir.is_dir():
+                candidates: list[Path] = []
+                for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
+                    candidates.extend(sorted(t_dir.glob(ext)))
+                if candidates:
+                    return candidates[(idx - 1) % len(candidates)]
+
+        chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
+        if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
+            chan_prefix = "aelithia"
+        scenery_dir = VISUAL_BANK_DIR / chan_prefix / "scenery"
+        if scenery_dir.is_dir():
+            candidates = []
+            for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
+                candidates.extend(sorted(scenery_dir.glob(ext)))
+            if candidates:
+                return candidates[(idx - 1) % len(candidates)]
+
+        try:
+            from src.core.catalog import LoopCatalogRepository
+
+            repo = LoopCatalogRepository()
+            loop_rec = repo.resolve_for_theme(theme=norm_arch or "atmospheric_landscape", is_vertical=is_vertical)
+            if loop_rec and loop_rec.file_path and Path(loop_rec.file_path).is_file():
+                return Path(loop_rec.file_path)
+        except Exception as exc:
+            logger.debug("LoopCatalogRepository resolution failed: %s", exc)
+
+        proc_dir = REPO_ROOT / "assets" / "loops" / "web_procedural"
+        if proc_dir.is_dir():
+            proc_candidates = sorted(proc_dir.glob("**/*.mp4"))
+            if proc_candidates:
+                return proc_candidates[(idx - 1) % len(proc_candidates)]
+
+        bg = REPO_ROOT / "assets" / "background.jpg"
+        if bg.is_file():
+            return bg
+
+        return TEMPLATES_DIR / "horror" / "master_backdrop.jpg"
+
+
