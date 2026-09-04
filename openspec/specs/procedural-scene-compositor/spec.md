@@ -103,7 +103,7 @@ The native procedural engine MUST map high-level art director parameters (tensio
 - **And** maximum concurrent worker threads MUST NOT exceed the configured concurrency ceiling.
 
 ### Requirement: Niche HUD Dispatch Without Browser
-The **MultiAct** filtergraph path MUST support niche HUD overlays via FFmpeg `drawtext`/`drawbox` only (no Playwright/Chromium), dispatched by lane/story type (planner `niche_hud` dict preferred when present on `NarrativeSceneAct`; otherwise theme-category mapping):
+The **MultiAct** filtergraph path and **`DIRECTOR_SINGLE_PASS`** / `MultiSceneCompositor` assembly MUST support niche HUD overlays via FFmpeg `drawtext`/`drawbox` only (no Playwright/Chromium), dispatched by lane/story type (planner `niche_hud` dict preferred when present on `NarrativeSceneAct` / scene manifest; otherwise theme-category mapping on MultiAct):
 
 - SCP: CCTV header bar with site, classification badge, optional high-tension alert
 - Reddit-AITA / drama: glassmorphic post card with subreddit badge and OP/telemetry
@@ -111,11 +111,24 @@ The **MultiAct** filtergraph path MUST support niche HUD overlays via FFmpeg `dr
 
 HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21).
 
-**Scope honesty:** `DIRECTOR_SINGLE_PASS` / `MultiSceneCompositor` stream-copy (`-c:v copy`) does **not** burn niche HUD overlays (keeps cheap director assembly). Planner still writes `niche_hud` onto the scene manifest for MultiAct/dev consumers; this is theme+filter porting, not a full director HUD burn path.
+**DIRECTOR_SINGLE_PASS HUD burn:** When planner/manifest `niche_hud` is present, `MultiSceneCompositor` MUST consume it via shared `niche_hud_from_mapping` + `build_niche_hud_filter` and fuse the drawtext/drawbox snippets into **one** assembly `filter_complex` (homogeneous HUD concat, scale+concat, or opt-in xfade) — not N per-scene encodes, and not Playwright/wgpu/Pillow frame loops. Homogeneous loops **without** `niche_hud` MUST still stream-copy (`-c:v copy` / `loop_stream_copy`).
 
 #### Scenario: SCP lane produces CCTV HUD filter
 - **Given** a scene with `niche_hud.story_type = "scp"` and tension ≥ 4
 - **When** `MultiActVideoRenderer.build_scene_hud_filter` runs
 - **Then** the filtergraph MUST include drawbox/drawtext HUD elements and an alert indicator
 - **And** MUST NOT import Playwright or Chromium.
+
+#### Scenario: DIRECTOR_SINGLE_PASS burns planner niche_hud in one filter_complex
+- **Given** procedural scenes with planner `niche_hud` and `DIRECTOR_SINGLE_PASS` enabled
+- **When** `MultiSceneCompositor` assembles loops via single-pass
+- **Then** the assembly MUST include drawtext/drawbox HUD elements in a single `filter_complex`
+- **And** MUST use `encode_defaults` (`veryfast` + CRF 21) for that one encode
+- **And** MUST NOT perform N per-scene video encodes for HUD
+- **And** MUST NOT import Playwright, Chromium, or wgpu on that path
+
+#### Scenario: DIRECTOR_SINGLE_PASS without niche_hud still stream-copies
+- **Given** homogeneous procedural loops (matching WxH/codec/pix_fmt/time_base) with no `niche_hud`
+- **When** `MultiSceneCompositor` assembles via single-pass
+- **Then** assembly MUST use stream-copy (`-c:v copy` / `loop_stream_copy`) without a HUD `filter_complex`
 
