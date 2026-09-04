@@ -1,7 +1,7 @@
 # Arquitectura del Sistema — yt-auto
 
 > **Estado:** REPOSITORIO / OFICIAL  
-> **Última actualización:** 2026-08  
+> **Última actualización:** 2026-09  
 
 Arquitectura modular, persistencia atómica en SQLite WAL, catálogo de assets offline y política de ejecución del sistema basada en carriles editoriales (`config/lanes.json`).
 
@@ -13,7 +13,7 @@ Arquitectura modular, persistencia atómica en SQLite WAL, catálogo de assets o
 graph TD
     Lanes[config/lanes.json] --> Pipe[src/pipeline.py]
     Config[src/config.py] --> Pipe
-    Pipe --> Media[src/media/ Procedural & Loops]
+    Pipe --> Media[src/media/ native_procedural + FFmpeg loops]
     Pipe --> Audio[src/audio/ TTS & EBU R128]
     Pipe --> Subs[src/media/subtitles_ass.py]
     Pipe --> Encoder[src/media/unified_encoder.py]
@@ -72,29 +72,31 @@ El sistema implementa una arquitectura desacoplada de 6 agentes orquestados con 
 2. **Agent 2: `ArtDirectorMoodAgent` (`schemas/art_director.schema.json`)**:
    - Selección de paleta cromática Rec.709, atmósfera lumínica volumétrica y dinámicas de partículas.
 3. **Agent 3: `ScenePlannerCompositorAgent` (`schemas/scene_manifest.schema.json`)**:
-   - Compilación del manifiesto de composición multi-escena canónico `SceneManifestV2` (capas de fondo WebGL, overlays, vectores de cámara 3D).
+   - Compilación del manifiesto de composición multi-escena canónico `SceneManifestV2` (arquetipos procedurales nativos WGSL, overlays, pacing). Los agentes emiten JSON; el motor de media decide píxeles.
 4. **Agent 4: `VisualAudioQAAuditorAgent` (`schemas/video_qa.schema.json`)**:
    - Auditoría forense automatizada: EBU R128 (-14.0 ± 1.0 LUFS para Shorts, -16.0 LUFS para Longform), True Peak (-1.0 dBTP), correlación estéreo y umbrales de luminancia/congelamiento.
 5. **Agent 5: `ImageAuditorAgent` (`schemas/image_auditor.schema.json`)**:
-   - **Política Anti-Filler**: 100% de fondos y sujetos animados deben ser generados proceduralmente (código WebGL/Canvas). Prohíbe terminantemente fotos de stock estáticas (`DISCARDED_GENERIC_FILLER`).
-   - Autoriza exclusivamente logotipos de marca o emblemas institucionales oficiales (`APPROVED_REFERENCE`) para proyección en insignias overlay no invasivas (SVG o Canvas).
+   - **Política Anti-Filler**: 100% de fondos y sujetos animados deben ser generados proceduralmente (código nativo WGSL/`wgpu-py` + FFmpeg). Prohíbe terminantemente fotos de stock estáticas (`DISCARDED_GENERIC_FILLER`).
+   - Autoriza exclusivamente logotipos de marca o emblemas institucionales oficiales (`APPROVED_REFERENCE`) para proyección en insignias overlay no invasivas (SVG / `resvg-py`).
 6. **Agent 6: `SeoOptimizerAgent` (`schemas/seo_metadata.schema.json`)**:
    - Fórmulas algorítmicas de retención: 3 títulos virales para A/B testing, descripción con marcas de tiempo formateadas, tags optimizados, hashtags virales, comentario fijado para disparar interacción comunitaria y blueprints de miniaturas.
 
 ---
 
-## 6. Detección Escénica Procedural (7 Bucles 3D)
+## 6. Detección Escénica Procedural (Arquetipos Nativos WGSL)
 
-Ubicado en `src/core/scenic_detector.py`, clasifica automáticamente el tema en uno de los 7 entornos generativos Three.js / WebGL:
-- `scp_facility`: Instalación subterránea de contención y búnkeres de alta seguridad.
-- `jurassic_dino`: Selvas primitivas y yacimientos de fósiles.
-- `eerie_forest`: Bosques góticos inmersos en niebla de horror.
-- `rose_garden`: Jardines florales para relatos románticos y reflexivos.
-- `cosmic_nebula`: Espacio profundo, galaxias y vórtices cuánticos.
-- `cyber_matrix`: Paisajes cibernéticos de código, inteligencia artificial y circuitos.
-- `deep_ocean`: Océano abisal con efectos de bioluminiscencia y fauna submarina.
+Ubicado en `src/core/scenic_detector.py`, clasifica el tema hacia arquetipos del motor nativo (`src/media/native_procedural.py`, shaders WGSL vía `wgpu-py` / Lavapipe). No usa Canvas, Three.js ni WebGL de navegador. Arquetipos canónicos (`VALID_ARCHETYPES`):
+- `tactical_chamber`: Túneles, búnkeres, contención y pasillos industriales.
+- `dark_forest`: Bosques, niebla y caminos nocturnos.
+- `arctic_desolation`: Nieve, ventisca y tundra.
+- `cosmic_singularity`: Espacio profundo y singularidades.
+- `arcade_vector_flight`: Vuelo vectorial retro / asteroides.
+- `parkour_runner`: Recorrido isométrico tipo parkour.
+- `cozy_hearth`: Interior cálido / confesiones domésticas.
+- `synaptic_network`: Redes neuronales e introspección.
+- `maritime_lighthouse`: Faro, costa y tormenta marina.
 
-Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical_lift`, `karaoke_glow`, `cinematic_fade`).
+Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical_lift`, `karaoke_glow`, `cinematic_fade`, entre otros). Los subtítulos activos se queman con ASS + **libass** en FFmpeg.
 
 ---
 

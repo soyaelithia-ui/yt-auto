@@ -33,8 +33,8 @@ Sistema de producción y publicación automatizada para **YouTube Shorts vertica
 | **MOKU** (`moku`, `config/channels/moku.json`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` |
 | **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` |
 
-- **Shorts Verticales (9:16)**: Canvas `1080x1920` @30fps, subtítulos ASS Karaoke en franja segura inferior (`MarginV 240-250`).
-- **Longform Horizontal (16:9)**: Canvas `1920x1080` @30fps, duración ≥600s auto-expandible por compilación multihistoria y carrusel dinámico director.
+- **Shorts Verticales (9:16)**: Resolución `1080x1920` @30fps, subtítulos ASS Karaoke (libass) en franja segura inferior (`MarginV 240-250`).
+- **Longform Horizontal (16:9)**: Resolución `1920x1080` @30fps, duración ≥600s auto-expandible por compilación multihistoria y carrusel dinámico director.
 
 ---
 
@@ -59,7 +59,7 @@ python3 main.py run --lane aelithia-aita-long
 python3 main.py status
 python3 main.py queue list
 
-# 6. Catálogo y síntesis de bucles de video por código web (Three.js/Canvas/CSS)
+# 6. Catálogo y síntesis de bucles de video (native procedural / FFmpeg)
 python3 main.py loop list
 python3 main.py loop generate -c cosmic_horror -o vertical -n 2
 python3 main.py loop audit
@@ -74,13 +74,14 @@ python3 main.py daemon --interval 60
 
 ---
 
-## 🎨 Motor de Video Procedural Web y Base de Datos Local de Bucles
+## 🎨 Motor de Video Procedural Nativo y Base de Datos Local de Bucles
 
-El sistema implementa un motor de composición visual por código y tecnologías web (**HTML5 Canvas, WebGL, Three.js y animaciones CSS**) con un catálogo local en SQLite (`video_loops`):
-- **Cero videos pesados**: Genera y almacena micro-bucles periódicos matemáticos de **6 a 10 segundos** (~2 a 5 MB c/u). FFmpeg los expande sin costuras (`-stream_loop -1`) a la duración total del audio (Shorts o videos de 10 min).
-- **Temáticas Adaptables**: `cosmic_horror` (vórtices y agujeros negros en Three.js/WebGL), `dark_forest` (niebla y esporas orgánicas en Canvas 2D), `monsters` (sombras y ojos parpadeantes), `space_abyss` (abismo estelar 3D), `scp` (terminal CRT de fósforo verde y wireframe 3D) y `drama_aita` (ondas fluidas).
+El stack visual activo es **nativo y determinista** (sin navegador headless): `src/media/native_procedural.py` (`wgpu-py` + shaders WGSL, con fallback CPU Mesa Lavapipe) y composición/expansión vía **FFmpeg** (`src/media/loop_engine.py`, `loop_worker.py`, `unified_encoder.py`), con catálogo local en SQLite (`video_loops`):
+- **Cero videos pesados**: Genera y almacena micro-bucles de **6 a 10 segundos** (~2 a 5 MB c/u). FFmpeg los expande sin costuras (`-stream_loop -1`) a la duración total del audio (Shorts o videos de 10 min).
+- **Temáticas de catálogo**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). La síntesis marca `technology=native_procedural`; no hay motor Canvas/Three.js/WebGL en el camino activo.
 - **Rotación Inteligente**: La base de datos local rota automáticamente los bucles menos usados para garantizar variedad visual entre publicaciones consecutivas.
 - **Modo Activo**: El worker en segundo plano mantiene nutrido el buffer de bucles por temática sin intervención manual.
+- **Agentes vs píxeles**: Los agentes del arnés producen texto/JSON creativo (guion, mood, manifiesto, SEO, veredictos). El código de media determinista es dueño de los píxeles; con subtítulos activos, ASS + **libass** en la cadena FFmpeg.
 
 > [!NOTE]
 > Para compatibilidad con despliegues previos, `python3 manage.py` reenvía de forma transparente todos los comandos al CLI unificado. Consulta [docs/OPERACION.md](docs/OPERACION.md) para la referencia completa de subcomandos y alias.
@@ -115,4 +116,4 @@ Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
 2. **Auto-Publicación Segura**: Ventana de revisión de 6h configurable. Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
-3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. El renderizado procedural, subtítulos y persistencia son 100% código determinista local.
+3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado procedural nativo (`wgpu`/WGSL), bucles FFmpeg, subtítulos ASS/libass y persistencia son 100% código determinista local (dueño de los píxeles).
