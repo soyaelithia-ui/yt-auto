@@ -37,32 +37,39 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 
 ## 2. Despliegue con Docker Compose (`docker-compose.yml`)
 
-Entorno de producción supervisado:
-- **Límites de Recursos**: `mem_limit: 6g`, `cpus: 4.0`, `pids_limit: 512`, `shm_size: 1g`.
-- **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` de 2 GB, `cap_drop: ALL`, usuario no-root `appuser:10001`.
-- **Servidor Telegram Local**: Integrado en el puerto `8081` con soporte para cargas de hasta 2 GB y transporte zero-copy `file:///`.
+Camino feliz **sin sudo en el host**. El contenedor es autocontenido (FFmpeg, Chromium, `agy` en `/usr/local/bin/agy`). No monta el CLI ni `~/.gemini` del usuario.
+
+- **Límites de Recursos**: `mem_limit: 6g`, `cpus: 4.0`, `pids_limit: 512`, `shm_size: 1g`. Instancia pequeña: `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` (`2g` / `2` CPU).
+- **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` de 2 GB, `cap_drop: ALL`, usuario no-root `appuser:10001`, named volumes (no bind del workdir). Secretos solo en `./secrets:/run/secrets:ro`.
+- **Servidor Telegram Local**: Puerto `127.0.0.1:8081`, hasta 2 GB, zero-copy `file:///`.
+- **Antigravity**: AppData en el volumen `yt_agy_home` (`/home/appuser/.gemini`). El token OAuth se copia desde `secrets/antigravity-oauth-token` (login `agy` en una máquina con navegador; el contenedor no abre OAuth interactivo).
 
 ```bash
-# Iniciar servicios en segundo plano
+# 1. Stage del ELF agy (gitignored; build/agy no se commitea)
+./scripts/stage_agy.sh
+
+# 2. Construir e iniciar (hace falta Docker; no hace falta apt/sudo)
+docker compose build
 docker compose up -d
 
-# Ver logs en tiempo real
+# Ver logs / estado
 docker compose logs --follow yt-automation
-
-# Verificar estado de los contenedores
 docker compose ps
 ```
+
+Si el build falla con `build/agy: not found`, falta el paso 1. Si el arranque falla por directorios no escribibles, recrear volúmenes: `docker compose down -v` (borra estado de data/work).
 
 ---
 
 ## 3. Unidades Systemd (`deploy/systemd/`) y Mantenimiento SQLite
 
-Para despliegues en VPS:
+Solo para VPS **con root**. El despliegue Docker de la sección 2 no usa systemd.
+
 - `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`python3 main.py daemon --interval 60`).
 - `yt-review-bot.service`: Bot interactivo Telegram (`python3 review/review_bot_daemon.py`).
 
 ```bash
-# Systemd setup
+# Systemd setup (requiere sudo)
 sudo cp deploy/systemd/*.service /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo systemctl enable --now yt-lanes-daemon.service yt-review-bot.service
 

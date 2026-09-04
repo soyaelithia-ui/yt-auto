@@ -100,3 +100,6 @@ assets/scp_media/
 /core
 core.*
 
+# Staged Antigravity CLI ELF for Docker image builds (never commit)
+/build/
+

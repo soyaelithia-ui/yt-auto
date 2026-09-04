@@ -19,6 +19,10 @@ Matriz de diagnóstico operativo para rápida resolución de incidentes.
 | **Error de Render / Pantalla Negra** | Fallo en resolución de loop o asset corrupto. | `src/visual_validator.py` | El validador rechaza el render automáticamente. Reintentar con catálogo de loops (`assets/loops/`). |
 | **Fallo en Telegram Bot (:8081)** | Contenedor local no disponible o permisos. | `curl -I http://localhost:8081` | Asegurar que el contenedor `telegram-bot-api` esté en ejecución (`docker compose up -d telegram-bot-api`). |
 | **FFmpeg saturando CPU al 100%** | Concurrencia de hilos no limitada en VPS. | `ps aux | grep ffmpeg` | Asegurar límites de hilos (`-threads 2` a `4`) y prioridad reducida con `nice`. |
+| **`docker compose build`: `build/agy: not found`** | No se stageó el CLI Antigravity. | `ls -l build/agy` | `./scripts/stage_agy.sh` (requiere `agy` en PATH o `AGY_BIN`) y volver a construir. No commitear el ELF. |
+| **`Antigravity CLI missing at /usr/local/bin/agy`** | Imagen construida sin el binario. | `docker compose exec yt-automation ls -l /usr/local/bin/agy` | Rebuild tras `stage_agy.sh`. El compose ya no monta `agy` del host. |
+| **Directorio no escribible uid 10001** | Named volume con ownership de root o de otro UID. | `docker compose exec yt-automation id` | `docker compose down -v` y `up` de nuevo (borra estado). No usar bind de `~/.gemini`. |
+| **Agentes tocan el Antigravity del IDE** | AppData del host filtrada por env/symlink. | `pytest tests/unit/test_antigravity_host_isolation.py` | El arnés deniega `~/.gemini/antigravity-cli`. Sembrar token en `secrets/antigravity-oauth-token`, no en el home del usuario. |
 
 ---
 
