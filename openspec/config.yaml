@@ -2,17 +2,30 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Python 3.12/3.13, FFmpeg (Stream-Copy & libass), Edge-TTS, SQLite (WAL), WebGPU (wgpu-py), resvg-py
-  Architecture: Multi-lane automated video generation pipeline (agents, media DSP, sanitizers)
-  Testing: pytest (pytest-asyncio, pytest-timeout), 4-tier test architecture
-  Style: Modular Python, dataclasses/Pydantic, strict schema validation, offline mockable
+  Tech stack: Python 3.12/3.13, FFmpeg-first media (stream-copy, libass, EBU R128), Edge-TTS, SQLite WAL
+  Architecture: Multi-lane YouTube pipeline (agents, media DSP, sanitizers, Telegram review, publishing)
+  Testing: pytest (pytest-asyncio, pytest-timeout); tests/{unit,integration,e2e}; live excluded by default
+  Style: Modular Python, dataclasses/Pydantic, strict schema validation, offline-mockable
+  Constraints: Zero browser in src/media|cli|narrative|core; session-upload fallback only in src/youtube/; WebGPU quarantined
 
 strict_tdd: true
+
+projects:
+  - path: .
+    stack: Python 3.12/3.13
+    test_command: pytest
+    framework: pytest
+  - path: review
+    stack: Python package video-review-core 1.1.0
+    test_command: ""
+    framework: ""
+    covered_by: workspace pytest via tests/
 
 testing:
   runner:
     command: "pytest"
     framework: "pytest"
+    notes: "Workspace-level command from repo root; pytest.ini testpaths=tests; CI uses pytest -m \"not live\" -q --timeout=600"
   layers:
     unit:
       available: true
@@ -26,6 +39,7 @@ testing:
       available: true
       tool: "pytest"
       path: "tests/e2e"
+      notes: "pytest tests/e2e is the runner, not a browser harness"
   coverage:
     available: false
     command: ""
