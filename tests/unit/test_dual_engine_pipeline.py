@@ -254,7 +254,9 @@ class TestDualEnginesAndCompositor:
         import inspect, wave, struct, math
         comp = MultiSceneCompositor()
         sig = inspect.signature(comp.render)
-        assert sig.parameters["preset"].default == "faster"
+        # Encode knobs resolve via encode_defaults (veryfast/CRF 21), not hardcoded faster.
+        assert sig.parameters["preset"].default is None
+        assert sig.parameters["crf"].default is None
 
         speech_wav = tmp_path / "speech_threads.wav"
         with wave.open(str(speech_wav), "wb") as wf:
