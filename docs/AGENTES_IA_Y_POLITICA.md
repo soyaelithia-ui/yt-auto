@@ -80,4 +80,4 @@ src/agents/
 > **Obligación Profesional de Negativa**:
 > Cada **25 commits** o antes de iniciar sesiones mayores y pipelines de producción, es mandatario ejecutar `./scripts/verify_integrity.sh`. Si se detecta cualquier worktree huérfano, import de navegador en renderizado o plano obsoleto, el agente **DEBE NEGARSE A TRABAJAR**, abortar la ejecución y alertar al operador.
 >
-> Ver especificación completa en [docs/POLITICA_GOBERNANZA_ANTI_REGRESION.md](file:///home/moku/projects/yt-auto/docs/POLITICA_GOBERNANZA_ANTI_REGRESION.md).
+> Ver especificación completa en [POLITICA_GOBERNANZA_ANTI_REGRESION.md](POLITICA_GOBERNANZA_ANTI_REGRESION.md).

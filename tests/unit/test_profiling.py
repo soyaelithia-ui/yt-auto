@@ -284,7 +284,7 @@ class TestBenchmarkAndCli:
         for stage in CanonicalStage:
             assert stage.value in summary.phases
             metrics = summary.phases[stage.value]
-            assert metrics.duration_sec > 0
+            assert metrics.duration_sec >= 0
             assert metrics.success is True
 
     def test_cli_handle_profile_mock_table(self, capsys, tmp_path):

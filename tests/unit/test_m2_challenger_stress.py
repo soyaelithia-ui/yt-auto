@@ -15,7 +15,7 @@ import tracemalloc
 import numpy as np
 import pytest
 
-from src.media.svg_overlay import SVGOverlayEngine
+from src.media.svg_overlay import SVGOverlayEngine, resvg_py
 from src.media.inmemory_compositor import InMemoryCompositor
 
 
@@ -29,6 +29,7 @@ def get_vmrss_mb() -> float:
     return 0.0
 
 
+@pytest.mark.skipif(resvg_py is None, reason="resvg-py optional dependency not installed")
 class TestSVGOverlayEngineStress:
     """Stress tests and edge case mining for SVGOverlayEngine."""
 
