@@ -103,18 +103,18 @@ The native procedural engine MUST map high-level art director parameters (tensio
 - **And** maximum concurrent worker threads MUST NOT exceed the configured concurrency ceiling.
 
 ### Requirement: Niche HUD Dispatch Without Browser
-The **MultiAct** filtergraph path and **`DIRECTOR_SINGLE_PASS`** / `MultiSceneCompositor` assembly MUST support niche HUD overlays via FFmpeg `drawtext`/`drawbox` only (no Playwright/Chromium), dispatched by lane/story type (planner `niche_hud` dict preferred when present on `NarrativeSceneAct` / scene manifest; otherwise theme-category mapping on MultiAct):
+The **MultiAct** filtergraph path and **`DIRECTOR_SINGLE_PASS`** / `MultiSceneCompositor` assembly MUST support niche HUD overlays via FFmpeg `drawtext`/`drawbox` only (no Playwright/Chromium). Geometry MUST be selected only by theme-agnostic `niche_hud.hud_layout` (`top_bar` | `card` | `bottom_bar`; default `top_bar`). Planner `niche_hud` dict is preferred when present on `NarrativeSceneAct` / scene manifest; otherwise MultiAct uses default layout + act badge/site/telemetry/color fields. `story_type` / niche-name strings MUST NOT choose HUD geometry or accent-color fallbacks.
 
-- SCP: CCTV header bar with site, classification badge, optional high-tension alert
-- Reddit-AITA / drama: glassmorphic post card with subreddit badge and OP/telemetry
-- Abyssal / horror (default): sonar telemetry box with depth coordinates
+- `top_bar`: top header bar with site, badge, optional high-tension alert
+- `card`: centered card with badge / site / telemetry
+- `bottom_bar`: bottom bar on landscape; top safe bar on vertical Shorts
 
 HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21).
 
 **DIRECTOR_SINGLE_PASS HUD burn:** When planner/manifest `niche_hud` is present, `MultiSceneCompositor` MUST consume it via shared `niche_hud_from_mapping` + `build_niche_hud_filter` and fuse the drawtext/drawbox snippets into **one** assembly `filter_complex` (homogeneous HUD concat, scale+concat, or opt-in xfade) — not N per-scene encodes, and not Playwright/wgpu/Pillow frame loops. Homogeneous loops **without** `niche_hud` MUST still stream-copy (`-c:v copy` / `loop_stream_copy`).
 
-#### Scenario: SCP lane produces CCTV HUD filter
-- **Given** a scene with `niche_hud.story_type = "scp"` and tension ≥ 4
+#### Scenario: top_bar layout produces header HUD filter
+- **Given** a scene with `niche_hud.hud_layout = "top_bar"` and tension ≥ 4
 - **When** `MultiActVideoRenderer.build_scene_hud_filter` runs
 - **Then** the filtergraph MUST include drawbox/drawtext HUD elements and an alert indicator
 - **And** MUST NOT import Playwright or Chromium.
@@ -133,7 +133,7 @@ HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21).
 - **Then** assembly MUST use stream-copy (`-c:v copy` / `loop_stream_copy`) without a HUD `filter_complex`
 
 #### Scenario: Shorts niche HUD respects shared safe-zone margins
-- **Given** a vertical Shorts canvas (e.g. 1080x1920) and any niche HUD (`scp` / `reddit_aita` / `horror`)
+- **Given** a vertical Shorts canvas (e.g. 1080x1920) and any HUD layout (`top_bar` / `card` / `bottom_bar`)
 - **When** `build_niche_hud_filter` / `MultiActVideoRenderer.build_scene_hud_filter` runs
 - **Then** drawbox/drawtext HUD geometry MUST stay inside the shared thumbnail `AspectLayoutManager` safe-zone (clear of YouTube Shorts top chrome, right rail, and bottom caption/channel UI)
 - **And** fontsize/stroke MUST use the shared HUD typography constants across niches

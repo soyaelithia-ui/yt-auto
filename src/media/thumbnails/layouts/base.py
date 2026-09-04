@@ -66,11 +66,10 @@ class LayoutRegistry:
         if not cls._registry:
             import src.media.thumbnails.layouts  # noqa: F401
 
-        # Channel moku has two distinct operational lanes based on aspect ratio
+        # Channel moku horizontal longform prefers analog horror when registered.
+        # Former scp/reddit lane ids are not registered and fall through to GeneralCinematicLayout.
         norm_chan = str(channel_id or "").lower()
         if norm_chan == "moku" and not archetype and not template:
-            if is_vertical is True and "moku-scp-shorts" in cls._registry:
-                return cls._registry["moku-scp-shorts"]()
             if is_vertical is False and "moku-horror-long" in cls._registry:
                 return cls._registry["moku-horror-long"]()
 

@@ -1,22 +1,17 @@
 # Impeccable Thumbnail Pipeline Specification
 
 ## Purpose
-The `impeccable-thumbnail-pipeline` capability delivers automated, high-CTR, niche-tailored YouTube thumbnails. It replaces rudimentary PIL vector silhouettes and heavy blur with authentic graphical overlays (SCP HUDs, Reddit cards, VHS telemetry), 3D multi-pass typography, and local-first thematic asset sourcing.
+The `impeccable-thumbnail-pipeline` capability delivers automated, high-CTR, niche-tailored YouTube thumbnails. It replaces rudimentary PIL vector silhouettes and heavy blur with modular layouts (analog VHS + general cinematic fallback; former scp/reddit thumbnail modules removed), 3D multi-pass typography, and local-first thematic asset sourcing.
 
 ## Requirements
 
 ### Requirement: Niche Layout Dispatch & Thematic Compositing
 The system MUST dispatch thumbnail composition to specialized layout engines based on channel profile, lane, and narrative archetype.
 
-#### Scenario: SCP Short thumbnail composition (Happy Path)
-- **GIVEN** a vertical 9:16 generation request for lane `moku-scp-shorts`
-- **WHEN** the thumbnail engine generates the image
-- **THEN** it MUST render `ScpFoundFootageLayout` with a security cam HUD, Foundation classification banner, hazard chevrons, and containment alert badge.
-
-#### Scenario: Reddit AITA Longform thumbnail composition (Happy Path)
-- **GIVEN** a horizontal 16:9 generation request for lane `aelithia-aita-long`
-- **WHEN** the thumbnail engine generates the image
-- **THEN** it MUST render `RedditDramaCardLayout` with a glassmorphic Reddit post card, upvote badge, and dramatic quote callout.
+#### Scenario: Former SCP/Reddit lanes fall back to cinematic (Happy Path)
+- **GIVEN** a generation request for former scp/reddit lane ids (e.g. `moku-scp-shorts`, `aelithia-aita-long`)
+- **WHEN** the thumbnail engine resolves a layout via `LayoutRegistry.get_layout`
+- **THEN** it MUST fall back to `GeneralCinematicLayout` (dedicated `scp_hud` / `reddit_card` modules removed).
 
 #### Scenario: Analog Horror Longform thumbnail composition (Happy Path)
 - **GIVEN** a horizontal 16:9 generation request for lane `moku-horror-long`

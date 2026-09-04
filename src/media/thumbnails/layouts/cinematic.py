@@ -12,7 +12,22 @@ from src.media.thumbnails.typography import DynamicTypographyEngine
 
 
 @LayoutRegistry.register_default
-@LayoutRegistry.register("cinematic", "general", "default")
+@LayoutRegistry.register(
+    "cinematic",
+    "general",
+    "default",
+    # Former scp_hud / reddit_card lane keys — modules deleted; fall back here.
+    "scp",
+    "scp-hud",
+    "found-footage",
+    "moku-scp-shorts",
+    "reddit",
+    "aita",
+    "drama",
+    "confession",
+    "aelithia",
+    "aelithia-aita-long",
+)
 class GeneralCinematicLayout(BaseThumbnailLayout):
     """
     High-craft editorial fallback layout:
