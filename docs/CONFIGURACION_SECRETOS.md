@@ -25,9 +25,10 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 | `VIDEO_REVIEW_DB_PATH` | Ruta a la base de datos de revisión de Telegram. | `data/review_state.db` |
 | `WORK_ROOT` | Directorio temporal de trabajo y renders. | `work/` |
 | `ARTIFACT_ROOT` | Directorio persistente de artefactos generados. | `artifacts/` |
-| `SECRETS_DIR` | Directorio de montaje de secretos del sistema. | `/run/secrets` |
-| `ANTIGRAVITY_AGENTS_APP_DATA_DIR` | Directorio aislado de sesión para agentes de IA (instancia predeterminada). | `.bot_home/.gemini/antigravity-cli` |
+| `SECRETS_DIR` | Directorio de montaje de secretos. Semilla `antigravity-oauth-token` / `settings.json` hacia AppData (copia `0600`, nunca symlink al host). | `/run/secrets` o `secrets/` |
+| `ANTIGRAVITY_AGENTS_APP_DATA_DIR` | Directorio aislado de sesión para agentes de IA (instancia predeterminada). | `.bot_home/.gemini/antigravity-cli` (host) / `/home/appuser/.gemini/antigravity-cli` (Docker) |
 | `ANTIGRAVITY_AGENTS_APP_DATA_DIR_<ID>` | Directorio aislado para una instancia específica (ej. `PIPELINE_CREATIVE`). | `.bot_home_<id>/.gemini/antigravity-cli` |
+| `AGY_BIN` | Ruta al CLI Antigravity. En Docker vive **dentro** de la imagen. | `/usr/local/bin/agy` |
 
 ### B. Inteligencia Artificial (Google Gemini)
 | Variable | Descripción | Uso |

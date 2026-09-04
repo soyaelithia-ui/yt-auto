@@ -37,34 +37,100 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 TASK_RESULT_PATH = OUTPUT_DIR / "task_result.json"
 
 
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        return path.expanduser().resolve().is_relative_to(root.expanduser().resolve())
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _is_external_interactive_cli(path: Path) -> bool:
+    """True when *path* is the host IDE Antigravity dir, not project/container home."""
+    try:
+        resolved = Path(path).expanduser().resolve()
+        interactive_root = (Path.home() / ".gemini").resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    if not _is_under(resolved, interactive_root):
+        return False
+    bot_home = Path(os.environ.get("BOT_HOME", str(PROJECT_ROOT / ".bot_home")))
+    if _is_under(resolved, bot_home) or _is_under(resolved, PROJECT_ROOT):
+        return False
+    return True
+
+
+def _bot_home_for_app_data(app_data_dir: Path) -> Path:
+    directory = Path(app_data_dir)
+    if directory.name == "antigravity-cli" and directory.parent.name == ".gemini":
+        return directory.parent.parent
+    return directory
+
+
+def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
+    secrets_dir = Path(os.environ.get("SECRETS_DIR", str(PROJECT_ROOT / "secrets")))
+    if _is_external_interactive_cli(secrets_dir):
+        return
+    for name in ("antigravity-oauth-token", "settings.json"):
+        src = secrets_dir / name
+        dst = bot_appdata / name
+        if not src.is_file() or dst.exists() or _is_external_interactive_cli(src.parent):
+            continue
+        shutil.copy2(src, dst)
+        try:
+            os.chmod(dst, 0o600)
+        except OSError:
+            pass
+
+
+def _scrub_external_antigravity_env(cli_env: dict[str, str], *, isolated_root: Path) -> None:
+    isolated = isolated_root.expanduser().resolve()
+    for key, val in list(cli_env.items()):
+        if key == "PATH" or not val:
+            continue
+        if "/" not in val and not val.startswith("~"):
+            continue
+        candidate = Path(val)
+        try:
+            if not val.startswith("~") and not candidate.is_absolute():
+                continue
+            resolved = candidate.expanduser().resolve()
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if _is_under(resolved, isolated):
+            continue
+        if _is_external_interactive_cli(resolved):
+            del cli_env[key]
+
+
 def _resolve_default_app_data_dir(instance_id: str = "default") -> Path:
     """Resolve an isolated app data directory for automated project agents.
 
-    NEVER falls back to host ~/.gemini/antigravity-cli unless explicitly
-    configured, preventing contamination of interactive IDE sessions.
+    Never uses host ~/.gemini/antigravity-cli, even if env vars point there.
     """
     env_instance_key = f"ANTIGRAVITY_AGENTS_APP_DATA_DIR_{instance_id.upper()}"
     configured_instance = os.environ.get(env_instance_key, "").strip()
     if configured_instance:
-        return Path(configured_instance).expanduser().resolve()
+        candidate = Path(configured_instance).expanduser().resolve()
+        if not _is_external_interactive_cli(candidate):
+            return candidate
 
     configured = os.environ.get("ANTIGRAVITY_AGENTS_APP_DATA_DIR", "").strip()
     if configured:
         base = Path(configured).expanduser().resolve()
-        if instance_id != "default":
-            return (base.parent / f"{base.name}_{instance_id}").resolve()
-        return base
+        if not _is_external_interactive_cli(base):
+            if instance_id != "default":
+                return (base.parent / f"{base.name}_{instance_id}").resolve()
+            return base
 
     if instance_id != "default":
         bot_gemini = PROJECT_ROOT / f".bot_home_{instance_id}" / ".gemini" / "antigravity-cli"
     else:
         bot_gemini = PROJECT_ROOT / ".bot_home" / ".gemini" / "antigravity-cli"
 
-    if bot_gemini.parent.exists():
-        return bot_gemini.resolve()
     secrets_appdata = PROJECT_ROOT / "secrets" / f"agents_appdata_{instance_id}"
-    if secrets_appdata.exists():
-        return secrets_appdata.resolve()
+    if not bot_gemini.parent.exists() and secrets_appdata.exists():
+        if not _is_external_interactive_cli(secrets_appdata):
+            return secrets_appdata.resolve()
     return bot_gemini.resolve()
 
 
@@ -248,22 +314,18 @@ class AgyStreamClient:
 
     def _prepare_env(self) -> dict[str, str]:
         cli_env = dict(os.environ)
-        bot_home = self.app_data_dir.parent.parent
-        bot_appdata = self.app_data_dir
+        bot_home = _bot_home_for_app_data(self.app_data_dir)
+        bot_appdata = Path(self.app_data_dir)
         bot_appdata.mkdir(parents=True, exist_ok=True)
-        host_appdata = Path.home() / ".gemini" / "antigravity-cli"
-        for item in ["antigravity-oauth-token", "settings.json", "bin", "builtin"]:
-            src = host_appdata / item
-            dst = bot_appdata / item
-            if src.exists() and not dst.exists():
-                try:
-                    dst.symlink_to(src)
-                except Exception:
-                    pass
-
+        _seed_appdata_from_secrets(bot_appdata)
+        _scrub_external_antigravity_env(cli_env, isolated_root=bot_home)
+        gemini_home = (
+            bot_appdata.parent if bot_appdata.name == "antigravity-cli" else bot_home / ".gemini"
+        )
         cli_env["HOME"] = str(bot_home)
-        cli_env["ANTIGRAVITY_APP_DATA_DIR"] = str(self.app_data_dir)
-        cli_env["AGY_APP_DATA_DIR"] = str(self.app_data_dir)
+        cli_env["ANTIGRAVITY_CLI_HOME"] = str(gemini_home)
+        cli_env["ANTIGRAVITY_APP_DATA_DIR"] = str(bot_appdata)
+        cli_env["AGY_APP_DATA_DIR"] = str(bot_appdata)
         return cli_env
 
     def send_task(self, prompt: str, schema: Optional[Any] = None) -> dict[str, Any]:
