@@ -3,8 +3,10 @@ src/media/multi_act_renderer.py - Multi-Act FFmpeg Video Compositor.
 
 Orchestrates sequential catalog/loop video scenes across narrative temporal acts in a
 single FFmpeg filter_complex pass, with tactical SCP HUD overlays (drawtext/drawbox),
-real FFmpeg xfade transitions (duration-aware via calculate_xfade_duration),
-and optional ASS subtitles. FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
+real FFmpeg xfade transitions when MULTIACT_XFADE=1 (default; duration-aware via
+calculate_xfade_duration — callers must pass that for total_duration so A/V -t align),
+or fade+concat without timeline shrink when MULTIACT_XFADE=0. Optional ASS subtitles.
+FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
 """
 from __future__ import annotations
 
@@ -24,20 +26,44 @@ logger = get_logger("multi_act_renderer")
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-def calculate_xfade_duration(scene_durations: List[float], transition_duration: float = 0.75) -> float:
-    """Calculates total duration across scenes with transitions: sum(durations) - ((n - 1) * transition_duration)."""
+def clamp_transition_duration(dur1: float, dur2: float, requested_transition: float = 0.75) -> float:
+    """Clamps transition duration to <= 30% of the shortest adjacent scene duration."""
+    shortest = min(float(dur1), float(dur2))
+    return max(0.05, min(float(requested_transition), shortest * 0.30))
+
+
+def calculate_xfade_duration(
+    scene_durations: List[float],
+    transition_duration: float = 0.75,
+    *,
+    clamp: bool = True,
+) -> float:
+    """Total timeline after xfade overlaps.
+
+    Uses the same clamp_transition_duration rules as the FFmpeg graph so callers
+    can pass this value as total_duration / -t and keep audio+video aligned.
+    """
     if not scene_durations:
         return 0.0
     if len(scene_durations) == 1:
         return float(scene_durations[0])
-    num_transitions = len(scene_durations) - 1
-    return float(sum(scene_durations) - (num_transitions * transition_duration))
+    out = float(scene_durations[0])
+    for i in range(len(scene_durations) - 1):
+        if clamp:
+            t = clamp_transition_duration(
+                scene_durations[i], scene_durations[i + 1], transition_duration
+            )
+        else:
+            t = float(transition_duration)
+        out += float(scene_durations[i + 1]) - t
+    return out
 
 
-def clamp_transition_duration(dur1: float, dur2: float, requested_transition: float = 0.75) -> float:
-    """Clamps transition duration to <= 30% of the shortest adjacent scene duration."""
-    shortest = min(float(dur1), float(dur2))
-    return min(float(requested_transition), shortest * 0.30)
+def multiact_xfade_enabled() -> bool:
+    """Real xfade shortens the timeline; default on (docs claim xfade) but opt-out via MULTIACT_XFADE=0."""
+    return os.environ.get("MULTIACT_XFADE", "1").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
 
 
 @dataclass
@@ -173,7 +199,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         audio_idx = len(acts)
         cmd.extend(["-i", str(audio_path)])
 
-        # Construct filter complex: per-act HUD prep, then real xfade (or passthrough for n=1).
+        # Construct filter complex: per-act HUD prep, then xfade or concat.
+        # Contract: a single output -t trims BOTH mapped video and audio to the same duration.
+        # Callers should pass total_duration=calculate_xfade_duration([...]) when xfade is on.
+        use_xfade = multiact_xfade_enabled() and len(acts) > 1
+        act_durs = [float(a.duration_sec) for a in acts]
+        if use_xfade:
+            contract_dur = calculate_xfade_duration(act_durs, 0.75, clamp=True)
+            if total_duration > 0 and abs(float(total_duration) - contract_dur) > 0.05:
+                logger.warning(
+                    "MultiAct total_duration=%.3f differs from calculate_xfade_duration=%.3f; "
+                    "using contract duration for A/V -t alignment (pass calculate_xfade_duration).",
+                    float(total_duration),
+                    contract_dur,
+                )
+            out_dur = contract_dur
+        else:
+            # No overlap shrink: keep full act sum (or caller total when provided).
+            out_dur = float(total_duration) if total_duration > 0 else float(sum(act_durs))
+
         filter_parts = []
         for i, act in enumerate(acts):
             scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
@@ -192,11 +236,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if len(acts) == 1:
             chained = "[v_act0]"
-            xfade_out_dur = float(acts[0].duration_sec)
-        else:
+        elif use_xfade:
             cum = float(acts[0].duration_sec)
             current = "[v_act0]"
-            xfade_out_dur = float(acts[0].duration_sec)
             for k in range(len(acts) - 1):
                 t = clamp_transition_duration(
                     acts[k].duration_sec, acts[k + 1].duration_sec, 0.75
@@ -209,10 +251,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
                 current = out_tag
                 cum += float(acts[k + 1].duration_sec) - t
-                xfade_out_dur += float(acts[k + 1].duration_sec) - t
             chained = current
-            if total_duration > 0:
-                xfade_out_dur = min(float(total_duration), xfade_out_dur)
+        else:
+            # Safe non-shrinking path: concat acts (opt-out via MULTIACT_XFADE=0).
+            labels = "".join(f"[v_act{i}]" for i in range(len(acts)))
+            filter_parts.append(f"{labels}concat=n={len(acts)}:v=1:a=0[v_concat]")
+            chained = "[v_concat]"
 
         if ass_subtitles and ass_subtitles.is_file():
             sub_path_esc = str(ass_subtitles).replace("\\", "/").replace(":", "\\:")
@@ -228,7 +272,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "-filter_complex", filter_complex_str,
             "-map", v_final,
             "-map", f"{audio_idx}:a:0",
-            "-t", f"{(xfade_out_dur if len(acts) > 1 else float(total_duration)):.3f}",
+            "-t", f"{out_dur:.3f}",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "19",

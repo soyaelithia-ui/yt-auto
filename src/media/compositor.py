@@ -347,17 +347,58 @@ class MultiSceneCompositor(BaseVideoCompositor):
         )
         if synth.is_file():
             return synth.resolve()
-        # Broader: any mp4 under category dir
-        cat_dir = Path("assets/loops/web_procedural") / category
-        if cat_dir.is_dir():
-            hits = sorted(cat_dir.glob("*.mp4"))
-            if hits:
-                return hits[0].resolve()
+        # Do NOT pick an arbitrary *.mp4 from the category (wrong loop risk).
+        # Return None so the caller falls back to legacy multi-pass.
         return None
+
+    def _stream_copy_signature(
+        self, loop_path: Path
+    ) -> Optional[Tuple[int, int, str, str, str]]:
+        """Return (w, h, codec, pix_fmt, time_base) for concat demuxer -c:v copy safety."""
+        try:
+            probe = probe_media(loop_path)
+            vs = probe.video_streams[0] if probe.video_streams else probe.primary_video
+            if vs is None:
+                return None
+            time_base = ""
+            for s in (probe.raw_payload or {}).get("streams", []):
+                if s.get("codec_type") == "video":
+                    time_base = str(s.get("time_base") or "")
+                    break
+            return (
+                int(vs.width),
+                int(vs.height),
+                str(getattr(vs, "codec_name", "") or ""),
+                str(getattr(vs, "pix_fmt", "") or ""),
+                time_base,
+            )
+        except Exception:
+            return None
 
     def _loop_matches_target(self, loop_path: Path, width: int, height: int) -> bool:
         # Shared SSOT with proc_engine / encode_defaults (PR #12).
         return loop_matches_target_geometry(loop_path, width, height)
+
+    def _loops_homogeneous_for_stream_copy(
+        self, loop_paths: List[Path], width: int, height: int
+    ) -> bool:
+        """True only when all loops share WxH/codec/pix_fmt/time_base and match target WxH."""
+        if not loop_paths:
+            return False
+        sigs: List[Tuple[int, int, str, str, str]] = []
+        for p in loop_paths:
+            sig = self._stream_copy_signature(p)
+            if sig is None:
+                return False
+            if sig[0] != int(width) or sig[1] != int(height):
+                return False
+            # Require codec + pix_fmt so concat demuxer -c:v copy is safe.
+            if not sig[2] or not sig[3]:
+                return False
+            sigs.append(sig)
+        first = sigs[0]
+        return all(s == first for s in sigs)
+
 
     def _assemble_procedural_loops_single_pass(
         self,
@@ -391,8 +432,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
             loop_paths.append(lp)
             durations.append(max(0.5, float(scene.duration_sec)))
 
-        needs_scale = any(
-            not self._loop_matches_target(p, width, height) for p in loop_paths
+        # Stream-copy only when every loop matches target WxH AND is codec/pix_fmt/timebase-homogeneous.
+        # Otherwise explicitly fall back to one scale+concat encode (or xfade encode).
+        needs_scale = not self._loops_homogeneous_for_stream_copy(
+            loop_paths, width, height
         )
         use_xfade = director_xfade_enabled() and len(loop_paths) > 1
 
