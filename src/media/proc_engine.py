@@ -1,9 +1,9 @@
 """
-src/media/procedural_video_engine.py - Pure Procedural WebGL/Three.js/Canvas2D Rendering Engine.
+src/media/proc_engine.py - Procedural / catalog scene renderer (FFmpeg default).
 
-Renders deterministic, mathematical procedural scene segments with virtual time stepping,
-strict Rec.709 color matrices, and zero API costs.
-Conforms to BaseVideoCompositor interface.
+Renders deterministic scene segments from the local loop catalog or FFmpeg lavfi.
+Optional NativeProceduralEngine (wgpu) may be injected only when ENABLE_NATIVE_PROCEDURAL=1;
+production default constructs no WebGPU. Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
 

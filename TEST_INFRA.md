@@ -20,7 +20,7 @@ The `yt-auto` Visual Pipeline testing infrastructure enforces strict opaque-box,
 | **F01** | Legacy Code & Template Deletion | Deletion of `web_renderer.py`, `realtime_video_engine.py`, `web_templates/`, obsolete scripts, and legacy tests. | M1 | Tier 1 | 5 |
 | **F02** | Media Exports & Registry Refactor | Decoupling of `src/media/__init__.py`, `loop_worker.py`, and CLI tools from browser renderers. | M1 | Tier 1 | 5 |
 | **F03** | Pipeline Branch Pruning | Removal of orphan `is_multiscene_mode` browser branches, SwiftShader flags, and Chrome reapers in `src/pipeline.py`. | M1 | Tier 1 | 5 |
-| **F04** | Native Procedural Engine (`wgpu-py`) | `NativeProceduralEngine` interface, WebGPU adapter discovery, Lavapipe software fallback, and buffer zero-copy mutation. | M2 | Tier 1 | 5 |
+| **F04** | Native Procedural Engine (`wgpu-py`) — **opt-in experimental** | `NativeProceduralEngine` remains testable but is **not** the production default (`ENABLE_NATIVE_PROCEDURAL=0`). Prod SSOT: FFmpeg beats stream-copy + director zoompan. | M2 | Tier 1 | 5 |
 | **F05** | WGSL Shaders Catalog | 4 WGSL shaders (`cosmic_singularity`, `dark_forest`, `synaptic_network`, `tactical_chamber`) with uniform layout and syntax validity. | M2 | Tier 1 | 5 |
 | **F06** | SVG Overlay Engine (`resvg-py`) | `SVGOverlayEngine` with XML parameter interpolation, in-memory raster caching, and out-buffer mutation. | M2 | Tier 1 | 5 |
 | **F07** | SVG Vector Assets Catalog | Vector assets in `assets/svg_overlays/` (`hud_tactical_telemetry.svg`, `scp_classification_stamp.svg`, `biometric_wave.svg`). | M2 | Tier 1 | 5 |

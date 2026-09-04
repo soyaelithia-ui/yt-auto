@@ -74,14 +74,15 @@ python3 main.py daemon --interval 60
 
 ---
 
-## 🎨 Motor de Video Procedural Nativo y Base de Datos Local de Bucles
+## 🎨 Motor Visual FFmpeg (SSOT Teología v2.4.0) y Catálogo Local de Bucles
 
-El stack visual activo es **nativo y determinista** (sin navegador headless): `src/media/native_procedural.py` (`wgpu-py` + shaders WGSL, con fallback CPU Mesa Lavapipe) y composición/expansión vía **FFmpeg** (`src/media/loop_engine.py`, `loop_worker.py`, `unified_encoder.py`), con catálogo local en SQLite (`video_loops`):
-- **Cero videos pesados**: Genera y almacena micro-bucles de **6 a 10 segundos** (~2 a 5 MB c/u). FFmpeg los expande sin costuras (`-stream_loop -1`) a la duración total del audio (Shorts o videos de 10 min).
-- **Temáticas de catálogo**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). La síntesis marca `technology=native_procedural`; no hay motor Canvas/Three.js/WebGL en el camino activo.
-- **Rotación Inteligente**: La base de datos local rota automáticamente los bucles menos usados para garantizar variedad visual entre publicaciones consecutivas.
-- **Modo Activo**: El worker en segundo plano mantiene nutrido el buffer de bucles por temática sin intervención manual.
-- **Agentes vs píxeles**: Los agentes del arnés producen texto/JSON creativo (guion, mood, manifiesto, SEO, veredictos). El código de media determinista es dueño de los píxeles; con subtítulos activos, ASS + **libass** en la cadena FFmpeg.
+El stack visual de **producción** es **FFmpeg-first y determinista** (sin navegador headless, sin WebGPU en el hot path):
+- **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** (stream-copy, casi cero reencode) cuando la orientación es horizontal y no se queman subtítulos.
+- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`**, HUDs/overlays y ensamble master FFmpeg; `ENABLE_NATIVE_PROCEDURAL` default **off** (opt-in experimental únicamente).
+- **Catálogo de bucles** (SQLite `video_loops` + `loop_worker.py`): micro-bucles **6–10 s** (~2–5 MB) sintetizados con FFmpeg lavfi (`technology=ffmpeg_lavfi`), expandidos con `-stream_loop -1`.
+- **Temáticas**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). Cero Canvas/Three.js/WebGL en el camino activo.
+- **Agentes vs píxeles**: los agentes emiten texto/JSON; el código de media es dueño de los píxeles (ASS + **libass** cuando hay subtítulos).
+- **Experimental**: `src/media/native_procedural.py` (`wgpu-py`/WGSL) permanece en el repo pero **no** se instancia en producción salvo `ENABLE_NATIVE_PROCEDURAL=1`.
 
 > [!NOTE]
 > Para compatibilidad con despliegues previos, `python3 manage.py` reenvía de forma transparente todos los comandos al CLI unificado. Consulta [docs/OPERACION.md](docs/OPERACION.md) para la referencia completa de subcomandos y alias.
@@ -116,4 +117,4 @@ Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
 2. **Auto-Publicación Segura**: Ventana de revisión de 6h configurable. Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
-3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado procedural nativo (`wgpu`/WGSL), bucles FFmpeg, subtítulos ASS/libass y persistencia son 100% código determinista local (dueño de los píxeles).
+3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). WebGPU/`native_procedural` es opt-in experimental (`ENABLE_NATIVE_PROCEDURAL=0` por defecto).

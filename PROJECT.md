@@ -1,15 +1,16 @@
 # Project: yt-auto Codebase Reconciliation, Browser Eradication, Doc Purge & Test Certification
 
 ## Architecture
-The yt-auto media pipeline is built on a zero-browser, deterministic native media architecture:
-1. **Procedural Native Layer (`src/media/native_procedural.py`, `src/media/shaders/*.wgsl`)**:
-   - Native WebGPU via `wgpu-py` with WGSL fragment shaders, supported by CPU software rasterization (Mesa Lavapipe).
-   - Uniform buffer 64-byte packing (`std140`), hex accent color parsing, and photometric luminance calibration.
-2. **Native Loop Engine (`src/media/loop_worker.py`, `src/media/loop_engine.py`)**:
-   - Background synthetic video loop creation via native FFmpeg `lavfi` (`color=c=black...` or WGSL buffers).
+The yt-auto media pipeline is built on a zero-browser, deterministic **FFmpeg-first** architecture (SSOT Teología PDF v2.4.0):
+1. **Production visual path (FFmpeg)**:
+   - **Beats / loop**: `LoopVideoEngine` concat demuxer + `-c:v copy` (near-zero reencode) on the default horizontal path.
+   - **Director / multi-scene**: `MultiSceneCompositor` + `HybridVideoEngine` Ken Burns via FFmpeg `zoompan`; master assembly in FFmpeg. `ENABLE_NATIVE_PROCEDURAL` defaults to **off**.
+2. **Loop catalog (`src/media/loop_worker.py`, `src/media/loop_engine.py`)**:
+   - Background synthetic video loop creation via native FFmpeg `lavfi` (`technology=ffmpeg_lavfi`).
    - Stream looping (`-stream_loop -1`), EBU R128 sidechain ducking filtergraphs, and ASS subtitle burning.
    - Strictly zero Playwright, Chromium, or headless browser subprocesses in media rendering.
-3. **Storage & Concurrency Architecture**:
+3. **Experimental only**: `src/media/native_procedural.py` (WebGPU/`wgpu-py` WGSL) remains in-tree but is **not** constructed on the production hot path unless `ENABLE_NATIVE_PROCEDURAL=1`.
+4. **Storage & Concurrency Architecture**:
    - SQLite with Write-Ahead Logging (`WAL`), `PRAGMA busy_timeout=15000`, `synchronous=NORMAL`.
    - Discrete per-PID test review databases avoiding lock collisions under concurrency.
    - Strict offline socket network isolation in test environments.
@@ -72,12 +73,12 @@ The yt-auto media pipeline is built on a zero-browser, deterministic native medi
 src/
 ├── cli/
 │   ├── handlers/
-│   │   └── loop.py                   # Loop CLI handler (native procedural, 0 browser)
+│   │   └── loop.py                   # Loop CLI handler (FFmpeg lavfi, 0 browser)
 │   └── parser.py                     # CLI argument parser
 ├── media/
 │   ├── loop_engine.py                # LoopVideoEngine (FFmpeg audio & video looping)
 │   ├── loop_worker.py                # LoopSynthesizerWorker (fast FFmpeg lavfi generator)
-│   ├── native_procedural.py          # NativeProceduralEngine (WebGPU WGSL shaders)
+│   ├── native_procedural.py          # OPT-IN only: NativeProceduralEngine (not prod default)
 │   └── shaders/
 │       └── maritime_lighthouse.wgsl  # WGSL shader with photometric luminance floor
 docs/
