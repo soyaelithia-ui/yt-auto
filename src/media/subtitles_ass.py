@@ -287,3 +287,74 @@ class ASSSubtitleGenerator:
 
         out.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return out
+
+
+def force_pillow_subtitles_enabled(extra: Optional[Dict[str, Any]] = None) -> bool:
+    """Opt-in only: Pillow frame-bridge subtitles are off by default (libass preferred).
+
+    Enable with FORCE_PILLOW_SUBTITLES=1 or force_pillow_subtitles=True in call kwargs.
+    """
+    env = os.environ.get("FORCE_PILLOW_SUBTITLES", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if extra and bool(extra.get("force_pillow_subtitles")):
+        return True
+    return False
+
+
+def word_timestamps_from_cues(cues: Optional[List[Any]]) -> List[Dict[str, Any]]:
+    """Flatten CodeSubtitleDrawer cues into word_timestamps for ASSSubtitleGenerator."""
+    words: List[Dict[str, Any]] = []
+    if not cues:
+        return words
+    for cue in cues:
+        cue_words = getattr(cue, "words", None) or []
+        for w in cue_words:
+            text = getattr(w, "text", None) or getattr(w, "word", "") or ""
+            if not str(text).strip():
+                continue
+            words.append(
+                {
+                    "word": str(text).strip(),
+                    "start": float(getattr(w, "start_sec", getattr(w, "start", 0.0)) or 0.0),
+                    "end": float(getattr(w, "end_sec", getattr(w, "end", 0.0)) or 0.0),
+                }
+            )
+    return words
+
+
+def write_ass_from_cues_or_words(
+    *,
+    output_path: Union[str, Path],
+    word_timestamps: Optional[List[Dict[str, Any]]] = None,
+    cues: Optional[List[Any]] = None,
+    video_width: int = 1080,
+    video_height: int = 1920,
+    theme_name: str = "default",
+    margin_v: int = 260,
+    time_offset_sec: float = 0.0,
+) -> Path:
+    """Generate an ASS file from word timestamps or Pillow-era cues (libass path).
+
+    time_offset_sec: subtract from cue times when burning onto a scene segment whose
+    local timeline starts at 0 while cues are absolute (scene_start_sec).
+    """
+    stamps = list(word_timestamps or [])
+    if not stamps and cues:
+        stamps = word_timestamps_from_cues(cues)
+    if time_offset_sec:
+        shifted: List[Dict[str, Any]] = []
+        for w in stamps:
+            start = max(0.0, float(w.get("start", 0.0)) - float(time_offset_sec))
+            end = max(start + 0.01, float(w.get("end", start)) - float(time_offset_sec))
+            shifted.append({**w, "start": start, "end": end})
+        stamps = shifted
+    generator = ASSSubtitleGenerator()
+    return generator.generate_ass_file(
+        word_timestamps=stamps,
+        output_path=output_path,
+        video_width=video_width,
+        video_height=video_height,
+        theme_name=theme_name,
+        margin_v=margin_v,
+    )

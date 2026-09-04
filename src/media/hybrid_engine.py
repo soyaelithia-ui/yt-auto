@@ -194,6 +194,11 @@ class HybridVideoEngine(BaseVideoCompositor):
 
         # 4. Render frames using direct batch pipe to FFmpeg
         threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
+        from src.media.subtitles_ass import (
+            force_pillow_subtitles_enabled,
+            write_ass_from_cues_or_words,
+        )
+        use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
         ffmpeg_cmd = [
             "ffmpeg", "-y",
             "-f", "rawvideo",
@@ -273,8 +278,9 @@ class HybridVideoEngine(BaseVideoCompositor):
                 if particles.type != "none" and particle_system:
                     frame = self._render_particles(frame, particle_system, t_norm, width, height)
 
-                # Direct in-memory Code Subtitle Rendering (Word-by-Word Active Karaoke)
-                if subtitle_cues:
+                # Pillow subtitle bridge is opt-in only (FORCE_PILLOW_SUBTITLES).
+                # Default: burn via libass after the scene encode (see post-pass below).
+                if subtitle_cues and use_pillow_bridge:
                     curr_time = scene_start_sec + (frame_idx / float(fps))
                     frame = self.subtitle_drawer.draw_on_frame(
                         frame,
@@ -310,6 +316,42 @@ class HybridVideoEngine(BaseVideoCompositor):
                 stderr=err_msg,
                 command=ffmpeg_cmd,
             )
+
+        if subtitle_cues and not use_pillow_bridge:
+            # Native libass burn-in post-pass (avoids Pillow GIL frame bridge).
+            import tempfile as _tempfile
+            burned = out_path.with_name(out_path.stem + "_libass" + out_path.suffix)
+            with _tempfile.TemporaryDirectory(prefix="hybrid_ass_") as _ass_dir:
+                ass_path = Path(_ass_dir) / "scene_subs.ass"
+                write_ass_from_cues_or_words(
+                    output_path=ass_path,
+                    cues=subtitle_cues,
+                    video_width=width,
+                    video_height=height,
+                    time_offset_sec=float(scene_start_sec or 0.0),
+                )
+                sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
+                fonts_dir = Path("assets/fonts").resolve()
+                fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
+                vf = f"ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
+                burn_cmd = [
+                    "ffmpeg", "-y",
+                    "-i", str(out_path),
+                    "-vf", vf,
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-colorspace", "bt709",
+                    "-color_primaries", "bt709",
+                    "-color_trc", "bt709",
+                    "-crf", str(crf),
+                    "-preset", "faster",
+                    "-threads", threads_val,
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(burned),
+                ]
+                run_ffmpeg(burn_cmd)
+            burned.replace(out_path)
 
         return out_path
 

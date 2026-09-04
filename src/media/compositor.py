@@ -17,13 +17,17 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.log import get_logger
 from src.media.hybrid_engine import HybridVideoEngine
 from src.media.proc_engine import ProceduralVideoEngine
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
+from src.media.subtitles_ass import (
+    force_pillow_subtitles_enabled,
+    write_ass_from_cues_or_words,
+)
 from src.scene_manifest import (
     SceneConfig,
     SceneManifestV2,
@@ -99,12 +103,16 @@ class MultiSceneCompositor(BaseVideoCompositor):
         t0 = time.time()
         rendered_scene_files: List[Tuple[SceneConfig, Path]] = []
 
-        # Resolve Subtitle Cues for Code-Level Frame Rendering
+        # Prefer native libass ASS burn-in (master assembly). Pillow frame-bridge is opt-in only.
         word_timestamps = extra_kwargs.get("word_timestamps")
         subtitle_cues: Optional[List[SubtitleCue]] = extra_kwargs.get("subtitle_cues")
         subtitle_theme: Optional[SubtitleTheme] = extra_kwargs.get("subtitle_theme")
-        if not subtitle_cues and word_timestamps:
+        force_pillow = force_pillow_subtitles_enabled(extra_kwargs)
+        if force_pillow and (not subtitle_cues) and word_timestamps:
             subtitle_cues = CodeSubtitleDrawer.parse_word_timestamps(word_timestamps)
+        if not force_pillow:
+            # Production default: never push cues into per-frame Pillow drawers.
+            subtitle_cues = None
 
         import concurrent.futures
 
@@ -173,9 +181,26 @@ class MultiSceneCompositor(BaseVideoCompositor):
             narration_audio = Path(manifest.audio_tracks.narration_path).resolve() if manifest.audio_tracks.narration_path else None
             music_audio = Path(manifest.audio_tracks.music_path).resolve() if manifest.audio_tracks.music_path and Path(manifest.audio_tracks.music_path).is_file() else None
 
-            # 4. Fast Master Assembly with FFmpeg
+            # 4. Fast Master Assembly with FFmpeg — libass ASS burn when available
             subtitle_file = extra_kwargs.get("subtitle_path") or extra_kwargs.get("subtitles_path") or extra_kwargs.get("ass_path")
-            sub_p = Path(subtitle_file).resolve() if subtitle_file and Path(subtitle_file).is_file() and not subtitle_cues else None
+            sub_p: Optional[Path] = None
+            if subtitle_file and Path(subtitle_file).is_file():
+                sub_p = Path(subtitle_file).resolve()
+            elif (not force_pillow) and (word_timestamps or extra_kwargs.get("subtitle_cues")):
+                # Synthesize ASS from timestamps/cues so burn-in stays on libass, not Pillow.
+                ass_tmp = tmp_dir / "multiscene_subs.ass"
+                write_ass_from_cues_or_words(
+                    output_path=ass_tmp,
+                    word_timestamps=word_timestamps if isinstance(word_timestamps, list) else None,
+                    cues=extra_kwargs.get("subtitle_cues"),
+                    video_width=width,
+                    video_height=height,
+                )
+                if ass_tmp.is_file():
+                    sub_p = ass_tmp.resolve()
+            if force_pillow and subtitle_cues:
+                # Explicit legacy path: cues already burned per-frame; skip second burn.
+                sub_p = None
 
             self._master_assembly(
                 video_input=video_only_assembled,

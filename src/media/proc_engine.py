@@ -252,7 +252,47 @@ class ProceduralVideoEngine(BaseVideoCompositor):
 
             threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
 
-            if subtitle_cues:
+            from src.media.subtitles_ass import (
+                force_pillow_subtitles_enabled,
+                write_ass_from_cues_or_words,
+            )
+            use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
+
+            if subtitle_cues and not use_pillow_bridge:
+                # Preferred path: generate ASS and burn via native libass in one FFmpeg pass.
+                ass_path = Path(concat_dir_str) / "scene_subs.ass"
+                write_ass_from_cues_or_words(
+                    output_path=ass_path,
+                    cues=subtitle_cues,
+                    video_width=width,
+                    video_height=height,
+                    time_offset_sec=float(scene_start_sec or 0.0),
+                )
+                sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
+                fonts_dir = Path("assets/fonts").resolve()
+                fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
+                vf = f"scale={width}:{height},ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-vf", vf,
+                    "-c:v", "libx264",
+                    "-crf", str(crf),
+                    "-preset", "faster",
+                    "-b:v", "4500k",
+                    "-maxrate", "6000k",
+                    "-bufsize", "8000k",
+                    "-threads", threads_val,
+                    "-pix_fmt", "yuv420p",
+                    "-colorspace", "bt709",
+                    "-color_primaries", "bt709",
+                    "-color_trc", "bt709",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+                run_ffmpeg(ffmpeg_cmd)
+            elif use_pillow_bridge:
                 from PIL import Image
                 from src.media.subtitles import CodeSubtitleDrawer
                 drawer = CodeSubtitleDrawer(theme=subtitle_theme)
