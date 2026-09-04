@@ -78,7 +78,7 @@ python3 main.py daemon --interval 60
 
 El stack visual de **producción** es **FFmpeg-first y determinista** (sin navegador headless, sin WebGPU en el hot path):
 - **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** (stream-copy, casi cero reencode) cuando la orientación es horizontal y no se queman subtítulos.
-- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`**, HUDs/overlays y ensamble master FFmpeg; `ENABLE_NATIVE_PROCEDURAL` default **off** (código quarantined en `_legacy`; no SSOT).
+- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`** en escenas hybrid; ensamble master FFmpeg (libass + EBU R128). Con `DIRECTOR_SINGLE_PASS=1` (default) y escenas procedurales con bucles de catálogo compatibles, **omite N re-encodes** y arma con stream-copy trim + concat demuxer (`-c:v copy`). `DIRECTOR_XFADE=1` activa `xfade` real (acorta timeline; off por defecto para sync con narración). `MultiActVideoRenderer` sí usa `xfade` en un solo `filter_complex`. `ENABLE_NATIVE_PROCEDURAL` default **off**.
 - **Catálogo de bucles** (SQLite `video_loops` + `loop_worker.py`): micro-bucles **6–10 s** (~2–5 MB) sintetizados con FFmpeg lavfi (`technology=ffmpeg_lavfi`), expandidos con `-stream_loop -1`.
 - **Temáticas**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). Cero Canvas/Three.js/WebGL en el camino activo.
 - **Agentes vs píxeles**: los agentes emiten texto/JSON; el código de media es dueño de los píxeles (ASS + **libass** cuando hay subtítulos).

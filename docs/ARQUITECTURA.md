@@ -119,7 +119,7 @@ Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical
 ## 9. Políticas Arquitectónicas Anti-Regresión (REG-01 a REG-09)
 
 El sistema impone invariantes arquitectónicos nativos verificados automáticamente en CI/pytest:
-- **Renderizado FFmpeg SSOT (Teología v2.4.0)**: beats = concat demuxer + `-c:v copy`; director = FFmpeg `zoompan`/HUDs + ensamble master. `ENABLE_NATIVE_PROCEDURAL` default off; `native_procedural`/shaders viven quarantined en `src/media/_legacy` (no SSOT; FFmpeg + Pillow thumbs).
+- **Renderizado FFmpeg SSOT (Teología v2.4.0)**: beats = concat demuxer + `-c:v copy`; director = `zoompan` (hybrid) + `DIRECTOR_SINGLE_PASS` stream-copy/concat para bucles procedurales (default on; elimina N re-encodes). `xfade` real en `MultiActVideoRenderer`; en `MultiSceneCompositor` solo con `DIRECTOR_XFADE=1`. `ENABLE_NATIVE_PROCEDURAL` default off; `native_procedural`/shaders viven quarantined en `src/media/_legacy` (no SSOT; FFmpeg + Pillow thumbs).
 - **Tipografía Vectorizada y Overlays Dinámicos**: Rasterización SVG de alto rendimiento vía `resvg-py` y composición de overlays con técnica zero-copy.
 - **Subtítulos Nativos Atómicos (`libass`)**: Generación directa de archivos `.ass` con temporización karaoke (`{\kf}`) y márgenes de seguridad para UI móvil (`MarginV >= 240px`), integrados nativamente en la cadena de filtros de FFmpeg.
 - **Transcodificación Atómica en Pase Único**: Pipeline unificado de FFmpeg (`-filter_complex`) con drenaje asíncrono de flujo `stderr` para evitar bloqueos por buffers de tubería del SO.

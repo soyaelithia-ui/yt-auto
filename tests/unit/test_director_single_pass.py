@@ -1,0 +1,192 @@
+"""Unit tests for DIRECTOR_SINGLE_PASS."""
+from unittest.mock import MagicMock
+from pathlib import Path
+import pytest
+from src.media.director_single_pass import (
+    build_scale_concat_video_filters, build_xfade_video_filters,
+    count_director_video_encodes, director_single_pass_enabled, director_xfade_enabled,
+    is_procedural_engine_type, manifest_eligible_for_loop_single_pass,
+)
+from src.media.multi_act_renderer import (
+    MultiActVideoRenderer,
+    NarrativeSceneAct,
+    calculate_xfade_duration,
+    multiact_xfade_enabled,
+)
+
+def test_single_pass_defaults_on(monkeypatch):
+    monkeypatch.delenv("DIRECTOR_SINGLE_PASS", raising=False)
+    assert director_single_pass_enabled() is True
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "0")
+    assert director_single_pass_enabled() is False
+
+def test_xfade_defaults_off(monkeypatch):
+    monkeypatch.delenv("DIRECTOR_XFADE", raising=False)
+    assert director_xfade_enabled() is False
+
+def test_eligibility():
+    assert manifest_eligible_for_loop_single_pass([MagicMock(engine_type="pure_procedural_webgl")])
+    assert not manifest_eligible_for_loop_single_pass([MagicMock(engine_type="hybrid_cinematic_ai")])
+    assert not is_procedural_engine_type("hybrid_cinematic_ai")
+
+def test_encode_counts():
+    legacy = count_director_video_encodes(n_scenes=5, single_pass=False, use_xfade=False, needs_scale=False)
+    assert legacy.total_video_encodes(has_ass_burn=False) == 5
+    sp = count_director_video_encodes(n_scenes=5, single_pass=True, use_xfade=False, needs_scale=False)
+    assert sp.mode == "loop_stream_copy" and sp.total_video_encodes(has_ass_burn=False) == 0
+
+def test_filters():
+    parts, out = build_scale_concat_video_filters(3, 1920, 1080, 30)
+    assert "concat=n=3" in ";".join(parts) and out == "[vout]"
+    parts, out, dur = build_xfade_video_filters([10,10,10], 1280, 720, 30, 0.75)
+    assert "xfade=transition=fade" in ";".join(parts) and dur == pytest.approx(28.5)
+
+def test_multiact_xfade(tmp_path, monkeypatch):
+    loop = tmp_path / "loop.mp4"; loop.write_bytes(b"\0"*32)
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"RIFF"+b"\0"*40)
+    out = tmp_path / "out.mp4"; captured = {}
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd); out.write_bytes(b"mp4"); return MagicMock(returncode=0)
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "1")
+    acts = [NarrativeSceneAct(0,0.0,2.0,"A","scp"), NarrativeSceneAct(1,2.0,2.0,"B","scp")]
+    expected = calculate_xfade_duration([2.0, 2.0], 0.75)
+    r.composite_multi_act_video(acts, audio, out, expected)
+    fc = captured["cmd"][captured["cmd"].index("-filter_complex")+1]
+    assert "xfade=transition=fade" in fc and "concat=n=" not in fc
+
+def test_multiact_av_t_align_contract(tmp_path, monkeypatch):
+    """A/V share one -t equal to calculate_xfade_duration (no silent mismatch)."""
+    loop = tmp_path / "loop.mp4"; loop.write_bytes(b"\0"*32)
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"RIFF"+b"\0"*40)
+    out = tmp_path / "out.mp4"; captured = {}
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd); out.write_bytes(b"mp4"); return MagicMock(returncode=0)
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "1")
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp"),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp"),
+        NarrativeSceneAct(2, 4.0, 3.0, "C", "scp"),
+    ]
+    durs = [a.duration_sec for a in acts]
+    contract = calculate_xfade_duration(durs, 0.75)
+    # Intentionally pass a wrong total to ensure renderer prefers contract duration.
+    r.composite_multi_act_video(acts, audio, out, total_duration=sum(durs))
+    cmd = captured["cmd"]
+    # Output -t is the last -t (inputs also pass -t for loop length).
+    out_t = float([cmd[i + 1] for i, x in enumerate(cmd) if x == "-t"][-1])
+    assert out_t == pytest.approx(contract)
+    # One output -t after both -map v and -map a → A/V share the same trim.
+    map_idxs = [i for i, x in enumerate(cmd) if x == "-map"]
+    t_idxs = [i for i, x in enumerate(cmd) if x == "-t"]
+    assert len(map_idxs) >= 2
+    assert t_idxs[-1] > map_idxs[0] and t_idxs[-1] > map_idxs[1]
+
+def test_multiact_xfade_opt_out_uses_concat(tmp_path, monkeypatch):
+    loop = tmp_path / "loop.mp4"; loop.write_bytes(b"\0"*32)
+    audio = tmp_path / "a.wav"; audio.write_bytes(b"RIFF"+b"\0"*40)
+    out = tmp_path / "out.mp4"; captured = {}
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd); out.write_bytes(b"mp4"); return MagicMock(returncode=0)
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+    assert multiact_xfade_enabled() is False
+    acts = [NarrativeSceneAct(0,0.0,2.0,"A","scp"), NarrativeSceneAct(1,2.0,2.0,"B","scp")]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0)
+    cmd = captured["cmd"]
+    fc = cmd[cmd.index("-filter_complex")+1]
+    assert "concat=n=2" in fc and "xfade=" not in fc
+    # Last -t is the output duration (inputs also use -t).
+    out_t = [cmd[i + 1] for i, x in enumerate(cmd) if x == "-t"][-1]
+    assert float(out_t) == pytest.approx(4.0)
+
+def test_compositor_stream_copy(tmp_path, monkeypatch):
+    from src.media.compositor import MultiSceneCompositor
+    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    loop = tmp_path / "cat.mp4"; loop.write_bytes(b"\0"*64)
+    vs = MagicMock(width=1280, height=720, codec_name="h264", pix_fmt="yuv420p")
+    probe = MagicMock(
+        video_streams=[vs],
+        primary_video=vs,
+        raw_payload={"streams": [{"codec_type": "video", "time_base": "1/90000"}]},
+    )
+    cmds = []
+    def fake_run(cmd, **kw):
+        cmds.append(list(cmd)); Path(cmd[-1]).write_bytes(b"mp4"); return MagicMock(returncode=0)
+    monkeypatch.setattr("src.media.compositor.probe_media", lambda *a, **k: probe)
+    monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS","1"); monkeypatch.setenv("DIRECTOR_XFADE","0")
+    comp = MultiSceneCompositor()
+    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig())
+    scene2 = scene.model_copy(update={"scene_index":2,"scene_id":"s2","start_sec":1.0})
+    manifest = SceneManifestV2(story_id="t", lane_id="lane", channel_name="moku", resolution=[1280,720], fps=30, total_duration_sec=2.0, scenes=[scene,scene2], audio_tracks=AudioTracks(narration_path=str(tmp_path/"n.wav")), safe_area=SafeArea())
+    (tmp_path/"n.wav").write_bytes(b"RIFF"+b"\0"*40)
+    monkeypatch.setattr(comp, "_resolve_procedural_loop_path", lambda *a, **k: loop)
+    ok = comp._assemble_procedural_loops_single_pass(manifest=manifest, output_mp4=tmp_path/"a.mp4", width=1280, height=720, fps=30, crf=26, preset="ultrafast", tmp_dir=tmp_path)
+    assert ok and comp._last_assembly_plan.mode == "loop_stream_copy"
+    assert sum(1 for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v")+1]=="copy") == 2
+
+def test_compositor_inhomogeneous_falls_back_to_scale_concat(tmp_path, monkeypatch):
+    """Mismatched codec/pix_fmt/time_base must NOT stream-copy; use scale+concat encode."""
+    from src.media.compositor import MultiSceneCompositor
+    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    loop_a = tmp_path / "a.mp4"; loop_a.write_bytes(b"\0"*64)
+    loop_b = tmp_path / "b.mp4"; loop_b.write_bytes(b"\0"*64)
+    vs_a = MagicMock(width=1280, height=720, codec_name="h264", pix_fmt="yuv420p")
+    vs_b = MagicMock(width=1280, height=720, codec_name="h264", pix_fmt="yuv422p")
+    probes = {
+        str(loop_a.resolve()): MagicMock(
+            video_streams=[vs_a], primary_video=vs_a,
+            raw_payload={"streams": [{"codec_type": "video", "time_base": "1/90000"}]},
+        ),
+        str(loop_b.resolve()): MagicMock(
+            video_streams=[vs_b], primary_video=vs_b,
+            raw_payload={"streams": [{"codec_type": "video", "time_base": "1/90000"}]},
+        ),
+    }
+    cmds = []
+    def fake_probe(p, **kw):
+        return probes[str(Path(p).resolve())]
+    def fake_run(cmd, **kw):
+        cmds.append(list(cmd)); Path(cmd[-1]).write_bytes(b"mp4"); return MagicMock(returncode=0)
+    monkeypatch.setattr("src.media.compositor.probe_media", fake_probe)
+    monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS","1"); monkeypatch.setenv("DIRECTOR_XFADE","0")
+    comp = MultiSceneCompositor()
+    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig())
+    scene2 = scene.model_copy(update={"scene_index":2,"scene_id":"s2","start_sec":1.0})
+    manifest = SceneManifestV2(story_id="t", lane_id="lane", channel_name="moku", resolution=[1280,720], fps=30, total_duration_sec=2.0, scenes=[scene,scene2], audio_tracks=AudioTracks(narration_path=str(tmp_path/"n.wav")), safe_area=SafeArea())
+    (tmp_path/"n.wav").write_bytes(b"RIFF"+b"\0"*40)
+    paths = [loop_a, loop_b]
+    monkeypatch.setattr(comp, "_resolve_procedural_loop_path", lambda *a, **k: paths.pop(0))
+    ok = comp._assemble_procedural_loops_single_pass(manifest=manifest, output_mp4=tmp_path/"a.mp4", width=1280, height=720, fps=30, crf=26, preset="ultrafast", tmp_dir=tmp_path)
+    assert ok and comp._last_assembly_plan.mode == "loop_filter_concat"
+    assert any("-filter_complex" in c for c in cmds)
+    assert not any("-c:v" in c and c[c.index("-c:v")+1]=="copy" and "-stream_loop" in c for c in cmds)
+
+def test_resolve_loop_no_glob_fallback(tmp_path, monkeypatch):
+    """Arbitrary sorted(glob('*.mp4'))[0] must not be used; return None → multi-pass."""
+    from src.media.compositor import MultiSceneCompositor
+    from src.scene_manifest import ProceduralConfig, SceneConfig
+    cat = tmp_path / "assets" / "loops" / "web_procedural" / "dark_forest"
+    cat.mkdir(parents=True)
+    (cat / "wrong_loop.mp4").write_bytes(b"\0"*32)
+    monkeypatch.chdir(tmp_path)
+    comp = MultiSceneCompositor()
+    eng = MagicMock()
+    eng.catalog.get_best_loop.return_value = None
+    eng._resolve_category.return_value = "dark_forest"
+    comp.procedural_engine = eng
+    scene = SceneConfig(
+        scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2,
+        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(),
+        environment_name="dark_forest",
+    )
+    assert comp._resolve_procedural_loop_path(scene, width=1280, height=720, lane_id="lane") is None

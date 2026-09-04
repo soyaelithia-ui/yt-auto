@@ -2,9 +2,16 @@
 src/media/multi_scene_compositor.py - Master Multi-Scene Dynamic Video Compositor.
 
 Orchestrates multi-scene rendering (45-90s pacing for longform, 8-15s for shorts),
-delegating scene segments to either the Hybrid Cinematic AI Engine or the Pure Procedural Engine,
-stitching scenes via FFmpeg concat demuxer (stream-copy; not xfade), mastering broadcast EBU R128 audio (-14 LUFS, -1.5 dBTP)
-with dynamic sidechain ducking (-18 dB), and applying master 36-tap Lanczos / de-banding filters.
+delegating scene segments to either the Hybrid Cinematic AI Engine or the Pure Procedural Engine.
+
+Default assembly (DIRECTOR_SINGLE_PASS=1): when every scene is procedural and catalog loops
+resolve, skip per-scene libx264 re-encodes and assemble via stream-copy trim + concat demuxer
+(-c:v copy; near-zero CPU) or one filter_complex scale+concat when loops need resize.
+Real FFmpeg xfade is opt-in (DIRECTOR_XFADE=1) because it shortens the timeline.
+
+Legacy multi-pass (per-scene encode → concat stream-copy → master) remains for hybrid scenes
+or when DIRECTOR_SINGLE_PASS=0. Master still applies EBU R128 audio (-14 LUFS, -1.5 dBTP)
+with sidechain ducking and optional libass ASS burn.
 Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
@@ -17,7 +24,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from src.media.encode_defaults import default_render_crf, default_render_preset
+from src.media.encode_defaults import default_render_crf, default_render_preset, loop_matches_target_geometry
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
@@ -39,6 +46,14 @@ from lib.ffmpeg import (
     FFmpegExecutionError,
     probe_media,
     run_ffmpeg,
+)
+from src.media.director_single_pass import (
+    build_scale_concat_video_filters,
+    build_xfade_video_filters,
+    count_director_video_encodes,
+    director_single_pass_enabled,
+    director_xfade_enabled,
+    manifest_eligible_for_loop_single_pass,
 )
 
 logger = get_logger("multi_scene_compositor")
@@ -121,6 +136,13 @@ class MultiSceneCompositor(BaseVideoCompositor):
 
         t0 = time.time()
         rendered_scene_files: List[Tuple[SceneConfig, Path]] = []
+        assembly_plan = count_director_video_encodes(
+            n_scenes=len(manifest.scenes),
+            single_pass=False,
+            use_xfade=False,
+            needs_scale=False,
+        )
+        has_ass_burn = False
 
         # Prefer native libass ASS burn-in (master assembly). Pillow frame-bridge is opt-in only.
         word_timestamps = extra_kwargs.get("word_timestamps")
@@ -145,60 +167,93 @@ class MultiSceneCompositor(BaseVideoCompositor):
 
         with tempfile.TemporaryDirectory(prefix="multiscene_render_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
-
-            # 1. Parallel Scene Segment Rendering
-            def _render_scene_worker(item: Tuple[int, SceneConfig]) -> Tuple[int, SceneConfig, Path]:
-                idx, scene = item
-                sc_out = tmp_dir / f"scene_{idx:03d}_{scene.scene_id}.mp4"
-                logger.info(
-                    "Rendering Scene %d/%d (id=%s, engine=%s, dur=%.2fs, tension=%d, threads=%d)",
-                    idx + 1,
-                    len(manifest.scenes),
-                    scene.scene_id,
-                    scene.engine_type,
-                    scene.duration_sec,
-                    scene.tension_level,
-                    threads_per_worker,
-                )
-
-                if scene.engine_type == "hybrid_cinematic_ai":
-                    self.hybrid_engine.render_scene_segment(
-                        scene=scene,
-                        width=width,
-                        height=height,
-                        fps=fps,
-                        output_mp4=sc_out,
-                        crf=crf,
-                        subtitle_cues=subtitle_cues,
-                        scene_start_sec=scene.start_sec,
-                        subtitle_theme=subtitle_theme,
-                        threads=threads_per_worker,
-                    )
-                else:
-                    self.procedural_engine.render_scene_segment(
-                        scene=scene,
-                        width=width,
-                        height=height,
-                        fps=fps,
-                        lane_id=manifest.lane_id,
-                        output_mp4=sc_out,
-                        crf=crf,
-                        subtitle_cues=subtitle_cues,
-                        scene_start_sec=scene.start_sec,
-                        subtitle_theme=subtitle_theme,
-                        threads=threads_per_worker,
-                    )
-                return (idx, scene, sc_out)
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
-                parallel_results = list(executor.map(_render_scene_worker, enumerate(manifest.scenes)))
-
-            parallel_results.sort(key=lambda x: x[0])
-            rendered_scene_files = [(r[1], r[2]) for r in parallel_results]
-
-            # 2. Assemble video stream (instant stream copy concat)
             video_only_assembled = tmp_dir / "video_assembled.mp4"
-            self._assemble_video_scenes(rendered_scene_files, video_only_assembled, width, height, fps)
+
+            used_single_pass = False
+            if (
+                director_single_pass_enabled()
+                and manifest_eligible_for_loop_single_pass(manifest.scenes)
+                and not force_pillow
+            ):
+                try:
+                    used_single_pass = self._assemble_procedural_loops_single_pass(
+                        manifest=manifest,
+                        output_mp4=video_only_assembled,
+                        width=width,
+                        height=height,
+                        fps=fps,
+                        crf=crf,
+                        preset=preset,
+                        tmp_dir=tmp_dir,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "DIRECTOR_SINGLE_PASS failed (%s); falling back to legacy multi-pass",
+                        exc,
+                    )
+                    used_single_pass = False
+
+            if not used_single_pass:
+                # 1. Parallel Scene Segment Rendering (legacy multi-pass)
+                def _render_scene_worker(item: Tuple[int, SceneConfig]) -> Tuple[int, SceneConfig, Path]:
+                    idx, scene = item
+                    sc_out = tmp_dir / f"scene_{idx:03d}_{scene.scene_id}.mp4"
+                    logger.info(
+                        "Rendering Scene %d/%d (id=%s, engine=%s, dur=%.2fs, tension=%d, threads=%d)",
+                        idx + 1,
+                        len(manifest.scenes),
+                        scene.scene_id,
+                        scene.engine_type,
+                        scene.duration_sec,
+                        scene.tension_level,
+                        threads_per_worker,
+                    )
+
+                    if scene.engine_type == "hybrid_cinematic_ai":
+                        self.hybrid_engine.render_scene_segment(
+                            scene=scene,
+                            width=width,
+                            height=height,
+                            fps=fps,
+                            output_mp4=sc_out,
+                            crf=crf,
+                            subtitle_cues=subtitle_cues,
+                            scene_start_sec=scene.start_sec,
+                            subtitle_theme=subtitle_theme,
+                            threads=threads_per_worker,
+                        )
+                    else:
+                        self.procedural_engine.render_scene_segment(
+                            scene=scene,
+                            width=width,
+                            height=height,
+                            fps=fps,
+                            lane_id=manifest.lane_id,
+                            output_mp4=sc_out,
+                            crf=crf,
+                            subtitle_cues=subtitle_cues,
+                            scene_start_sec=scene.start_sec,
+                            subtitle_theme=subtitle_theme,
+                            threads=threads_per_worker,
+                        )
+                    return (idx, scene, sc_out)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+                    parallel_results = list(executor.map(_render_scene_worker, enumerate(manifest.scenes)))
+
+                parallel_results.sort(key=lambda x: x[0])
+                rendered_scene_files = [(r[1], r[2]) for r in parallel_results]
+
+                # 2. Assemble video stream (instant stream copy concat)
+                self._assemble_video_scenes(rendered_scene_files, video_only_assembled, width, height, fps)
+                assembly_plan = count_director_video_encodes(
+                    n_scenes=len(manifest.scenes),
+                    single_pass=False,
+                    use_xfade=False,
+                    needs_scale=False,
+                )
+            else:
+                assembly_plan = getattr(self, "_last_assembly_plan", assembly_plan)
 
             # 3. Master audio mixing (narration + BGM + sidechain ducking + EBU R128)
             narration_audio = Path(manifest.audio_tracks.narration_path).resolve() if manifest.audio_tracks.narration_path else None
@@ -224,6 +279,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
             if force_pillow and subtitle_cues:
                 # Explicit legacy path: cues already burned per-frame; skip second burn.
                 sub_p = None
+            has_ass_burn = bool(sub_p and sub_p.is_file())
 
             self._master_assembly(
                 video_input=video_only_assembled,
@@ -255,7 +311,212 @@ class MultiSceneCompositor(BaseVideoCompositor):
             "render_time_sec": elapsed,
             "scenes_count": len(manifest.scenes),
             "engine": "multi_scene_dual_engine",
+            "director_assembly": assembly_plan.as_dict(),
+            "director_video_encodes_estimate": assembly_plan.total_video_encodes(
+                has_ass_burn=has_ass_burn
+            ),
         }
+
+
+    def _resolve_procedural_loop_path(
+        self,
+        scene: SceneConfig,
+        *,
+        width: int,
+        height: int,
+        lane_id: str,
+    ) -> Optional[Path]:
+        """Resolve a catalog/on-disk loop for a procedural scene without re-encoding."""
+        eng = self.procedural_engine
+        cfg = scene.procedural_config
+        orientation = "vertical" if height > width else "horizontal"
+        category = eng._resolve_category(  # noqa: SLF001 — shared resolver
+            scene.environment_name,
+            getattr(cfg, "template_name", None) if cfg else None,
+            lane_id,
+        )
+        matching = eng.catalog.get_best_loop(category=category, orientation=orientation)
+        if matching and Path(matching.file_path).is_file():
+            return Path(matching.file_path).resolve()
+        # Fall back to any existing synthesized loop path used by proc_engine naming.
+        seed = getattr(cfg, "seed", 42) if cfg else 42
+        synth = (
+            Path("assets/loops/web_procedural")
+            / category
+            / f"proc_{category}_{orientation}_{width}x{height}_s{seed}_6s.mp4"
+        )
+        if synth.is_file():
+            return synth.resolve()
+        # Do NOT pick an arbitrary *.mp4 from the category (wrong loop risk).
+        # Return None so the caller falls back to legacy multi-pass.
+        return None
+
+    def _stream_copy_signature(
+        self, loop_path: Path
+    ) -> Optional[Tuple[int, int, str, str, str]]:
+        """Return (w, h, codec, pix_fmt, time_base) for concat demuxer -c:v copy safety."""
+        try:
+            probe = probe_media(loop_path)
+            vs = probe.video_streams[0] if probe.video_streams else probe.primary_video
+            if vs is None:
+                return None
+            time_base = ""
+            for s in (probe.raw_payload or {}).get("streams", []):
+                if s.get("codec_type") == "video":
+                    time_base = str(s.get("time_base") or "")
+                    break
+            return (
+                int(vs.width),
+                int(vs.height),
+                str(getattr(vs, "codec_name", "") or ""),
+                str(getattr(vs, "pix_fmt", "") or ""),
+                time_base,
+            )
+        except Exception:
+            return None
+
+    def _loop_matches_target(self, loop_path: Path, width: int, height: int) -> bool:
+        # Shared SSOT with proc_engine / encode_defaults (PR #12).
+        return loop_matches_target_geometry(loop_path, width, height)
+
+    def _loops_homogeneous_for_stream_copy(
+        self, loop_paths: List[Path], width: int, height: int
+    ) -> bool:
+        """True only when all loops share WxH/codec/pix_fmt/time_base and match target WxH."""
+        if not loop_paths:
+            return False
+        sigs: List[Tuple[int, int, str, str, str]] = []
+        for p in loop_paths:
+            sig = self._stream_copy_signature(p)
+            if sig is None:
+                return False
+            if sig[0] != int(width) or sig[1] != int(height):
+                return False
+            # Require codec + pix_fmt so concat demuxer -c:v copy is safe.
+            if not sig[2] or not sig[3]:
+                return False
+            sigs.append(sig)
+        first = sigs[0]
+        return all(s == first for s in sigs)
+
+
+    def _assemble_procedural_loops_single_pass(
+        self,
+        *,
+        manifest: SceneManifestV2,
+        output_mp4: Path,
+        width: int,
+        height: int,
+        fps: int,
+        crf: int,
+        preset: str,
+        tmp_dir: Path,
+    ) -> bool:
+        """Assemble all-procedural scenes from catalog loops without per-scene re-encodes.
+
+        Returns True on success (output_mp4 written). Raises or returns False on ineligibility.
+        """
+        loop_paths: List[Path] = []
+        durations: List[float] = []
+        for scene in manifest.scenes:
+            lp = self._resolve_procedural_loop_path(
+                scene, width=width, height=height, lane_id=manifest.lane_id
+            )
+            if lp is None or not lp.is_file():
+                logger.info(
+                    "Single-pass skip: no loop for scene=%s env=%s",
+                    scene.scene_id,
+                    scene.environment_name,
+                )
+                return False
+            loop_paths.append(lp)
+            durations.append(max(0.5, float(scene.duration_sec)))
+
+        # Stream-copy only when every loop matches target WxH AND is codec/pix_fmt/timebase-homogeneous.
+        # Otherwise explicitly fall back to one scale+concat encode (or xfade encode).
+        needs_scale = not self._loops_homogeneous_for_stream_copy(
+            loop_paths, width, height
+        )
+        use_xfade = director_xfade_enabled() and len(loop_paths) > 1
+
+        plan = count_director_video_encodes(
+            n_scenes=len(loop_paths),
+            single_pass=True,
+            use_xfade=use_xfade,
+            needs_scale=needs_scale,
+        )
+        self._last_assembly_plan = plan
+        logger.info(
+            "DIRECTOR_SINGLE_PASS mode=%s scenes=%d needs_scale=%s xfade=%s "
+            "(eliminates %d per-scene encodes)",
+            plan.mode,
+            len(loop_paths),
+            needs_scale,
+            use_xfade,
+            len(loop_paths),
+        )
+
+        if not needs_scale and not use_xfade:
+            # Near-zero CPU: stream-copy trim each loop, then concat demuxer -c:v copy.
+            trimmed: List[Path] = []
+            for i, (lp, dur) in enumerate(zip(loop_paths, durations)):
+                out_seg = tmp_dir / f"sp_trim_{i:03d}.mp4"
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-stream_loop", "-1",
+                    "-i", str(lp),
+                    "-t", f"{dur:.3f}",
+                    "-c:v", "copy",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_seg),
+                ]
+                run_ffmpeg(cmd)
+                trimmed.append(out_seg)
+            self._assemble_video_scenes(
+                [(manifest.scenes[i], trimmed[i]) for i in range(len(trimmed))],
+                output_mp4,
+                width,
+                height,
+                fps,
+            )
+            return output_mp4.is_file()
+
+        # One filter_complex encode (scale+concat or xfade).
+        cmd: List[str] = ["ffmpeg", "-y"]
+        for lp, dur in zip(loop_paths, durations):
+            cmd.extend(["-stream_loop", "-1", "-t", f"{dur:.3f}", "-i", str(lp)])
+
+        if use_xfade:
+            # Use first scene transition duration when present.
+            t_req = 0.75
+            t0 = getattr(manifest.scenes[0], "transition_out", None)
+            if t0 is not None and getattr(t0, "duration_sec", None):
+                t_req = float(t0.duration_sec)
+            parts, v_out, _out_dur = build_xfade_video_filters(
+                durations, width, height, fps, transition_sec=t_req
+            )
+        else:
+            parts, v_out = build_scale_concat_video_filters(
+                len(loop_paths), width, height, fps
+            )
+
+        cmd.extend([
+            "-filter_complex", ";".join(parts),
+            "-map", v_out,
+            "-c:v", "libx264",
+            "-crf", str(crf),
+            "-preset", str(preset),
+            "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-an",
+            "-movflags", "+faststart",
+            str(output_mp4),
+        ])
+        run_ffmpeg(cmd)
+        return output_mp4.is_file()
 
     def _assemble_video_scenes(
         self,
