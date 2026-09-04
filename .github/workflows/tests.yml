@@ -17,8 +17,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg and Mesa Lavapipe (software WebGPU)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg mesa-vulkan-drivers libvulkan1
+          # Prefer Lavapipe ICD on GitHub-hosted runners (no discrete GPU).
+          if [ -f /usr/share/vulkan/icd.d/lvp_icd.json ]; then
+            echo "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json" >> "$GITHUB_ENV"
+          elif [ -f /usr/share/vulkan/icd.d/lvp_icd.x86_64.json ]; then
+            echo "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json" >> "$GITHUB_ENV"
+          else
+            echo "Lavapipe ICD not found; GPU-dependent tests will skip if no adapter."
+            ls -la /usr/share/vulkan/icd.d/ || true
+          fi
       - name: Clean install (requirements must be complete)
         run: |
           python -m pip install --upgrade pip
