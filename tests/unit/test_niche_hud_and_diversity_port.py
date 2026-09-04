@@ -7,7 +7,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.media.multi_act_renderer import MultiActVideoRenderer, NicheHudConfig
+from src.media.multi_act_renderer import (
+    MultiActVideoRenderer,
+    NarrativeSceneAct,
+    NicheHudConfig,
+    niche_hud_from_act,
+    niche_hud_from_mapping,
+)
 from lib.qa.diversity_gate import audit_scene_diversity, evaluate_scene_diversity
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.encode_defaults import default_render_crf, default_render_preset
@@ -90,21 +96,37 @@ def test_shorts_diversity_insufficient_scenes():
     assert code == "ERR_QA_SHORT_DIVERSITY_INSUFFICIENT"
 
 
-def test_shorts_diversity_passes_with_three_scenes():
-    # 4 distinct assets × 12.5s = 50s → 25% each (dominance uses strict > 0.25)
-    manifest = {
+def test_shorts_min_scenes_is_four_aligned_with_dominance():
+    """Conservative policy: min_short_scenes=4 so equal cuts stay ≤25% dominance.
+
+    With 3 equal scenes each is ~33% > 25%; requiring ≥4 keeps min-count and
+    the 25% dominance ceiling coherent (4 × 25% passes strict ``> 0.25``).
+    Dominance still applies to shorts (not longform-only).
+    """
+    three = {
+        "duration_sec": 45.0,
+        "scenes": [
+            {"duration_sec": 15.0, "image_path": f"/s{i}.mp4"} for i in range(3)
+        ],
+    }
+    passed, code, msg, _ = audit_scene_diversity(three, duration_sec=45.0, is_short=True)
+    assert not passed
+    assert code == "ERR_QA_SHORT_DIVERSITY_INSUFFICIENT"
+    assert "at least 4" in msg
+
+    four = {
         "duration_sec": 50.0,
         "scenes": [
             {"duration_sec": 12.5, "image_path": f"/s{i}.mp4"} for i in range(4)
         ],
     }
-    passed, code, _, _ = audit_scene_diversity(manifest, duration_sec=50.0, is_short=True)
+    passed, code, _, _ = audit_scene_diversity(four, duration_sec=50.0, is_short=True)
     assert passed
     assert code == "OK_SCENE_DIVERSITY"
 
 
 def test_asset_dominance_applies_without_longform_floor():
-    """Mission: block if one asset >25% runtime (any length when evaluated)."""
+    """Dominance applies to shorts too (any length when runtime known)."""
     manifest = {
         "duration_sec": 80.0,
         "scenes": [
@@ -147,6 +169,44 @@ def test_qa_gatekeeper_wires_scene_diversity(tmp_path, monkeypatch):
     issues: list = []
     gk._audit_scene_diversity(str(mpath), "short", issues)
     assert any(i.code == "ERR_QA_SHORT_DIVERSITY_INSUFFICIENT" for i in issues)
+
+
+def test_qa_gatekeeper_diversity_audit_fails_closed_in_strict(tmp_path, monkeypatch):
+    """Silent except-return is forbidden: strict mode must surface audit failures."""
+    from lib.qa_gatekeeper import QAGatekeeper
+
+    mpath = tmp_path / "scene_manifest.json"
+    mpath.write_text("{not-json", encoding="utf-8")
+    gk = QAGatekeeper(strict_mode=True)
+    issues: list = []
+    gk._audit_scene_diversity(str(mpath), "short", issues)
+    assert any(i.code == "ERR_QA_SCENE_DIVERSITY_AUDIT_FAILED" for i in issues)
+    assert any(i.severity == "CRITICAL" for i in issues)
+
+
+def test_niche_hud_prefers_planner_mapping_on_act():
+    planner = {
+        "lane_id": "moku-scp-shorts",
+        "story_type": "scp",
+        "hud_badge": "NIVEL 5 // KETER",
+        "hud_site": "SITIO-19",
+        "telemetry_label": "CAM-07",
+        "accent_color_hex": "#00FF66",
+        "tension_level": 5,
+    }
+    assert niche_hud_from_mapping(planner).story_type == "scp"
+    act = NarrativeSceneAct(
+        act_index=0,
+        start_sec=0.0,
+        duration_sec=10.0,
+        title="t",
+        theme_category="reddit_aita",  # would map to reddit without planner dict
+        niche_hud=planner,
+    )
+    cfg = niche_hud_from_act(act)
+    assert cfg.story_type == "scp"
+    assert cfg.hud_site == "SITIO-19"
+    assert cfg.tension_level == 5
 
 
 def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
@@ -196,3 +256,25 @@ def test_visual_bank_scenery_assets_present():
     ]
     for p in expected:
         assert p.is_file() and p.stat().st_size > 1000
+
+
+def test_scene_config_does_not_widen_extra_allow():
+    from src.scene_manifest import SceneConfig
+    # Unknown keys ignored (default), known niche fields accepted — no extra="allow".
+    sc = SceneConfig(
+        scene_index=1,
+        scene_id="s1",
+        start_sec=0.0,
+        duration_sec=5.0,
+        tension_level=2,
+        engine_type="pure_procedural_webgl",
+        niche_hud={"story_type": "scp"},
+        image_path="/x.jpg",
+        asset_path="/x.jpg",
+        totally_unknown_field="drop-me",  # type: ignore[call-arg]
+    )
+    assert sc.niche_hud["story_type"] == "scp"
+    assert not hasattr(sc, "totally_unknown_field")
+    src = Path("src/scene_manifest.py").read_text(encoding="utf-8")
+    assert "model_config = ConfigDict(extra=" not in src
+    assert 'ConfigDict(extra="allow")' not in src

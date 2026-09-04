@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import jsonschema
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.log import get_logger
@@ -183,8 +183,8 @@ class TransitionConfig(BaseModel):
 
 
 class SceneConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
+    # Explicit fields only (niche_hud / camera_motion / image_path / asset_path).
+    # Do not widen with extra="allow" — unknown keys are ignored (Pydantic default).
     scene_index: int = Field(..., ge=1)
     scene_id: str
     environment_name: Optional[str] = None

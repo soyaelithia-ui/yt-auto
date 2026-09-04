@@ -69,7 +69,11 @@ def multiact_xfade_enabled() -> bool:
 
 @dataclass
 class NarrativeSceneAct:
-    """Represents a discrete temporal act with a specific code-driven visual theme."""
+    """Represents a discrete temporal act with a specific code-driven visual theme.
+
+    Optional ``niche_hud`` dict (planner/manifest shape) is preferred when present;
+    otherwise theme_category + hud_* fields drive theme mapping.
+    """
     act_index: int
     start_sec: float
     duration_sec: float
@@ -79,6 +83,7 @@ class NarrativeSceneAct:
     hud_site: str = "SITIO-62C // CONTENCIÓN"
     hud_telemetry: str = "STATUS: OPERACIONAL // SENSOR HUME ONLINE"
     color_hex: str = "#00FF88"
+    niche_hud: Optional[Dict[str, Any]] = None
 
 
 
@@ -101,8 +106,34 @@ def _escape_drawtext(text: str) -> str:
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "").replace("%", "\\%")
 
 
+def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudConfig]:
+    """Build NicheHudConfig from planner/manifest ``niche_hud`` dict when present."""
+    if not isinstance(data, dict) or not data:
+        return None
+    story = str(data.get("story_type") or data.get("lane_id") or "").strip()
+    if not story and not (data.get("hud_badge") or data.get("hud_site")):
+        return None
+    return NicheHudConfig(
+        lane_id=str(data.get("lane_id") or ""),
+        story_type=story or "horror",
+        hud_badge=str(data.get("hud_badge") or ""),
+        hud_site=str(data.get("hud_site") or ""),
+        telemetry_label=str(data.get("telemetry_label") or ""),
+        accent_color_hex=str(data.get("accent_color_hex") or "#00FF88"),
+        tension_level=int(data.get("tension_level") or 1),
+    )
+
+
 def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
-    """Map a NarrativeSceneAct theme to niche HUD story_type."""
+    """Resolve niche HUD: prefer planner ``act.niche_hud`` dict, else theme mapping.
+
+    Note: DIRECTOR_SINGLE_PASS / MultiSceneCompositor stream-copy path does **not**
+    burn these overlays (avoids forced re-encode). Consumption is on MultiAct
+    filtergraph renders and any caller that builds NicheHudConfig explicitly.
+    """
+    from_planner = niche_hud_from_mapping(getattr(act, "niche_hud", None))
+    if from_planner is not None:
+        return from_planner
     cat = (act.theme_category or "").lower()
     if "scp" in cat or "found" in cat or "anomaly" in cat:
         story = "scp"

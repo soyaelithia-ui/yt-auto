@@ -2,8 +2,8 @@
 lib/qa/diversity_gate.py - QA Gates for Scene Diversity and Perceived Luminance.
 
 Enforces:
-1. Minimum scene diversity for longform productions (rejecting static single-loop videos).
-2. Asset dominance ceilings (no single visual asset exceeding 25% duration in longform).
+1. Minimum scene diversity for shorts (≥4) and longform (≥6) productions.
+2. Asset dominance ceilings (no single visual asset exceeding 25% duration; all lengths).
 3. Perceived luminance and contrast floors (rejecting pitch-black and under-illuminated scenes).
 """
 from __future__ import annotations
@@ -23,13 +23,18 @@ def audit_scene_diversity(
     max_asset_dominance_ratio: float = 0.25,
     *,
     is_short: bool = False,
-    min_short_scenes: int = 3,
+    min_short_scenes: int = 4,
 ) -> Tuple[bool, str, str, Dict[str, Any]]:
     """Audit scene count and single-asset dominance.
 
-    - Shorts (`is_short=True`): require at least `min_short_scenes` (default 3).
+    Policy alignment (product-safe / conservative):
+    - Shorts (`is_short=True`): require at least `min_short_scenes` (default **4**).
+      With equal-length scenes, 3 scenes ⇒ ~33% each which already exceeds the 25%
+      dominance ceiling; requiring ≥4 scenes keeps min-count and dominance coherent
+      (4 equal scenes = 25% each; dominance uses strict ``>`` so exact 25% passes).
     - Longform (`duration_sec >= 300` when not short): require at least `min_longform_scenes`.
-    - No single visual asset may occupy more than `max_asset_dominance_ratio` (25%) of the runtime.
+    - Asset dominance (`max_asset_dominance_ratio`, default 25%) applies whenever runtime
+      is known (shorts and longform) — not longform-only.
     """
     data: Dict[str, Any] = {}
     if isinstance(manifest_or_dict, dict):

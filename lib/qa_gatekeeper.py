@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.log import get_logger
+
+logger = get_logger("qa_gatekeeper")
+
 from lib.ffmpeg import (
     FFprobeError,
     has_faststart as ffmpeg_has_faststart,
@@ -368,7 +372,10 @@ class QAGatekeeper:
 
 
     def _audit_scene_diversity(self, manifest_path: str, video_mode: str, issues: List[QualityReportIssue]) -> None:
-        """Block publish when scene diversity or asset dominance fails."""
+        """Block publish when scene diversity or asset dominance fails.
+
+        Exceptions are never silent fail-open: logged always; CRITICAL in strict_mode.
+        """
         try:
             from lib.qa.diversity_gate import evaluate_scene_diversity
 
@@ -385,8 +392,20 @@ class QAGatekeeper:
                     message=res.get("message") or "Visual scene diversity validation failed",
                     severity=_CRITICAL,
                 )
-        except Exception:
-            return
+        except Exception as exc:
+            logger.exception(
+                "scene diversity audit failed (manifest=%s mode=%s): %s",
+                manifest_path,
+                video_mode,
+                exc,
+            )
+            # Fail closed in strict mode — never swallow gate failures silently.
+            self._issue(
+                issues,
+                code="ERR_QA_SCENE_DIVERSITY_AUDIT_FAILED",
+                message=f"Scene diversity audit raised: {exc}",
+                severity=_CRITICAL if self.strict_mode else _WARNING,
+            )
 
     def _finish(self, report: QualityReportDTO, output_report_path: str | None) -> None:
         if output_report_path:

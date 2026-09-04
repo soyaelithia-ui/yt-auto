@@ -49,8 +49,18 @@ The QA subsystem MUST evaluate the total count of distinct visual scenes in vert
 - **Then** the gate result MUST return `is_passed = True`
 - **And** the result severity MUST be `INFO`.
 
+
+### Requirement: Shorts Min-Count Aligned With Dominance Ceiling
+Short productions MUST require at least **4** distinct scenes so the min-count invariant is coherent with the 25% asset-dominance ceiling. With equal-length scenes, 3 scenes ⇒ ~33% each (already over 25%); 4 equal scenes ⇒ 25% each, which passes the strict ``> 25%`` dominance check. Dominance applies to shorts and longform whenever runtime is known (conservative product-safe policy).
+
+#### Scenario: Three equal Short scenes fail min-count before dominance math
+- **Given** a vertical Short of 45.0 seconds with exactly 3 equal-length distinct assets
+- **When** the `SceneDiversityGate` evaluates the Short production
+- **Then** the gate result MUST return `is_passed = False`
+- **And** the failure code MUST be `ERR_QA_SHORT_DIVERSITY_INSUFFICIENT`
+
 ### Requirement: Production Gatekeeper Diversity Enforcement
-`lib/qa_gatekeeper.py` MUST actively invoke scene diversity evaluation across production runs (longform and shorts), blocking publish when single-asset dominance exceeds 25% or scene counts fall below thresholds (≥6 longform, ≥3 Shorts).
+`lib/qa_gatekeeper.py` MUST actively invoke scene diversity evaluation across production runs (longform and shorts), blocking publish when single-asset dominance exceeds 25% or scene counts fall below thresholds (≥6 longform, ≥4 Shorts).
 
 #### Scenario: Gatekeeper blocks publishing on single-asset dominance
 - **Given** a finished video deliverable where a single background asset spans 70% of total runtime
