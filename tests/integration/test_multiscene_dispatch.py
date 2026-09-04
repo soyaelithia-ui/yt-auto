@@ -1,6 +1,6 @@
 """
 Integration tests for multiscene pipeline dispatch, lane configuration alignment,
-and MultiSceneCompositor delegation to NativeProceduralEngine.
+and MultiSceneCompositor default FFmpeg path (wgpu opt-in only).
 """
 
 from __future__ import annotations
@@ -60,17 +60,34 @@ def test_pipeline_engine_resolution_invalid_mode_raises():
     assert is_supported is False, "Unrecognized engine mode should be rejected"
 
 
-def test_compositor_default_wiring_uses_native_engine():
-    """Verify MultiSceneCompositor wires NativeProceduralEngine into ProceduralVideoEngine by default."""
+def test_compositor_default_wiring_skips_native_engine(monkeypatch):
+    """Default MultiSceneCompositor must NOT construct NativeProceduralEngine / WebGPU."""
+    monkeypatch.delenv("ENABLE_NATIVE_PROCEDURAL", raising=False)
     compositor = MultiSceneCompositor()
     assert compositor.procedural_engine is not None
-    assert compositor.procedural_engine.renderer is not None
+    assert compositor.procedural_engine.renderer is None
+
+
+def test_compositor_opt_in_native_engine(monkeypatch):
+    """ENABLE_NATIVE_PROCEDURAL=1 may wire NativeProceduralEngine (skip if no adapter/dep)."""
+    monkeypatch.setenv("ENABLE_NATIVE_PROCEDURAL", "1")
+    try:
+        compositor = MultiSceneCompositor()
+    except RuntimeError as exc:
+        if "No WebGPU adapter available" in str(exc) or "wgpu is not installed" in str(exc):
+            pytest.skip(f"Native procedural unavailable: {exc}")
+        raise
     assert isinstance(compositor.procedural_engine.renderer, NativeProceduralEngine)
 
 
 def test_procedural_engine_renders_via_native_procedural(tmp_path):
     """Verify ProceduralVideoEngine renders via NativeProceduralEngine without falling back to PIL."""
-    native_eng = NativeProceduralEngine()
+    try:
+        native_eng = NativeProceduralEngine()
+    except RuntimeError as exc:
+        if "No WebGPU adapter available" in str(exc) or "wgpu is not installed" in str(exc):
+            pytest.skip(f"Native procedural unavailable: {exc}")
+        raise
     proc_eng = ProceduralVideoEngine(renderer=native_eng)
     
     scene = SceneConfig(

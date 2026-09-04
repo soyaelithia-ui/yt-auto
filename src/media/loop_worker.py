@@ -1,9 +1,10 @@
 """
 src/media/loop_worker.py - Autonomous Background Loop Synthesizer & Buffer Maintainer.
 
-Continuously monitors the local SQLite loop catalog and synthesizes new procedural
-background video loops (native procedural / WebGPU / Lavapipe / FFmpeg) to ensure a healthy,
-diverse stock of background loops across all channels, lanes, and thematic categories.
+Continuously monitors the local SQLite loop catalog and synthesizes new background
+video loops via FFmpeg lavfi (default hot path). An injected renderer may be used for
+opt-in experiments; NativeProceduralEngine/wgpu is NOT constructed by default
+(SSOT PDF v2.4.0).
 """
 from __future__ import annotations
 
@@ -161,7 +162,7 @@ class LoopSynthesizerWorker:
         rec = LoopRecord(
             loop_id=loop_id,
             category=category,
-            technology="native_procedural",
+            technology="ffmpeg_lavfi",
             orientation=orientation,
             width=width,
             height=height,

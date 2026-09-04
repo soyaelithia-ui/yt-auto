@@ -15,7 +15,7 @@ def _make_engine(**kwargs):
     try:
         return NativeProceduralEngine(**kwargs)
     except RuntimeError as exc:
-        if "No WebGPU adapter available" in str(exc):
+        if "No WebGPU adapter available" in str(exc) or "wgpu is not installed" in str(exc):
             pytest.skip(f"WebGPU/Lavapipe adapter unavailable: {exc}")
         raise
 

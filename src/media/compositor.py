@@ -48,6 +48,17 @@ __all__ = [
 ]
 
 
+
+def _native_procedural_hot_path_enabled() -> bool:
+    """Return True only when ENABLE_NATIVE_PROCEDURAL explicitly opts into wgpu render."""
+    return os.environ.get("ENABLE_NATIVE_PROCEDURAL", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 class MultiSceneCompositorError(CompositorError):
     """Base exception for MultiSceneCompositor operations."""
     pass
@@ -66,9 +77,16 @@ class MultiSceneCompositor(BaseVideoCompositor):
         self.hybrid_engine = hybrid_engine or HybridVideoEngine()
         if procedural_engine is not None:
             self.procedural_engine = procedural_engine
-        else:
+        elif _native_procedural_hot_path_enabled():
+            # Opt-in only (SSOT PDF v2.4.0): never construct WebGPU on default prod path.
             from src.media.native_procedural import NativeProceduralEngine
+            logger.warning(
+                "ENABLE_NATIVE_PROCEDURAL=1: wiring NativeProceduralEngine (wgpu) into MultiSceneCompositor"
+            )
             self.procedural_engine = ProceduralVideoEngine(renderer=NativeProceduralEngine())
+        else:
+            # Default: FFmpeg lavfi / catalog loops via ProceduralVideoEngine (no wgpu).
+            self.procedural_engine = ProceduralVideoEngine()
 
     def render(
         self,

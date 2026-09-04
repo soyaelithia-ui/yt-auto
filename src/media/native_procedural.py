@@ -1,7 +1,9 @@
 """
 Native Procedural Engine for yt-auto Visual Pipeline.
-Provides GPU-accelerated and CPU-fallback (Mesa Lavapipe) WGSL shader rendering
-with 64-byte std140 uniform buffer alignment and 256-byte row stride zero-allocation extraction.
+OPT-IN / non-production engine: GPU-accelerated and CPU-fallback (Mesa Lavapipe) WGSL
+shader rendering. Production hot path (pipeline/compositor/loop_worker) must NOT construct
+this by default (SSOT PDF v2.4.0: FFmpeg audiovisual; wgpu invalid on hot path).
+Enable only via ENABLE_NATIVE_PROCEDURAL=1. 64-byte std140 uniforms; 256-byte row stride.
 """
 
 from __future__ import annotations
@@ -15,7 +17,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import wgpu
+
+# wgpu is OPTIONAL / off production hot path (SSOT PDF v2.4.0).
+# Import only when NativeProceduralEngine is constructed (ENABLE_NATIVE_PROCEDURAL).
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,19 @@ DEFAULT_ACCENT_COLORS: Dict[str, Tuple[float, float, float]] = {
     "tactical_chamber": (1.0, 0.2, 0.1),
 }
 
+
+
+def _import_wgpu():
+    """Lazy-import wgpu so catalog/helpers work without the dep installed."""
+    try:
+        import wgpu as _wgpu
+    except ImportError as exc:  # pragma: no cover - exercised when dep removed
+        raise RuntimeError(
+            "wgpu is not installed. NativeProceduralEngine is opt-in only "
+            "(set ENABLE_NATIVE_PROCEDURAL=1 and install wgpu). "
+            "Production hot path uses FFmpeg lavfi/catalog loops."
+        ) from exc
+    return _wgpu
 
 
 def pack_uniform_bytes(
@@ -153,6 +170,8 @@ class NativeProceduralEngine:
         self.shaders_dir = Path(shaders_dir) if shaders_dir else DEFAULT_SHADERS_DIR
         self.force_software = force_software
         self._lock = threading.RLock()
+        wgpu = _import_wgpu()
+        self._wgpu = wgpu
 
         # 1. Setup Vulkan Software Driver Fallback if requested or on headless host
         lvp_path = Path("/usr/share/vulkan/icd.d/lvp_icd.json")
@@ -245,9 +264,9 @@ class NativeProceduralEngine:
             fragment={
                 "module": shader_module,
                 "entry_point": "fs_main",
-                "targets": [{"format": wgpu.TextureFormat.rgba8unorm}],
+                "targets": [{"format": self._wgpu.TextureFormat.rgba8unorm}],
             },
-            primitive={"topology": wgpu.PrimitiveTopology.triangle_list},
+            primitive={"topology": self._wgpu.PrimitiveTopology.triangle_list},
         )
         self._pipelines[archetype_id] = pipeline
         return pipeline
@@ -281,12 +300,12 @@ class NativeProceduralEngine:
                 self._bytes_per_row = (width * 4 + 255) & ~255
                 self._staging_buf = self.device.create_buffer(
                     size=self._bytes_per_row * height,
-                    usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ,
+                    usage=self._wgpu.BufferUsage.COPY_DST | self._wgpu.BufferUsage.MAP_READ,
                 )
                 self._texture = self.device.create_texture(
                     size=(width, height, 1),
-                    format=wgpu.TextureFormat.rgba8unorm,
-                    usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC,
+                    format=self._wgpu.TextureFormat.rgba8unorm,
+                    usage=self._wgpu.TextureUsage.RENDER_ATTACHMENT | self._wgpu.TextureUsage.COPY_SRC,
                 )
                 self._texture_view = self._texture.create_view()
                 self._cached_res = (width, height)
@@ -311,8 +330,8 @@ class NativeProceduralEngine:
                 color_attachments=[
                     {
                         "view": self._texture_view,
-                        "load_op": wgpu.LoadOp.clear,
-                        "store_op": wgpu.StoreOp.store,
+                        "load_op": self._wgpu.LoadOp.clear,
+                        "store_op": self._wgpu.StoreOp.store,
                         "clear_value": (0.0, 0.0, 0.0, 1.0),
                     }
                 ]
@@ -331,7 +350,7 @@ class NativeProceduralEngine:
             self.device.queue.submit([command_encoder.finish()])
 
             # 5. Zero-Allocation Readback
-            self._staging_buf.map_sync(wgpu.MapMode.READ)
+            self._staging_buf.map_sync(self._wgpu.MapMode.READ)
             mapped_view = self._staging_buf.read_mapped()
 
             if out_buffer is None:

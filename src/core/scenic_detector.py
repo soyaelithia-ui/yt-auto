@@ -3,7 +3,7 @@ src/core/scenic_detector.py - Intelligent Semantic Scenic Setting & Subtitle Sty
 
 Dynamically and contextually infers the optimal procedural visual archetype and subtitle animation
 from story narrative context, scene keywords, title, and channel niche.
-Supports all 8 native procedural WGSL shader archetypes:
+Supports canonical scenic archetypes (names aligned with WGSL catalog; render is FFmpeg on hot path):
 - tactical_chamber: Subways, metro tunnels, underground stairs, bunkers, vaults, corridors, containment.
 - dark_forest: Haunted woods, misty wilderness, nocturnal roads, secluded cabins.
 - arctic_desolation: Snowy blizzards, freezing mountains, ice tundras, SCP-096 expeditions.
@@ -19,9 +19,21 @@ import logging
 import re
 from typing import Dict, List, Literal, Optional, Tuple
 
-from src.media.native_procedural import VALID_ARCHETYPES
-
 logger = logging.getLogger(__name__)
+
+# Mirror of native_procedural.VALID_ARCHETYPES — kept local so scenic detection
+# (pipeline hot path) never imports wgpu / NativeProceduralEngine.
+VALID_ARCHETYPES = {
+    "arcade_vector_flight",
+    "arctic_desolation",
+    "cosmic_singularity",
+    "cozy_hearth",
+    "dark_forest",
+    "maritime_lighthouse",
+    "parkour_runner",
+    "synaptic_network",
+    "tactical_chamber",
+}
 
 SubtitleAnimationStyle = Literal[
     "tiktok_bounce",
