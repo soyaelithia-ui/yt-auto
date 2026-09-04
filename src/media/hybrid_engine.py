@@ -50,7 +50,9 @@ __all__ = [
     "HybridVideoError",
     "cubic_bezier_ease",
     "force_pillow_hybrid_frames_enabled",
+    "force_pillow_particles_enabled",
     "build_ken_burns_zoompan_filter",
+    "resolve_hybrid_overlay_asset",
 ]
 
 
@@ -69,7 +71,7 @@ def cubic_bezier_ease(t: float, p1: float = 0.25, p2: float = 0.1, p3: float = 0
 def force_pillow_hybrid_frames_enabled(extra: Optional[Dict[str, Any]] = None) -> bool:
     """Opt-in only: legacy Pillow rawvideo frame loop for hybrid camera/FX.
 
-    Default path uses FFmpeg zoompan/crop (+ precomputed overlays) to avoid
+    Default path uses FFmpeg zoompan/crop (+ FFmpeg/asset overlays) to avoid
     per-frame Python crop/resize/ImageDraw work. Enable the old path with
     FORCE_PILLOW_HYBRID_FRAMES=1 or force_pillow_hybrid_frames=True in kwargs.
     """
@@ -79,6 +81,54 @@ def force_pillow_hybrid_frames_enabled(extra: Optional[Dict[str, Any]] = None) -
     if extra and bool(extra.get("force_pillow_hybrid_frames")):
         return True
     return False
+
+
+def force_pillow_particles_enabled(extra: Optional[Dict[str, Any]] = None) -> bool:
+    """Opt-in Pillow ImageDraw for particle/god-ray overlay generation.
+
+    Default FFmpeg camera path uses asset PNGs and/or lavfi noise/geq overlays
+    instead of Pillow. Enable Pillow overlay generation with
+    FORCE_PILLOW_PARTICLES=1 / force_pillow_particles=True, or via the full
+    FORCE_PILLOW_HYBRID_FRAMES legacy frame loop.
+    """
+    if force_pillow_hybrid_frames_enabled(extra):
+        return True
+    env = os.environ.get("FORCE_PILLOW_PARTICLES", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if extra and bool(extra.get("force_pillow_particles")):
+        return True
+    return False
+
+
+def resolve_hybrid_overlay_asset(
+    kind: str,
+    particle_type: Optional[str] = None,
+) -> Optional[Path]:
+    """Return a pre-made overlay PNG under assets/overlays if present.
+
+    Conventions:
+    - particles: ``assets/overlays/particles_<type>.png`` then ``particles.png``
+    - god_rays: ``assets/overlays/god_rays.png``
+    """
+    root = Path("assets/overlays")
+    if not root.is_dir():
+        return None
+    candidates: List[Path] = []
+    kind_norm = (kind or "").strip().lower()
+    if kind_norm == "particles":
+        ptype = (particle_type or "none").strip().lower()
+        if ptype and ptype != "none":
+            candidates.append(root / f"particles_{ptype}.png")
+        candidates.append(root / "particles.png")
+    elif kind_norm in ("god_rays", "god-rays", "rays"):
+        candidates.append(root / "god_rays.png")
+    else:
+        return None
+    for cand in candidates:
+        if cand.is_file():
+            return cand.resolve()
+    return None
 
 
 def build_ken_burns_zoompan_filter(
@@ -229,11 +279,15 @@ class HybridVideoEngine(BaseVideoCompositor):
         Renders a single scene segment using 3D camera pan, volumetric lighting, and particle simulation.
 
         Default path: FFmpeg ``zoompan`` for Ken Burns (no per-frame Pillow crop/resize
-        rawvideo pipe). Particles / god rays are precomputed as static RGBA overlays and
-        composited in ``filter_complex``. Ambient flicker uses FFmpeg ``eq``.
+        rawvideo pipe). Particles / god rays use a pre-made ``assets/overlays`` PNG when
+        present, otherwise lightweight FFmpeg lavfi ``noise``/``geq`` overlays — never
+        Pillow ``ImageDraw`` on the default path. Ambient flicker uses FFmpeg ``eq``.
 
-        Opt-in fallback: ``FORCE_PILLOW_HYBRID_FRAMES=1`` (or kwarg) restores the legacy
-        Pillow frame loop. Pillow subtitle burn remains opt-in via ``FORCE_PILLOW_SUBTITLES``.
+        Opt-in fallbacks:
+        - ``FORCE_PILLOW_HYBRID_FRAMES=1`` restores the legacy Pillow frame loop.
+        - ``FORCE_PILLOW_PARTICLES=1`` restores Pillow-drawn particle/god-ray PNGs on the
+          FFmpeg camera path (without the full rawvideo loop).
+        Pillow subtitle burn remains opt-in via ``FORCE_PILLOW_SUBTITLES``.
         """
         out_path = Path(output_mp4).resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -305,6 +359,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 crf=crf,
                 preset=preset,
                 threads_val=threads_val,
+                extra_kwargs=extra_kwargs,
             )
 
         if subtitle_cues and not use_pillow_bridge:
@@ -389,8 +444,10 @@ class HybridVideoEngine(BaseVideoCompositor):
         crf: int,
         preset: str,
         threads_val: str,
+        extra_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Ken Burns + FX via FFmpeg filter_complex (no Python rawvideo frame loop)."""
+        use_pillow_overlays = force_pillow_particles_enabled(extra_kwargs)
         with tempfile.TemporaryDirectory(prefix="hybrid_ff_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             bg_path = tmp_dir / "bg.png"
@@ -414,34 +471,33 @@ class HybridVideoEngine(BaseVideoCompositor):
             current = "base"
 
             if lighting.volumetric_rays:
-                god = self._create_god_rays_overlay(width, height, lighting)
-                god_path = tmp_dir / "god_rays.png"
-                god.save(god_path, format="PNG")
-                inputs.extend(["-i", str(god_path)])
-                filter_parts.append(f"[{overlay_idx}:v]format=rgba[god]")
-                filter_parts.append(f"[{current}][god]overlay=0:0:format=auto[vgod]")
-                current = "vgod"
-                overlay_idx += 1
+                current, overlay_idx = self._attach_god_rays_overlay(
+                    inputs=inputs,
+                    filter_parts=filter_parts,
+                    current=current,
+                    overlay_idx=overlay_idx,
+                    tmp_dir=tmp_dir,
+                    width=width,
+                    height=height,
+                    duration=duration,
+                    lighting=lighting,
+                    use_pillow_overlays=use_pillow_overlays,
+                )
 
             if particles.type != "none":
-                particle_system = self._init_particle_system(particles, width, height, tension)
-                if particle_system:
-                    # Precompute one static particle field (simplifies away per-frame ImageDraw).
-                    particle_img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-                    particle_img = self._render_particles(
-                        particle_img, particle_system, t_norm=0.35, width=width, height=height
-                    )
-                    if particle_img.mode != "RGBA":
-                        particle_img = particle_img.convert("RGBA")
-                    # Restore transparency for non-particle pixels drawn as opaque RGB on RGBA canvas.
-                    # _render_particles draws opaque ellipses; keep them, leave empty alpha as-is.
-                    part_path = tmp_dir / "particles.png"
-                    particle_img.save(part_path, format="PNG")
-                    inputs.extend(["-i", str(part_path)])
-                    filter_parts.append(f"[{overlay_idx}:v]format=rgba[parts]")
-                    filter_parts.append(f"[{current}][parts]overlay=0:0:format=auto[vpart]")
-                    current = "vpart"
-                    overlay_idx += 1
+                current, overlay_idx = self._attach_particle_overlay(
+                    inputs=inputs,
+                    filter_parts=filter_parts,
+                    current=current,
+                    overlay_idx=overlay_idx,
+                    tmp_dir=tmp_dir,
+                    width=width,
+                    height=height,
+                    duration=duration,
+                    particles=particles,
+                    tension=tension,
+                    use_pillow_overlays=use_pillow_overlays,
+                )
 
             if lighting.flicker_frequency > 0.0:
                 freq = float(lighting.flicker_frequency)
@@ -627,6 +683,204 @@ class HybridVideoEngine(BaseVideoCompositor):
                 stderr=err_msg,
                 command=ffmpeg_cmd,
             )
+
+    def _attach_static_overlay_input(
+        self,
+        *,
+        inputs: List[str],
+        filter_parts: List[str],
+        current: str,
+        overlay_idx: int,
+        overlay_path: Path,
+        label: str,
+    ) -> Tuple[str, int]:
+        """Attach a static RGBA PNG as the next overlay input."""
+        inputs.extend(["-loop", "1", "-i", str(overlay_path)])
+        filter_parts.append(f"[{overlay_idx}:v]format=rgba[{label}]")
+        out = f"v{label}"
+        filter_parts.append(f"[{current}][{label}]overlay=0:0:format=auto[{out}]")
+        return out, overlay_idx + 1
+
+    def _attach_lavfi_overlay_input(
+        self,
+        *,
+        inputs: List[str],
+        filter_parts: List[str],
+        current: str,
+        overlay_idx: int,
+        lavfi: str,
+        label: str,
+    ) -> Tuple[str, int]:
+        """Attach a lavfi-generated RGBA stream as the next overlay input."""
+        inputs.extend(["-f", "lavfi", "-i", lavfi])
+        filter_parts.append(f"[{overlay_idx}:v]format=rgba[{label}]")
+        out = f"v{label}"
+        filter_parts.append(
+            f"[{current}][{label}]overlay=0:0:format=auto:shortest=1[{out}]"
+        )
+        return out, overlay_idx + 1
+
+    def _build_ffmpeg_god_rays_lavfi(
+        self, width: int, height: int, duration: float, lighting: LightingConfig
+    ) -> str:
+        """Soft volumetric rays via geq (no Pillow ImageDraw)."""
+        sx = int(width * (lighting.light_source_pos[0] if lighting.light_source_pos else 0.8))
+        sy = int(height * (lighting.light_source_pos[1] if lighting.light_source_pos else 0.2))
+        radius = max(width, height) * 0.9
+        strength = max(20.0, min(120.0, 255.0 * float(lighting.intensity) * 0.35))
+        a_expr = (
+            f"min(100,floor({strength:.2f}*(1-hypot(X-{sx},Y-{sy})/{radius:.1f})"
+            f"*max(0,0.55+0.45*sin(atan2(Y-{sy},X-{sx})*6))))"
+        ).replace(",", r"\,")
+        return (
+            f"color=c=black@0.0:s={int(width)}x{int(height)}:d={max(0.2, float(duration)):.3f},"
+            f"format=rgba,geq=r=200:g=240:b=255:a='{a_expr}'"
+        )
+
+    def _build_ffmpeg_particle_lavfi(
+        self,
+        width: int,
+        height: int,
+        duration: float,
+        particles: ParticleConfig,
+        tension: int,
+    ) -> str:
+        """Sparse atmospheric grain via noise (no Pillow ImageDraw)."""
+        dens = max(1, min(500, int(particles.density)))
+        dens = int(dens * (1.0 + 0.2 * (max(1, min(5, tension)) - 1)))
+        alls = max(6, min(36, dens // 6))
+        opacity = max(0.08, min(0.55, float(particles.opacity) * 0.7))
+        ptype = (particles.type or "dust_motes").strip().lower()
+        # Bias noise colorchannelmixer RGB gains by particle family.
+        if ptype == "ember_sparks":
+            mix = f"rr=1.2:gg=0.55:bb=0.2:aa={opacity:.3f}"
+        elif ptype == "spores":
+            mix = f"rr=0.15:gg=1.1:bb=0.85:aa={opacity:.3f}"
+        elif ptype == "fog_mist":
+            mix = f"rr=0.7:gg=0.85:bb=0.95:aa={min(0.4, opacity):.3f}"
+        elif ptype == "rain_streaks":
+            mix = f"rr=0.55:gg=0.65:bb=0.9:aa={opacity:.3f}"
+        else:
+            mix = f"rr=0.85:gg=0.95:bb=1.05:aa={opacity:.3f}"
+        return (
+            f"color=c=black@0.0:s={int(width)}x{int(height)}:d={max(0.2, float(duration)):.3f},"
+            f"format=rgba,noise=alls={alls}:allf=t+u,format=rgba,colorchannelmixer={mix}"
+        )
+
+    def _attach_god_rays_overlay(
+        self,
+        *,
+        inputs: List[str],
+        filter_parts: List[str],
+        current: str,
+        overlay_idx: int,
+        tmp_dir: Path,
+        width: int,
+        height: int,
+        duration: float,
+        lighting: LightingConfig,
+        use_pillow_overlays: bool,
+    ) -> Tuple[str, int]:
+        """Attach god rays: Pillow (opt-in) → asset PNG → FFmpeg geq → skip."""
+        if use_pillow_overlays:
+            god = self._create_god_rays_overlay(width, height, lighting)
+            god_path = tmp_dir / "god_rays.png"
+            god.save(god_path, format="PNG")
+            return self._attach_static_overlay_input(
+                inputs=inputs,
+                filter_parts=filter_parts,
+                current=current,
+                overlay_idx=overlay_idx,
+                overlay_path=god_path,
+                label="god",
+            )
+
+        asset = resolve_hybrid_overlay_asset("god_rays")
+        if asset is not None:
+            logger.info("Hybrid god rays: reusing asset %s", asset)
+            return self._attach_static_overlay_input(
+                inputs=inputs,
+                filter_parts=filter_parts,
+                current=current,
+                overlay_idx=overlay_idx,
+                overlay_path=asset,
+                label="god",
+            )
+
+        lavfi = self._build_ffmpeg_god_rays_lavfi(width, height, duration, lighting)
+        logger.info("Hybrid god rays: FFmpeg geq lavfi overlay")
+        return self._attach_lavfi_overlay_input(
+            inputs=inputs,
+            filter_parts=filter_parts,
+            current=current,
+            overlay_idx=overlay_idx,
+            lavfi=lavfi,
+            label="god",
+        )
+
+    def _attach_particle_overlay(
+        self,
+        *,
+        inputs: List[str],
+        filter_parts: List[str],
+        current: str,
+        overlay_idx: int,
+        tmp_dir: Path,
+        width: int,
+        height: int,
+        duration: float,
+        particles: ParticleConfig,
+        tension: int,
+        use_pillow_overlays: bool,
+    ) -> Tuple[str, int]:
+        """Attach particles: Pillow (opt-in) → asset PNG → FFmpeg noise → skip."""
+        if use_pillow_overlays:
+            particle_system = self._init_particle_system(particles, width, height, tension)
+            if not particle_system:
+                return current, overlay_idx
+            particle_img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            particle_img = self._render_particles(
+                particle_img, particle_system, t_norm=0.35, width=width, height=height
+            )
+            if particle_img.mode != "RGBA":
+                particle_img = particle_img.convert("RGBA")
+            part_path = tmp_dir / "particles.png"
+            particle_img.save(part_path, format="PNG")
+            return self._attach_static_overlay_input(
+                inputs=inputs,
+                filter_parts=filter_parts,
+                current=current,
+                overlay_idx=overlay_idx,
+                overlay_path=part_path,
+                label="parts",
+            )
+
+        asset = resolve_hybrid_overlay_asset("particles", particles.type)
+        if asset is not None:
+            logger.info("Hybrid particles: reusing asset %s", asset)
+            return self._attach_static_overlay_input(
+                inputs=inputs,
+                filter_parts=filter_parts,
+                current=current,
+                overlay_idx=overlay_idx,
+                overlay_path=asset,
+                label="parts",
+            )
+
+        lavfi = self._build_ffmpeg_particle_lavfi(
+            width, height, duration, particles, tension
+        )
+        logger.info(
+            "Hybrid particles: FFmpeg noise lavfi overlay type=%s", particles.type
+        )
+        return self._attach_lavfi_overlay_input(
+            inputs=inputs,
+            filter_parts=filter_parts,
+            current=current,
+            overlay_idx=overlay_idx,
+            lavfi=lavfi,
+            label="parts",
+        )
 
     def _create_god_rays_overlay(self, w: int, h: int, lighting: LightingConfig) -> Image.Image:
         """Precomputes volumetric god rays mask overlay."""

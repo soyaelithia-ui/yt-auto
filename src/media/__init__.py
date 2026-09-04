@@ -21,7 +21,9 @@ from src.media.hybrid_engine import (
     HybridVideoError,
     cubic_bezier_ease,
     force_pillow_hybrid_frames_enabled,
+    force_pillow_particles_enabled,
     build_ken_burns_zoompan_filter,
+    resolve_hybrid_overlay_asset,
 )
 from src.media.proc_engine import (
     ProceduralVideoEngine,
@@ -72,7 +74,9 @@ __all__ = [
     "default_render_preset",
     "loop_matches_target_geometry",
     "force_pillow_hybrid_frames_enabled",
+    "force_pillow_particles_enabled",
     "build_ken_burns_zoompan_filter",
+    "resolve_hybrid_overlay_asset",
     "ProceduralVideoEngine",
     "ProceduralVideoError",
     "MultiSceneCompositor",

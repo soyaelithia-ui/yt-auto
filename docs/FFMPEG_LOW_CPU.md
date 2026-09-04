@@ -16,7 +16,7 @@ Helpers: `src/media/encode_defaults.py` (`default_render_preset`, `default_rende
 
 1. **Horizontal beats / loop** (`LoopVideoEngine`): prefer `-c:v copy` when orientation is horizontal and subtitles are not burned. Pipeline already sets `stream_copy=True` in that case.
 2. **Re-encode paths** (vertical + libass, hybrid zoompan, multi-scene master): use `veryfast` + CRF 21 — **not** `slow` (CPU disaster) and **not** blind `ultrafast` on final delivers.
-3. **Pillow / rawvideo**: opt-in only via `FORCE_PILLOW_SUBTITLES` / `FORCE_PILLOW_HYBRID_FRAMES`. Default hybrid/procedural paths must not open a Python frame pipe.
+3. **Pillow / rawvideo**: opt-in only via `FORCE_PILLOW_SUBTITLES` / `FORCE_PILLOW_HYBRID_FRAMES` / `FORCE_PILLOW_PARTICLES`. Default hybrid/procedural paths must not open a Python frame pipe. Hybrid particles/god rays default to FFmpeg lavfi `noise`/`geq` (or a pre-made `assets/overlays/*.png` if present) — never Pillow `ImageDraw` unless `FORCE_PILLOW_PARTICLES` or `FORCE_PILLOW_HYBRID_FRAMES` is set.
 4. **Procedural segments** without subtitles: stream-copy trim (`-stream_loop` + `-c:v copy`) when `loop_matches_target_geometry` says WxH already match — same predicate as director single-pass (PR #11). Mismatched geometry re-encodes with scale+crop+fps + `veryfast`/`RENDER_CRF`.
 
 ## Guardrails

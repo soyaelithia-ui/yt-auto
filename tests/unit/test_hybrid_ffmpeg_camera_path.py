@@ -15,6 +15,8 @@ from src.media.hybrid_engine import (
     HybridVideoEngine,
     build_ken_burns_zoompan_filter,
     force_pillow_hybrid_frames_enabled,
+    force_pillow_particles_enabled,
+    resolve_hybrid_overlay_asset,
 )
 from src.scene_manifest import (
     CameraMotionConfig,
@@ -137,6 +139,7 @@ def test_default_hybrid_path_uses_ffmpeg_zoompan_not_rawvideo(tmp_path: Path, mo
 
 def test_default_path_skips_per_frame_pillow_crop(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    monkeypatch.delenv("FORCE_PILLOW_PARTICLES", raising=False)
     engine = HybridVideoEngine()
     sc = SceneConfig(
         scene_index=1,
@@ -204,3 +207,210 @@ def test_pillow_fallback_still_available(tmp_path: Path, monkeypatch):
         crf=28,
     )
     assert out_mp4.exists() and out_mp4.stat().st_size > 500
+
+
+def test_force_pillow_particles_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("FORCE_PILLOW_PARTICLES", raising=False)
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    from src.media.hybrid_engine import force_pillow_particles_enabled
+
+    assert force_pillow_particles_enabled() is False
+    assert force_pillow_particles_enabled({}) is False
+    assert force_pillow_particles_enabled({"force_pillow_particles": False}) is False
+
+
+def test_force_pillow_particles_opt_in_env_kwarg_and_hybrid_frames(monkeypatch):
+    from src.media.hybrid_engine import force_pillow_particles_enabled
+
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    monkeypatch.setenv("FORCE_PILLOW_PARTICLES", "1")
+    assert force_pillow_particles_enabled() is True
+    monkeypatch.delenv("FORCE_PILLOW_PARTICLES", raising=False)
+    assert force_pillow_particles_enabled({"force_pillow_particles": True}) is True
+    monkeypatch.setenv("FORCE_PILLOW_HYBRID_FRAMES", "1")
+    assert force_pillow_particles_enabled() is True
+
+
+def test_resolve_hybrid_overlay_asset_prefers_typed_png(tmp_path: Path, monkeypatch):
+    from src.media.hybrid_engine import resolve_hybrid_overlay_asset
+
+    overlays = tmp_path / "assets" / "overlays"
+    overlays.mkdir(parents=True)
+    typed = overlays / "particles_dust_motes.png"
+    generic = overlays / "particles.png"
+    rays = overlays / "god_rays.png"
+    typed.write_bytes(b"x")
+    generic.write_bytes(b"y")
+    rays.write_bytes(b"z")
+    monkeypatch.chdir(tmp_path)
+    assert resolve_hybrid_overlay_asset("particles", "dust_motes").name == "particles_dust_motes.png"
+    assert resolve_hybrid_overlay_asset("particles", "ember_sparks").name == "particles.png"
+    assert resolve_hybrid_overlay_asset("god_rays").name == "god_rays.png"
+    assert resolve_hybrid_overlay_asset("particles", "none").name == "particles.png"
+
+
+def _particle_scene(scene_id: str = "sc_particles") -> SceneConfig:
+    return SceneConfig(
+        scene_index=1,
+        scene_id=scene_id,
+        start_sec=0.0,
+        duration_sec=0.4,
+        tension_level=3,
+        engine_type="hybrid_cinematic_ai",
+        hybrid_ai_config=HybridAIConfig(
+            camera_motion=CameraMotionConfig(pan_direction="left_to_right"),
+            lighting=LightingConfig(volumetric_rays=True, intensity=0.3),
+            particles=ParticleConfig(type="dust_motes", density=20, opacity=0.4),
+        ),
+    )
+
+
+def test_default_path_does_not_imagedraw_particles(tmp_path: Path, monkeypatch):
+    """Default hybrid path must not call Pillow ImageDraw for particles/god rays."""
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    monkeypatch.delenv("FORCE_PILLOW_PARTICLES", raising=False)
+    monkeypatch.delenv("FORCE_PILLOW_SUBTITLES", raising=False)
+
+    engine = HybridVideoEngine()
+    sc = _particle_scene("sc_no_imagedraw")
+    out_mp4 = tmp_path / "hybrid_no_draw.mp4"
+    seen = {"cmds": []}
+    draw_calls = {"n": 0}
+
+    from PIL import ImageDraw as PILImageDraw
+
+    orig_draw = PILImageDraw.Draw
+
+    def counting_draw(*a, **k):
+        draw_calls["n"] += 1
+        return orig_draw(*a, **k)
+
+    def fake_run(cmd, **kwargs):
+        seen["cmds"].append(list(cmd))
+        out_mp4.write_bytes(b"\0" * 600)
+        return MagicMock(returncode=0)
+
+    with patch("src.media.hybrid_engine.ImageDraw.Draw", side_effect=counting_draw):
+        with patch("src.media.hybrid_engine.run_ffmpeg", side_effect=fake_run):
+            engine.render_scene_segment(
+                scene=sc,
+                width=320,
+                height=180,
+                fps=30,
+                output_mp4=out_mp4,
+                crf=28,
+            )
+
+    assert draw_calls["n"] == 0, f"ImageDraw.Draw called {draw_calls['n']} times on default path"
+    assert seen["cmds"], "expected FFmpeg invocation"
+    joined = " ".join(str(x) for x in seen["cmds"][0])
+    assert "zoompan=" in joined
+    assert "rawvideo" not in seen["cmds"][0]
+    assert any("lavfi" in str(x) for x in seen["cmds"][0])
+    assert any("noise=" in str(x) for x in seen["cmds"][0])
+    assert any("geq=" in str(x) for x in seen["cmds"][0])
+    # Pillow-generated overlay filenames must not appear (tmp god_rays.png / particles.png).
+    assert not any(str(x).endswith("particles.png") for x in seen["cmds"][0])
+    assert not any(str(x).endswith("god_rays.png") for x in seen["cmds"][0])
+
+
+def test_default_path_reuses_asset_png_without_imagedraw(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    monkeypatch.delenv("FORCE_PILLOW_PARTICLES", raising=False)
+
+    from PIL import Image as PILImage
+
+    overlays = tmp_path / "overlays"
+    overlays.mkdir()
+    part_png = overlays / "particles_dust_motes.png"
+    god_png = overlays / "god_rays.png"
+    PILImage.new("RGBA", (32, 18), (255, 255, 255, 40)).save(part_png)
+    PILImage.new("RGBA", (32, 18), (200, 240, 255, 30)).save(god_png)
+
+    def fake_resolve(kind, particle_type=None):
+        if kind == "particles":
+            return part_png
+        if kind in ("god_rays", "god-rays", "rays"):
+            return god_png
+        return None
+
+    monkeypatch.setattr("src.media.hybrid_engine.resolve_hybrid_overlay_asset", fake_resolve)
+
+    engine = HybridVideoEngine()
+    sc = _particle_scene("sc_asset_png")
+    out_mp4 = tmp_path / "hybrid_asset.mp4"
+    seen = {"cmds": []}
+    draw_calls = {"n": 0}
+
+    from PIL import ImageDraw as PILImageDraw
+
+    orig_draw = PILImageDraw.Draw
+
+    def counting_draw(*a, **k):
+        draw_calls["n"] += 1
+        return orig_draw(*a, **k)
+
+    def fake_run(cmd, **kwargs):
+        seen["cmds"].append(list(cmd))
+        out_mp4.write_bytes(b"\0" * 600)
+        return MagicMock(returncode=0)
+
+    with patch("src.media.hybrid_engine.ImageDraw.Draw", side_effect=counting_draw):
+        with patch("src.media.hybrid_engine.run_ffmpeg", side_effect=fake_run):
+            engine.render_scene_segment(
+                scene=sc,
+                width=320,
+                height=180,
+                fps=30,
+                output_mp4=out_mp4,
+                crf=28,
+            )
+
+    assert draw_calls["n"] == 0
+    joined = " ".join(str(x) for x in seen["cmds"][0])
+    assert str(part_png) in joined
+    assert str(god_png) in joined
+    assert "zoompan=" in joined
+    assert "rawvideo" not in seen["cmds"][0]
+
+
+def test_force_pillow_particles_still_uses_imagedraw(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    monkeypatch.setenv("FORCE_PILLOW_PARTICLES", "1")
+
+    engine = HybridVideoEngine()
+    sc = _particle_scene("sc_pillow_particles")
+    out_mp4 = tmp_path / "hybrid_pillow_parts.mp4"
+    seen = {"cmds": []}
+    draw_calls = {"n": 0}
+
+    from PIL import ImageDraw as PILImageDraw
+
+    orig_draw = PILImageDraw.Draw
+
+    def counting_draw(*a, **k):
+        draw_calls["n"] += 1
+        return orig_draw(*a, **k)
+
+    def fake_run(cmd, **kwargs):
+        seen["cmds"].append(list(cmd))
+        out_mp4.write_bytes(b"\0" * 600)
+        return MagicMock(returncode=0)
+
+    with patch("src.media.hybrid_engine.ImageDraw.Draw", side_effect=counting_draw):
+        with patch("src.media.hybrid_engine.run_ffmpeg", side_effect=fake_run):
+            engine.render_scene_segment(
+                scene=sc,
+                width=320,
+                height=180,
+                fps=30,
+                output_mp4=out_mp4,
+                crf=28,
+            )
+
+    assert draw_calls["n"] >= 1, "FORCE_PILLOW_PARTICLES must still ImageDraw overlays"
+    joined = " ".join(str(x) for x in seen["cmds"][0])
+    assert "zoompan=" in joined
+    assert "rawvideo" not in seen["cmds"][0]
+    assert any(str(x).endswith("particles.png") for x in seen["cmds"][0])
+    assert any(str(x).endswith("god_rays.png") for x in seen["cmds"][0])
