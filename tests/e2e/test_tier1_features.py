@@ -182,39 +182,58 @@ def test_f03_legacy_web_template_config_rejected():
 
 
 # ==============================================================================
-# F04: Native Procedural Engine (wgpu-py)
+# F04: Native Procedural Engine (wgpu-py) — quarantined under src.media._legacy
 # ==============================================================================
 
+_F04_QUARANTINE_SKIP = "quarantined: Lavapipe/wgpu not SSOT; native_procedural under src.media._legacy"
+
+
+def _make_native_procedural_engine(**kwargs):
+    """Construct NativeProceduralEngine or skip cleanly (no adapter / no wgpu / legacy)."""
+    engine_file = PROJECT_ROOT / "src" / "media" / "_legacy" / "native_procedural.py"
+    if not engine_file.exists():
+        pytest.skip("native_procedural legacy module missing")
+    try:
+        from src.media.native_procedural import NativeProceduralEngine
+        return NativeProceduralEngine(**kwargs)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "No WebGPU adapter available" in msg or "wgpu is not installed" in msg:
+            pytest.skip(f"WebGPU/Lavapipe adapter unavailable: {exc}")
+        raise
+    except ImportError as exc:
+        pytest.skip(f"Native procedural unavailable: {exc}")
+
+
 @pytest.mark.tier1
+@pytest.mark.skip(reason=_F04_QUARANTINE_SKIP)
 def test_f04_render_frame_contract():
     """Verify NativeProceduralEngine contract renders RGBA array of shape (height, width, 4) uint8."""
-    engine_file = PROJECT_ROOT / "src" / "media" / "_legacy" / "native_procedural.py"
-    if engine_file.exists():
-        from src.media.native_procedural import NativeProceduralEngine
-        engine = NativeProceduralEngine()
+    engine = _make_native_procedural_engine()
+    try:
         frame = engine.render_frame(width=1080, height=1920, time_sec=0.0, duration_sec=5.0, archetype_id="cosmic_singularity")
         assert isinstance(frame, np.ndarray)
         assert frame.shape == (1920, 1080, 4)
         assert frame.dtype == np.uint8
-    else:
-        # Contract signature check from PROJECT.md
-        pass
+    finally:
+        engine.close()
 
 
 @pytest.mark.tier1
+@pytest.mark.skip(reason=_F04_QUARANTINE_SKIP)
 def test_f04_out_buffer_zero_copy_mutation():
     """Verify render_frame writes in-place into provided out_buffer."""
-    engine_file = PROJECT_ROOT / "src" / "media" / "_legacy" / "native_procedural.py"
-    if engine_file.exists():
-        from src.media.native_procedural import NativeProceduralEngine
-        engine = NativeProceduralEngine()
+    engine = _make_native_procedural_engine()
+    try:
         out_buf = np.zeros((1920, 1080, 4), dtype=np.uint8)
         res = engine.render_frame(width=1080, height=1920, time_sec=1.0, duration_sec=5.0, archetype_id="cosmic_singularity", out_buffer=out_buf)
         assert np.shares_memory(res, out_buf) or (id(res) == id(out_buf))
+    finally:
+        engine.close()
 
 
 @pytest.mark.tier1
-@pytest.mark.skip(reason="quarantined: Lavapipe/wgpu not SSOT; native_procedural under src.media._legacy")
+@pytest.mark.skip(reason=_F04_QUARANTINE_SKIP)
 def test_f04_lavapipe_software_fallback():
     """Verify Vulkan Lavapipe software driver definition exists on system."""
     lavapipe_icd = Path("/usr/share/vulkan/icd.d/lvp_icd.json")
@@ -222,17 +241,18 @@ def test_f04_lavapipe_software_fallback():
 
 
 @pytest.mark.tier1
+@pytest.mark.skip(reason=_F04_QUARANTINE_SKIP)
 def test_f04_parameter_determinism():
     """Verify same seed/time gives identical output, while differing seeds give distinct outputs."""
-    engine_file = PROJECT_ROOT / "src" / "media" / "_legacy" / "native_procedural.py"
-    if engine_file.exists():
-        from src.media.native_procedural import NativeProceduralEngine
-        engine = NativeProceduralEngine()
+    engine = _make_native_procedural_engine()
+    try:
         f1 = engine.render_frame(width=256, height=256, time_sec=1.0, duration_sec=5.0, archetype_id="cosmic_singularity", seed=42)
         f2 = engine.render_frame(width=256, height=256, time_sec=1.0, duration_sec=5.0, archetype_id="cosmic_singularity", seed=42)
         f3 = engine.render_frame(width=256, height=256, time_sec=1.0, duration_sec=5.0, archetype_id="cosmic_singularity", seed=99)
         assert np.array_equal(f1, f2), "Same seed and time must produce identical frames"
         assert not np.array_equal(f1, f3), "Different seeds must produce different frames"
+    finally:
+        engine.close()
 
 
 @pytest.mark.tier1
@@ -289,14 +309,15 @@ def test_f05_tactical_chamber_shader():
 
 
 @pytest.mark.tier1
+@pytest.mark.skip(reason=_F04_QUARANTINE_SKIP)
 def test_f05_invalid_shader_rejection():
     """Verify requesting an unknown shader archetype raises KeyError or ValueError."""
-    engine_file = PROJECT_ROOT / "src" / "media" / "_legacy" / "native_procedural.py"
-    if engine_file.exists():
-        from src.media.native_procedural import NativeProceduralEngine
-        engine = NativeProceduralEngine()
+    engine = _make_native_procedural_engine()
+    try:
         with pytest.raises((KeyError, ValueError)):
             engine.render_frame(width=256, height=256, time_sec=0.0, duration_sec=1.0, archetype_id="invalid_unknown_archetype_xyz")
+    finally:
+        engine.close()
 
 
 # ==============================================================================
