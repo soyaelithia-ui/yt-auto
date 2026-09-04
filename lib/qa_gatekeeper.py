@@ -339,6 +339,12 @@ class QAGatekeeper:
 
         # ---------------- thumbnail artifact ----------------
         thumb_src = thumbnail_path or kwargs.get("thumbnail_path") or kwargs.get("thumbnail")
+        if not thumb_src and video_path and os.path.exists(video_path):
+            v_dir = Path(video_path).parent
+            for cand in ("thumbnail.jpg", "thumbnail.png", "cover.jpg", "cover.png"):
+                if (v_dir / cand).is_file():
+                    thumb_src = str(v_dir / cand)
+                    break
         if thumb_src:
             self._audit_thumbnail_artifact(str(thumb_src), issues)
 

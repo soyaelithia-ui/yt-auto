@@ -57,6 +57,7 @@ class LayoutRegistry:
         channel_id: Optional[str] = None,
         archetype: Optional[str] = None,
         template: Optional[str] = None,
+        is_vertical: Optional[bool] = None,
     ) -> BaseThumbnailLayout:
         """
         Resolves the appropriate layout instance based on archetype, template, or channel_id.
@@ -64,6 +65,14 @@ class LayoutRegistry:
         """
         if not cls._registry:
             import src.media.thumbnails.layouts  # noqa: F401
+
+        # Channel moku has two distinct operational lanes based on aspect ratio
+        norm_chan = str(channel_id or "").lower()
+        if norm_chan == "moku" and not archetype and not template:
+            if is_vertical is True and "moku-scp-shorts" in cls._registry:
+                return cls._registry["moku-scp-shorts"]()
+            if is_vertical is False and "moku-horror-long" in cls._registry:
+                return cls._registry["moku-horror-long"]()
 
         keys_to_try = [
             k.lower() for k in [archetype, template, channel_id] if k
@@ -74,10 +83,15 @@ class LayoutRegistry:
             if key in cls._registry:
                 return cls._registry[key]()
 
-        # 2. Substring matching
+        # 2. Substring matching: prefer reg_key in key (archetype keyword in lane)
         for key in keys_to_try:
             for reg_key, layout_cls in cls._registry.items():
-                if reg_key in key or key in reg_key:
+                if reg_key in key:
+                    return layout_cls()
+
+        for key in keys_to_try:
+            for reg_key, layout_cls in cls._registry.items():
+                if key in reg_key:
                     return layout_cls()
 
         if cls._default_layout_cls:

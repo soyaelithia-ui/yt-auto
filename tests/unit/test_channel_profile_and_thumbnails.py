@@ -469,4 +469,134 @@ def test_niche_layouts_custom_metadata_and_colors():
     assert res_scp.size == (1080, 1920)
 
 
+def test_moku_lane_aspect_ratio_dispatch_and_asset_resolution():
+    from PIL import ImageOps
+    from src.media.thumbnails.layouts.base import LayoutRegistry
+    from src.media.thumbnails.layouts.analog_horror import AnalogHorrorVhsLayout
+    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+    from src.media.thumbnails.asset_resolver import ThematicAssetResolver, TEMPLATES_DIR
+
+    # 1. Moku horizontal 16:9 -> AnalogHorrorVhsLayout and horror backdrop
+    layout_h = LayoutRegistry.get_layout(channel_id="moku", is_vertical=False)
+    assert isinstance(layout_h, AnalogHorrorVhsLayout)
+
+    res_h = ThematicAssetResolver.resolve_base_image(channel_id="moku", archetype=None, target_size=(1920, 1080))
+    assert res_h.size == (1920, 1080)
+    horror_ref = Image.open(TEMPLATES_DIR / "horror" / "master_backdrop.jpg")
+    fit_h = ImageOps.fit(horror_ref, (1920, 1080))
+    assert sum(abs(c1 - c2) for c1, c2 in zip(res_h.getpixel((500, 500)), fit_h.getpixel((500, 500)))) == 0
+
+    # 2. Moku vertical 9:16 -> ScpFoundFootageLayout and scp backdrop
+    layout_v = LayoutRegistry.get_layout(channel_id="moku", is_vertical=True)
+    assert isinstance(layout_v, ScpFoundFootageLayout)
+
+    res_v = ThematicAssetResolver.resolve_base_image(channel_id="moku", archetype=None, target_size=(1080, 1920))
+    assert res_v.size == (1080, 1920)
+    scp_ref = Image.open(TEMPLATES_DIR / "scp" / "master_backdrop.jpg")
+    fit_v = ImageOps.fit(scp_ref, (1080, 1920))
+    assert sum(abs(c1 - c2) for c1, c2 in zip(res_v.getpixel((500, 500)), fit_v.getpixel((500, 500)))) <= 5
+
+
+def test_qa_auditor_rejects_9_16_shorts_safe_zone_violations(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+
+    auditor = VisualAudioQAAuditorAgent()
+    engine = ThumbnailEngine()
+
+    # Generate a valid 9:16 thumbnail
+    valid_path = tmp_path / "valid_shorts.jpg"
+    engine.generate(ThumbnailConfig(
+        title="TITULO SEGURO SHORTS",
+        channel_id="moku-scp-shorts",
+        output_path=valid_path,
+        width=1080,
+        height=1920,
+    ))
+
+    # 1. Element penetrating bottom 450px: y from 1600 to 1750
+    bad_bot_elements = [(200, 1600, 600, 1750)]
+    passed_bot, errs_bot = auditor.audit_thumbnail(valid_path, elements=bad_bot_elements)
+    assert passed_bot is False
+    assert any("shorts" in e.lower() for e in errs_bot)
+
+    # 2. Element penetrating right 120px interaction rail: x from 980 to 1050
+    bad_right_elements = [(980, 600, 1050, 750)]
+    passed_right, errs_right = auditor.audit_thumbnail(valid_path, elements=bad_right_elements)
+    assert passed_right is False
+    assert any("shorts" in e.lower() for e in errs_right)
+
+    # 3. Out-of-canvas element must NOT cause false positive
+    out_elements = [(2000, 2000, 2100, 2100)]
+    passed_out, errs_out = auditor.audit_thumbnail(valid_path, elements=out_elements)
+    assert passed_out is True
+    assert len(errs_out) == 0
+
+    # 4. Pixel-level inspection: draw text in bottom 450px without passing elements
+    viol_img = Image.open(valid_path).copy()
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(viol_img)
+    draw.text((150, 1650), "TEXT IN FORBIDDEN OVERLAY", fill=(255, 255, 255), stroke_width=6, stroke_fill=(0, 0, 0))
+    viol_path = tmp_path / "violating_shorts.jpg"
+    viol_img.save(viol_path, "JPEG", quality=95)
+
+    passed_pixel, errs_pixel = auditor.audit_thumbnail(viol_path)
+    assert passed_pixel is False
+    assert any("shorts bottom ui overlay" in e.lower() for e in errs_pixel)
+
+
+def test_typography_left_align_with_rotation():
+    canvas = Image.new("RGB", (1920, 1080), (0, 0, 0))
+    # Should render cleanly with left alignment and tilt angle
+    res = DynamicTypographyEngine.draw_text_with_effects(
+        canvas=canvas,
+        text="LEFT ALIGNED TITLE",
+        pos_x=120,
+        pos_y=150,
+        max_width=600,
+        align="left",
+        tilt_angle=-3.5,
+    )
+    assert res.size == (1920, 1080)
+    bbox = res.getbbox()
+    assert bbox is not None
+    # X coordinate must stay near pos_x (120) with padding margin
+    assert 60 <= bbox[0] <= 140
+
+
+def test_qa_gatekeeper_auto_discovers_thumbnail_artifact(tmp_path: Path):
+    from lib.qa_gatekeeper import QAGatekeeper
+
+    gk = QAGatekeeper(strict_mode=True)
+    engine = ThumbnailEngine()
+
+    # Create dummy video folder with video and thumbnail.jpg
+    vid_dir = tmp_path / "production_out"
+    vid_dir.mkdir()
+    vid_path = vid_dir / "rendered_video.mp4"
+    vid_path.touch()
+
+    thumb_path = vid_dir / "thumbnail.jpg"
+    engine.generate(ThumbnailConfig(title="VALID DISCOVERY THUMB", output_path=thumb_path))
+
+    # Audit video without passing thumbnail_path - should auto-discover and succeed
+    import unittest.mock as mock
+    with mock.patch("lib.qa_gatekeeper.ffprobe") as mock_ffprobe, \
+         mock.patch("lib.qa_gatekeeper.has_faststart", return_value=True), \
+         mock.patch.object(gk, "_audit_audio_silence_and_volume", return_value=(0.0, -18.0, -1.0)), \
+         mock.patch.object(gk, "_audit_freeze_and_black_frames", return_value=(0.0, 0.0)), \
+         mock.patch.object(gk, "_audit_ebu_r128_loudness", return_value=(-14.0, -1.0, 5.0)):
+
+        mock_ffprobe.return_value = {
+            "format": {"duration": "10.0"},
+            "streams": [
+                {"codec_type": "video", "codec_name": "h264", "profile": "Main", "pix_fmt": "yuv420p", "width": 1920, "height": 1080, "duration": "10.0"},
+                {"codec_type": "audio", "codec_name": "aac", "channels": 2, "sample_rate": "48000", "duration": "10.0"},
+            ]
+        }
+        report = gk.audit_video(video_path=str(vid_path), video_mode="longform")
+        # Verify thumbnail was auto-discovered, audited, and passed
+        assert not any(i.code == "ERR_QA_THUMBNAIL_DEFECT" for i in report.issues)
+
+
+
 

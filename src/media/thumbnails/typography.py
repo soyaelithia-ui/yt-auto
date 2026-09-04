@@ -83,8 +83,8 @@ class DynamicTypographyEngine:
                 current_line = [word]
                 current_len = w_len
             else:
+                current_len = w_len if not current_line else (current_len + 1 + w_len)
                 current_line.append(word)
-                current_len += (1 if current_line else 0) + w_len
 
         if current_line:
             lines.append(" ".join(current_line))
@@ -94,9 +94,10 @@ class DynamicTypographyEngine:
             l3_words = []
             cur = 0
             for w in rem_words:
-                if not l3_words or (cur + 1 + len(w)) <= max_chars_per_line:
+                needed = len(w) if not l3_words else (cur + 1 + len(w))
+                if not l3_words or needed <= max_chars_per_line:
                     l3_words.append(w)
-                    cur += (1 if l3_words else 0) + len(w)
+                    cur = len(w) if len(l3_words) == 1 else (cur + 1 + len(w))
                 else:
                     break
             if len(l3_words) < len(rem_words):
@@ -265,8 +266,8 @@ class DynamicTypographyEngine:
             paste_x = center_x - rot_w // 2
             paste_y = center_y - rot_h // 2
         else:
-            paste_x = pos_x - pad
-            paste_y = pos_y - pad
+            paste_x = pos_x - pad - (rot_w - temp_w) // 2
+            paste_y = pos_y - pad - (rot_h - temp_h) // 2
 
         canvas_rgba = canvas.convert("RGBA")
         canvas_rgba.paste(combined, (paste_x, paste_y), combined)

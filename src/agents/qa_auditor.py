@@ -96,19 +96,21 @@ class VisualAudioQAAuditorAgent:
 
                     if is_horizontal_16_9:
                         ts_x1, ts_y1 = int(w * 0.817), int(h * 0.86)
-                        if ex2 > ts_x1 and ey2 > ts_y1:
+                        if ex2 > ts_x1 and ex1 < w and ey2 > ts_y1 and ey1 < h:
                             errors.append(
                                 f"Safe-zone boundary violation: graphic element penetrates "
                                 f"YouTube timestamp zone [{ts_x1}, {ts_y1}, {w}, {h}]"
                             )
                     elif is_vertical_9_16:
-                        if ey2 > h - 450 or ex2 > w - 120:
+                        in_bottom_zone = (ey2 > h - 450 and ey1 < h and ex2 > 0 and ex1 < w)
+                        in_right_zone = (ex2 > w - 120 and ex1 < w and ey2 > 0 and ey1 < h)
+                        if in_bottom_zone or in_right_zone:
                             errors.append(
                                 f"Safe-zone boundary violation: graphic element penetrates "
                                 f"YouTube Shorts UI overlay zone"
                             )
 
-            # Pixel-level inspection of timestamp area for high-contrast artificial overlay text/badge
+            # Pixel-level inspection of safe zones for high-contrast artificial overlay text/badge
             if is_horizontal_16_9:
                 ts_crop = img.crop((int(w * 0.817), int(h * 0.86), w, h))
                 edges = ts_crop.convert("L").filter(ImageFilter.FIND_EDGES)
@@ -117,6 +119,26 @@ class VisualAudioQAAuditorAgent:
                     errors.append(
                         f"Safe-zone boundary violation: high-contrast text or badge overlay detected "
                         f"in YouTube timestamp zone [1570, 930, {w}, {h}]"
+                    )
+            elif is_vertical_9_16:
+                # 1. Bottom 450px UI overlay zone
+                bot_crop = img.crop((0, h - 450, w, h))
+                b_edges = bot_crop.convert("L").filter(ImageFilter.FIND_EDGES)
+                b_hist = b_edges.histogram()
+                if sum(b_hist[180:]) > 150 and b_edges.getextrema()[1] >= 240:
+                    errors.append(
+                        f"Safe-zone boundary violation: high-contrast text or badge overlay detected "
+                        f"in YouTube Shorts bottom UI overlay zone [0, {h - 450}, {w}, {h}]"
+                    )
+
+                # 2. Right 120px interaction rail zone
+                right_crop = img.crop((w - 120, int(h * 0.25), w, h - 450))
+                r_edges = right_crop.convert("L").filter(ImageFilter.FIND_EDGES)
+                r_hist = r_edges.histogram()
+                if sum(r_hist[180:]) > 150 and r_edges.getextrema()[1] >= 240:
+                    errors.append(
+                        f"Safe-zone boundary violation: high-contrast text or badge overlay detected "
+                        f"in YouTube Shorts right interaction rail [{w - 120}, {w}]"
                     )
 
         except Exception as exc:

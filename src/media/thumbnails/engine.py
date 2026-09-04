@@ -112,10 +112,12 @@ class ThumbnailEngine:
         )
 
         # 4. Dispatch to Niche Layout Engine
+        is_vertical = h > w
         layout = LayoutRegistry.get_layout(
             channel_id=config.channel_id,
             archetype=config.archetype,
             template=config.template,
+            is_vertical=is_vertical,
         )
         safe_zone = AspectLayoutManager.get_safe_zone(w, h)
         hook_text = config.hook_text or self._extract_hook_text(config.title)

@@ -11,7 +11,7 @@ from src.media.thumbnails.layouts.base import BaseThumbnailLayout, LayoutRegistr
 from src.media.thumbnails.typography import DynamicTypographyEngine
 
 
-@LayoutRegistry.register("analog", "horror", "vhs", "moku-horror-long")
+@LayoutRegistry.register("analog", "horror", "vhs", "moku-horror-long", "moku-horror", "moku-long", "moku")
 class AnalogHorrorVhsLayout(BaseThumbnailLayout):
     """
     Renders an authentic 90s Analog Horror VHS aesthetic:

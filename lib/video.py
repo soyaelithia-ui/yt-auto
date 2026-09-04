@@ -872,6 +872,11 @@ def create_video_thumbnail(
             "quote": kwargs.get("quote") or kwargs.get("callout") or kwargs.get("excerpt"),
             "date": kwargs.get("date") or kwargs.get("timestamp_label"),
         }
+        if kwargs.get("story") and isinstance(kwargs.get("story"), dict):
+            s_dict = kwargs["story"]
+            for k in ("subreddit", "upvotes", "author", "user_handle", "hazard_level", "site", "cam", "tape_id", "channel_tag", "category", "quote", "callout", "date", "timestamp_label"):
+                if s_dict.get(k) is not None and not meta.get(k):
+                    meta[k] = s_dict[k]
         if kwargs.get("metadata") and isinstance(kwargs.get("metadata"), dict):
             meta.update(kwargs.get("metadata"))
         meta = {k: v for k, v in meta.items() if v is not None}

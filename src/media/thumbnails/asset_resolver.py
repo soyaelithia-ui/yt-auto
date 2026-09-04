@@ -110,12 +110,15 @@ class ThematicAssetResolver:
         # Tier 2 (Fallback): Curated Channel Defaults / Visual Bank
         # ---------------------------------------------------------
         chan_keys = []
+        is_vertical = h > w
         if any(k in norm_chan for k in ("scp", "found-footage")):
             chan_keys.append("scp")
         elif any(k in norm_chan for k in ("aita", "drama", "aelithia")):
             chan_keys.append("aita")
-        elif any(k in norm_chan for k in ("horror", "vhs", "analog", "moku")):
+        elif any(k in norm_chan for k in ("horror", "vhs", "analog")):
             chan_keys.append("horror")
+        elif "moku" in norm_chan:
+            chan_keys.append("scp" if is_vertical else "horror")
 
         for c_key in chan_keys:
             c_dir = TEMPLATES_DIR / c_key
