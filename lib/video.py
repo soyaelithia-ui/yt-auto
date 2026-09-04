@@ -43,8 +43,9 @@ SHORT_MAX_SCENE_SECONDS = 4.5
 # Render performance knobs (env-overridable). Lower fps encodes fewer frames;
 # a thread cap keeps ffmpeg from saturating every core and starving the host.
 VIDEO_FPS = max(15, int(os.environ.get("VIDEO_FPS", "30")))
-# Quality & performance knobs (env-overridable). Defaults: CRF 24, veryfast preset.
-RENDER_CRF = max(0, min(51, int(os.environ.get("RENDER_CRF", "24"))))
+# Quality & performance knobs (env-overridable). Defaults: CRF 21, veryfast preset
+# (aligned with docker-compose RENDER_* and src.config SETTINGS.render_crf).
+RENDER_CRF = max(0, min(51, int(os.environ.get("RENDER_CRF", "21"))))
 RENDER_PRESET = os.environ.get("RENDER_PRESET", "veryfast").strip() or "veryfast"
 _FFMPEG_THREADS_ENV = os.environ.get("FFMPEG_THREADS", "")
 # R7: respect the env knob up to the CPU count (capped at the container quota

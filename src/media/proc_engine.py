@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from src.media.encode_defaults import default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
@@ -146,7 +147,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
         fps: int,
         lane_id: str,
         output_mp4: Union[Path, str],
-        crf: int = 18,
+        crf: int | None = None,
         subtitle_cues: Optional[List[Any]] = None,
         scene_start_sec: float = 0.0,
         subtitle_theme: Optional[Any] = None,
@@ -251,6 +252,9 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                     f.write(f"file '{loop_file.resolve()}'\n")
 
             threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
+            if crf is None:
+                crf = default_render_crf()
+            preset = str(extra_kwargs.get("preset") or default_render_preset())
 
             from src.media.subtitles_ass import (
                 force_pillow_subtitles_enabled,
@@ -279,7 +283,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                     "-vf", vf,
                     "-c:v", "libx264",
                     "-crf", str(crf),
-                    "-preset", "faster",
+                    "-preset", preset,
                     "-b:v", "4500k",
                     "-maxrate", "6000k",
                     "-bufsize", "8000k",
@@ -317,7 +321,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                     "-color_primaries", "bt709",
                     "-color_trc", "bt709",
                     "-crf", str(crf),
-                    "-preset", "faster",
+                    "-preset", preset,
                     "-b:v", "4500k",
                     "-maxrate", "6000k",
                     "-bufsize", "8000k",
@@ -370,24 +374,47 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                         command=write_cmd,
                     )
             else:
-                ffmpeg_cmd = [
-                    "ffmpeg", "-y",
-                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
-                    "-t", f"{duration:.3f}",
-                    "-c:v", "libx264",
-                    "-crf", str(crf),
-                    "-preset", "faster",
-                    "-b:v", "4500k",
-                    "-maxrate", "6000k",
-                    "-bufsize", "8000k",
-                    "-threads", threads_val,
-                    "-pix_fmt", "yuv420p",
-                    "-colorspace", "bt709",
-                    "-color_primaries", "bt709",
-                    "-color_trc", "bt709",
-                    "-movflags", "+faststart",
-                    str(out_path),
-                ]
+                # Prefer stream-copy when the micro-loop already matches target geometry
+                # (avoids a full libx264 pass on the default procedural hot path).
+                use_stream_copy = False
+                try:
+                    probe = probe_media(loop_file)
+                    pv = probe.primary_video if probe else None
+                    if pv and int(getattr(pv, "width", 0) or 0) == int(width) and int(getattr(pv, "height", 0) or 0) == int(height):
+                        use_stream_copy = True
+                except Exception:
+                    use_stream_copy = False
+
+                if use_stream_copy:
+                    ffmpeg_cmd = [
+                        "ffmpeg", "-y",
+                        "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                        "-t", f"{duration:.3f}",
+                        "-c:v", "copy",
+                        "-an",
+                        "-movflags", "+faststart",
+                        str(out_path),
+                    ]
+                else:
+                    ffmpeg_cmd = [
+                        "ffmpeg", "-y",
+                        "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                        "-t", f"{duration:.3f}",
+                        "-vf", f"scale={width}:{height},format=yuv420p",
+                        "-c:v", "libx264",
+                        "-crf", str(crf),
+                        "-preset", preset,
+                        "-b:v", "4500k",
+                        "-maxrate", "6000k",
+                        "-bufsize", "8000k",
+                        "-threads", threads_val,
+                        "-pix_fmt", "yuv420p",
+                        "-colorspace", "bt709",
+                        "-color_primaries", "bt709",
+                        "-color_trc", "bt709",
+                        "-movflags", "+faststart",
+                        str(out_path),
+                    ]
                 run_ffmpeg(ffmpeg_cmd)
 
         return out_path
@@ -443,8 +470,8 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             "-colorspace", "bt709",
             "-color_primaries", "bt709",
             "-color_trc", "bt709",
-            "-crf", "18",
-            "-preset", "fast",
+            "-crf", str(default_render_crf()),
+            "-preset", default_render_preset(),
             "-movflags", "+faststart",
             str(out_path),
         ]

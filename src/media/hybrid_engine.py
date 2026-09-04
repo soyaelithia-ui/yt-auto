@@ -41,6 +41,7 @@ from lib.ffmpeg import (
     probe_media,
     run_ffmpeg,
 )
+from src.media.encode_defaults import default_render_crf, default_render_preset
 
 logger = get_logger("hybrid_video_engine")
 
@@ -218,7 +219,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         height: int,
         fps: int,
         output_mp4: Union[Path, str],
-        crf: int = 18,
+        crf: int | None = None,
         subtitle_cues: Optional[List[SubtitleCue]] = None,
         scene_start_sec: float = 0.0,
         subtitle_theme: Optional[SubtitleTheme] = None,
@@ -251,6 +252,9 @@ class HybridVideoEngine(BaseVideoCompositor):
         zoom_end = float(camera.end_zoom) + (0.02 * (tension - 1))
         pan_dir = camera.pan_direction
 
+        if crf is None:
+            crf = default_render_crf()
+        preset = str(extra_kwargs.get("preset") or default_render_preset())
         threads_val = str(extra_kwargs.get("threads") or max(1, (os.cpu_count() or 4) // 4))
         from src.media.subtitles_ass import (
             force_pillow_subtitles_enabled,
@@ -275,6 +279,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 tension=tension,
                 out_path=out_path,
                 crf=crf,
+                preset=preset,
                 threads_val=threads_val,
                 subtitle_cues=subtitle_cues if use_pillow_bridge else None,
                 scene_start_sec=scene_start_sec,
@@ -298,6 +303,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 tension=tension,
                 out_path=out_path,
                 crf=crf,
+                preset=preset,
                 threads_val=threads_val,
             )
 
@@ -309,6 +315,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 height=height,
                 scene_start_sec=scene_start_sec,
                 crf=crf,
+                preset=preset,
                 threads_val=threads_val,
                 write_ass_from_cues_or_words=write_ass_from_cues_or_words,
             )
@@ -324,6 +331,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         height: int,
         scene_start_sec: float,
         crf: int,
+        preset: str,
         threads_val: str,
         write_ass_from_cues_or_words: Any,
     ) -> None:
@@ -352,7 +360,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 "-color_primaries", "bt709",
                 "-color_trc", "bt709",
                 "-crf", str(crf),
-                "-preset", "faster",
+                "-preset", preset,
                 "-threads", threads_val,
                 "-an",
                 "-movflags", "+faststart",
@@ -379,6 +387,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         tension: int,
         out_path: Path,
         crf: int,
+        preset: str,
         threads_val: str,
     ) -> None:
         """Ken Burns + FX via FFmpeg filter_complex (no Python rawvideo frame loop)."""
@@ -462,7 +471,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 "-color_primaries", "bt709",
                 "-color_trc", "bt709",
                 "-crf", str(crf),
-                "-preset", "faster",
+                "-preset", preset,
                 "-b:v", "4500k",
                 "-maxrate", "6000k",
                 "-bufsize", "8000k",
@@ -496,6 +505,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         tension: int,
         out_path: Path,
         crf: int,
+        preset: str,
         threads_val: str,
         subtitle_cues: Optional[List[SubtitleCue]],
         scene_start_sec: float,
@@ -517,7 +527,7 @@ class HybridVideoEngine(BaseVideoCompositor):
             "-color_primaries", "bt709",
             "-color_trc", "bt709",
             "-crf", str(crf),
-            "-preset", "faster",
+            "-preset", preset,
             "-b:v", "4500k",
             "-maxrate", "6000k",
             "-bufsize", "8000k",

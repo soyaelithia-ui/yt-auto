@@ -83,6 +83,7 @@ El stack visual de **producción** es **FFmpeg-first y determinista** (sin naveg
 - **Temáticas**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). Cero Canvas/Three.js/WebGL en el camino activo.
 - **Agentes vs píxeles**: los agentes emiten texto/JSON; el código de media es dueño de los píxeles (ASS + **libass** cuando hay subtítulos).
 - **Quarantined (no prod)**: `src/media/_legacy/native_procedural.py` + WGSL shaders (`wgpu`/Lavapipe). SSOT = FFmpeg + Pillow thumbs. Opt-in only via `ENABLE_NATIVE_PROCEDURAL=1`; default off.
+- **Low-CPU encode defaults**: `RENDER_PRESET=veryfast` + `RENDER_CRF=21` (see `src/media/encode_defaults.py` / docker-compose). Horizontal beats keep `-c:v copy`. Do not reintroduce `preset=slow` on the hot path or default Pillow/`rawvideo` frame loops (opt-in via `FORCE_PILLOW_*` only).
 
 > [!NOTE]
 > Para compatibilidad con despliegues previos, `python3 manage.py` reenvía de forma transparente todos los comandos al CLI unificado. Consulta [docs/OPERACION.md](docs/OPERACION.md) para la referencia completa de subcomandos y alias.

@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from src.media.encode_defaults import default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
@@ -92,8 +93,8 @@ class MultiSceneCompositor(BaseVideoCompositor):
         self,
         manifest_path: Union[Path, str],
         output_video_path: Union[Path, str],
-        crf: int = 18,
-        preset: str = "faster",
+        crf: int | None = None,
+        preset: str | None = None,
         **extra_kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -125,6 +126,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
         word_timestamps = extra_kwargs.get("word_timestamps")
         subtitle_cues: Optional[List[SubtitleCue]] = extra_kwargs.get("subtitle_cues")
         subtitle_theme: Optional[SubtitleTheme] = extra_kwargs.get("subtitle_theme")
+        if crf is None:
+            crf = default_render_crf()
+        if preset is None:
+            preset = default_render_preset()
         force_pillow = force_pillow_subtitles_enabled(extra_kwargs)
         if force_pillow and (not subtitle_cues) and word_timestamps:
             subtitle_cues = CodeSubtitleDrawer.parse_word_timestamps(word_timestamps)

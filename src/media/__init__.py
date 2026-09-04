@@ -10,6 +10,11 @@ from src.media.assets import (
     search_reference_image_web,
     generate_ai_image,
 )
+from src.media.encode_defaults import (
+    default_ffmpeg_threads,
+    default_render_crf,
+    default_render_preset,
+)
 from src.media.hybrid_engine import (
     HybridVideoEngine,
     HybridVideoError,
@@ -61,6 +66,9 @@ __all__ = [
     "HybridVideoEngine",
     "HybridVideoError",
     "cubic_bezier_ease",
+    "default_ffmpeg_threads",
+    "default_render_crf",
+    "default_render_preset",
     "force_pillow_hybrid_frames_enabled",
     "build_ken_burns_zoompan_filter",
     "ProceduralVideoEngine",

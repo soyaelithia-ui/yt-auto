@@ -12,6 +12,7 @@ import logging
 import random
 import time
 from pathlib import Path
+from src.media.encode_defaults import default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from src.config import DEFAULT_DB_PATH
@@ -152,7 +153,7 @@ class LoopSynthesizerWorker:
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "lavfi", "-i",
             f"gradients=s={width}x{height}:d={duration_sec}:r={fps}:c0={c0}:c1={c1}:x0=0:y0=0:x1={width}:y1={height}:type=radial:speed=0.02",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "fast",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(default_render_crf()), "-preset", default_render_preset(),
             "-movflags", "+faststart", str(synth_mp4)
         ]
         subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
