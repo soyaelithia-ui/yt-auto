@@ -28,7 +28,12 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from src.media.encode_defaults import default_render_crf, default_render_preset, loop_matches_target_geometry
+from src.media.encode_defaults import (
+    default_ffmpeg_threads,
+    default_render_crf,
+    default_render_preset,
+    loop_matches_target_geometry,
+)
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
@@ -168,8 +173,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
         import concurrent.futures
 
         worker_count = min(2, len(manifest.scenes)) if manifest.scenes else 1
-        cpu_count = os.cpu_count() or 4
-        threads_per_worker = max(1, cpu_count // max(1, worker_count))
+        threads_per_worker = max(1, default_ffmpeg_threads() // max(1, worker_count))
 
         with tempfile.TemporaryDirectory(prefix="multiscene_render_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
@@ -660,7 +664,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
             "-b:a", "192k",
             "-ar", "48000",
             "-ac", "2",
-            "-threads", str(max(1, min(os.cpu_count() or 4, 8))),
+            "-threads", str(default_ffmpeg_threads()),
             "-movflags", "+faststart",
             str(output_mp4),
         ])

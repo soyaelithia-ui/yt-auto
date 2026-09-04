@@ -18,6 +18,11 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger
+from src.media.encode_defaults import (
+    default_ffmpeg_threads,
+    default_render_crf,
+    default_render_preset,
+)
 
 logger = get_logger("subtitle_drawer")
 
@@ -295,7 +300,9 @@ def apply_code_subtitles_to_video(
     width: int,
     height: int,
     fps: int,
-    crf: int = 18,
+    crf: Optional[int] = None,
+    preset: Optional[str] = None,
+    threads: Optional[int] = None,
     subtitle_theme: Optional[SubtitleTheme] = None,
     drawer: Optional[CodeSubtitleDrawer] = None,
 ) -> Path:
@@ -311,6 +318,13 @@ def apply_code_subtitles_to_video(
         shutil.copy2(in_path, out_path)
         return out_path
 
+    if crf is None:
+        crf = default_render_crf()
+    if preset is None:
+        preset = default_render_preset()
+    if threads is None:
+        threads = default_ffmpeg_threads()
+
     drawer = drawer or CodeSubtitleDrawer(theme=subtitle_theme)
     read_cmd = [
         "ffmpeg", "-y", "-i", str(in_path),
@@ -324,7 +338,10 @@ def apply_code_subtitles_to_video(
         "-i", "-",
         "-c:v", "libx264", "-pix_fmt", "yuv420p",
         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-        "-crf", str(crf), "-preset", "faster", "-b:v", "4500k", "-maxrate", "6000k", "-bufsize", "8000k", "-threads", "0", "-movflags", "+faststart",
+        "-crf", str(crf),
+        "-preset", str(preset),
+        "-threads", str(threads),
+        "-movflags", "+faststart",
         str(out_path),
     ]
 
