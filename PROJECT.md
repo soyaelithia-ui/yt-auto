@@ -28,6 +28,13 @@ The yt-auto media pipeline is built on a zero-browser, deterministic native medi
 | F07 | CLI Loop Generation Latency SLA (<2.0s) | Optimize FFmpeg encoding preset to ultrafast in loop_worker.py and defer eager imports in main.py. | M2 | Survey 3 / R2 |
 | F08 | Verification Targets Certification | Certify 100% green pass on the 4 targeted test suites (test_native_procedural_uniforms, test_cinematic_storyboard, test_multiscene_dispatch, test_loop_video_engine). | M3 | Survey 3 / R3 |
 | F09 | Full Suite Zero-Regression & DB Concurrency Certification | Run full pytest suite, verifying 0 failures, 0 database locks (WAL/busy_timeout), 0 browser leaks, and 0 network quota consumption. | M3 | Survey 3 / R3 |
+| F10 | Monotonic Timestamp Sanitizer | Timestamp sanitization enforcing monotonicity, non-negative durations, and millisecond ASS formatting. | M3 | Tier 1 |
+| F11 | Unified Atomic FFmpeg Encoder | Unified single-pass filtergraph, libass subtitles, EBU R128 ducking, and async stderr drain. | M3 | Tier 1 |
+| F12 | SceneManifest Contract Synchronization | Synchronization of SceneManifest and JSON Schema contracts with VisualArchetypeId. | M4 | Tier 1 |
+| F13 | Scene Planner Agent Sync | Scene planner agent resolving archetype tokens and generating valid vertical SceneManifest instances. | M4 | Tier 1 |
+| F14 | Deterministic Video QA Gate | Forensic audiovisual QA auditor verifying faststart, yuv420p, loudness, and frame integrity. | M4 | Tier 1 |
+| F15 | Documentation Synchronization | Architecture and operations documentation synchronization with zero legacy blueprints. | M4 | Tier 1 |
+| F16 | E2E Testing Suite (Tiers 1–4) | Complete test runner CLI, multi-tier test suites (Tiers 1–4), and boundary/workload coverage. | E2E | Tier 1 |
 
 ---
 

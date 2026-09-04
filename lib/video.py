@@ -859,14 +859,38 @@ def create_video_thumbnail(
     try:
         from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
         engine = ThumbnailEngine()
+        meta = {
+            "subreddit": kwargs.get("subreddit"),
+            "upvotes": kwargs.get("upvotes"),
+            "author": kwargs.get("author") or kwargs.get("user_handle"),
+            "hazard_level": kwargs.get("hazard_level"),
+            "site": kwargs.get("site"),
+            "cam": kwargs.get("cam"),
+            "tape_id": kwargs.get("tape_id"),
+            "channel_tag": kwargs.get("channel_tag"),
+            "category": kwargs.get("category"),
+            "quote": kwargs.get("quote") or kwargs.get("callout") or kwargs.get("excerpt"),
+            "date": kwargs.get("date") or kwargs.get("timestamp_label"),
+        }
+        if kwargs.get("metadata") and isinstance(kwargs.get("metadata"), dict):
+            meta.update(kwargs.get("metadata"))
+        meta = {k: v for k, v in meta.items() if v is not None}
+
         cfg = ThumbnailConfig(
             title=title,
             channel_id=str(channel_id),
+            hook_text=kwargs.get("hook_text"),
             output_path=output_path,
             width=target_w,
             height=target_h,
+            tilt_angle=float(kwargs["tilt_angle"]) if "tilt_angle" in kwargs else -3.5,
+            blur_radius=float(kwargs["blur_radius"]) if "blur_radius" in kwargs else 3.5,
+            contrast_boost=float(kwargs["contrast_boost"]) if "contrast_boost" in kwargs else 1.35,
+            primary_color=kwargs.get("primary_color"),
+            accent_color=kwargs.get("accent_color"),
             archetype=kwargs.get("archetype") or kwargs.get("template") or kwargs.get("category"),
             template=kwargs.get("template"),
+            metadata=meta,
         )
         res = engine.generate(
             config=cfg,

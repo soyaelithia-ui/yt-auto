@@ -183,6 +183,7 @@ class QAGatekeeper:
         output_report_path: str | None = None,
         video_mode: str = "short",
         ass_path: str | None = None,
+        thumbnail_path: str | None = None,
         **kwargs: Any,
     ) -> QualityReportDTO:
         issues: List[QualityReportIssue] = []
@@ -336,6 +337,11 @@ class QAGatekeeper:
         if script_text:
             self._audit_script_text(script_text, issues)
 
+        # ---------------- thumbnail artifact ----------------
+        thumb_src = thumbnail_path or kwargs.get("thumbnail_path") or kwargs.get("thumbnail")
+        if thumb_src:
+            self._audit_thumbnail_artifact(str(thumb_src), issues)
+
         if self.strict_mode:
             report.passed = not issues
         else:
@@ -363,6 +369,27 @@ class QAGatekeeper:
             code=code, message=message, severity=severity,
             metric_value=metric, threshold_limit=threshold,
         ))
+
+    def _audit_thumbnail_artifact(self, path: str, issues: List[QualityReportIssue]) -> None:
+        try:
+            from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+            auditor = VisualAudioQAAuditorAgent()
+            t_pass, t_errs = auditor.audit_thumbnail(path)
+            if not t_pass:
+                for err in t_errs:
+                    self._issue(
+                        issues,
+                        "ERR_QA_THUMBNAIL_DEFECT",
+                        f"Thumbnail defect: {err}",
+                        severity=_CRITICAL,
+                    )
+        except Exception as exc:
+            self._issue(
+                issues,
+                "ERR_QA_THUMBNAIL_FAILED",
+                f"Thumbnail audit execution failed: {exc}",
+                severity=_WARNING,
+            )
 
     def _audit_script_text(self, script_text: str, issues: List[QualityReportIssue]) -> None:
         try:

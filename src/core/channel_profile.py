@@ -238,11 +238,11 @@ class ChannelProfileRegistry:
             s = str(raw.value).strip().lower()
         else:
             s = (str(raw or "")).strip().lower()
-        if s in ("moku", "channel1", "primary", "terror", "scp", "horror"):
+        if s in ("moku", "channel1", "primary", "terror", "scp", "horror") or s.startswith("moku-") or "moku" in s:
             return "moku"
-        if s in ("aelithia", "channel2", "secondary", "aita", "reddit", "drama", "soy_el_malo"):
+        if s in ("aelithia", "channel2", "secondary", "aita", "reddit", "drama", "soy_el_malo") or s.startswith("aelithia-") or "aelithia" in s:
             return "aelithia"
-        if s in ("scifi", "sci_fi", "space", "singularidad"):
+        if s in ("scifi", "sci_fi", "space", "singularidad") or s.startswith("scifi-") or "scifi" in s:
             return "scifi"
         return s
 

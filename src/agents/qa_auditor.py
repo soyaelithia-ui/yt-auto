@@ -14,7 +14,7 @@ import math
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import jsonschema
 
@@ -36,9 +36,19 @@ class VisualAudioQAAuditorAgent:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
 
-    def audit_thumbnail(self, thumbnail_path: Union[Path, str]) -> Tuple[bool, List[str]]:
-        """Audits thumbnail for minimum resolution, non-default bitmap font, and high contrast."""
-        from PIL import Image, ImageStat
+    def audit_thumbnail(
+        self,
+        thumbnail_path: Union[Path, str],
+        elements: Optional[List[Any]] = None,
+    ) -> Tuple[bool, List[str]]:
+        """
+        Audits thumbnail artifact:
+        - Aspect-ratio resolution: 16:9 (>=1280x720) or 9:16 (>=720x1280).
+        - Minimum file size >= 40 KB.
+        - High contrast / luminance dynamic range (max stddev >= 18.0).
+        - Safe-zone clearance: keeps YouTube timestamp zone and Shorts UI clear of overlay elements.
+        """
+        from PIL import Image, ImageFilter, ImageStat
         errors: List[str] = []
         p = Path(thumbnail_path).resolve()
         if not p.is_file():
@@ -46,19 +56,72 @@ class VisualAudioQAAuditorAgent:
         try:
             img = Image.open(p).convert("RGB")
             w, h = img.size
-            if w < 1280 or h < 720:
-                errors.append(f"Thumbnail resolution too low: {w}x{h} (expected >= 1280x720)")
+
+            # 1. Aspect Ratio & Resolution Check
+            is_horizontal_16_9 = (w >= 1280 and h >= 720) and (1.5 <= w / h <= 1.95)
+            is_vertical_9_16 = (w >= 720 and h >= 1280) and (0.45 <= w / h <= 0.65)
+
+            if not (is_horizontal_16_9 or is_vertical_9_16):
+                errors.append(
+                    f"Thumbnail has invalid aspect ratio or resolution: {w}x{h} "
+                    f"(expected 16:9 >= 1280x720 or 9:16 >= 720x1280)"
+                )
+
+            # 2. Luminance & Color Contrast Standard Deviation
             stat = ImageStat.Stat(img)
-            # Check color dynamic range / contrast standard deviation
             std_devs = stat.stddev
             if max(std_devs) < 18.0:
-                errors.append(f"Thumbnail has critically low contrast/visual dynamic range: max stddev {max(std_devs):.1f} < 18.0")
-            # Check file size
+                errors.append(
+                    f"Thumbnail has critically low contrast/visual dynamic range: "
+                    f"max stddev {max(std_devs):.1f} < 18.0"
+                )
+
+            # 3. File Size Check (>= 40 KB)
             sz_kb = p.stat().st_size / 1024
-            if sz_kb < 20.0:
-                errors.append(f"Thumbnail file size suspiciously small: {sz_kb:.1f} KB (likely blank or unrendered text)")
+            if sz_kb < 40.0:
+                errors.append(
+                    f"Thumbnail file size suspiciously small: {sz_kb:.1f} KB (expected >= 40.0 KB)"
+                )
+
+            # 4. Safe-Zone Clearance Check
+            if elements:
+                for el in elements:
+                    if isinstance(el, (tuple, list)) and len(el) >= 4:
+                        ex1, ey1, ex2, ey2 = el[:4]
+                    elif isinstance(el, dict):
+                        ex1, ey1 = el.get("x", 0), el.get("y", 0)
+                        ex2, ey2 = ex1 + el.get("w", 0), ey1 + el.get("h", 0)
+                    else:
+                        continue
+
+                    if is_horizontal_16_9:
+                        ts_x1, ts_y1 = int(w * 0.817), int(h * 0.86)
+                        if ex2 > ts_x1 and ey2 > ts_y1:
+                            errors.append(
+                                f"Safe-zone boundary violation: graphic element penetrates "
+                                f"YouTube timestamp zone [{ts_x1}, {ts_y1}, {w}, {h}]"
+                            )
+                    elif is_vertical_9_16:
+                        if ey2 > h - 450 or ex2 > w - 120:
+                            errors.append(
+                                f"Safe-zone boundary violation: graphic element penetrates "
+                                f"YouTube Shorts UI overlay zone"
+                            )
+
+            # Pixel-level inspection of timestamp area for high-contrast artificial overlay text/badge
+            if is_horizontal_16_9:
+                ts_crop = img.crop((int(w * 0.817), int(h * 0.86), w, h))
+                edges = ts_crop.convert("L").filter(ImageFilter.FIND_EDGES)
+                edge_stat = ImageStat.Stat(edges)
+                if edge_stat.stddev[0] > 30.0 and edge_stat.mean[0] > 4.5 and edges.getextrema()[1] >= 240:
+                    errors.append(
+                        f"Safe-zone boundary violation: high-contrast text or badge overlay detected "
+                        f"in YouTube timestamp zone [1570, 930, {w}, {h}]"
+                    )
+
         except Exception as exc:
             errors.append(f"Failed opening/auditing thumbnail: {exc}")
+
         return len(errors) == 0, errors
 
     def audit_description_timestamps(self, description: str, video_duration_sec: float) -> Tuple[bool, List[str]]:

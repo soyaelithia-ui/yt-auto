@@ -12,9 +12,11 @@ from typing import Any, Dict, Optional, Union
 from PIL import Image
 
 from src.core.channel_profile import ChannelProfile, ChannelProfileRegistry
+from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.extractor import ClimaxFrameExtractor
 from src.media.thumbnails.grading import ChiaroscuroColorGrader
 from src.media.thumbnails.layout import AspectLayoutManager
+from src.media.thumbnails.layouts.base import LayoutRegistry
 from src.media.thumbnails.subject_extractor import RimLightCompositor, AdaptiveSubjectCompositor
 from src.media.thumbnails.typography import DynamicTypographyEngine
 
@@ -30,21 +32,22 @@ class ThumbnailConfig:
     width: int = 1920
     height: int = 1080
     tilt_angle: float = -3.5
-    blur_radius: float = 5.0
+    blur_radius: float = 3.5
     contrast_boost: float = 1.35
     primary_color: Optional[str] = None
     accent_color: Optional[str] = None
     archetype: Optional[str] = None
     template: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class ThumbnailEngine:
     """
     Main orchestrator for generating high-CTR YouTube thumbnails:
-    - Extracts the climax keyframe from the rendered video.
-    - Applies Chiaroscuro Rec.709 color grading and Gaussian depth blur.
-    - Enhances edge silhouettes with rim lighting.
-    - Renders bold, angled, high-contrast typography in safe zones.
+    - Resolves authentic background imagery via ThematicAssetResolver (3-tier local hierarchy).
+    - Applies Chiaroscuro Rec.709 color grading and subtle depth blur.
+    - Enhances edge silhouettes and focal depth with rim lighting.
+    - Dispatches to specialized niche layouts (SCP HUD, Reddit Drama Card, Analog Horror VHS, or Cinematic).
     """
 
     def __init__(self) -> None:
@@ -60,48 +63,30 @@ class ThumbnailEngine:
         manifest_path: Optional[Union[str, Path]] = None,
         base_image_path: Optional[Union[str, Path]] = None,
     ) -> Path:
-        channel_prof = ChannelProfileRegistry.get_channel(config.channel_id)
+        try:
+            channel_prof = ChannelProfileRegistry.get_channel(config.channel_id)
+        except KeyError:
+            channel_prof = ChannelProfileRegistry.get_channel("moku")
         out_path = Path(config.output_path or "output/thumbnail.jpg").resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         w, h = config.width, config.height
-        is_vertical = h > w
 
-        # 1. Acquire Base Frame
-        base_img: Optional[Image.Image] = None
-        if base_image_path and Path(base_image_path).is_file():
-            try:
-                base_img = Image.open(str(base_image_path)).convert("RGB")
-            except Exception as e:
-                logger.warning("Failed opening base_image_path: %s", e)
-
-        if base_img is None and video_path and Path(video_path).is_file():
-            v_path = Path(video_path)
-            tmp_extract_dir = out_path.parent / "thumb_tmp"
-            climax_t = self.extractor.resolve_climax_timestamp(
-                manifest_path=Path(manifest_path) if manifest_path else None
-            )
-            cand_frames = self.extractor.extract_candidate_frames(
-                video_path=v_path,
-                center_timestamp=climax_t,
-                output_dir=tmp_extract_dir,
-                count=5,
-            )
-            best_frame_path = self.extractor.select_best_frame(cand_frames)
-            if best_frame_path and best_frame_path.is_file():
-                try:
-                    base_img = Image.open(best_frame_path).convert("RGB")
-                except Exception as e:
-                    logger.warning("Failed loading best frame: %s", e)
-
-        # Fallback if no video frame could be acquired
-        if base_img is None:
-            base_img = Image.new("RGB", (w, h), (4, 8, 14))
+        # 1. Resolve Authentic Thematic Base Image (3-Tier Hierarchy)
+        eff_archetype = config.archetype or config.template or config.title or config.channel_id
+        base_img = ThematicAssetResolver.resolve_base_image(
+            channel_id=config.channel_id,
+            archetype=eff_archetype,
+            target_size=(w, h),
+            explicit_path=base_image_path,
+            video_path=video_path,
+            manifest_path=manifest_path,
+        )
 
         # 2. Apply Chiaroscuro Grading & Gaussian Depth Blur
         accent = config.accent_color or channel_prof.visual.palette.accent
         primary = config.primary_color or channel_prof.visual.palette.highlight or "#FFE600"
-        
+
         graded_bg = self.grader.process_background(
             base_img=base_img,
             target_w=w,
@@ -112,14 +97,13 @@ class ThumbnailEngine:
             accent_color_hex=accent,
         )
 
-        # 3. Enhance Focal Subject with Adaptive Thematic Silhouette & Rim Light Glow
-        eff_archetype = config.archetype or config.template or config.title or config.channel_id
+        # 3. Enhance Focal Subject with Depth & Subtle Rim Light Glow
         subject_composited = AdaptiveSubjectCompositor.composite_thematic_subject(
             base_img=graded_bg,
             channel_id=config.channel_id,
             archetype=eff_archetype,
             accent_color_hex=accent,
-            intensity=0.95,
+            intensity=0.90,
         )
         rim_lit = self.subject_comp.apply_rim_light_to_frame(
             base_img=subject_composited,
@@ -127,21 +111,32 @@ class ThumbnailEngine:
             intensity=0.6,
         )
 
-        # 4. Render Dynamic Typography
-        hook_text = config.hook_text or self._extract_hook_text(config.title)
+        # 4. Dispatch to Niche Layout Engine
+        layout = LayoutRegistry.get_layout(
+            channel_id=config.channel_id,
+            archetype=config.archetype,
+            template=config.template,
+        )
         safe_zone = AspectLayoutManager.get_safe_zone(w, h)
-        pos_x, pos_y = AspectLayoutManager.get_hook_text_position(w, h, text_height=int(h * 0.22))
+        hook_text = config.hook_text or self._extract_hook_text(config.title)
 
-        final_thumb = self.typography.render_hook_title(
+        layout_metadata: Dict[str, Any] = {
+            "archetype": config.archetype,
+            "template": config.template,
+            "primary_color": primary,
+            "accent_color": accent,
+            "tilt_angle": config.tilt_angle,
+            "title_raw": config.title,
+        }
+        if config.metadata:
+            layout_metadata.update(config.metadata)
+
+        final_thumb = layout.apply_layout(
             canvas=rim_lit,
-            text=hook_text,
-            pos_x=pos_x,
-            pos_y=pos_y,
-            max_width=safe_zone.width,
-            font_name=channel_prof.visual.typography.font_bold,
-            primary_color=primary,
-            accent_color=accent,
-            tilt_angle=config.tilt_angle,
+            title=hook_text,
+            channel_id=config.channel_id,
+            safe_zone=safe_zone,
+            metadata=layout_metadata,
         )
 
         # Save Final JPEG

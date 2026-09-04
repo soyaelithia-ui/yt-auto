@@ -98,3 +98,375 @@ def test_climax_frame_extractor_timestamp():
     t = extractor.resolve_climax_timestamp(manifest_data=manifest_dummy)
     # Scene 3 has tension 5, start 11.0, dur 8.0 -> 11.0 + (8.0 * 0.45) = 14.6
     assert 14.0 <= t <= 15.0
+
+
+def test_niche_layout_scp_found_footage_vertical():
+    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+
+    layout = ScpFoundFootageLayout()
+    canvas = Image.new("RGB", (1080, 1920), (15, 20, 25))
+    safe_zone = AspectLayoutManager.get_safe_zone(1080, 1920)
+
+    result = layout.apply_layout(
+        canvas=canvas,
+        title="SCP-173 BRECHA DE CONTENCIÓN",
+        channel_id="moku",
+        safe_zone=safe_zone,
+        metadata={"hazard_level": "EUCLID", "site": "SITE-19"},
+    )
+
+    assert result.size == (1080, 1920)
+    # Verify canvas pixels were mutated by HUD elements
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
+    assert diff > 1000
+
+    # Safe-zone check: verify bottom 450px and right 120px interaction zone
+    # Specifically, primary title hook center must be within safe_zone
+    assert safe_zone.bottom <= 1920 - 450
+
+
+def test_niche_layout_reddit_drama_card_horizontal():
+    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
+
+    layout = RedditDramaCardLayout()
+    canvas = Image.new("RGB", (1920, 1080), (25, 25, 30))
+    safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
+
+    result = layout.apply_layout(
+        canvas=canvas,
+        title="¿SOY LA MALA POR ARRUINAR LA BODA?",
+        channel_id="aelithia",
+        safe_zone=safe_zone,
+        metadata={"subreddit": "r/AmItheAsshole", "upvotes": "28.4k"},
+    )
+
+    assert result.size == (1920, 1080)
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
+    assert diff > 1000
+
+    # Safe-zone check: YouTube timestamp zone [1570, 930, 1920, 1080] must be clear of title text
+    assert safe_zone.right <= 1920 * 0.88
+    assert safe_zone.bottom <= 1080 * 0.90
+
+
+def test_niche_layout_analog_horror_vhs_horizontal():
+    from src.media.thumbnails.layouts.analog_horror import AnalogHorrorVhsLayout
+
+    layout = AnalogHorrorVhsLayout()
+    canvas = Image.new("RGB", (1920, 1080), (10, 12, 16))
+    safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
+
+    result = layout.apply_layout(
+        canvas=canvas,
+        title="TRANSMISIÓN NO AUTORIZADA",
+        channel_id="moku",
+        safe_zone=safe_zone,
+        metadata={"tape_id": "TAPE-04", "channel_tag": "CH 03"},
+    )
+
+    assert result.size == (1920, 1080)
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
+    assert diff > 1000
+
+
+def test_niche_layout_general_cinematic_fallback():
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
+
+    layout = GeneralCinematicLayout()
+    canvas = Image.new("RGB", (1920, 1080), (18, 18, 18))
+    safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
+
+    result = layout.apply_layout(
+        canvas=canvas,
+        title="EL MISTERIO DEL TIEMPO",
+        channel_id="unknown_lane",
+        safe_zone=safe_zone,
+        metadata={},
+    )
+
+    assert result.size == (1920, 1080)
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
+    assert diff > 500
+
+
+def test_layout_registry_dispatch():
+    from src.media.thumbnails.layouts.base import LayoutRegistry
+    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
+    from src.media.thumbnails.layouts.analog_horror import AnalogHorrorVhsLayout
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
+
+    layout_scp = LayoutRegistry.get_layout(channel_id="moku-scp-shorts", archetype="scp")
+    assert isinstance(layout_scp, ScpFoundFootageLayout)
+
+    layout_reddit = LayoutRegistry.get_layout(channel_id="aelithia-aita-long", archetype="aita")
+    assert isinstance(layout_reddit, RedditDramaCardLayout)
+
+    layout_horror = LayoutRegistry.get_layout(channel_id="moku-horror-long", archetype="horror")
+    assert isinstance(layout_horror, AnalogHorrorVhsLayout)
+
+    layout_fallback = LayoutRegistry.get_layout(channel_id="unregistered_channel", archetype="other")
+    assert isinstance(layout_fallback, GeneralCinematicLayout)
+
+
+def test_typography_draw_text_with_effects_3d():
+    canvas = Image.new("RGB", (1920, 1080), (10, 10, 15))
+    safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
+
+    result = DynamicTypographyEngine.draw_text_with_effects(
+        canvas=canvas,
+        text="PELIGRO BIOLÓGICO EXTREMO",
+        pos_x=safe_zone.left + 50,
+        pos_y=safe_zone.top + 100,
+        max_width=safe_zone.width - 100,
+        font_name="Montserrat-Black.ttf",
+        fill_color="#FFE600",
+        stroke_color="#000000",
+        stroke_width=12,
+        shadow_offset=(8, 12),
+        shadow_blur=4,
+        glow_color="#FF003B",
+        glow_radius=8,
+        tilt_angle=-3.0,
+    )
+
+    assert result.size == (1920, 1080)
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), result.tobytes()))
+    assert diff > 1000
+
+
+def test_typography_multiline_safe_splitting():
+    # Long text over 30 chars with question/exclamation marks
+    long_title = "¿POR QUÉ NADIE QUIERE DECIR LA VERDAD SOBRE ESTO?"
+    lines = DynamicTypographyEngine.split_title_to_safe_lines(long_title, max_chars_per_line=20)
+    assert 2 <= len(lines) <= 3
+    for line in lines:
+        assert len(line) <= 25
+
+    # Very long title over 60 chars
+    extra_long = "¿POR QUÉ NADIE QUIERE DECIR LA VERDAD SOBRE EL EXPERIMENTO SECRETO?"
+    lines_extra = DynamicTypographyEngine.split_title_to_safe_lines(extra_long, max_chars_per_line=20)
+    assert 2 <= len(lines_extra) <= 3
+    for line in lines_extra:
+        assert len(line) <= 25
+
+
+def test_thematic_asset_resolver_hierarchy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from src.media.thumbnails.asset_resolver import ThematicAssetResolver
+
+    # Tier 1: Explicit path
+    explicit_file = tmp_path / "explicit_backdrop.png"
+    img = Image.new("RGB", (1920, 1080), (120, 50, 80))
+    img.save(explicit_file)
+
+    resolved_t1 = ThematicAssetResolver.resolve_base_image(
+        channel_id="moku",
+        archetype="scp",
+        target_size=(1920, 1080),
+        explicit_path=explicit_file,
+    )
+    assert resolved_t1.size == (1920, 1080)
+    # Check color matches explicit file
+    assert resolved_t1.getpixel((100, 100)) == (120, 50, 80)
+
+    # Tier 2: Asset bank resolution (seeded templates)
+    resolved_t2_scp = ThematicAssetResolver.resolve_base_image(
+        channel_id="moku-scp-shorts",
+        archetype="scp",
+        target_size=(1080, 1920),
+    )
+    assert resolved_t2_scp.size == (1080, 1920)
+
+    resolved_t2_aita = ThematicAssetResolver.resolve_base_image(
+        channel_id="aelithia",
+        archetype="aita",
+        target_size=(1920, 1080),
+    )
+    assert resolved_t2_aita.size == (1920, 1080)
+
+    # Tier 3: Climax keyframe fallback from video when archetype not in template bank
+    mock_vid = tmp_path / "synthetic_video.mp4"
+    mock_vid.touch()
+    mock_cand = tmp_path / "mock_climax_frame.png"
+    Image.new("RGB", (1920, 1080), (33, 77, 99)).save(mock_cand)
+
+    from src.media.thumbnails.extractor import ClimaxFrameExtractor
+    monkeypatch.setattr(ClimaxFrameExtractor, "resolve_climax_timestamp", lambda self, **kw: 5.0)
+    monkeypatch.setattr(ClimaxFrameExtractor, "extract_candidate_frames", lambda self, **kw: [mock_cand])
+    monkeypatch.setattr(ClimaxFrameExtractor, "select_best_frame", lambda self, frames: mock_cand)
+
+    resolved_t3 = ThematicAssetResolver.resolve_base_image(
+        channel_id="custom_channel",
+        archetype="cyberpunk_heist",
+        target_size=(1920, 1080),
+        video_path=mock_vid,
+    )
+    assert resolved_t3.size == (1920, 1080)
+    pix = resolved_t3.getpixel((100, 100))
+    assert abs(pix[0] - 33) <= 1 and abs(pix[1] - 77) <= 1 and abs(pix[2] - 99) <= 1
+
+    # Tier 4: Fallback when no explicit, no asset bank match, and no video
+    resolved_fallback = ThematicAssetResolver.resolve_base_image(
+        channel_id="completely_new_niche",
+        archetype="unknown_x",
+        target_size=(1920, 1080),
+    )
+    assert resolved_fallback.size == (1920, 1080)
+
+
+def test_qa_auditor_aspect_ratio_16_9_and_9_16(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+
+    auditor = VisualAudioQAAuditorAgent()
+    engine = ThumbnailEngine()
+
+    # 16:9 thumbnail
+    thumb_16_9 = tmp_path / "valid_16_9.jpg"
+    cfg_16_9 = ThumbnailConfig(
+        title="INCIDENTE EN EL SECTOR 19",
+        channel_id="moku",
+        output_path=thumb_16_9,
+        width=1920,
+        height=1080,
+    )
+    engine.generate(config=cfg_16_9)
+    passed_16_9, errs_16_9 = auditor.audit_thumbnail(thumb_16_9)
+    assert passed_16_9 is True, f"16:9 audit failed: {errs_16_9}"
+
+    # 9:16 thumbnail
+    thumb_9_16 = tmp_path / "valid_9_16.jpg"
+    cfg_9_16 = ThumbnailConfig(
+        title="LA ENTIDAD DEL PANTANO",
+        channel_id="moku-scp-shorts",
+        output_path=thumb_9_16,
+        width=1080,
+        height=1920,
+    )
+    engine.generate(config=cfg_9_16)
+    passed_9_16, errs_9_16 = auditor.audit_thumbnail(thumb_9_16)
+    assert passed_9_16 is True, f"9:16 audit failed: {errs_9_16}"
+
+
+def test_qa_auditor_rejects_low_contrast_or_small_file(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+
+    auditor = VisualAudioQAAuditorAgent()
+
+    # Low contrast / flat image
+    bad_img = Image.new("RGB", (1920, 1080), (128, 128, 128))
+    bad_path = tmp_path / "low_contrast.jpg"
+    bad_img.save(bad_path, "JPEG", quality=20)
+
+    passed, errs = auditor.audit_thumbnail(bad_path)
+    assert passed is False
+    assert any("low contrast" in e.lower() or "size" in e.lower() for e in errs)
+
+
+def test_qa_auditor_safe_zone_violation(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+
+    auditor = VisualAudioQAAuditorAgent()
+    engine = ThumbnailEngine()
+
+    thumb_path = tmp_path / "safe_zone_test.jpg"
+    cfg = ThumbnailConfig(
+        title="TITULO DE PRUEBA",
+        output_path=thumb_path,
+        width=1920,
+        height=1080,
+    )
+    engine.generate(config=cfg)
+
+    # Element explicitly penetrating timestamp zone [1570, 930, 1920, 1080]
+    bad_elements = [(1600, 950, 1850, 1020)]
+    passed, errs = auditor.audit_thumbnail(thumb_path, elements=bad_elements)
+    assert passed is False
+    assert any("safe-zone" in e.lower() for e in errs)
+
+
+def test_qa_gatekeeper_thumbnail_wiring(tmp_path: Path):
+    from lib.qa_gatekeeper import QAGatekeeper
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+
+    gk = QAGatekeeper(strict_mode=True)
+    engine = ThumbnailEngine()
+
+    good_thumb = tmp_path / "gk_good_thumb.jpg"
+    engine.generate(ThumbnailConfig(title="PRUEBA GATEKEEPER", output_path=good_thumb))
+
+    issues = []
+    gk._audit_thumbnail_artifact(str(good_thumb), issues)
+    assert len(issues) == 0
+
+    # Bad thumbnail: flat grey image
+    bad_thumb = tmp_path / "gk_bad_thumb.jpg"
+    Image.new("RGB", (1920, 1080), (50, 50, 50)).save(bad_thumb, quality=30)
+
+    issues_bad = []
+    gk._audit_thumbnail_artifact(str(bad_thumb), issues_bad)
+    assert len(issues_bad) > 0
+    assert any(i.code == "ERR_QA_THUMBNAIL_DEFECT" for i in issues_bad)
+
+
+def test_typography_auto_fit_downscale():
+    canvas = Image.new("RGB", (1920, 1080), (10, 10, 10))
+    # Render very long words in narrow width (500px)
+    narrow_w = 500
+    res = DynamicTypographyEngine.draw_text_with_effects(
+        canvas=canvas,
+        text="EXTRAORDINARIAMENTE PELIGROSO E INCONTROLABLE",
+        pos_x=100,
+        pos_y=200,
+        max_width=narrow_w,
+        font_size=110,
+        tilt_angle=0.0,
+    )
+    assert res.size == (1920, 1080)
+    # Ensure drawing succeeded and mutated canvas
+    diff = sum(c1 != c2 for c1, c2 in zip(canvas.tobytes(), res.tobytes()))
+    assert diff > 500
+
+
+def test_niche_layouts_custom_metadata_and_colors():
+    from src.media.thumbnails.layouts.reddit_card import RedditDramaCardLayout
+    from src.media.thumbnails.layouts.scp_hud import ScpFoundFootageLayout
+
+    safe_zone = AspectLayoutManager.get_safe_zone(1920, 1080)
+    canvas = Image.new("RGB", (1920, 1080), (20, 20, 20))
+
+    # Reddit layout with custom quote and custom colors
+    reddit_layout = RedditDramaCardLayout()
+    res_reddit = reddit_layout.apply_layout(
+        canvas=canvas,
+        title="MI HISTORIA",
+        channel_id="aelithia",
+        safe_zone=safe_zone,
+        metadata={
+            "quote": "Descubrió la verdad oculta durante 10 años",
+            "category": "CONFESIÓN ANÓNIMA",
+            "primary_color": "#00FFCC",
+            "accent_color": "#FF9900",
+        },
+    )
+    assert res_reddit.size == (1920, 1080)
+
+    # SCP layout with custom colors
+    scp_safe = AspectLayoutManager.get_safe_zone(1080, 1920)
+    canvas_v = Image.new("RGB", (1080, 1920), (10, 15, 20))
+    scp_layout = ScpFoundFootageLayout()
+    res_scp = scp_layout.apply_layout(
+        canvas=canvas_v,
+        title="SCP-096",
+        channel_id="moku",
+        safe_zone=scp_safe,
+        metadata={
+            "hazard_level": "EUCLID",
+            "cam": "LONG-IDENTIFIER-SECURITY-CAM-SECTOR-09",
+            "primary_color": "#00FFCC",
+            "accent_color": "#FF003B",
+        },
+    )
+    assert res_scp.size == (1080, 1920)
+
+
+
