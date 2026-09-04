@@ -3,7 +3,8 @@ src/media/multi_act_renderer.py - Multi-Act FFmpeg Video Compositor.
 
 Orchestrates sequential catalog/loop video scenes across narrative temporal acts in a
 single FFmpeg filter_complex pass, with tactical SCP HUD overlays (drawtext/drawbox),
-fade transitions, and optional ASS subtitles. FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
+real FFmpeg xfade transitions (duration-aware via calculate_xfade_duration),
+and optional ASS subtitles. FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
 """
 from __future__ import annotations
 
@@ -172,20 +173,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         audio_idx = len(acts)
         cmd.extend(["-i", str(audio_path)])
 
-        # Construct filter complex
+        # Construct filter complex: per-act HUD prep, then real xfade (or passthrough for n=1).
         filter_parts = []
-        seg_labels = []
-
         for i, act in enumerate(acts):
-            # Scale & crop loop
             scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
-            
-            # HUD Overlay via drawtext (escape colons and apostrophes)
+
             site_esc = act.hud_site.replace(":", "\\:").replace("'", "")
             badge_esc = act.hud_badge.replace(":", "\\:").replace("'", "")
-            title_esc = act.title.replace(":", "\\:").replace("'", "")
-            
-            # Draw HUD boxes and text in safe area
+
             hud_filters = (
                 f"{scale_filter},"
                 f"drawbox=x=40:y=40:w={w-80}:h=75:color=black@0.65:t=fill,"
@@ -193,26 +188,39 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"drawtext=text='{site_esc}':fontcolor={act.color_hex}:fontsize=22:x=60:y=55:box=0,"
                 f"drawtext=text='{badge_esc}':fontcolor=white:fontsize=20:x={w-420}:y=55:box=0"
             )
-            
-            # Apply slight fade-in and fade-out at act boundaries
-            fade_dur = clamp_transition_duration(act.duration_sec, act.duration_sec, 0.5)
-            fade_out_start = max(0.1, act.duration_sec - fade_dur)
-            trans_filter = f"{hud_filters},fade=t=in:st=0:d={fade_dur},fade=t=out:st={fade_out_start:.3f}:d={fade_dur}"
-            
-            filter_parts.append(f"[{i}:v]{trans_filter}[v_act{i}]")
-            seg_labels.append(f"[v_act{i}]")
+            filter_parts.append(f"[{i}:v]{hud_filters}[v_act{i}]")
 
-        # Concat all act video streams
-        concat_in = "".join(seg_labels)
-        filter_parts.append(f"{concat_in}concat=n={len(acts)}:v=1:a=0[v_concat]")
+        if len(acts) == 1:
+            chained = "[v_act0]"
+            xfade_out_dur = float(acts[0].duration_sec)
+        else:
+            cum = float(acts[0].duration_sec)
+            current = "[v_act0]"
+            xfade_out_dur = float(acts[0].duration_sec)
+            for k in range(len(acts) - 1):
+                t = clamp_transition_duration(
+                    acts[k].duration_sec, acts[k + 1].duration_sec, 0.75
+                )
+                offset = max(0.0, cum - t)
+                out_tag = f"[vx{k + 1}]" if k < len(acts) - 2 else "[v_xfaded]"
+                filter_parts.append(
+                    f"{current}[v_act{k + 1}]xfade=transition=fade:"
+                    f"duration={t:.3f}:offset={offset:.3f}{out_tag}"
+                )
+                current = out_tag
+                cum += float(acts[k + 1].duration_sec) - t
+                xfade_out_dur += float(acts[k + 1].duration_sec) - t
+            chained = current
+            if total_duration > 0:
+                xfade_out_dur = min(float(total_duration), xfade_out_dur)
 
-        # Apply subtitles if provided
         if ass_subtitles and ass_subtitles.is_file():
             sub_path_esc = str(ass_subtitles).replace("\\", "/").replace(":", "\\:")
-            filter_parts.append(f"[v_concat]subtitles='{sub_path_esc}'[vout]")
+            filter_parts.append(f"{chained}subtitles='{sub_path_esc}'[vout]")
             v_final = "[vout]"
         else:
-            v_final = "[v_concat]"
+            filter_parts.append(f"{chained}null[vout]")
+            v_final = "[vout]"
 
         filter_complex_str = ";".join(filter_parts)
 
@@ -220,7 +228,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "-filter_complex", filter_complex_str,
             "-map", v_final,
             "-map", f"{audio_idx}:a:0",
-            "-t", f"{total_duration:.3f}",
+            "-t", f"{(xfade_out_dur if len(acts) > 1 else float(total_duration)):.3f}",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "19",

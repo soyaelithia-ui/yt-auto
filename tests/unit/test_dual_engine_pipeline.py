@@ -250,8 +250,10 @@ class TestDualEnginesAndCompositor:
         assert out_master.exists()
         assert out_master.stat().st_size > 1000
 
-    def test_multi_scene_compositor_default_preset_and_bounded_threads(self, tmp_path):
+    def test_multi_scene_compositor_default_preset_and_bounded_threads(self, tmp_path, monkeypatch):
         import inspect, wave, struct, math
+        # Force legacy multi-pass so per-scene thread bounding is exercised.
+        monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "0")
         comp = MultiSceneCompositor()
         sig = inspect.signature(comp.render)
         # Encode knobs resolve via encode_defaults (veryfast/CRF 21), not hardcoded faster.

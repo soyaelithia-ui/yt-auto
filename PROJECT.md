@@ -4,7 +4,7 @@
 The yt-auto media pipeline is built on a zero-browser, deterministic **FFmpeg-first** architecture (SSOT Teología PDF v2.4.0):
 1. **Production visual path (FFmpeg)**:
    - **Beats / loop**: `LoopVideoEngine` concat demuxer + `-c:v copy` (near-zero reencode) on the default horizontal path.
-   - **Director / multi-scene**: `MultiSceneCompositor` + `HybridVideoEngine` Ken Burns via FFmpeg `zoompan`; master assembly in FFmpeg. `ENABLE_NATIVE_PROCEDURAL` defaults to **off** (quarantined under `src/media/_legacy`).
+   - **Director / multi-scene**: `MultiSceneCompositor` + `HybridVideoEngine` Ken Burns via FFmpeg `zoompan`. Default `DIRECTOR_SINGLE_PASS=1` assembles all-procedural manifests from catalog loops with stream-copy trim + concat demuxer (eliminates per-scene libx264). Real `xfade` is opt-in (`DIRECTOR_XFADE=1`) because it shortens the timeline; `MultiActVideoRenderer` uses `xfade` in one `filter_complex`. `ENABLE_NATIVE_PROCEDURAL` defaults to **off** (quarantined under `src/media/_legacy`).
 2. **Loop catalog (`src/media/loop_worker.py`, `src/media/loop_engine.py`)**:
    - Background synthetic video loop creation via native FFmpeg `lavfi` (`technology=ffmpeg_lavfi`).
    - Stream looping (`-stream_loop -1`), EBU R128 sidechain ducking filtergraphs, and ASS subtitle burning.
