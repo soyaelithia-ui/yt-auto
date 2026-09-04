@@ -2,8 +2,8 @@
 lib/qa/diversity_gate.py - QA Gates for Scene Diversity and Perceived Luminance.
 
 Enforces:
-1. Minimum scene diversity for longform productions (rejecting static single-loop videos).
-2. Asset dominance ceilings (no single visual asset exceeding 25% duration in longform).
+1. Minimum scene diversity for shorts (≥4) and longform (≥6) productions.
+2. Asset dominance ceilings (no single visual asset exceeding 25% duration; all lengths).
 3. Perceived luminance and contrast floors (rejecting pitch-black and under-illuminated scenes).
 """
 from __future__ import annotations
@@ -21,11 +21,20 @@ def audit_scene_diversity(
     duration_sec: float,
     min_longform_scenes: int = 6,
     max_asset_dominance_ratio: float = 0.25,
+    *,
+    is_short: bool = False,
+    min_short_scenes: int = 4,
 ) -> Tuple[bool, str, str, Dict[str, Any]]:
     """Audit scene count and single-asset dominance.
 
-    - If duration_sec >= 300.0 (5 min), requires at least `min_longform_scenes`.
-    - No single visual asset may occupy more than `max_asset_dominance_ratio` (25%) of the runtime.
+    Policy alignment (product-safe / conservative):
+    - Shorts (`is_short=True`): require at least `min_short_scenes` (default **4**).
+      With equal-length scenes, 3 scenes ⇒ ~33% each which already exceeds the 25%
+      dominance ceiling; requiring ≥4 scenes keeps min-count and dominance coherent
+      (4 equal scenes = 25% each; dominance uses strict ``>`` so exact 25% passes).
+    - Longform (`duration_sec >= 300` when not short): require at least `min_longform_scenes`.
+    - Asset dominance (`max_asset_dominance_ratio`, default 25%) applies whenever runtime
+      is known (shorts and longform) — not longform-only.
     """
     data: Dict[str, Any] = {}
     if isinstance(manifest_or_dict, dict):
@@ -42,8 +51,16 @@ def audit_scene_diversity(
     scene_count = len(scenes)
     total_dur = float(data.get("duration_sec") or duration_sec or 0.0)
 
-    # Longform scene count invariant
-    if total_dur >= 300.0 and scene_count < min_longform_scenes:
+    # Scene count invariants (shorts vs longform)
+    if is_short:
+        if scene_count < min_short_scenes:
+            return (
+                False,
+                "ERR_QA_SHORT_DIVERSITY_INSUFFICIENT",
+                f"Short production ({total_dur:.1f}s) has {scene_count} scenes, but requires at least {min_short_scenes} distinct scenes.",
+                {"scene_count": scene_count, "min_required": min_short_scenes, "duration_sec": total_dur, "is_short": True},
+            )
+    elif total_dur >= 300.0 and scene_count < min_longform_scenes:
         return (
             False,
             "ERR_QA_SCENE_DIVERSITY_INSUFFICIENT",
@@ -51,25 +68,26 @@ def audit_scene_diversity(
             {"scene_count": scene_count, "min_required": min_longform_scenes, "duration_sec": total_dur},
         )
 
-    # Asset dominance invariant
+    # Asset dominance invariant (25% ceiling; applies whenever runtime is known)
     asset_durations: Dict[str, float] = {}
     for sc in scenes:
         proc_cfg = sc.get("procedural_config")
         template_name = proc_cfg.get("template_name") if isinstance(proc_cfg, dict) else None
         asset_id = (
             sc.get("image_path")
+            or sc.get("asset_path")
             or sc.get("source")
             or template_name
             or sc.get("category")
             or "unknown"
         )
         sc_dur = float(sc.get("duration_sec") or sc.get("duration") or (total_dur / max(1, scene_count)))
-        asset_durations[asset_id] = asset_durations.get(asset_id, 0.0) + sc_dur
+        asset_durations[str(asset_id)] = asset_durations.get(str(asset_id), 0.0) + sc_dur
 
-    if total_dur > 0 and len(scenes) > 1:
+    if total_dur > 0 and scenes:
         for asset_id, dur in asset_durations.items():
             ratio = dur / total_dur
-            if ratio > max_asset_dominance_ratio and total_dur >= 300.0:
+            if ratio > max_asset_dominance_ratio:
                 return (
                     False,
                     "ERR_QA_ASSET_DOMINANCE_EXCEEDED",
@@ -83,6 +101,19 @@ def audit_scene_diversity(
         f"Scene diversity compliant ({scene_count} scenes across {total_dur:.1f}s)",
         {"scene_count": scene_count, "duration_sec": total_dur},
     )
+
+
+
+def evaluate_scene_diversity(manifest: Dict[str, Any], is_short: bool = False) -> Dict[str, Any]:
+    """Dict API for gatekeeper / callers (is_passed, failure_code, message)."""
+    scenes = manifest.get("scenes") or []
+    total = float(manifest.get("duration_sec") or sum(float(s.get("duration_sec") or 0.0) for s in scenes) or 0.0)
+    passed, code, msg, _details = audit_scene_diversity(manifest, duration_sec=total, is_short=is_short)
+    return {
+        "is_passed": bool(passed),
+        "failure_code": None if passed else code,
+        "message": msg,
+    }
 
 
 class SceneDiversityGate(BaseGate):
@@ -106,7 +137,16 @@ class SceneDiversityGate(BaseGate):
         if not manifest_data or dur <= 0:
             return []
 
-        passed, code, msg, details = audit_scene_diversity(manifest_data, duration_sec=dur)
+        is_short = bool(
+            dur < 180.0
+            or (
+                getattr(ctx.facts, "height", 0) > getattr(ctx.facts, "width", 0)
+                and dur < 300.0
+            )
+        )
+        passed, code, msg, details = audit_scene_diversity(
+            manifest_data, duration_sec=dur, is_short=is_short
+        )
         if passed:
             return [
                 GateResult(

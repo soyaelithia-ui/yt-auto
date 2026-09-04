@@ -183,6 +183,8 @@ class TransitionConfig(BaseModel):
 
 
 class SceneConfig(BaseModel):
+    # Explicit fields only (niche_hud / camera_motion / image_path / asset_path).
+    # Do not widen with extra="allow" — unknown keys are ignored (Pydantic default).
     scene_index: int = Field(..., ge=1)
     scene_id: str
     environment_name: Optional[str] = None
@@ -197,6 +199,10 @@ class SceneConfig(BaseModel):
     hybrid_ai_config: Optional[HybridAIConfig] = None
     procedural_config: Optional[ProceduralConfig] = None
     transition_out: Optional[TransitionConfig] = Field(default_factory=TransitionConfig)
+    niche_hud: Optional[Dict[str, Any]] = None
+    camera_motion: Optional[Union[CameraMotionConfig, Dict[str, Any]]] = None
+    image_path: Optional[str] = None
+    asset_path: Optional[str] = None
 
 
 class SubtitleCue(BaseModel):

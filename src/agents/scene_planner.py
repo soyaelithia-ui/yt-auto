@@ -421,6 +421,60 @@ class ScenePlannerCompositorAgent:
                 if proc_config:
                     scene_entry["procedural_config"] = proc_config
 
+                # Niche HUD telemetry + resolved visual-bank asset (PR #2 value on cheap director)
+                lane_l = lane.lower()
+                hud_badge = sc_plan.get("hud_badge") or sc_script.get("hud_badge")
+                hud_site = sc_plan.get("hud_site") or sc_script.get("hud_site")
+                telemetry = sc_plan.get("telemetry_label") or sc_script.get("telemetry_label")
+                if "scp" in lane_l or "scp" in str(meta.get("story_type", "")).lower():
+                    niche_hud = {
+                        "lane_id": lane,
+                        "story_type": "scp",
+                        "hud_badge": hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO",
+                        "hud_site": hud_site or "SITIO-19 // SECTOR-04",
+                        "telemetry_label": telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA",
+                        "accent_color_hex": sc_plan.get("palette", {}).get("accent", "#00FF66"),
+                        "tension_level": tension,
+                    }
+                elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l:
+                    niche_hud = {
+                        "lane_id": lane,
+                        "story_type": "reddit_aita",
+                        "hud_badge": hud_badge or "r/AmItheAsshole",
+                        "hud_site": hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}",
+                        "telemetry_label": telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments",
+                        "accent_color_hex": "#FF4500",
+                        "tension_level": tension,
+                    }
+                else:
+                    niche_hud = {
+                        "lane_id": lane,
+                        "story_type": "horror",
+                        "hud_badge": hud_badge or "ABYSSAL SONAR // REC",
+                        "hud_site": hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M",
+                        "telemetry_label": telemetry or "ECO NO IDENTIFICADO",
+                        "accent_color_hex": "#00E5FF",
+                        "tension_level": tension,
+                    }
+
+                from src.media.thumbnails.asset_resolver import ThematicAssetResolver
+                arch = category if is_procedural else env_name
+                resolved_asset = ThematicAssetResolver.resolve_scene_asset_path(
+                    channel_id=lane,
+                    archetype=str(arch),
+                    scene_idx=global_scene_idx,
+                    is_vertical=(res[1] > res[0]),
+                )
+                scene_entry["niche_hud"] = niche_hud
+                scene_entry["camera_motion"] = {
+                    "type": motion_type,
+                    "pan_direction": pan_dir,
+                    "start_zoom": 1.0,
+                    "end_zoom": round(1.05 + 0.03 * tension, 3),
+                }
+                scene_entry["image_path"] = str(resolved_asset)
+                scene_entry["asset_path"] = str(resolved_asset)
+
                 scenes_data.append(scene_entry)
                 current_time += sub_dur
                 global_scene_idx += 1
