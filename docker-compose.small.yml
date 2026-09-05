@@ -1,5 +1,5 @@
-# Low-RAM overlay (meta near-zero). Live smoke RSS etapas 8–9 ≈ 84–88 MB;
-# full render pipeline still TBD — keep 2g ceiling until Quill/Live gate RSS.
+# Low-RAM overlay (meta near-zero). Live smoke ≈ 84–88 MB RSS.
+# CI budgets (rss_budgets): Δ8/9 ≤16 MB, peak ≤512 MB ≪ mem_limit 2g.
 # Uso: docker compose -f docker-compose.yml -f docker-compose.small.yml up -d
 services:
   yt-automation:
