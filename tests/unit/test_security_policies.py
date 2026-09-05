@@ -6,6 +6,18 @@ from pathlib import Path
 
 from src.config import BASE_DIR, MOKU, AELITHIA, SETTINGS
 
+# Format signatures only. Never embed live credential literals in tests or fixtures.
+_PRODUCTION_SECRET_PATTERNS = [
+    re.compile(r"AIzaSy[a-zA-Z0-9_-]{33}"),  # Google API key
+    re.compile(r"GOCSPX-[a-zA-Z0-9_-]{28}"),  # Google OAuth client secret
+    re.compile(r"(?<![0-9])\d{12}-[a-z0-9]{32}(?![a-z0-9.])"),  # Google OAuth client ID
+    re.compile(r"sk-[a-zA-Z0-9]{20,}"),  # OpenAI / generic API key
+    re.compile(r"\d{8,10}:[A-Za-z0-9_-]{35}"),  # Telegram bot token
+    re.compile(r"ghp_[a-zA-Z0-9]{36}"),  # GitHub personal access token
+]
+
+_SCAN_ROOTS = ("src", "tests", "dev", "scripts")
+
 
 def test_public_dict_does_not_leak_credential_paths():
     """Verify that public_dict() never exposes absolute or relative paths to secrets."""
@@ -25,18 +37,11 @@ def test_env_example_contains_no_real_secrets():
     assert env_example.is_file(), ".env.example must exist and be committed"
 
     content = env_example.read_text(encoding="utf-8")
-    
-    # Check for forbidden secret patterns in .env.example
-    forbidden_patterns = [
-        r"AIzaSy[a-zA-Z0-9_-]{33}",      # Google API key
-        r"GOCSPX-[a-zA-Z0-9_-]{28}",     # Google OAuth client secret
-        r"sk-[a-zA-Z0-9]{20,}",          # OpenAI / generic API key
-        r"\d{8,10}:[A-Za-z0-9_-]{35}",   # Telegram bot token
-        r"ghp_[a-zA-Z0-9]{36}",          # GitHub personal access token
-    ]
-    for pattern in forbidden_patterns:
-        match = re.search(pattern, content)
-        assert match is None, f"Real secret pattern detected in .env.example: {match.group(0) if match else ''}"
+
+    for pat in _PRODUCTION_SECRET_PATTERNS:
+        assert pat.search(content) is None, (
+            "Real secret pattern detected in .env.example"
+        )
 
     for line in content.splitlines():
         line = line.strip()
@@ -62,17 +67,22 @@ def test_gitignore_enforces_secret_rules():
     assert "secrets/" in lines
     assert "!.env.example" in lines
     assert "*.token" in lines or "*.key" in lines
+    assert "*token*.json" in lines
+    assert "*client_secret*.json" in lines
 
 
 def test_no_live_secrets_in_tracked_python_files():
-    """Verify that no live Google/OAuth secrets are hardcoded in tracked Python files."""
-    real_secret_patterns = [
-        re.compile(r'AIzaSyDLdzaSALYSHGxj2KRlYf5CFCWPlN9iu1I'),
-        re.compile(r'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'),
-        re.compile(r'186861552313-639lqvbh06ettc8vbm4etgsrauejgimp'),
-    ]
-
-    for py_file in (BASE_DIR / "src").rglob("*.py"):
-        text = py_file.read_text(encoding="utf-8")
-        for pat in real_secret_patterns:
-            assert not pat.search(text), f"Hardcoded credential pattern found in {py_file.relative_to(BASE_DIR)}"
+    """Verify tracked Python files do not embed production-format credentials."""
+    scanned = 0
+    for folder in _SCAN_ROOTS:
+        root = BASE_DIR / folder
+        if not root.is_dir():
+            continue
+        for py_file in root.rglob("*.py"):
+            text = py_file.read_text(encoding="utf-8")
+            scanned += 1
+            for pat in _PRODUCTION_SECRET_PATTERNS:
+                assert pat.search(text) is None, (
+                    f"Hardcoded credential pattern found in {py_file.relative_to(BASE_DIR)}"
+                )
+    assert scanned > 0, "Expected to scan at least one Python file"
