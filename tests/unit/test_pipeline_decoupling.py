@@ -147,8 +147,8 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
     @patch("src.youtube.uploader.upload_video")
     @patch("lib.tts.generate_audio", side_effect=_fake_generate_audio)
     @patch("src.llm.curate_script")
-    def test_subtitles_enabled_when_explicitly_flagged(self, mock_curate, mock_audio, mock_upload, mock_validate):
-        """Subtitles generation runs when enable_subtitles=True."""
+    def test_subtitles_stay_off_even_when_explicitly_flagged(self, mock_curate, mock_audio, mock_upload, mock_validate):
+        """Product path drops karaoke/captions even if enable_subtitles=True."""
         mock_curate.return_value = (
             "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
             "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad sobre el misterio."
@@ -179,8 +179,8 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             )
 
             self.assertEqual(res["status"], "RENDERED")
-            mock_ass.assert_called_once()
-            mock_srt.assert_called_once()
+            mock_ass.assert_not_called()
+            mock_srt.assert_not_called()
 
 
 class TestPrepublicationLoopPlanCadence(unittest.TestCase):

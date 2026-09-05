@@ -438,7 +438,7 @@ def test_directed_pipeline_skips_scraper_and_passes_no_extra_stories(monkeypatch
         ).fetchone()[0] == 1
 
 
-def test_non_short_pipeline_creates_srt_before_validation(monkeypatch, tmp_path):
+def test_non_short_pipeline_skips_captions_even_when_env_enables_them(monkeypatch, tmp_path):
     from src.pipeline import run_pipeline_once
 
     monkeypatch.setenv("ENABLE_SUBTITLES", "1")
@@ -511,7 +511,7 @@ def test_non_short_pipeline_creates_srt_before_validation(monkeypatch, tmp_path)
         object.__setattr__(SETTINGS, "work_root", old_work_root)
 
     assert result["status"] == JobStatus.RENDERED.value
-    assert order == ["create-ass", "create-srt", "validate-srt"]
+    assert order == []
 
 
 def test_pipeline_aborts_when_heartbeat_loses_ownership(monkeypatch, tmp_path):

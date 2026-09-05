@@ -177,6 +177,40 @@ def _record_combined_stories(
         conn.commit()
 
 
+def _catalog_shots_from_manifest(
+    manifest: dict[str, Any],
+    loop_engine: Any,
+    orientation: str,
+) -> tuple[list[str], list[float], str]:
+    """Turn a scene-planner manifest into catalog loop paths + durations (no pixel burn)."""
+    scenes = manifest.get("scenes") or []
+    paths: list[str] = []
+    durs: list[float] = []
+    last_cat = "dark_ambient"
+    for sc in scenes:
+        if not isinstance(sc, dict):
+            continue
+        try:
+            dur = float(sc.get("duration_sec") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if dur <= 0:
+            continue
+        proc = sc.get("procedural_config") if isinstance(sc.get("procedural_config"), dict) else {}
+        cat = (
+            sc.get("category")
+            or proc.get("template_name")
+            or last_cat
+        )
+        last_cat = str(cat).strip().lower().replace(" ", "_") or last_cat
+        path = loop_engine.resolve_loop_video(
+            last_cat, allow_fallback=True, orientation=orientation
+        )
+        paths.append(str(path))
+        durs.append(dur)
+    return paths, durs, last_cat
+
+
 def run_pipeline_once(
     *,
     channel: str,
@@ -349,17 +383,13 @@ def run_pipeline_once(
             "Supported engine modes: 'director', 'multiscene', 'hybrid', 'procedural', or 'loop'."
         )
 
-    # Subtitles are optional and disabled by default
-    if enable_subtitles is None:
-        env_subtitles = os.environ.get("ENABLE_SUBTITLES", "").strip().lower()
-        if env_subtitles in ("1", "true", "yes", "on"):
-            subtitles_active = True
-        elif env_subtitles in ("0", "false", "no", "off"):
-            subtitles_active = False
-        else:
-            subtitles_active = bool(getattr(lane, "enable_subtitles", False))
-    else:
-        subtitles_active = bool(enable_subtitles)
+    # Product path: no karaoke / no captions. Ignore lane and env flags.
+    if enable_subtitles:
+        logger.info(
+            "Dropping subtitles on the product path; ignoring enable_subtitles=%s",
+            enable_subtitles,
+        )
+    subtitles_active = False
 
     from src.core.guard import memory_checkpoint
     from src.observability import set_run_context
@@ -898,66 +928,134 @@ def run_pipeline_once(
                 from src.media.loop_engine import LoopVideoEngine
                 from src.core.scenic_detector import detect_adaptive_theme
                 loop_engine = LoopVideoEngine()
-                adaptive_theme = detect_adaptive_theme(
-                    topic=title or story.get("title", ""),
-                    script=script or story.get("raw_content", ""),
-                    niche=getattr(lane, "story_type", "") or channel_name,
-                )
+                planned = False
+                try:
+                    from src.agents.script_curator import CinematicScriptCuratorAgent
+                    from src.agents.art_director import ArtDirectorMoodAgent
+                    from src.agents.scene_planner import ScenePlannerCompositorAgent
 
-                # Resolve category: loop_category arg -> adaptive theme -> lane loop_category -> lane story_type -> channel default
-                target_category = (
-                    loop_category
-                    or adaptive_theme
-                    or getattr(lane, "loop_category", None)
-                    or getattr(lane, "story_type", None)
-                    or ("tactical_chamber" if channel_name == "moku" else "cozy_hearth")
-                )
-                total_audio_sec = float(audio["duration_sec"])
-                resolved_loop_path = loop_engine.resolve_loop_video(
-                    target_category,
-                    allow_fallback=True,
-                    orientation=lane.orientation,
-                )
+                    curator_agent = CinematicScriptCuratorAgent()
+                    art_agent = ArtDirectorMoodAgent()
+                    planner_agent = ScenePlannerCompositorAgent()
+                    target_fmt = "short" if lane.orientation == "vertical" else "longform"
+                    script_payload = curator_agent.curate(
+                        raw_text=clean_script,
+                        title=title,
+                        channel_lane=lane.id,
+                        target_format=target_fmt,
+                    )
+                    (work_dir / "cinematic_script.json").write_text(
+                        json.dumps(script_payload, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    plan_category = (
+                        loop_category
+                        or getattr(lane, "loop_category", None)
+                        or getattr(lane, "story_type", None)
+                        or ("cosmic_horror" if channel_name == "moku" else "dark_ambient")
+                    )
+                    visual_plan_payload = art_agent.plan_visuals(
+                        cinematic_script=script_payload,
+                        theme_lane=plan_category,
+                    )
+                    visual_plan_path.write_text(
+                        json.dumps(visual_plan_payload, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    manifest_payload = planner_agent.plan_manifest(
+                        script=script_payload,
+                        visual_plan=visual_plan_payload,
+                        story_id=story_id,
+                        narration_path=str(audio_path),
+                        music_path="",
+                        lane_id=lane.id,
+                        channel_name=channel_name,
+                        resolution=list(lane.expected_resolution),
+                        fps=lane.fps,
+                        actual_audio_duration=float(audio.get("duration_sec", 0.0) or 0.0),
+                    )
+                    scene_manifest_path.write_text(
+                        json.dumps(manifest_payload, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    scene_bg_list, shot_durations, target_category = _catalog_shots_from_manifest(
+                        manifest_payload, loop_engine, lane.orientation
+                    )
+                    if scene_bg_list and shot_durations:
+                        resolved_loop_path = scene_bg_list[0]
+                        planned = True
+                        logger.info(
+                            "Scene director planned %s shots; assembling with loop stream-copy",
+                            len(scene_bg_list),
+                        )
+                except Exception as plan_err:
+                    logger.warning(
+                        "Scene director planning failed; falling back to theme detect: %s",
+                        plan_err,
+                        exc_info=True,
+                    )
 
-                # Dynamic multi-camera shot progression for loop videos
-                from src.media.pacing import compute_dynamic_shot_pacing
-                shot_durations = compute_dynamic_shot_pacing(total_audio_sec, orientation=lane.orientation)
-                if not shot_durations:
-                    shot_durations = [total_audio_sec]
-                shot_count = len(shot_durations)
+                if not planned:
+                    adaptive_theme = detect_adaptive_theme(
+                        topic=title or story.get("title", ""),
+                        script=script or story.get("raw_content", ""),
+                        niche=getattr(lane, "story_type", "") or channel_name,
+                    )
 
-                scene_bg_list = []
-                scenes_plan = []
-                for s_idx in range(shot_count):
-                    shot_path = loop_engine.resolve_loop_video(
+                    # Resolve category: loop_category arg -> adaptive theme -> lane loop_category -> lane story_type -> channel default
+                    target_category = (
+                        loop_category
+                        or adaptive_theme
+                        or getattr(lane, "loop_category", None)
+                        or getattr(lane, "story_type", None)
+                        or ("tactical_chamber" if channel_name == "moku" else "cozy_hearth")
+                    )
+                    total_audio_sec = float(audio["duration_sec"])
+                    resolved_loop_path = loop_engine.resolve_loop_video(
                         target_category,
                         allow_fallback=True,
                         orientation=lane.orientation,
-                        seed=s_idx * 101,
                     )
-                    scene_bg_list.append(str(shot_path))
-                    scenes_plan.append({
-                        "duration": shot_durations[s_idx],
-                        "source": str(shot_path),
+
+                    # Dynamic multi-camera shot progression for loop videos
+                    from src.media.pacing import compute_dynamic_shot_pacing
+                    shot_durations = compute_dynamic_shot_pacing(total_audio_sec, orientation=lane.orientation)
+                    if not shot_durations:
+                        shot_durations = [total_audio_sec]
+                    shot_count = len(shot_durations)
+
+                    scene_bg_list = []
+                    scenes_plan = []
+                    for s_idx in range(shot_count):
+                        shot_path = loop_engine.resolve_loop_video(
+                            target_category,
+                            allow_fallback=True,
+                            orientation=lane.orientation,
+                            seed=s_idx * 101,
+                        )
+                        scene_bg_list.append(str(shot_path))
+                        scenes_plan.append({
+                            "duration": shot_durations[s_idx],
+                            "source": str(shot_path),
+                            "category": str(target_category),
+                            "shot_index": s_idx,
+                        })
+
+                    scene_prompts = []
+
+                    # Write multi-scene loop visual plan
+                    visual_plan_payload = {
+                        "video_engine": "loop",
+                        "loop": True,
+                        "mode": "loop",
                         "category": str(target_category),
-                        "shot_index": s_idx,
-                    })
-
-                scene_prompts = []
-
-                # Write multi-scene loop visual plan
-                visual_plan_payload = {
-                    "video_engine": "loop",
-                    "loop": True,
-                    "mode": "loop",
-                    "category": str(target_category),
-                    "scenes": scenes_plan,
-                    "covered_seconds": total_audio_sec,
-                    "black_fallbacks": 0,
-                    "scene_prompts": [],
-                    "shot_durations": shot_durations,
-                }
-                visual_plan_path.write_text(json.dumps(visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+                        "scenes": scenes_plan,
+                        "covered_seconds": total_audio_sec,
+                        "black_fallbacks": 0,
+                        "scene_prompts": [],
+                        "shot_durations": shot_durations,
+                    }
+                    visual_plan_path.write_text(json.dumps(visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
                 bg_audio_cfg = getattr(lane, "background_audio", None)
                 bg_enabled = getattr(bg_audio_cfg, "enabled", True) if bg_audio_cfg else True
@@ -981,7 +1079,7 @@ def run_pipeline_once(
             with profiler.phase(CanonicalStage.LOOP_SCENE):
                 from src.scene_manifest import build_scene_manifest
                 manifest_slot = story.get("object_class") or channel_name
-                mux_subtitles = bool(subtitles_active and ass_path.is_file())
+                mux_subtitles = False
                 stream_copy_mode = True
 
                 manifest_path = build_scene_manifest(

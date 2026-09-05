@@ -331,8 +331,11 @@ class TestLoopHotPathNoBurnGuardrails:
             "REG-13 VIOLATION: src/pipeline.py reintroduced caption burn"
         )
         assert "stream_copy_mode = True" in text
+        assert "subtitles_active = False" in text
         assert "FORCE_MULTISCENE" in text
         assert "is_multiscene_mode = False" in text
+        assert "ScenePlannerCompositorAgent" in text
+        assert "CinematicScriptCuratorAgent" in text
 
     def test_reg13_stream_copy_cmd_muxes_not_libass(self) -> None:
         text = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
