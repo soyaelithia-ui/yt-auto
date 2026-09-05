@@ -461,24 +461,37 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             return "drama_aita"
         return "atmospheric_landscape"
 
+    _FALLBACK_PALETTES: dict[str, tuple[str, str]] = {
+        "drama_aita": ("0x2d3436", "0x636e72"),
+        "cosmic_horror": ("0x0c101c", "0x2c1f3d"),
+        "scp": ("0x1a252f", "0x34495e"),
+        "classified_terminal": ("0x1a252f", "0x34495e"),
+        "dark_forest": ("0x0f2417", "0x1e452e"),
+        "dark_ambient": ("0x181a1b", "0x2f3542"),
+        "monsters": ("0x231515", "0x452222"),
+        "space_abyss": ("0x0a0e17", "0x1d273a"),
+        "atmospheric_landscape": ("0x181a1b", "0x34495e"),
+        "cosmic_singularity": ("0x0c101c", "0x2c1f3d"),
+    }
+
     def _generate_fallback_loop(
         self, category: str, width: int, height: int, fps: int, duration_sec: float, out_path: Path
     ) -> Path:
-        """Generates deterministic mathematical fallback loop video."""
-        from PIL import Image, ImageDraw
-        import numpy as np
-
-        total_frames = int(fps * duration_sec)
+        """Near-zero-RAM fallback: FFmpeg lavfi gradients (no numpy/PIL frame pump)."""
         out_path.parent.mkdir(parents=True, exist_ok=True)
-
+        norm = (category or "").strip().lower().replace("-", "_").replace(" ", "_")
+        c0, c1 = self._FALLBACK_PALETTES.get(norm, ("0x181a1b", "0x34495e"))
+        # Keep even dims for yuv420p
+        w = width - (width % 2)
+        h = height - (height % 2)
+        lavfi = (
+            f"gradients=s={w}x{h}:d={duration_sec}:r={fps}"
+            f":c0={c0}:c1={c1}:x0=0:y0=0:x1={w}:y1={h}:type=radial:speed=0.02"
+        )
         cmd = [
             "ffmpeg", "-y",
             "-loglevel", "error",
-            "-f", "rawvideo",
-            "-pix_fmt", "rgb24",
-            "-s", f"{width}x{height}",
-            "-r", str(fps),
-            "-i", "-",
+            "-f", "lavfi", "-i", lavfi,
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             "-colorspace", "bt709",
@@ -489,30 +502,11 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             "-movflags", "+faststart",
             str(out_path),
         ]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         register_process(proc)
-
         stderr_bytes = b""
         retcode = 0
         try:
-            for i in range(total_frames):
-                t_norm = i / float(total_frames)
-                # Create atmospheric procedural frame
-                arr = np.zeros((height, width, 3), dtype=np.uint8)
-                for y in range(0, height, 4):
-                    fac = y / height
-                    val = int(5 + fac * 25 + 10 * math.sin(2 * math.pi * t_norm + fac * 3))
-                    arr[y:y+4, :, 0] = max(0, min(255, val // 2))
-                    arr[y:y+4, :, 1] = max(0, min(255, val // 3))
-                    arr[y:y+4, :, 2] = max(0, min(255, val))
-
-                if proc.stdin:
-                    proc.stdin.write(arr.tobytes())
-
-            if proc.stdin:
-                with contextlib.suppress(Exception):
-                    proc.stdin.flush()
-                    proc.stdin.close()
             if proc.stderr:
                 with contextlib.suppress(Exception):
                     stderr_bytes = proc.stderr.read()
@@ -520,12 +514,16 @@ class ProceduralVideoEngine(BaseVideoCompositor):
         finally:
             cleanup_subprocesses(proc)
 
-        if retcode != 0:
+        if retcode != 0 or not out_path.is_file() or out_path.stat().st_size <= 0:
             err_msg = stderr_bytes.decode("utf-8", errors="replace")
             raise FFmpegExecutionError(
-                f"FFmpeg fallback loop generation failed (returncode {retcode}): {err_msg}",
+                f"FFmpeg lavfi fallback loop failed (returncode {retcode}): {err_msg}",
                 returncode=retcode,
                 stderr=err_msg,
                 command=cmd,
             )
+        logger.info(
+            "Generated lavfi fallback loop %s (%dx%d, category=%s, %d bytes)",
+            out_path.name, w, h, norm or "default", out_path.stat().st_size,
+        )
         return out_path
