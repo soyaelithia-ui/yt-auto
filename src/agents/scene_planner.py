@@ -107,7 +107,13 @@ class ScenePlannerCompositorAgent:
 
         _allowed = frozenset({"top_bar", "card", "bottom_bar"})
         cand = str(hud_layout_candidate or "").strip().lower()
-        if cand in _allowed:
+        if (
+            cand in ("none", "off", "disabled", "false")
+            or meta.get("hud_enabled") is False
+            or visual_plan.get("hud_enabled") is False
+        ):
+            resolved_layout = "none"
+        elif cand in _allowed:
             resolved_layout = cand
         elif cand in ("scp", "classified", "terminal") or "scp" in lane_l or "scp" in story_l:
             resolved_layout = "top_bar"
@@ -628,19 +634,27 @@ class ScenePlannerCompositorAgent:
                     copy_badge = hud_badge or "ABYSSAL SONAR // REC"
                     copy_site = hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M"
                     copy_tel = telemetry or "ECO NO IDENTIFICADO"
-                niche_hud = {
-                    "lane_id": lane,
-                    "story_type": story_type,
-                    "hud_layout": resolved_layout,
-                    "hud_badge": copy_badge,
-                    "hud_site": copy_site,
-                    "telemetry_label": copy_tel,
-                    "accent_color_hex": resolve_hud_accent_color(
-                        scene_accent, lane_id=lane, story_type=story_type
-                    ),
-                    "primary_color_hex": resolved_primary,
-                    "tension_level": tension,
-                }
+                if (
+                    resolved_layout in ("none", "off", "disabled", "false")
+                    or meta.get("hud_enabled") is False
+                    or sc_plan.get("hud_enabled") is False
+                    or sc_script.get("hud_enabled") is False
+                ):
+                    niche_hud = None
+                else:
+                    niche_hud = {
+                        "lane_id": lane,
+                        "story_type": story_type,
+                        "hud_layout": resolved_layout,
+                        "hud_badge": copy_badge,
+                        "hud_site": copy_site,
+                        "telemetry_label": copy_tel,
+                        "accent_color_hex": resolve_hud_accent_color(
+                            scene_accent, lane_id=lane, story_type=story_type
+                        ),
+                        "primary_color_hex": resolved_primary,
+                        "tension_level": tension,
+                    }
 
                 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
                 arch = category if is_procedural else env_name

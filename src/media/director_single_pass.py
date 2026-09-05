@@ -106,9 +106,9 @@ def build_hud_concat_video_filters(
         lab = f"[v{i}]"
         snippet = hud_snippets[i] if i < len(hud_snippets) and hud_snippets[i] else "null"
         if snippet != "null":
-            parts.append(f"[{i}:v]{snippet},format=yuv420p{lab}")
+            parts.append(f"[{i}:v]setsar=1,{snippet},format=yuv420p{lab}")
         else:
-            parts.append(f"[{i}:v]null{lab}")
+            parts.append(f"[{i}:v]setsar=1,format=yuv420p{lab}")
         labels.append(lab)
     if n == 1:
         parts.append(f"{labels[0]}null[vout]")
