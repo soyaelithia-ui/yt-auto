@@ -12,7 +12,22 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 OPENSPEC = REPO_ROOT / "openspec"
-CHANGE_SPECS = OPENSPEC / "changes" / "ffmpeg-first-ssot-policy" / "specs"
+
+
+def _resolve_ffmpeg_first_change_specs() -> Path:
+    active = OPENSPEC / "changes" / "ffmpeg-first-ssot-policy" / "specs"
+    if active.is_dir():
+        return active
+    archive_root = OPENSPEC / "changes" / "archive"
+    matches = sorted(archive_root.glob("*-ffmpeg-first-ssot-policy"))
+    for match in reversed(matches):
+        specs = match / "specs"
+        if specs.is_dir():
+            return specs
+    raise FileNotFoundError("ffmpeg-first-ssot-policy specs not found in active changes or archive")
+
+
+CHANGE_SPECS = _resolve_ffmpeg_first_change_specs()
 MAIN_SPECS = {
     "procedural-scene-compositor": OPENSPEC / "specs" / "procedural-scene-compositor" / "spec.md",
     "media-processing-performance-policy": OPENSPEC
