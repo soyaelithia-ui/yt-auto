@@ -55,8 +55,8 @@ AUTO_APPROVE=1 ENABLE_AUTO_PUBLISH_SWEEP=1 python3 main.py daemon --interval 60
 
 Camino feliz **sin sudo en el host**. El contenedor es autocontenido (FFmpeg, Chromium, `agy` en `/usr/local/bin/agy`). No monta el CLI ni `~/.gemini` del usuario.
 
-- **Límites de Recursos**: `mem_limit: 6g`, `cpus: 4.0`, `pids_limit: 512`, `shm_size: 1g`. Instancia pequeña: `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` (`2g` / `2` CPU).
-- **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` de 2 GB, `cap_drop: ALL`, usuario no-root `appuser:10001`, named volumes (no bind del workdir). Secretos solo en `./secrets:/run/secrets:ro`.
+- **Límites de Recursos (low-RAM primero)**: el techo del compose base es `mem_limit: 6g` / `cpus: 4.0` / `shm_size: 1g` (path pesado / reencode). **Camino recomendado de despliegue**: overlay small — `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` → `2g` / `2` CPU / `shm 256m` / tmpfs `/tmp` 512m. Smoke live (etapas 8–9) ≈ 84–88 MB RSS; no bajar el techo del base hasta gate RSS de Quill + full render.
+- **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` (2 GB en base; 512m con small), `cap_drop: ALL`, usuario no-root `appuser:10001`, named volumes (no bind del workdir). Secretos solo en `./secrets:/run/secrets:ro`.
 - **Servidor Telegram Local**: Puerto `127.0.0.1:8081`, hasta 2 GB, zero-copy `file:///`.
 - **Antigravity**: AppData en el volumen `yt_agy_home` (`/home/appuser/.gemini`). El token OAuth se copia desde `secrets/antigravity-oauth-token` (login `agy` en una máquina con navegador; el contenedor no abre OAuth interactivo).
 
@@ -64,13 +64,16 @@ Camino feliz **sin sudo en el host**. El contenedor es autocontenido (FFmpeg, Ch
 # 1. Stage del ELF agy (gitignored; build/agy no se commitea)
 ./scripts/stage_agy.sh
 
-# 2. Construir e iniciar (hace falta Docker; no hace falta apt/sudo)
-docker compose build
-docker compose up -d
+# 2. Construir e iniciar — preferir overlay low-RAM (small)
+docker compose -f docker-compose.yml -f docker-compose.small.yml build
+docker compose -f docker-compose.yml -f docker-compose.small.yml up -d
+
+# Path pesado (6g) solo si hace falta reencode / carga alta:
+# docker compose build && docker compose up -d
 
 # Ver logs / estado
-docker compose logs --follow yt-automation
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.small.yml logs --follow yt-automation
+docker compose -f docker-compose.yml -f docker-compose.small.yml ps
 ```
 
 Si el build falla con `build/agy: not found`, falta el paso 1. Si el arranque falla por directorios no escribibles, recrear volúmenes: `docker compose down -v` (borra estado de data/work).
@@ -85,7 +88,7 @@ Solo para VPS **con root**. El despliegue Docker de la sección 2 no usa systemd
 
 Los unit files fijan ese path en `WorkingDirectory=` y `ExecStart=` (systemd exige rutas absolutas ahí; no expande `Environment=` en esos campos). También exportan `Environment=YT_AUTO_ROOT=/srv/projects/yt-auto` (default documentado) y derivan rutas de DB con `${YT_AUTO_ROOT}` donde sí hay sustitución.
 
-- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`main.py daemon --interval 60`).
+- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`main.py daemon --interval 60`). Default `MemoryMax=6G`; low-RAM: drop-in `deploy/systemd/yt-lanes-daemon.service.d/low-ram.conf` → `MemoryMax=2G`.
 - `yt-review-bot.service`: Bot interactivo Telegram (`deploy/tmux_review_bot.py`).
 
 ```bash
