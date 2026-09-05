@@ -216,3 +216,41 @@ class TestLoopCatalogRepository(unittest.TestCase):
         self.assertEqual(Path(best.file_path), dest)
         self.assertNotIn("/srv/projects", best.file_path)
         self.assertNotIn("/home/moku/projects/yt-auto", best.file_path)
+
+    def test_count_loops_sql_without_list(self):
+        """count_loops uses cheap SQL COUNT and matches list length without loading rows."""
+        self.assertEqual(self.repo.count_loops(category="monsters", orientation="vertical"), 0)
+        f1 = self._create_dummy_video("loops/c1.mp4")
+        f2 = self._create_dummy_video("loops/c2.mp4")
+        for i, fp in enumerate((f1, f2), start=1):
+            self.repo.register_loop(LoopRecord(
+                loop_id=f"cnt_{i}",
+                category="monsters",
+                technology="canvas2d",
+                orientation="vertical",
+                width=1080,
+                height=1920,
+                duration_sec=6.0,
+                fps=30,
+                file_path=fp,
+                file_size_bytes=30_000,
+                sha256=compute_file_sha256(fp),
+            ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="cnt_h",
+            category="monsters",
+            technology="canvas2d",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=self._create_dummy_video("loops/c_h.mp4"),
+            file_size_bytes=30_000,
+            sha256="x",
+        ))
+        self.assertEqual(self.repo.count_loops(category="monsters", orientation="vertical"), 2)
+        self.assertEqual(self.repo.count_loops(category="monsters", orientation="horizontal"), 1)
+        listed = self.repo.list_loops(category="monsters", orientation="vertical", limit=1000)
+        self.assertEqual(self.repo.count_loops(category="monsters", orientation="vertical"), len(listed))
+

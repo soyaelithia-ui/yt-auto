@@ -12,7 +12,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.media.loop_worker import LoopSynthesizerWorker
@@ -119,3 +119,13 @@ class TestLoopSynthesizerWorker(unittest.TestCase):
         self.assertEqual(res["generated_count"], 3)
         self.assertEqual(self.worker.count_loops_for_category("cosmic_horror", "vertical"), 2)
         self.assertEqual(self.worker.count_loops_for_category("monsters", "vertical"), 2)
+
+    def test_count_loops_uses_catalog_count_api(self):
+        """Worker count must use catalog.count_loops, not list_loops(... limit=1000)."""
+        with patch.object(self.worker.catalog, "count_loops", return_value=7) as mock_count, \
+             patch.object(self.worker.catalog, "list_loops") as mock_list:
+            n = self.worker.count_loops_for_category("cosmic_horror", "vertical")
+        self.assertEqual(n, 7)
+        mock_count.assert_called_once_with(category="cosmic_horror", orientation="vertical")
+        mock_list.assert_not_called()
+

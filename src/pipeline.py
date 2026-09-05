@@ -893,6 +893,8 @@ def run_pipeline_once(
                     music_track_path = ""
 
             with profiler.phase(CanonicalStage.LOOP_SCENE):
+                from src.core.guard import memory_checkpoint
+                memory_checkpoint("8_loop_scene")
                 manifest_payload = planner_agent.plan_manifest(
                     script=script_payload,
                     visual_plan=visual_plan_payload,
@@ -911,6 +913,8 @@ def run_pipeline_once(
                 )
 
             with profiler.phase(CanonicalStage.VIDEO_RENDERING):
+                from src.core.guard import memory_checkpoint
+                memory_checkpoint("9_video_rendering")
                 from src.media.encode_defaults import default_render_crf, default_render_preset
                 compositor_metrics = multi_compositor.render(
                     manifest_path=scene_manifest_path,
@@ -1100,6 +1104,8 @@ def run_pipeline_once(
                     music_track_path = ""
 
             with profiler.phase(CanonicalStage.LOOP_SCENE):
+                from src.core.guard import memory_checkpoint
+                memory_checkpoint("8_loop_scene")
                 from src.scene_manifest import build_scene_manifest
                 manifest_slot = story.get("object_class") or channel_name
                 mux_subtitles = False
@@ -1124,6 +1130,8 @@ def run_pipeline_once(
                 )
 
             with profiler.phase(CanonicalStage.VIDEO_RENDERING):
+                from src.core.guard import memory_checkpoint
+                memory_checkpoint("9_video_rendering")
                 compositor_metrics = loop_engine.render(
                     manifest_path,
                     video_path,

@@ -332,6 +332,26 @@ class LoopCatalogRepository:
             conn.execute(sql, (now_iso, loop_id))
             conn.commit()
 
+    def count_loops(
+        self,
+        category: Optional[str] = None,
+        orientation: Optional[str] = None,
+    ) -> int:
+        """Cheap SQL COUNT of catalog rows. Does not load LoopRecord rows into memory."""
+        query = "SELECT COUNT(*) FROM video_loops WHERE 1=1"
+        params: List[Any] = []
+        if category:
+            query += " AND category = ?"
+            params.append(category.strip().lower().replace("-", "_").replace(" ", "_"))
+        if orientation:
+            orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
+            query += " AND orientation = ?"
+            params.append(orient_clean)
+
+        with self._get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            return int(row[0]) if row else 0
+
     def list_loops(
         self,
         category: Optional[str] = None,
