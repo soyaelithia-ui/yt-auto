@@ -26,6 +26,17 @@ from src.core.profiling import (
 from src.cli.handlers.profile import handle_profile
 
 
+def _consume_wall_time(seconds: float = 0.01) -> None:
+    """Busy-wait so PhaseTimer can record duration_sec > 0.
+
+    tests/conftest.py autouse-patches time.sleep to a no-op. On fast CI the
+    remaining decorator/context overhead can round to 0.0000s (4 decimals).
+    """
+    deadline = time.perf_counter() + seconds
+    while time.perf_counter() < deadline:
+        pass
+
+
 class TestCanonicalStage:
     def test_canonical_stage_count_and_members(self):
         # Must have exactly 13 canonical production stages
@@ -176,7 +187,7 @@ class TestPhaseTimer:
 
         @profiler.phase(CanonicalStage.TTS_SYNTHESIS)
         def mock_synthesize(text: str) -> str:
-            time.sleep(0.01)
+            _consume_wall_time(0.01)
             return f"audio:{text}"
 
         res = mock_synthesize("Hola mundo")
@@ -207,10 +218,10 @@ class TestPipelineProfiler:
         profiler = PipelineProfiler(run_id="run-1", story_id="story-1", channel="moku")
 
         with profiler.phase(CanonicalStage.INGEST_TRANSLATE):
-            time.sleep(0.01)
+            _consume_wall_time(0.01)
 
         with profiler.phase(CanonicalStage.TTS_SYNTHESIS):
-            time.sleep(0.01)
+            _consume_wall_time(0.01)
 
         summary = profiler.get_summary()
         assert isinstance(summary, ProfilingSummary)

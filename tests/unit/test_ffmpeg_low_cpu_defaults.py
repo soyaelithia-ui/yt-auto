@@ -177,6 +177,9 @@ def test_apply_code_subtitles_to_video_cmd_wires_encode_defaults(tmp_path, monke
     monkeypatch.setenv("RENDER_PRESET", "ultrafast")
     monkeypatch.setenv("RENDER_CRF", "26")
     monkeypatch.setenv("FFMPEG_THREADS", "3")
+    # SSOT caps threads at min(env, min(cpu_count, 4)). Pin cpu_count so env 3 is
+    # not collapsed to 2 on 2-vCPU CI runners (the default GitHub-hosted size).
+    monkeypatch.setattr("src.media.encode_defaults.os.cpu_count", lambda: 4)
 
     from src.media.subtitles import apply_code_subtitles_to_video, SubtitleCue, SubtitleWord
 
