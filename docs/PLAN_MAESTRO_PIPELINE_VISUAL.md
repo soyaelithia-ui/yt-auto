@@ -108,7 +108,7 @@ graph TD
   > `- Se elimina el campo template_name en ProceduralConfig. - Se agregan campos para configuración de capas SVG (svg_overlay_preset, svg_custom_params).`
 * **Tipo de Fallo:** `Ruptura de Interfaz` / `Inconsistencia de Esquema`
 * **Diagnóstico Técnico:**  
-  Suprimir `template_name` sin introducir un discriminador fuertemente tipado (`archetype_id`) rompe la deserialización en [`src/scene_manifest.py`](file:///home/moku/projects/yt-auto/src/scene_manifest.py) y en [`schemas/scene_manifest.schema.json`](file:///home/moku/projects/yt-auto/schemas/scene_manifest.schema.json), dejando al orquestador [`src/agents/scene_planner.py`](file:///home/moku/projects/yt-auto/src/agents/scene_planner.py) sin mecanismo para instanciar el shader requerido.
+  Suprimir `template_name` sin introducir un discriminador fuertemente tipado (`archetype_id`) rompe la deserialización en [`src/scene_manifest.py`](../src/scene_manifest.py) y en [`schemas/scene_manifest.schema.json`](../schemas/scene_manifest.schema.json), dejando al orquestador [`src/agents/scene_planner.py`](../src/agents/scene_planner.py) sin mecanismo para instanciar el shader requerido.
 * **Por qué no debe repetirse:**  
   Provoca fallos de validación en tiempo de ejecución (`ValidationError`). Debe mantenerse un `archetype_id` formal con validación estricta por enumeración en Pydantic.
 
@@ -119,7 +119,7 @@ graph TD
   > El análisis de impacto original limitaba la sustitución a `web_renderer.py` y `web_templates/*.html`.
 * **Tipo de Fallo:** `Falta de Trazabilidad de Dependencias`
 * **Diagnóstico Técnico:**  
-  Omitió los módulos [`src/media/realtime_video_engine.py`](file:///home/moku/projects/yt-auto/src/media/realtime_video_engine.py) (que contiene más de 1,200 líneas acopladas a Playwright y Three.js) y [`src/media/loop_worker.py`](file:///home/moku/projects/yt-auto/src/media/loop_worker.py) (daemon de síntesis batch de bucles).
+  Omitió los módulos [`src/media/realtime_video_engine.py`](../src/media/realtime_video_engine.py) (que contiene más de 1,200 líneas acopladas a Playwright y Three.js) y [`src/media/loop_worker.py`](../src/media/loop_worker.py) (daemon de síntesis batch de bucles).
 * **Por qué no debe repetirse:**  
   La eliminación no coordinada de `web_renderer.py` generaría errores fatales (`ImportError`) en procesos de fondo. Cualquier refactorización debe incluir la sustitución o eliminación integral de todos los consumidores.
 
@@ -330,7 +330,7 @@ graph LR
 
 #### 1. Módulo de Renderizado Web (`web_renderer.py` / `realtime_video_engine.py` $\longrightarrow$ `native_procedural.py`)
 * **1. Impacto de ruptura:**  
-  Al retirar `web_renderer.py` y `realtime_video_engine.py`, se rompe la invocación en [`src/media/loop_worker.py`](file:///home/moku/projects/yt-auto/src/media/loop_worker.py) y en la rama condicional de [`src/pipeline.py`](file:///home/moku/projects/yt-auto/src/pipeline.py#L754).
+  Al retirar `web_renderer.py` y `realtime_video_engine.py`, se rompe la invocación en [`src/media/loop_worker.py`](../src/media/loop_worker.py) y en la rama condicional de [`src/pipeline.py`](../src/pipeline.py#L754).
   * *Acción de contención:* Refactorizar `loop_worker.py` para invocar el catálogo estático o `native_procedural.py`; podar la bifurcación en `pipeline.py`.
 * **2. Análisis de regresión:**  
   Al sustituir Three.js por sombreadores nativos WGSL (`wgpu-py`), las 12 plantillas HTML heredadas dejan de ser leídas. Se requiere que los arquetipos visuales (`cosmic_singularity`, `synaptic_network`, `dark_forest`) estén expresados en WGSL con parámetros uniformes (`time`, `seed`, `tension`).
