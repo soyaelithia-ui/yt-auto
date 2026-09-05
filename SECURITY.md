@@ -21,7 +21,10 @@ To prevent credential leaks and unauthorized access, the following rules are str
    - Containerized and VPS deployments MUST mount secrets in `/run/secrets/` as read-only volumes.
    - The `.env` file and `secrets/` directory MUST remain strictly listed in `.gitignore`.
 3. **Safe Example Templates**:
-   - Only `.env.example` may be tracked in git, and it MUST contain empty placeholders (`KEY=`) with zero real production values.
+   - Only `.env.example` may be tracked in git.
+   - Secret-bearing keys (names containing `SECRET`, `KEY`, `TOKEN`, or `PASSWORD`, except `*_PATH` / `*_FILE` / `*_DIR`) MUST be empty (`KEY=`).
+   - Non-secret defaults are allowed and intentional: feature flags, timeouts, encode presets, and generic relative path/dir placeholders (e.g. under `secrets/`).
+   - Never commit real production credentials or live secret values. Enforced by `tests/unit/test_security_policies.py::test_env_example_contains_no_real_secrets`.
 4. **Data Sanitization & Telemetry Hygiene**:
    - Dict representations intended for public logging, Telegram messages, or CLI output (such as `ChannelSettings.public_dict()`) MUST NOT expose filesystem paths to secret files or raw credential payloads. Only boolean availability flags are permitted.
    - Loggers and health reporters MUST never log raw cookie values, session tokens, or OAuth authorization codes.

@@ -106,7 +106,7 @@ def test_public_dict_does_not_leak_credential_paths():
 
 
 def test_env_example_contains_no_real_secrets():
-    """Ensure .env.example contains only template placeholders and no live credentials."""
+    """Ensure .env.example has empty secret keys; non-secret defaults/path placeholders OK."""
     env_example = BASE_DIR / ".env.example"
     assert env_example.is_file(), ".env.example must exist and be committed"
 
@@ -125,7 +125,9 @@ def test_env_example_contains_no_real_secrets():
             key, val = line.split("=", 1)
             key = key.strip()
             val = val.strip().strip('"').strip("'")
-            if ("SECRET" in key or "KEY" in key or "TOKEN" in key or "PASSWORD" in key) and not (key.endswith("_PATH") or key.endswith("_FILE")):
+            secretish = ("SECRET" in key or "KEY" in key or "TOKEN" in key or "PASSWORD" in key)
+            path_placeholder = key.endswith(("_PATH", "_FILE", "_DIR"))
+            if secretish and not path_placeholder:
                 assert val == "", f"Secret variable {key} in .env.example must be empty, found: {val}"
 
 
