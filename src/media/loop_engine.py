@@ -27,6 +27,7 @@ from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository
 from src.log import get_logger
+from src.media.subtitles_ass import escape_ffmpeg_filter_path, has_active_subtitles
 
 from lib.ffmpeg import (
     FFmpegError,
@@ -400,24 +401,23 @@ class LoopVideoEngine(BaseVideoCompositor):
         w, h = target_resolution
         base_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1,format=yuv420p"
 
-        if include_subtitles and subtitle_path:
+        if include_subtitles and subtitle_path and has_active_subtitles(subtitle_path):
             sub_p = Path(subtitle_path)
-            if sub_p.exists() and sub_p.stat().st_size > 0:
-                # Escape path characters for FFmpeg filter argument
-                sub_escaped = str(sub_p).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-                fonts_clause = ""
-                resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
-                if resolved_fonts.exists() and resolved_fonts.is_dir():
-                    fonts_esc = str(resolved_fonts).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-                    fonts_clause = f":fontsdir='{fonts_esc}'"
+            # Escape path characters for FFmpeg filter argument
+            sub_escaped = escape_ffmpeg_filter_path(sub_p)
+            fonts_clause = ""
+            resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
+            if resolved_fonts.exists() and resolved_fonts.is_dir():
+                fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
+                fonts_clause = f":fontsdir={fonts_esc}"
 
-                is_ass = sub_p.suffix.lower() == ".ass"
-                if is_ass:
-                    sub_filter = f"ass=filename='{sub_escaped}'{fonts_clause}"
-                else:
-                    sub_filter = f"subtitles='{sub_escaped}'{fonts_clause}"
+            is_ass = sub_p.suffix.lower() == ".ass"
+            if is_ass:
+                sub_filter = f"ass=filename={sub_escaped}{fonts_clause}"
+            else:
+                sub_filter = f"subtitles=filename={sub_escaped}{fonts_clause}"
 
-                return f"[0:v]{base_filter}[vbase];[vbase]{sub_filter}[vsubbed];[vsubbed]format=yuv420p[vout]"
+            return f"[0:v]{base_filter}[vbase];[vbase]{sub_filter}[vsubbed];[vsubbed]format=yuv420p[vout]"
 
         return f"[0:v]{base_filter}[vout]"
 
@@ -592,19 +592,19 @@ class LoopVideoEngine(BaseVideoCompositor):
                 has_music = True
 
         # Subtitle overlay on [vbase]
-        if include_subtitles and subtitle_path and Path(subtitle_path).is_file():
-            sub_escaped = str(Path(subtitle_path)).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+        if include_subtitles and subtitle_path and has_active_subtitles(subtitle_path):
+            sub_escaped = escape_ffmpeg_filter_path(subtitle_path)
             fonts_clause = ""
             fonts_dir = kwargs.get("fonts_dir")
             resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
             if resolved_fonts.exists() and resolved_fonts.is_dir():
-                fonts_esc = str(resolved_fonts).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-                fonts_clause = f":fontsdir='{fonts_esc}'"
+                fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
+                fonts_clause = f":fontsdir={fonts_esc}"
             is_ass = Path(subtitle_path).suffix.lower() == ".ass"
             if is_ass:
-                sub_filter = f"[vbase]ass=filename='{sub_escaped}'{fonts_clause}[vout];"
+                sub_filter = f"[vbase]ass=filename={sub_escaped}{fonts_clause}[vout];"
             else:
-                sub_filter = f"[vbase]subtitles='{sub_escaped}'{fonts_clause}[vout];"
+                sub_filter = f"[vbase]subtitles=filename={sub_escaped}{fonts_clause}[vout];"
         else:
             sub_filter = "[vbase]null[vout];"
 
@@ -628,8 +628,8 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         filter_complex = "".join(filter_inputs) + concat_clause + sub_filter + audio_filter
 
-        crf = kwargs.get("crf", default_render_crf())
-        preset = kwargs.get("preset", default_render_preset())
+        crf = kwargs.get("crf") if kwargs.get("crf") is not None else default_render_crf()
+        preset = kwargs.get("preset") or default_render_preset()
         threads = kwargs.get("threads") or default_ffmpeg_threads()
         filter_threads = kwargs.get("filter_threads") or min(threads, 2)
 
@@ -651,6 +651,45 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-ac", "2",
             "-movflags", "+faststart",
         ])
+        return cmd
+
+    def build_render_command(
+        self,
+        video_paths: Sequence[Path | str],
+        audio_path: Path | str,
+        output_path: Path | str,
+        target_duration: float = 5.0,
+        target_resolution: tuple[int, int] = SHORT_RESOLUTION,
+        fps: int = 30,
+        crf: Optional[int] = None,
+        preset: Optional[str] = None,
+        bgm_path: Optional[Path | str] = None,
+        include_subtitles: bool = False,
+        subtitle_path: Path | str | None = None,
+        **kwargs: Any,
+    ) -> List[str]:
+        """Construct the complete FFmpeg multi-shot render command."""
+        v_paths = [Path(p) for p in video_paths]
+        if not v_paths:
+            raise LoopVideoAssetError("No video paths provided for render command")
+        shot_durs = kwargs.get("shot_durations")
+        if not shot_durs:
+            shot_durs = [float(target_duration) / max(1, len(v_paths))] * len(v_paths)
+        cmd = self.build_multi_shot_filter_graph(
+            scene_images=v_paths,
+            shot_durations=shot_durs,
+            audio_path=Path(audio_path),
+            bgm_path=Path(bgm_path) if bgm_path else None,
+            target_resolution=target_resolution,
+            duration_sec=target_duration,
+            include_subtitles=include_subtitles,
+            subtitle_path=Path(subtitle_path) if subtitle_path else None,
+            fps=fps,
+            crf=crf,
+            preset=preset,
+            **kwargs,
+        )
+        cmd.append(str(output_path))
         return cmd
 
     def build_stream_copy_composition_cmd(
@@ -787,10 +826,11 @@ class LoopVideoEngine(BaseVideoCompositor):
             timeout = max(cfg_timeout, float(duration_sec or 0) * 3.0 + 300.0)
 
         # Evaluate Stream-Copy path (Zero video re-encoding: ~2 seconds render)
+        subs_active = bool(include_subtitles) and has_active_subtitles(subtitle_path)
         if stream_copy is None:
-            is_stream_copy = (not include_subtitles) and (orientation in ("horizontal", "16:9", "longform", (1920, 1080)))
+            is_stream_copy = (not subs_active) and (orientation in ("horizontal", "16:9", "longform", (1920, 1080)))
         else:
-            is_stream_copy = bool(stream_copy) and (not include_subtitles)
+            is_stream_copy = bool(stream_copy) and (not subs_active)
 
         if is_stream_copy and v_path.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and not v_path.name.startswith(("corrupt", "invalid", "dead")):
             try:

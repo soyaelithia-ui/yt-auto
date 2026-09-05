@@ -363,7 +363,12 @@ class TestAdversarialFilterGraphMatrix(unittest.TestCase):
     def test_graph_matrix_with_bgm_and_ass_subtitles(self):
         """Case 3: With BGM, ASS Subtitles enabled."""
         sub_ass = self.root / "subs.ass"
-        sub_ass.write_text("[Script Info]\nTitle: Test", encoding="utf-8")
+        sub_ass.write_text(
+            "[Script Info]\nTitle: Test\n\n[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Active test cue\n",
+            encoding="utf-8",
+        )
 
         cmd = self.engine.build_composition_filter_graph(
             video_path=self.video_path,

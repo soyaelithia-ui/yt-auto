@@ -548,8 +548,8 @@ def test_f09_word_karaoke_kf_tags(tmp_path: Path):
 
 
 @pytest.mark.tier1
-def test_f09_safe_area_margin_v_260(tmp_path: Path):
-    """Verify style definitions in ASS file set MarginV=260 for vertical Shorts safe area."""
+def test_f09_safe_area_margin_v_480(tmp_path: Path):
+    """Verify style definitions in ASS file set MarginV>=480 for vertical Shorts safe area."""
     sub_file = PROJECT_ROOT / "src" / "media" / "subtitles_ass.py"
     if sub_file.exists():
         from src.media.subtitles_ass import ASSSubtitleGenerator
@@ -558,7 +558,7 @@ def test_f09_safe_area_margin_v_260(tmp_path: Path):
         timestamps = generate_sample_word_timestamps(["Safe", "area", "verification"])
         res_path = generator.generate_ass_file(timestamps, out_ass)
         content = res_path.read_text(encoding="utf-8")
-        assert "260" in content, "MarginV must enforce 260px vertical margin"
+        assert ",64,130,480," in content, "Portrait Style must use MarginL=64 MarginR=130 MarginV=480"
 
 
 @pytest.mark.tier1

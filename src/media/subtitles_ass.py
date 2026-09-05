@@ -24,6 +24,77 @@ def format_ass_timestamp(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
+def calculate_safe_margins(
+    video_width: int, video_height: int, downward_drift_px: int = 0
+) -> tuple[int, int, int]:
+    """Return (MarginL, MarginR, MarginV) for canvas orientation and drift."""
+    is_vertical = video_height > video_width
+    drift = max(0, int(downward_drift_px))
+    if is_vertical:
+        margin_v = max(480, int(video_height * 0.25)) + drift
+        margin_r = max(130, int(video_width * 0.12))
+        margin_l = max(64, int(video_width * 0.06))
+    else:
+        margin_v = max(130, int(video_height * 0.12)) + drift
+        margin_l = 40
+        margin_r = 40
+    return (margin_l, margin_r, margin_v)
+
+
+def calculate_font_size(video_width: int, video_height: int) -> int:
+    """Return height-scaled font size (52px at 1920h vertical, 38px at 1080h horizontal)."""
+    is_vertical = video_height > video_width
+    if is_vertical:
+        return max(12, int(round(52.0 * (video_height / 1920.0))))
+    return max(12, int(round(38.0 * (video_height / 1080.0))))
+
+
+def has_active_subtitles(path: Path | str | None) -> bool:
+    """Return True iff path is a regular file, size > 0, and has active cue text.
+
+    ASS/SSA: at least one non-whitespace ``Dialogue:`` event.
+    SRT/VTT: at least one cue-text line (not an index, timestamp, or header).
+    None, missing, empty, header-only, or unreadable paths return False.
+    """
+    if not path:
+        return False
+    try:
+        p = Path(path)
+        if not p.is_file() or p.stat().st_size == 0:
+            return False
+        content = p.read_text(encoding="utf-8", errors="replace")
+        for line in content.splitlines():
+            line_str = line.strip()
+            if line_str.startswith("Dialogue:"):
+                remainder = line_str[len("Dialogue:"):].strip()
+                fields = remainder.split(",", 9)
+                if len(fields) == 10:
+                    text = fields[9].strip()
+                else:
+                    text = remainder
+                if text:
+                    return True
+        suffix = p.suffix.lower()
+        if suffix in {".srt", ".vtt"}:
+            for line in content.splitlines():
+                s = line.strip()
+                if not s or s.isdigit() or "-->" in s:
+                    continue
+                upper = s.upper()
+                if upper.startswith(("WEBVTT", "NOTE", "STYLE", "REGION")):
+                    continue
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def escape_ffmpeg_filter_path(path: Path | str) -> str:
+    """Escape backslashes, colons, and single quotes for FFmpeg filter arguments."""
+    p_str = str(path).replace("\\", "/")
+    return p_str.replace(":", "\\:").replace("'", "\\'")
+
+
 def sanitize_timestamps(
     word_timestamps: Optional[List[Dict[str, Any]]],
     min_word_duration: float = 0.08,
@@ -223,10 +294,11 @@ class ASSSubtitleGenerator:
         video_height: int = 1920,
         theme_name: str = "scp_emerald",
         words_per_cue: int = 3,
-        margin_v: int = 260,
+        margin_v: Optional[int] = None,
         font_name: Optional[str] = None,
-        font_size: int = 56,
+        font_size: Optional[int] = None,
         karaoke_tag: str = r"\kf",
+        downward_drift_px: int = 0,
         **kwargs: Any,
     ) -> Path:
         """Generate a complete .ass file with karaoke word timing and safe area margin."""
@@ -238,6 +310,12 @@ class ASSSubtitleGenerator:
 
         base_font = font_name or theme.get("font", "Montserrat Black")
         resolved_font = self._resolve_font_hermetic(base_font)
+
+        margin_l, margin_r, computed_margin_v = calculate_safe_margins(
+            video_width, video_height, downward_drift_px=downward_drift_px
+        )
+        effective_margin_v = computed_margin_v if (margin_v is None or margin_v == 260) else margin_v
+        effective_font_size = calculate_font_size(video_width, video_height) if (font_size is None or font_size == 56) else font_size
 
         primary_col = theme.get("primary", "&H0000FFFF")
         secondary_col = theme.get("secondary", "&H00FFFFFF")
@@ -254,7 +332,7 @@ class ASSSubtitleGenerator:
             "",
             "[V4+ Styles]",
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-            f"Style: Default,{resolved_font},{font_size},{primary_col},{secondary_col},{outline_col},{back_col},-1,0,0,0,100,100,0,0,1,4,0,2,40,40,{margin_v},0",
+            f"Style: Default,{resolved_font},{effective_font_size},{primary_col},{secondary_col},{outline_col},{back_col},-1,0,0,0,100,100,0,0,1,4,0,2,{margin_l},{margin_r},{effective_margin_v},0",
             "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -265,13 +343,15 @@ class ASSSubtitleGenerator:
             return out
 
         cue_groups: List[List[Dict[str, Any]]] = []
-        chunk_size = max(1, words_per_cue)
+        chunk_size = min(3, max(1, words_per_cue if words_per_cue is not None else 3))
         for i in range(0, len(sanitized), chunk_size):
             cue_groups.append(sanitized[i : i + chunk_size])
 
+        prev_cue_end = 0.0
         for group in cue_groups:
-            cue_start = group[0]["start"]
-            cue_end = group[-1]["end"]
+            cue_start = max(group[0]["start"], prev_cue_end)
+            cue_end = max(group[-1]["end"], cue_start + 0.05)
+            prev_cue_end = cue_end
 
             tokens: List[str] = []
             for w in group:
@@ -331,8 +411,11 @@ def write_ass_from_cues_or_words(
     video_width: int = 1080,
     video_height: int = 1920,
     theme_name: str = "default",
-    margin_v: int = 260,
+    margin_v: Optional[int] = None,
+    font_size: Optional[int] = None,
     time_offset_sec: float = 0.0,
+    downward_drift_px: int = 0,
+    **kwargs: Any,
 ) -> Path:
     """Generate an ASS file from word timestamps or Pillow-era cues (libass path).
 
@@ -357,4 +440,7 @@ def write_ass_from_cues_or_words(
         video_height=video_height,
         theme_name=theme_name,
         margin_v=margin_v,
+        font_size=font_size,
+        downward_drift_px=downward_drift_px,
+        **kwargs,
     )

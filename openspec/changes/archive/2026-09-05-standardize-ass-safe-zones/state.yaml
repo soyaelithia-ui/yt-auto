@@ -1,0 +1,21 @@
+change_name: standardize-ass-safe-zones
+current_phase: archive
+status: completed
+delivery_strategy: ask-on-risk
+phases:
+  explore:
+    status: completed
+  proposal:
+    status: completed
+  spec:
+    status: completed
+  design:
+    status: completed
+  tasks:
+    status: completed
+  apply:
+    status: completed
+  verify:
+    status: completed
+  archive:
+    status: completed
