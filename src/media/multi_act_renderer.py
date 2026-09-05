@@ -583,14 +583,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         ]
         has_hud = any(bool(s) for s in hud_snippets)
         has_subtitles = bool(ass_subtitles and ass_subtitles.is_file())
-
-        if (
+        homogeneous = self._loops_homogeneous_for_stream_copy(loop_paths, w, h)
+        can_stream_copy = (
             director_single_pass_enabled()
             and not use_xfade
             and not has_hud
             and not has_subtitles
-            and self._loops_homogeneous_for_stream_copy(loop_paths, w, h)
-        ):
+            and homogeneous
+        )
+
+        if can_stream_copy:
             logger.info("🚀 Ejecutando ensamble stream-copy Multi-Acto (DIRECTOR_SINGLE_PASS)...")
             with tempfile.TemporaryDirectory(prefix="multiact_stream_copy_") as tmp_dir_str:
                 tmp_dir = Path(tmp_dir_str)
@@ -636,6 +638,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     output_video.stat().st_size / (1024 * 1024) if output_video.exists() else 0.0,
                 )
                 return output_video
+
+        if director_single_pass_enabled():
+            logger.info(
+                "MultiAct stream-copy ineligible (xfade=%s hud=%s subs=%s homogeneous=%s); "
+                "re-encoding with preset=%s crf=%s",
+                use_xfade,
+                has_hud,
+                has_subtitles,
+                homogeneous,
+                default_render_preset(),
+                default_render_crf(),
+            )
 
         filter_parts = []
         for i, act in enumerate(acts):

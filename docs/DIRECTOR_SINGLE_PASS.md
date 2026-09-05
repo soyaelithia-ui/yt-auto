@@ -6,6 +6,8 @@
 |------|---------------|----------|----------------------------|---------------------|
 | Legacy multi-pass | N libx264 | concat `-c:v copy` (0) | 0 / 1 | **5** |
 | `DIRECTOR_SINGLE_PASS=1` stream-copy (homogeneous loops, no HUD) | 0 | trim `-c:v copy` + concat copy (0) | 0 / 1 | **0** |
+| MultiAct, HUD off, `MULTIACT_XFADE=0`, homogeneous (9:16 or 16:9) | 0 | trim `-c:v copy` + concat copy (0) | 0 (AAC mux) | **0** |
+| MultiAct, any WxH/codec/pix_fmt/time_base mismatch | 0 | 1 filter_complex scale+concat (`setsar=1`, veryfast/CRF21) | 0 (AAC mux) | **1** |
 | Single-pass + scale (resize **or** non-homogeneous codec/pix_fmt/time_base) | 0 | 1 filter_complex concat | 0 / 1 | **1** |
 | Single-pass + planner `niche_hud` | 0 | 1 filter_complex concat+HUD (veryfast/CRF21) | 0 / 1 | **1** |
 | `DIRECTOR_XFADE=1` | 0 | 1 filter_complex xfade | 0 / 1 | **1** |

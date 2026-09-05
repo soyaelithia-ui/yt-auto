@@ -499,3 +499,126 @@ def test_build_hud_concat_video_filters_setsar():
     assert "[1:v]setsar=1,format=yuv420p[v1]" in joined
 
 
+def _probe(width, height, codec="h264", pix_fmt="yuv420p", time_base="1/90000"):
+    vs = MagicMock(width=width, height=height, codec_name=codec, pix_fmt=pix_fmt)
+    return MagicMock(
+        video_streams=[vs],
+        primary_video=vs,
+        raw_payload={"streams": [{"codec_type": "video", "time_base": time_base}]},
+    )
+
+
+def test_loops_homogeneous_for_stream_copy_requires_wxh_codec_pixfmt_timebase(tmp_path, monkeypatch):
+    """Strict concat-copy gate: any WxH/codec/pix_fmt/time_base mismatch is ineligible."""
+    a = tmp_path / "a.mp4"
+    b = tmp_path / "b.mp4"
+    a.write_bytes(b"\0" * 32)
+    b.write_bytes(b"\0" * 32)
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+
+    probes = {str(a.resolve()): _probe(1920, 1080), str(b.resolve()): _probe(1920, 1080)}
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda p, **k: probes[str(Path(p).resolve())],
+    )
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is True
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1080, 1920) is False
+
+    probes[str(b.resolve())] = _probe(1920, 1080, codec="hevc")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1920, 1080, pix_fmt="yuv422p")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1920, 1080, time_base="1/30000")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1280, 720)
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+
+
+def test_multiact_stream_copy_vertical_when_homogeneous_no_hud(tmp_path, monkeypatch):
+    """Vertical 1080x1920 homogeneous loops stream-copy the same as horizontal."""
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda *a, **k: _homogeneous_probe(1080, 1920),
+    )
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_layout": "none"}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0, is_vertical=True)
+
+    assert not any("-filter_complex" in c for c in cmds)
+    assert sum(1 for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy") == 2
+    assert any("-f" in c and "concat" in c and c[c.index("-c:v") + 1] == "copy" for c in cmds)
+
+
+def test_multiact_inhomogeneous_falls_back_to_veryfast_crf21(tmp_path, monkeypatch):
+    """Mismatched pix_fmt must not stream-copy; one veryfast/CRF21 encode with setsar=1."""
+    from src.media.encode_defaults import default_render_crf, default_render_preset
+
+    loop_a = tmp_path / "a.mp4"
+    loop_b = tmp_path / "b.mp4"
+    loop_a.write_bytes(b"\0" * 64)
+    loop_b.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+    probes = {
+        str(loop_a.resolve()): _probe(1920, 1080),
+        str(loop_b.resolve()): _probe(1920, 1080, pix_fmt="yuv422p"),
+    }
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda p, **k: probes[str(Path(p).resolve())],
+    )
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+    monkeypatch.delenv("RENDER_PRESET", raising=False)
+    monkeypatch.delenv("RENDER_CRF", raising=False)
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    paths = [loop_a, loop_b]
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: paths.pop(0))
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0, is_vertical=False)
+
+    assert not any("-c:v" in c and c[c.index("-c:v") + 1] == "copy" for c in cmds)
+    fc_cmds = [c for c in cmds if "-filter_complex" in c]
+    assert len(fc_cmds) == 1
+    cmd = fc_cmds[0]
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "setsar=1" in fc
+    assert "concat=n=2" in fc
+    assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
+    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+
+

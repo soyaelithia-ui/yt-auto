@@ -37,7 +37,7 @@ Opt-in native procedural rendering MAY overlay volumetric particle systems scale
 - **Then** a particle simulator MUST NOT be required.
 
 ### Requirement 4: Zero-Drop Seamless Crossfade (`xfade`) Transitions
-Production assembly MUST use `DIRECTOR_SINGLE_PASS`. Homogeneous procedural loops with `stream_copy_mode` MUST concatenate via concat demuxer `-c:v copy`. FFmpeg `xfade` (0.5s–1.5s, default 0.75s) MAY run when explicitly opted in; when used, the compositor MUST compute exact frame counts and offsets for zero dropped frames and A/V sync.
+Production assembly MUST use `DIRECTOR_SINGLE_PASS`. Homogeneous procedural loops with `stream_copy_mode` MUST concatenate via concat demuxer `-c:v copy`. The same WxH/codec/pix_fmt/time_base gate applies to `MultiActVideoRenderer` when HUD is off and `MULTIACT_XFADE=0`; mismatched loops MUST degrade to one `encode_defaults` (`veryfast` / CRF 21) re-encode with `setsar=1` (never silent corrupt concat). FFmpeg `xfade` (0.5s–1.5s, default 0.75s) MAY run when explicitly opted in; when used, the compositor MUST compute exact frame counts and offsets for zero dropped frames and A/V sync.
 
 #### Scenario: Multi-scene sequential single-pass composition (Happy Path)
 - **Given** 3 sequential rendered scenes with matching WxH/codec/pix_fmt/time_base and no `niche_hud`
@@ -105,6 +105,19 @@ HUD re-encode MUST use shared `encode_defaults` (`veryfast` + CRF 21).
 - **Given** homogeneous procedural loops (matching WxH/codec/pix_fmt/time_base) with no `niche_hud`
 - **When** `MultiSceneCompositor` assembles via single-pass
 - **Then** assembly MUST use stream-copy (`-c:v copy` / `loop_stream_copy`) without a HUD `filter_complex`
+
+#### Scenario: MultiAct stream-copy when HUD is off (vertical or horizontal)
+- **Given** `DIRECTOR_SINGLE_PASS=1`, `MULTIACT_XFADE=0`, no burned ASS, and planner HUD disabled (`niche_hud` is null / `hud_enabled: false` / `hud_layout: none`)
+- **When** `MultiActVideoRenderer` composites acts whose catalog loops match the target canvas (1080x1920 or 1920x1080) and share codec/pix_fmt/time_base
+- **Then** assembly MUST trim+concat with `-c:v copy` and MUST NOT emit a `filter_complex` re-encode
+
+#### Scenario: MultiAct inhomogeneous loops degrade to encode_defaults
+- **Given** any act/loop that differs in WxH, codec, pix_fmt, or time_base
+- **When** `MultiActVideoRenderer` composites
+- **Then** assembly MUST NOT stream-copy
+- **And** MUST re-encode once with `encode_defaults` (`veryfast` + CRF 21)
+- **And** the scale/concat graph MUST include `setsar=1` on each input
+- **And** FFmpeg failures MUST raise (no silent corrupt concat)
 
 #### Scenario: Shorts niche HUD respects shared safe-zone margins
 - **Given** a vertical Shorts canvas (e.g. 1080x1920) and any HUD layout (`top_bar` / `card` / `bottom_bar`)
