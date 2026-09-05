@@ -59,3 +59,11 @@ def test_setup_worktree_env_is_idempotent_on_primary():
     assert "secret" not in result.stdout.lower()
     assert "TOKEN" not in result.stdout
     assert "password" not in result.stdout.lower()
+
+
+def test_integrity_scripts_use_repo_local_pytest_not_host_roots():
+    for rel in ("scripts/verify_integrity.sh", "scripts/test.sh"):
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert "/srv/projects/yt-auto/.venv/bin/pytest" not in text
+        assert "/home/moku/projects/yt-auto/.venv/bin/pytest" not in text
+        assert ".venv/bin/pytest" in text

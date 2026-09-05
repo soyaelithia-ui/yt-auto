@@ -3,6 +3,10 @@
 # Enforces the Project Governance Policy: Mandatory check every 25 commits or pre-run.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 echo "======================================================================"
 echo "🔍 [INTEGRITY AUDIT] Checking Repository Invariants & Governance SLA"
 echo "======================================================================"
@@ -78,12 +82,8 @@ fi
 
 # 6. Run Fast Anti-Regression Test Suite and Verify Test Collectability
 PYTEST_CMD=""
-if [ -x ".venv/bin/pytest" ]; then
-    PYTEST_CMD=".venv/bin/pytest"
-elif [ -x "/srv/projects/yt-auto/.venv/bin/pytest" ]; then
-    PYTEST_CMD="/srv/projects/yt-auto/.venv/bin/pytest"
-elif [ -x "/home/moku/projects/yt-auto/.venv/bin/pytest" ]; then
-    PYTEST_CMD="/home/moku/projects/yt-auto/.venv/bin/pytest"
+if [ -x "$REPO_ROOT/.venv/bin/pytest" ]; then
+    PYTEST_CMD="$REPO_ROOT/.venv/bin/pytest"
 elif command -v pytest > /dev/null 2>&1; then
     PYTEST_CMD="pytest"
 fi
