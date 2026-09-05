@@ -3,8 +3,39 @@
 from __future__ import annotations
 
 import importlib
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _fresh_is_test_environment(profile: str) -> str:
+    """Ask a child interpreter (no pytest in sys.modules) whether the profile is test."""
+    env = os.environ.copy()
+    env["YT_PROFILE"] = profile
+    env.pop("TEST_MODE", None)
+    env.pop("PYTEST_CURRENT_TEST", None)
+    env["PYTHONPATH"] = str(_REPO_ROOT)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from src.config import is_test_environment; print(int(is_test_environment()))",
+        ],
+        cwd=str(_REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr or proc.stdout)
+    return proc.stdout.strip()
 
 
 def _reload_config(
@@ -74,3 +105,12 @@ def test_review_db_default_follows_profile(monkeypatch):
         assert str(cfg.default_review_db_path()).endswith("data/cli/review_state.db")
     finally:
         importlib.reload(cfg)
+
+
+def test_yt_profile_test_is_test_environment_outside_pytest():
+    """`main.py -p test` must skip the live agy chain (generate-only hang)."""
+    assert _fresh_is_test_environment("test") == "1"
+
+
+def test_yt_profile_cli_is_not_test_environment_outside_pytest():
+    assert _fresh_is_test_environment("cli") == "0"

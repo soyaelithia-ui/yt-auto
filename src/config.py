@@ -422,7 +422,18 @@ def get_channel_settings(channel: str | CanonicalChannel) -> ChannelSettings:
 
 
 def is_test_environment() -> bool:
-    return os.environ.get("TEST_MODE") == "1" or "pytest" in sys.modules
+    """True under pytest, TEST_MODE=1, or ``-p test`` / YT_PROFILE=test.
+
+    ``-p test`` isolates work dirs *and* must skip the live agy chain.
+    Without this, ``main.py run -p test --generate-only`` hangs on
+    ProgrammaticAgent (CLI_TIMEOUT_SECONDS=300) before writing any media.
+    """
+    profile = os.environ.get("YT_PROFILE", "").strip().lower()
+    return (
+        os.environ.get("TEST_MODE") == "1"
+        or profile == "test"
+        or "pytest" in sys.modules
+    )
 
 
 # Compatibility constants used by existing modules while the pipeline is migrated.
