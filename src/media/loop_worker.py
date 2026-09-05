@@ -52,10 +52,8 @@ class LoopSynthesizerWorker:
         self.renderer = renderer
 
     def count_loops_for_category(self, category: str, orientation: str) -> int:
-        """Counts existing valid loops for category and orientation in the database."""
-        records = self.catalog.list_loops(category=category, orientation=orientation, limit=1000)
-        valid = [r for r in records if Path(r.file_path).is_file() and Path(r.file_path).stat().st_size > 0]
-        return len(valid)
+        """Cheap catalog COUNT for category/orientation (no row materialization)."""
+        return self.catalog.count_loops(category=category, orientation=orientation)
 
     def maintain_buffer(
         self,

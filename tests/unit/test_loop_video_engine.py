@@ -119,6 +119,42 @@ class TestLoopCategoryResolution(unittest.TestCase):
             engine.resolve_loop_video(category="space_abyss", allow_fallback=False)
 
 
+
+    def test_live_synth_attempted_before_background_fallback(self):
+        """Empty catalog/category: live synth is attempted before background fallback."""
+        fb_img = self.fb_dir / "horror_forest.jpg"
+        fb_img.write_bytes(b"FALLBACK_IMAGE")
+        synth_vid = self.root_path / "live_synth.mp4"
+        synth_vid.write_bytes(b"SYNTH_VIDEO")
+
+        engine = LoopVideoEngine(
+            loops_root_dir=self.loops_dir,
+            default_fallback_dir=self.fb_dir,
+            default_fallback_image=self.fb_image,
+        )
+        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
+            resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
+        mock_synth.assert_called_once()
+        self.assertEqual(resolved, synth_vid)
+        self.assertNotEqual(resolved, fb_img)
+
+    def test_allow_fallback_false_skips_synth_and_background(self):
+        """allow_fallback=False fails closed: no live synth inventing assets, no backgrounds."""
+        fb_img = self.fb_dir / "should_not_use.jpg"
+        fb_img.write_bytes(b"FALLBACK_IMAGE")
+        synth_vid = self.root_path / "would_synth.mp4"
+        synth_vid.write_bytes(b"SYNTH_VIDEO")
+
+        engine = LoopVideoEngine(
+            loops_root_dir=self.loops_dir,
+            default_fallback_dir=self.fb_dir,
+            default_fallback_image=self.fb_image,
+        )
+        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
+            with self.assertRaises(LoopVideoAssetError):
+                engine.resolve_loop_video(category="space_abyss", allow_fallback=False)
+        mock_synth.assert_not_called()
+
 class TestLoopStreamComposition(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

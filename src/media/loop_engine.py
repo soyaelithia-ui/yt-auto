@@ -210,6 +210,164 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         return library
 
+    @staticmethod
+    def _live_rss_checkpoint(stage: str) -> dict:
+        """Cheap stdlib RSS sample for live select/create (stages 8–9)."""
+        try:
+            from src.core.guard import memory_checkpoint, read_vm_rss_bytes
+
+            info = memory_checkpoint(stage)
+            if "observed_bytes" not in info:
+                info["observed_bytes"] = read_vm_rss_bytes()
+            logger.debug(
+                "live_rss_checkpoint stage=%s rss_bytes=%s",
+                stage,
+                info.get("observed_bytes"),
+            )
+            return info
+        except Exception as exc:
+            logger.debug("live_rss_checkpoint skipped (%s): %s", stage, exc)
+            return {"stage": stage, "disabled": True}
+
+    def _iter_media_files(
+        self,
+        directory: Path,
+        extensions: tuple[str, ...],
+        *,
+        max_scan: int = 64,
+    ):
+        """Yield valid media files lazily with a hard scan cap (near-zero RAM)."""
+        if not directory.is_dir():
+            return
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            return
+        yielded = 0
+        for f in entries:
+            if yielded >= max_scan:
+                break
+            try:
+                if (
+                    f.is_file()
+                    and f.suffix.lower() in extensions
+                    and f.stat().st_size > 0
+                ):
+                    yielded += 1
+                    yield f
+            except OSError:
+                continue
+
+    def _pick_media_file(
+        self,
+        directory: Path,
+        extensions: tuple[str, ...],
+        *,
+        seed: Any = None,
+        name_substrs: Sequence[str] | None = None,
+        max_scan: int = 64,
+    ) -> Path | None:
+        """Pick one media file without materializing huge directory listings."""
+        collected: list[Path] = []
+        for f in self._iter_media_files(directory, extensions, max_scan=max_scan):
+            if name_substrs:
+                if any(s in f.name for s in name_substrs):
+                    collected.append(f)
+            else:
+                collected.append(f)
+            # Early exit when not seeding and we already have a preferred match
+            if seed is None and collected and not name_substrs:
+                return collected[0]
+        if name_substrs and not collected:
+            # Fall back to any valid file if name filter matched nothing
+            for f in self._iter_media_files(directory, extensions, max_scan=max_scan):
+                collected.append(f)
+                if seed is None:
+                    return f
+        if not collected:
+            return None
+        if seed is not None:
+            return random.Random(seed).choice(collected)
+        return collected[0]
+
+    def _try_live_synthesize(
+        self,
+        category: str,
+        orientation: str | None,
+        seed: Any,
+        *,
+        enabled: bool,
+    ) -> Path | None:
+        """
+        On-demand live create via LoopSynthesizerWorker.
+        No-op unless enabled (default-root production path). Mockable in tests.
+        """
+        if not enabled:
+            return None
+        self._live_rss_checkpoint("9_video_rendering_live_create")
+        try:
+            from src.media.loop_worker import LoopSynthesizerWorker
+
+            worker = LoopSynthesizerWorker(db_path=self.db_path)
+            seed_val = seed if isinstance(seed, int) else None
+            rec = worker.synthesize_on_demand(
+                category=category,
+                orientation=orientation or "vertical",
+                seed=seed_val,
+            )
+            path = Path(rec.file_path)
+            if path.is_file() and path.stat().st_size > 0:
+                try:
+                    if self.catalog is not None:
+                        self.catalog.record_loop_usage(rec.loop_id)
+                except Exception:
+                    pass
+                logger.info("Live-synthesized loop on demand: %s (%s)", rec.loop_id, path)
+                self._live_rss_checkpoint("9_video_rendering_live_create_done")
+                return path
+            logger.warning("Live synth produced missing/empty file for category '%s'", category)
+        except Exception as exc:
+            logger.warning("On-demand live loop synth failed for '%s': %s", category, exc)
+        return None
+
+    def _find_fallback_in_other_categories(
+        self,
+        root: Path,
+        norm_cat: str,
+        seed: Any,
+    ) -> Path | None:
+        """Lazy cross-category fallback: stop at first usable video (bounded)."""
+        # Prefer known thematic categories first, then shallow discovery.
+        candidates: list[str] = [c for c in self.THEMATIC_CATEGORIES if c != norm_cat]
+        try:
+            if root.is_dir():
+                for entry in sorted(root.iterdir()):
+                    if (
+                        entry.is_dir()
+                        and entry.name not in ("procedural", "vertical", "horizontal", norm_cat)
+                        and entry.name not in candidates
+                    ):
+                        candidates.append(entry.name)
+                        if len(candidates) >= 32:
+                            break
+        except OSError:
+            pass
+
+        for cat_name in candidates:
+            for cat_dir in (
+                root / cat_name,
+                root / "procedural" / cat_name,
+                root / "vertical" / cat_name,
+                root / "horizontal" / cat_name,
+            ):
+                picked = self._pick_media_file(
+                    cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, seed=seed, max_scan=32
+                )
+                if picked is not None:
+                    logger.info("Found fallback loop video in category '%s'", cat_name)
+                    return picked
+        return None
+
     def resolve_loop_video(
         self,
         category: str | None = None,
@@ -219,13 +377,15 @@ class LoopVideoEngine(BaseVideoCompositor):
         orientation: str | None = None,
     ) -> Path:
         """
-        Resolves a background video path for a given category and optional orientation.
-        Queries the local SQLite loop catalog repository first for web-procedural loops with smart rotation.
-        If missing, searches across filesystem directories, or fallback backgrounds.
+        Resolves a loop/background asset with live-first priority:
+        1) catalog get_best_loop (live select)
+        2) on-demand synthesize_on_demand (live create) when catalog/FS miss
+        3) filesystem / backgrounds fallback (kept in parallel; last resort)
         """
         norm_cat = self.normalize_category(category)
+        self._live_rss_checkpoint("8_loop_scene_live_select")
 
-        # 0. Query SQLite loop catalog repository first (Web-generated procedural loops)
+        # 0. Query SQLite loop catalog repository first (live select)
         # Only query default catalog if asset_root is not overridden and loops_root_dir is the default assets dir
         is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
         if self.catalog is not None and is_default_root:
@@ -237,105 +397,91 @@ class LoopVideoEngine(BaseVideoCompositor):
                 if best_loop and Path(best_loop.file_path).is_file() and Path(best_loop.file_path).stat().st_size > 0:
                     self.catalog.record_loop_usage(best_loop.loop_id)
                     logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, best_loop.file_path)
+                    self._live_rss_checkpoint("8_loop_scene_live_select_hit")
                     return Path(best_loop.file_path)
             except Exception as e:
                 logger.warning("Could not query SQLite loop catalog: %s", e)
 
         root = Path(asset_root).expanduser().resolve() if asset_root else self.loops_root_dir
+        cat_dir = root / norm_cat
 
-        # 1. Check orientation subdirectory if specified (e.g. horizontal / vertical)
+        # 1. Exact category filesystem hit (still live select of existing assets)
         if orientation:
             orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
+            name_keys = (orient_name, f"_{orient_name[:1]}_")
             for orient_cat_dir in (root / orient_name / norm_cat, root / "procedural" / norm_cat, root / norm_cat):
-                if orient_cat_dir.is_dir():
-                    videos = [
-                        f for f in sorted(orient_cat_dir.iterdir())
-                        if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
-                    ]
-                    matched = [v for v in videos if orient_name in v.name or f"_{orient_name[:1]}_" in v.name]
-                    if matched:
-                        videos = matched
-                    if videos:
-                        if seed is not None:
-                            rng = random.Random(seed)
-                            return rng.choice(videos)
-                        return videos[0]
+                # Prefer name-matched clips; fall back to any video in the dir
+                picked = self._pick_media_file(
+                    orient_cat_dir,
+                    self.SUPPORTED_VIDEO_EXTENSIONS,
+                    seed=seed,
+                    name_substrs=name_keys,
+                    max_scan=64,
+                )
+                if picked is not None:
+                    return picked
 
-        # 2. Check requested category directory across possible subtrees
         for cat_dir in (root / norm_cat, root / "procedural" / norm_cat):
-            if cat_dir.is_dir():
-                videos = [
-                    f for f in sorted(cat_dir.iterdir())
-                    if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
-                ]
-                if videos:
-                    if seed is not None:
-                        rng = random.Random(seed)
-                        return rng.choice(videos)
-                    return videos[0]
+            picked = self._pick_media_file(
+                cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, seed=seed, max_scan=64
+            )
+            if picked is not None:
+                return picked
 
-        # If fallback is disallowed, fail immediately
+        # Fail closed: never invent backgrounds when fallback is disallowed
         if not allow_fallback:
             raise LoopVideoAssetError(
                 f"No video loops found in category '{norm_cat}' at {cat_dir}"
             )
 
-        logger.info(
-            "Category '%s' is empty or missing in %s. Initiating graceful fallback search.",
+        # 2. Live create BEFORE filesystem/background fallback (parallel path retained below)
+        synth_path = self._try_live_synthesize(
+            norm_cat,
+            orientation,
+            seed,
+            enabled=is_default_root,
+        )
+        if synth_path is not None:
+            return synth_path
 
+        logger.info(
+            "Category '%s' is empty or missing in %s (live synth unavailable/failed). "
+            "Initiating graceful background fallback search.",
             norm_cat,
             root,
         )
 
-        # 2. Check other thematic categories under root
-        scanned = self.scan_libraries(asset_root=root)
-        for cat_name, files in scanned.items():
-            if cat_name != norm_cat and files:
-                valid_files = [
-                    f for f in files
-                    if f.is_file() and f.stat().st_size > 0
-                ]
-                if valid_files:
-                    logger.info("Found fallback loop video in category '%s'", cat_name)
-                    if seed is not None:
-                        rng = random.Random(seed)
-                        return rng.choice(valid_files)
-                    return valid_files[0]
+        # 3. Filesystem / background fallback (kept; only after live select+create)
+        other = self._find_fallback_in_other_categories(root, norm_cat, seed)
+        if other is not None:
+            return other
 
-        # 3. Check loose video files in loops root
         if root.is_dir():
-            root_videos = [
-                f for f in sorted(root.iterdir())
-                if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
-            ]
-            if root_videos:
-                logger.info("Found fallback loop video in root loops directory: %s", root_videos[0].name)
-                return root_videos[0]
+            root_hit = self._pick_media_file(
+                root, self.SUPPORTED_VIDEO_EXTENSIONS, seed=None, max_scan=32
+            )
+            if root_hit is not None:
+                logger.info("Found fallback loop video in root loops directory: %s", root_hit.name)
+                return root_hit
 
-        # 4. Check fallback backgrounds directory (video or static images)
         if self.default_fallback_dir.is_dir():
-            fb_videos = [
-                f for f in sorted(self.default_fallback_dir.iterdir())
-                if f.is_file() and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and f.stat().st_size > 0
-            ]
-            if fb_videos:
-                logger.info("Found fallback video in backgrounds directory: %s", fb_videos[0].name)
-                return fb_videos[0]
+            fb_vid = self._pick_media_file(
+                self.default_fallback_dir, self.SUPPORTED_VIDEO_EXTENSIONS, max_scan=32
+            )
+            if fb_vid is not None:
+                logger.info("Found fallback video in backgrounds directory: %s", fb_vid.name)
+                return fb_vid
+            fb_img = self._pick_media_file(
+                self.default_fallback_dir, self.SUPPORTED_IMAGE_EXTENSIONS, max_scan=32
+            )
+            if fb_img is not None:
+                logger.info("Found fallback background image: %s", fb_img.name)
+                return fb_img
 
-            fb_images = [
-                f for f in sorted(self.default_fallback_dir.iterdir())
-                if f.is_file() and f.suffix.lower() in self.SUPPORTED_IMAGE_EXTENSIONS and f.stat().st_size > 0
-            ]
-            if fb_images:
-                logger.info("Found fallback background image: %s", fb_images[0].name)
-                return fb_images[0]
-
-        # 5. Check default fallback image
         if self.default_fallback_image.is_file() and self.default_fallback_image.stat().st_size > 0:
             logger.info("Using default fallback image: %s", self.default_fallback_image.name)
             return self.default_fallback_image
 
-        # 6. If in test environment and using the default project assets path, provide a fallback test asset
         from src.config import is_test_environment
         if is_test_environment() and root == (BASE_DIR / "assets" / "loops").resolve():
             test_fallback = BASE_DIR / "assets" / "background.jpg"
