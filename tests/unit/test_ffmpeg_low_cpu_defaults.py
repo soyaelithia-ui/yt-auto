@@ -61,6 +61,13 @@ def test_loop_engine_build_filter_uses_veryfast(monkeypatch):
     assert 'crf: int = 23' not in src
 
 
+def test_pipeline_coerces_director_to_loop_without_force_multiscene():
+    src = Path("src/pipeline.py").read_text(encoding="utf-8")
+    assert "FORCE_MULTISCENE" in src
+    assert "Coercing video_engine=" in src
+    assert "is_multiscene_mode = False" in src
+
+
 def test_pipeline_rejects_slow_hot_path_literal():
     """Multi-scene render must not hardcode preset=slow (CPU disaster)."""
     src = Path("src/pipeline.py").read_text(encoding="utf-8")
@@ -68,12 +75,14 @@ def test_pipeline_rejects_slow_hot_path_literal():
     assert "default_render_preset()" in src
 
 
-def test_stream_copy_policy_skips_only_burned_subtitles():
-    """Vertical loops may -c:v copy; LoopVideoEngine already geometry-gates."""
+def test_stream_copy_policy_muxes_captions_never_burns():
+    """Loop path always stream-copies; captions mux, they do not block -c:v copy."""
     src = Path("src/pipeline.py").read_text(encoding="utf-8")
-    assert 'stream_copy_mode = bool(not burn_subtitles)' in src
+    assert "stream_copy_mode = True" in src
     assert "stream_copy=stream_copy_mode" in src
-    assert 'lane.orientation == "horizontal" and not burn_subtitles' not in src
+    assert "include_subtitles=mux_subtitles" in src
+    assert "burn_subtitles" not in src
+    assert 'stream_copy_mode = bool(not burn_subtitles)' not in src
 
 
 def test_loop_stream_copy_cmd_uses_copy_codec():

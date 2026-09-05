@@ -165,6 +165,53 @@ def test_loop_video_engine_compose_stream_copy_preserved_on_inactive_subtitles(
     assert "libx264" not in stream_cmd
 
 
+def test_loop_video_engine_compose_muxes_active_ass_with_stream_copy(
+    tmp_path: Path, active_ass_file: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Active captions mux as a subtitle stream; video stays -c:v copy. No libass burn."""
+    engine = LoopVideoEngine()
+    fake_video = tmp_path / "loop.mp4"
+    fake_video.write_bytes(b"dummy")
+    fake_audio = tmp_path / "audio.wav"
+    fake_audio.write_bytes(b"dummy")
+    out_video = tmp_path / "output.mp4"
+
+    mock_probe = MagicMock()
+    mock_probe.duration = 10.0
+    mock_probe.video_streams = [MagicMock(width=1080, height=1920)]
+
+    captured_cmds: list[list[str]] = []
+
+    def fake_run_ffmpeg(cmd, **kwargs):
+        captured_cmds.append(list(cmd))
+        out_video.write_bytes(b"rendered")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(loop_engine_mod, "probe_media", lambda *a, **k: mock_probe)
+    monkeypatch.setattr(loop_engine_mod, "run_ffmpeg", fake_run_ffmpeg)
+
+    engine.compose(
+        audio_path=fake_audio,
+        output_video_path=out_video,
+        video_loop_path=fake_video,
+        orientation="vertical",
+        stream_copy=True,
+        include_subtitles=True,
+        subtitle_path=active_ass_file,
+        duration_sec=8.0,
+    )
+
+    assert len(captured_cmds) == 1
+    cmd = captured_cmds[0]
+    cmd_str = " ".join(cmd)
+    assert cmd[cmd.index("-c:v") + 1] == "copy"
+    assert "libx264" not in cmd
+    assert "ass=" not in cmd_str
+    assert str(active_ass_file) in cmd
+    assert "-c:s" in cmd
+    assert cmd[cmd.index("-c:s") + 1] == "mov_text"
+
+
 # ==============================================================================
 # 2.2 RED: MultiSceneCompositor Stream-Copy and Filter Gating
 # ==============================================================================

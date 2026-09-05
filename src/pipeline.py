@@ -330,6 +330,17 @@ def run_pipeline_once(
     ).strip().lower()
     is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "beats")
     is_multiscene_mode = engine_mode in ("director", "multiscene", "multi_scene", "multi_scene_compositor", "dual_engine", "hybrid", "procedural")
+    force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if is_multiscene_mode and not force_multiscene:
+        logger.info(
+            "Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)",
+            engine_mode,
+        )
+        engine_mode = "loop"
+        is_loop_mode = True
+        is_multiscene_mode = False
     is_supported_engine = is_loop_mode or is_multiscene_mode
 
     if not is_supported_engine:
@@ -847,9 +858,6 @@ def run_pipeline_once(
                 )
 
             with profiler.phase(CanonicalStage.VIDEO_RENDERING):
-                burn_subtitles_ms = bool(
-                    lane.orientation == "vertical" and subtitles_active and ass_path.is_file()
-                )
                 from src.media.encode_defaults import default_render_crf, default_render_preset
                 compositor_metrics = multi_compositor.render(
                     manifest_path=scene_manifest_path,
@@ -858,9 +866,8 @@ def run_pipeline_once(
                     # Avoid preset=slow on the hot path — huge CPU/RAM for little YT gain.
                     crf=default_render_crf(),
                     preset=default_render_preset(),
-                    # Prefer libass ASS burn in MultiSceneCompositor master assembly
-                    # (never pass Pillow subtitle_cues / word_timestamps by default).
-                    subtitle_path=ass_path if burn_subtitles_ms else None,
+                    # Captions mux downstream; do not pass ASS into a libass burn graph.
+                    subtitle_path=None,
                 )
                 visual_integrity_report = {
                     "passed": True,
@@ -974,8 +981,8 @@ def run_pipeline_once(
             with profiler.phase(CanonicalStage.LOOP_SCENE):
                 from src.scene_manifest import build_scene_manifest
                 manifest_slot = story.get("object_class") or channel_name
-                burn_subtitles = bool(lane.orientation == "vertical" and subtitles_active and ass_path.is_file())
-                stream_copy_mode = bool(not burn_subtitles)
+                mux_subtitles = bool(subtitles_active and ass_path.is_file())
+                stream_copy_mode = True
 
                 manifest_path = build_scene_manifest(
                     work_dir=work_dir,
@@ -987,7 +994,7 @@ def run_pipeline_once(
                     music_path=music_track_path,
                     duration_sec=float(audio["duration_sec"]),
                     scene_images=scene_bg_list,
-                    subtitles=audio.get("word_timestamps") if (burn_subtitles and ass_path.is_file()) else [],
+                    subtitles=[],
                     resolution=tuple(lane.expected_resolution),
                     fps=lane.fps,
                     stamp_text="[MOKU]" if channel_name == "moku" else "@Aelithia",
@@ -1000,14 +1007,14 @@ def run_pipeline_once(
                     manifest_path,
                     video_path,
                     audio_path=audio_path,
-                    subtitle_path=ass_path if (burn_subtitles and ass_path.is_file()) else None,
+                    subtitle_path=ass_path if mux_subtitles else None,
                     background_path=str(resolved_loop_path),
                     bg_music_path=music_track_path,
                     music_volume=bg_volume,
                     duration_sec=float(audio["duration_sec"]),
                     category=target_category,
                     orientation=lane.orientation,
-                    include_subtitles=burn_subtitles,
+                    include_subtitles=mux_subtitles,
                     stream_copy=stream_copy_mode,
                     scene_images=scene_bg_list,
                     shot_durations=shot_durations,

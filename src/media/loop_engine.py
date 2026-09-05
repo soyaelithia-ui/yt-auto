@@ -27,7 +27,12 @@ from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository
 from src.log import get_logger
-from src.media.subtitles_ass import escape_ffmpeg_filter_path, has_active_subtitles, libass_filter_clause
+from src.media.subtitles_ass import (
+    escape_ffmpeg_filter_path,
+    has_active_subtitles,
+    libass_filter_clause,
+    subtitle_mux_ffmpeg_parts,
+)
 
 from lib.ffmpeg import (
     FFmpegError,
@@ -695,11 +700,13 @@ class LoopVideoEngine(BaseVideoCompositor):
         bgm_path: Path | None,
         duration_sec: float,
         output_video_path: Path,
+        subtitle_path: Path | str | None = None,
         **kwargs,
     ) -> list[str]:
         """
         Builds FFmpeg command for direct zero-reencode video stream copy (-c:v copy).
         Combines multi-repetition video concat demuxer with audio chain in ~2 seconds.
+        Active captions are muxed (mov_text), never burned with libass.
         """
         cmd: list[str] = [
             "ffmpeg", "-y",
@@ -712,6 +719,10 @@ class LoopVideoEngine(BaseVideoCompositor):
             if bg_p.is_file() and bg_p.stat().st_size > 0:
                 cmd.extend(["-stream_loop", "-1", "-i", str(bg_p)])
                 has_music = True
+
+        sub_input_index = 3 if has_music else 2
+        extra_sub, sub_maps = subtitle_mux_ffmpeg_parts(subtitle_path, sub_input_index)
+        cmd.extend(extra_sub)
 
         threads = kwargs.get("threads") or default_ffmpeg_threads()
         if has_music:
@@ -738,6 +749,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 "-map", "0:v:0",
                 "-map", "1:a:0",
             ])
+        cmd.extend(sub_maps)
 
         cmd.extend([
             "-t", f"{max(0.1, duration_sec):.3f}",
@@ -821,12 +833,13 @@ class LoopVideoEngine(BaseVideoCompositor):
             cfg_timeout = float(getattr(SETTINGS, "render_timeout_seconds", 10800) or 10800)
             timeout = max(cfg_timeout, float(duration_sec or 0) * 3.0 + 300.0)
 
-        # Evaluate Stream-Copy path (Zero video re-encoding: ~2 seconds render)
-        subs_active = bool(include_subtitles) and has_active_subtitles(subtitle_path)
+        # Evaluate Stream-Copy path (Zero video re-encoding: ~2 seconds render).
+        # Active captions mux; they must not force libx264/libass burn.
+        mux_path = Path(subtitle_path) if (include_subtitles and subtitle_path) else None
         if stream_copy is None:
-            is_stream_copy = (not subs_active) and (orientation in ("horizontal", "16:9", "longform", (1920, 1080)))
+            is_stream_copy = True
         else:
-            is_stream_copy = bool(stream_copy) and (not subs_active)
+            is_stream_copy = bool(stream_copy)
 
         if is_stream_copy and v_path.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS and not v_path.name.startswith(("corrupt", "invalid", "dead")):
             try:
@@ -855,6 +868,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                         bgm_path=Path(bg_music_path) if bg_music_path else None,
                         duration_sec=duration_sec,
                         output_video_path=out_path,
+                        subtitle_path=mux_path,
                         music_volume=music_volume,
                         ducking_threshold=ducking_threshold,
                         ducking_ratio=ducking_ratio,

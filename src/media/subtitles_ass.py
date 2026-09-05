@@ -103,6 +103,9 @@ def libass_filter_clause(
 
     Wrapping the path in single quotes breaks libass on FFmpeg 6.1. Colons and
     quotes inside the path are escaped; the filter value itself stays unquoted.
+
+    Production captions MUST NOT use this on the video graph (it forces libx264).
+    Mux with ``subtitle_mux_ffmpeg_parts`` instead.
     """
     clause = f"ass=filename={escape_ffmpeg_filter_path(subtitle_path)}"
     if fonts_dir is None:
@@ -111,6 +114,31 @@ def libass_filter_clause(
     if fonts.exists() and fonts.is_dir():
         clause += f":fontsdir={escape_ffmpeg_filter_path(fonts)}"
     return clause
+
+
+def subtitle_mux_ffmpeg_parts(
+    subtitle_path: Path | str | None,
+    input_index: int,
+    language: str = "spa",
+) -> tuple[list[str], list[str]]:
+    """Mux an ASS/SRT file as a subtitle stream. Never paints pixels.
+
+    Returns ``(extra_inputs, map_and_codec)``. Caller appends extra_inputs with
+    the other ``-i`` flags, then map_and_codec next to ``-c:v copy``.
+    Empty lists when there is no active Dialogue.
+    """
+    if subtitle_path is None or not has_active_subtitles(subtitle_path):
+        return [], []
+    extra_inputs = ["-i", str(Path(subtitle_path))]
+    map_and_codec = [
+        "-map",
+        f"{int(input_index)}:0",
+        "-c:s",
+        "mov_text",
+        "-metadata:s:s:0",
+        f"language={language}",
+    ]
+    return extra_inputs, map_and_codec
 
 
 def sanitize_timestamps(
