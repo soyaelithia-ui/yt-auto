@@ -1,6 +1,9 @@
 change_name: purge-rotated-credentials
-current_phase: verify
-status: completed
+current_phase: archive
+status: archived
+archived_at: '2026-09-05'
+promoted_specs:
+  - openspec/specs/secret-hygiene/spec.md
 delivery_strategy: ask-on-risk
 artifact_store: openspec
 research: unselected
@@ -28,4 +31,4 @@ phases:
   verify:
     status: completed
   archive:
-    status: pending
+    status: completed

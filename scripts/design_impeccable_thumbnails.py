@@ -13,11 +13,34 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps
 
-FONT_PATH = "/srv/projects/yt-auto/assets/fonts/Montserrat-Black.ttf"
-ARTIFACT_DIR = Path("/home/moku/.gemini/antigravity-cli/brain/709258c2-94f7-4b4a-b0c2-2edd58883f4e")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_thumbnail_output_dir(custom_path: str | Path | None = None) -> Path:
+    if custom_path:
+        target = Path(custom_path).resolve()
+    elif os.getenv("YT_THUMBNAILS_DIR"):
+        target = Path(os.environ["YT_THUMBNAILS_DIR"]).resolve()
+    else:
+        target = (REPO_ROOT / "artifacts" / "thumbnails").resolve()
+
+    # Enforce Strict Confinement Guardrail
+    try:
+        target.relative_to(REPO_ROOT)
+    except ValueError:
+        raise PermissionError(
+            f"Security Violation: Target path '{target}' escapes workspace root '{REPO_ROOT}'."
+        )
+
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
 
 def get_font(size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(FONT_PATH, size=size)
+    font_path = REPO_ROOT / "assets" / "fonts" / "Montserrat-Black.ttf"
+    if not font_path.exists():
+        raise FileNotFoundError(f"Required font asset does not exist: {font_path}")
+    return ImageFont.truetype(str(font_path), size=size)
 
 def draw_text_with_effects(
     draw: ImageDraw.ImageDraw,
@@ -438,13 +461,18 @@ def create_horror_impeccable_thumbnail(base_path: str, output_path: str) -> str:
 
 
 def main():
-    scp_base = ARTIFACT_DIR / "scp_173_intense_1788482257060.jpg"
-    aita_base = ARTIFACT_DIR / "inheritance_drama_wedding_1788480840010.jpg"
-    horror_base = ARTIFACT_DIR / "abandoned_radio_mountain_1788480856078.jpg"
+    output_dir = resolve_thumbnail_output_dir()
+    scp_base = REPO_ROOT / "assets" / "thumbnails" / "scp_173_intense_1788482257060.jpg"
+    aita_base = REPO_ROOT / "assets" / "thumbnails" / "inheritance_drama_wedding_1788480840010.jpg"
+    horror_base = REPO_ROOT / "assets" / "thumbnails" / "abandoned_radio_mountain_1788480856078.jpg"
 
-    scp_out = ARTIFACT_DIR / "impeccable_thumb_scp_173.jpg"
-    aita_out = ARTIFACT_DIR / "impeccable_thumb_aita.jpg"
-    horror_out = ARTIFACT_DIR / "impeccable_thumb_horror.jpg"
+    scp_out = output_dir / "impeccable_thumb_scp_173.jpg"
+    aita_out = output_dir / "impeccable_thumb_aita.jpg"
+    horror_out = output_dir / "impeccable_thumb_horror.jpg"
+
+    for base in (scp_base, aita_base, horror_base):
+        if not base.exists():
+            raise FileNotFoundError(f"Required base artwork does not exist: {base}")
 
     print("Generating Impeccable SCP-173 thumbnail...")
     create_scp_impeccable_thumbnail(str(scp_base), str(scp_out))
@@ -458,12 +486,17 @@ def main():
     create_horror_impeccable_thumbnail(str(horror_base), str(horror_out))
     print(f"-> Saved: {horror_out}")
 
-    # Copy to the work directories
-    import shutil
-    shutil.copyfile(scp_out, "/srv/projects/yt-auto/work/cli/093e7ae9d19c4030bf678e729d796fbf/thumbnail.jpg")
-    shutil.copyfile(aita_out, "/srv/projects/yt-auto/work/cli/29168829ab644b6ca985edd030b41800/thumbnail.jpg")
-    shutil.copyfile(horror_out, "/srv/projects/yt-auto/work/cli/e86b45838f3c466b86042ed276b466b3/thumbnail.jpg")
-    print("Copied impeccable thumbnails into work/cli directories.")
+    # Copy to work directories if present in workspace
+    for out_path, run_id in [
+        (scp_out, "093e7ae9d19c4030bf678e729d796fbf"),
+        (aita_out, "29168829ab644b6ca985edd030b41800"),
+        (horror_out, "e86b45838f3c466b86042ed276b466b3"),
+    ]:
+        run_dest = REPO_ROOT / "work" / "cli" / run_id / "thumbnail.jpg"
+        if run_dest.parent.exists():
+            import shutil
+            shutil.copyfile(out_path, run_dest)
+            print(f"Copied impeccable thumbnail into {run_dest}")
 
 if __name__ == "__main__":
     main()
