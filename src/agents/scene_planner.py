@@ -36,6 +36,20 @@ logger = get_logger("scene_planner_compositor")
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schemas" / "scene_manifest.schema.json"
 
+HEX_COLOR_PATTERN = re.compile(r"^#([0-9a-fA-F]{6})$")
+
+
+def validate_hex_color(val: Any, default: str = "#00FF88") -> str:
+    """Validate that val matches standard hex format (#RRGGBB). If invalid or null, return default."""
+    if val and isinstance(val, str):
+        val_s = val.strip()
+        if val_s.startswith("0x") and len(val_s) == 8:
+            val_s = "#" + val_s[2:]
+        m = HEX_COLOR_PATTERN.match(val_s)
+        if m:
+            return f"#{m.group(1).upper()}"
+    return default
+
 
 class ScenePlannerCompositorAgent:
     """Agent 3: Synthesizes SceneManifestV2 from Script and Visual Plan."""
@@ -46,6 +60,154 @@ class ScenePlannerCompositorAgent:
         if self.schema_path.is_file():
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
+
+    @staticmethod
+    def _extract_channel_palette_and_hud(
+        channel_name: str,
+        lane_id: str,
+        meta: Dict[str, Any],
+        visual_plan: Dict[str, Any],
+        channel_config: Optional[Any] = None,
+        lane_config: Optional[Any] = None,
+        explicit_hud_layout: Optional[str] = None,
+        explicit_accent: Optional[str] = None,
+    ) -> Tuple[str, str, str]:
+        """Extracts and validates suggested (hud_layout, accent_color_hex, primary_color_hex).
+
+        Extracts layout and chromatic palette from explicit arguments, metadata, visual_plan,
+        provided channel/lane configs, or ChannelProfileRegistry.
+        Empty or invalid color values degrade cleanly to safe, neutral defaults.
+        """
+        ch_cfg = channel_config or meta.get("channel_config") or visual_plan.get("channel_config")
+        ln_cfg = lane_config or meta.get("lane_config") or visual_plan.get("lane_config")
+
+        # 1. Extract suggested HUD layout/style
+        hud_layout_candidate = (
+            explicit_hud_layout
+            or meta.get("hud_layout")
+            or meta.get("hud_style")
+            or visual_plan.get("hud_layout")
+            or visual_plan.get("hud_style")
+        )
+        if not hud_layout_candidate and ln_cfg:
+            if isinstance(ln_cfg, dict):
+                hud_layout_candidate = ln_cfg.get("hud_layout") or ln_cfg.get("hud_style")
+            else:
+                hud_layout_candidate = getattr(ln_cfg, "hud_layout", None) or getattr(ln_cfg, "hud_style", None)
+
+        if not hud_layout_candidate and ch_cfg:
+            if isinstance(ch_cfg, dict):
+                hud_layout_candidate = ch_cfg.get("hud_layout") or ch_cfg.get("hud_style")
+            else:
+                hud_layout_candidate = getattr(ch_cfg, "hud_layout", None) or getattr(ch_cfg, "hud_style", None)
+
+        lane_l = (lane_id or "").lower()
+        story_l = str(meta.get("story_type") or "").lower()
+        ch_l = (channel_name or "").lower()
+
+        _allowed = frozenset({"top_bar", "card", "bottom_bar"})
+        cand = str(hud_layout_candidate or "").strip().lower()
+        if cand in _allowed:
+            resolved_layout = cand
+        elif cand in ("scp", "classified", "terminal") or "scp" in lane_l or "scp" in story_l:
+            resolved_layout = "top_bar"
+        elif cand in ("reddit_aita", "reddit", "aita", "drama") or "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l or "aita" in story_l or "reddit" in story_l:
+            resolved_layout = "card"
+        elif cand in ("scifi", "cyberpunk", "space") or "scifi" in lane_l or "space" in lane_l or "scifi" in ch_l:
+            resolved_layout = "top_bar"
+        else:
+            resolved_layout = "bottom_bar"
+
+        # 2. Extract Accent Color
+        raw_accent = (
+            explicit_accent
+            or meta.get("accent_color")
+            or meta.get("accent_color_hex")
+            or meta.get("palette", {}).get("accent")
+            or visual_plan.get("accent_color")
+            or visual_plan.get("palette", {}).get("accent")
+        )
+
+        if not raw_accent and ln_cfg:
+            if isinstance(ln_cfg, dict):
+                raw_accent = ln_cfg.get("accent_color") or ln_cfg.get("palette", {}).get("accent")
+            else:
+                raw_accent = getattr(ln_cfg, "accent_color", None)
+                if not raw_accent and hasattr(ln_cfg, "palette"):
+                    pal = getattr(ln_cfg, "palette")
+                    raw_accent = getattr(pal, "accent", None) if pal else None
+
+        if not raw_accent and ch_cfg:
+            if isinstance(ch_cfg, dict):
+                raw_accent = (
+                    ch_cfg.get("accent_color")
+                    or ch_cfg.get("accent_color_hex")
+                    or ch_cfg.get("visual", {}).get("palette", {}).get("accent")
+                    or ch_cfg.get("palette", {}).get("accent")
+                    or ch_cfg.get("accent")
+                )
+            else:
+                vis = getattr(ch_cfg, "visual", None)
+                pal = getattr(vis, "palette", None) if vis else getattr(ch_cfg, "palette", None)
+                raw_accent = getattr(pal, "accent", None) if pal else getattr(ch_cfg, "accent_color", None)
+
+        if not raw_accent:
+            try:
+                from src.core.channel_profile import ChannelProfileRegistry
+                cid = ChannelProfileRegistry.normalize_channel_id(channel_name or lane_id)
+                profile = ChannelProfileRegistry.get_channel(cid)
+                if profile and profile.visual and profile.visual.palette:
+                    raw_accent = profile.visual.palette.accent
+            except Exception:
+                pass
+
+        if "scp" in lane_l or "scp" in story_l:
+            safe_accent_default = "#00FF66"
+        elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l or "aita" in story_l:
+            safe_accent_default = "#FF4500"
+        elif "scifi" in lane_l or "space" in lane_l or "scifi" in ch_l:
+            safe_accent_default = "#00F0FF"
+        else:
+            safe_accent_default = "#00E5FF"
+
+        if raw_accent is not None:
+            resolved_accent = validate_hex_color(raw_accent, default="#00FF88")
+        else:
+            resolved_accent = validate_hex_color(safe_accent_default, default="#00FF88")
+
+        # 3. Extract Primary Color
+        raw_primary = (
+            meta.get("primary_color")
+            or meta.get("primary_color_hex")
+            or meta.get("palette", {}).get("primary")
+            or visual_plan.get("primary_color")
+            or visual_plan.get("palette", {}).get("primary")
+        )
+        if not raw_primary and ch_cfg:
+            if isinstance(ch_cfg, dict):
+                raw_primary = (
+                    ch_cfg.get("primary_color")
+                    or ch_cfg.get("visual", {}).get("palette", {}).get("primary")
+                    or ch_cfg.get("palette", {}).get("primary")
+                )
+            else:
+                vis = getattr(ch_cfg, "visual", None)
+                pal = getattr(vis, "palette", None) if vis else getattr(ch_cfg, "palette", None)
+                raw_primary = getattr(pal, "primary", None) if pal else None
+
+        if not raw_primary:
+            try:
+                from src.core.channel_profile import ChannelProfileRegistry
+                cid = ChannelProfileRegistry.normalize_channel_id(channel_name or lane_id)
+                profile = ChannelProfileRegistry.get_channel(cid)
+                if profile and profile.visual and profile.visual.palette:
+                    raw_primary = profile.visual.palette.primary
+            except Exception:
+                pass
+
+        resolved_primary = validate_hex_color(raw_primary, default="#030A14")
+
+        return resolved_layout, resolved_accent, resolved_primary
 
     @staticmethod
     def _resolve_scene_archetype(
@@ -226,6 +388,12 @@ class ScenePlannerCompositorAgent:
         fps: int = 30,
         actual_audio_duration: Optional[float] = None,
         subdivide_shots: bool = False,
+        *,
+        channel_config: Optional[Any] = None,
+        lane_config: Optional[Any] = None,
+        hud_layout: Optional[str] = None,
+        accent_color: Optional[str] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
         Builds a canonical scene_manifest.json payload.
@@ -233,6 +401,17 @@ class ScenePlannerCompositorAgent:
         meta = script.get("metadata", {})
         lane = lane_id or meta.get("channel_lane", "moku-horror-long")
         target_fmt = meta.get("target_format", "longform")
+
+        resolved_layout, resolved_accent, resolved_primary = self._extract_channel_palette_and_hud(
+            channel_name=channel_name,
+            lane_id=lane,
+            meta=meta,
+            visual_plan=visual_plan,
+            channel_config=channel_config or kwargs.get("channel_config"),
+            lane_config=lane_config or kwargs.get("lane_config"),
+            explicit_hud_layout=hud_layout or kwargs.get("hud_layout"),
+            explicit_accent=accent_color or kwargs.get("accent_color"),
+        )
 
         # Resolve resolution
         if resolution:
@@ -351,8 +530,8 @@ class ScenePlannerCompositorAgent:
                         "seed": 42 + global_scene_idx * 19,
                         "palette": {
                             "base_dark": palette_data.get("shadow", "#000305"),
-                            "mid_tone": palette_data.get("primary", "#041421"),
-                            "accent": palette_data.get("accent", "#00e5a3"),
+                            "mid_tone": palette_data.get("primary", resolved_primary),
+                            "accent": palette_data.get("accent", resolved_accent),
                         },
                         "uniforms": {
                             "u_noise_scale": round(1.0 + 0.25 * tension, 2),
@@ -388,7 +567,7 @@ class ScenePlannerCompositorAgent:
                             "light_source_pos": [0.75, 0.25],
                             "intensity": round(0.28 + 0.12 * tension, 2),
                             "flicker_frequency": round(3.5 if tension >= 4 else 0.0, 1),
-                            "color_tint": sc_plan.get("palette", {}).get("accent", "#00e5a3"),
+                            "color_tint": sc_plan.get("palette", {}).get("accent", resolved_accent),
                         },
                         "particles": {
                             "type": particle_type,
@@ -428,48 +607,40 @@ class ScenePlannerCompositorAgent:
                 telemetry = sc_plan.get("telemetry_label") or sc_script.get("telemetry_label")
                 from src.media.multi_act_renderer import resolve_hud_accent_color
                 plan_accent = sc_plan.get("palette", {}).get("accent") if isinstance(sc_plan.get("palette"), dict) else None
-                if "scp" in lane_l or "scp" in str(meta.get("story_type", "")).lower():
+                scene_accent_raw = plan_accent or sc_plan.get("accent_color_hex")
+                if scene_accent_raw is not None:
+                    scene_accent = validate_hex_color(str(scene_accent_raw), default=resolved_accent)
+                else:
+                    scene_accent = resolved_accent
+                story_l = str(meta.get("story_type", "")).lower()
+                if "scp" in lane_l or "scp" in story_l:
                     story_type = "scp"
-                    niche_hud = {
-                        "lane_id": lane,
-                        "story_type": story_type,
-                        "hud_layout": "top_bar",
-                        "hud_badge": hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO",
-                        "hud_site": hud_site or "SITIO-19 // SECTOR-04",
-                        "telemetry_label": telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA",
-                        "accent_color_hex": resolve_hud_accent_color(
-                            str(plan_accent or ""), lane_id=lane, story_type=story_type
-                        ),
-                        "tension_level": tension,
-                    }
+                    copy_badge = hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO"
+                    copy_site = hud_site or "SITIO-19 // SECTOR-04"
+                    copy_tel = telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA"
                 elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l:
                     story_type = "reddit_aita"
-                    niche_hud = {
-                        "lane_id": lane,
-                        "story_type": story_type,
-                        "hud_layout": "card",
-                        "hud_badge": hud_badge or "r/AmItheAsshole",
-                        "hud_site": hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}",
-                        "telemetry_label": telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments",
-                        "accent_color_hex": resolve_hud_accent_color(
-                            str(plan_accent or ""), lane_id=lane, story_type=story_type
-                        ),
-                        "tension_level": tension,
-                    }
+                    copy_badge = hud_badge or "r/AmItheAsshole"
+                    copy_site = hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}"
+                    copy_tel = telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments"
                 else:
                     story_type = "horror"
-                    niche_hud = {
-                        "lane_id": lane,
-                        "story_type": story_type,
-                        "hud_layout": "bottom_bar",
-                        "hud_badge": hud_badge or "ABYSSAL SONAR // REC",
-                        "hud_site": hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M",
-                        "telemetry_label": telemetry or "ECO NO IDENTIFICADO",
-                        "accent_color_hex": resolve_hud_accent_color(
-                            str(plan_accent or ""), lane_id=lane, story_type=story_type
-                        ),
-                        "tension_level": tension,
-                    }
+                    copy_badge = hud_badge or "ABYSSAL SONAR // REC"
+                    copy_site = hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M"
+                    copy_tel = telemetry or "ECO NO IDENTIFICADO"
+                niche_hud = {
+                    "lane_id": lane,
+                    "story_type": story_type,
+                    "hud_layout": resolved_layout,
+                    "hud_badge": copy_badge,
+                    "hud_site": copy_site,
+                    "telemetry_label": copy_tel,
+                    "accent_color_hex": resolve_hud_accent_color(
+                        scene_accent, lane_id=lane, story_type=story_type
+                    ),
+                    "primary_color_hex": resolved_primary,
+                    "tension_level": tension,
+                }
 
                 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
                 arch = category if is_procedural else env_name

@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -111,6 +112,20 @@ HUD_FONT_META = 16
 HUD_BORDERW = 2
 HUD_BORDERCOLOR = "black@0.85"
 _GENERIC_HUD_ACCENTS = frozenset({"", "#00ff88"})  # NicheHudConfig default only
+HEX_COLOR_PATTERN = re.compile(r"^#([0-9a-fA-F]{6})$")
+
+
+def _escape_ffmpeg_color(color: Any, default: str = "#00FF88") -> str:
+    """Keep only #RRGGBB so corrupt accents cannot leak into drawbox/drawtext."""
+    if not color or not isinstance(color, str):
+        return default
+    s = color.strip()
+    if s.startswith("0x") and len(s) == 8:
+        s = "#" + s[2:]
+    m = HEX_COLOR_PATTERN.match(s)
+    if m:
+        return f"#{m.group(1).upper()}"
+    return default
 
 
 def _escape_drawtext(text: str) -> str:
@@ -127,7 +142,9 @@ def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", stor
     """
     raw = (accent_color_hex or "").strip()
     if raw and raw.lower() not in _GENERIC_HUD_ACCENTS:
-        return raw
+        escaped = _escape_ffmpeg_color(raw, default="")
+        if escaped:
+            return escaped
     key = (lane_id or "").strip()
     if key:
         try:
@@ -135,10 +152,10 @@ def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", stor
 
             accent = (ChannelProfileRegistry.get_channel(key).visual.palette.accent or "").strip()
             if accent:
-                return accent
+                return _escape_ffmpeg_color(accent, default="#00FF88")
         except Exception:
             pass
-    return raw or "#00FF88"
+    return _escape_ffmpeg_color(raw, default="#00FF88")
 
 
 def hud_safe_margins(width: int, height: int) -> Dict[str, int]:
