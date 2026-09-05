@@ -1395,7 +1395,7 @@ def run_pipeline_once(
             _require_heartbeat()
 
             # Code-Based Review Verdict (deterministic) — preferred path.
-            # Falls back to the legacy Telegram + 6h sweep path on failure.
+            # Falls back to the legacy Telegram + AUTO_PUBLISH_TIMEOUT_HOURS sweep path on failure.
             code_review_succeeded = False
             code_review_attempted = False
             try:

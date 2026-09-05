@@ -523,7 +523,7 @@ def _run_turn_responsive(fn, *, timeout: float, database: str, tick: float | Non
 
 
 def _run_auto_publish_sweep() -> None:
-    """Publish pending reviews whose approval window (6h default) has elapsed."""
+    """Publish pending reviews whose approval window (AUTO_PUBLISH_TIMEOUT_HOURS, default 24h) has elapsed."""
     if os.environ.get("ENABLE_AUTO_PUBLISH_SWEEP") != "1":
         return
     try:
@@ -531,7 +531,7 @@ def _run_auto_publish_sweep() -> None:
 
         check_pending_approvals()
     except Exception as exc:  # pragma: no cover - operational guard
-        logger.warning("6-hour auto-publish sweep failed: %s", exc, exc_info=True)
+        logger.warning("auto-publish sweep failed: %s", exc, exc_info=True)
 
 
 def start_daemon(
