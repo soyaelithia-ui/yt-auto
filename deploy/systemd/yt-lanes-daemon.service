@@ -6,11 +6,17 @@ After=network.target yt-review-bot.service
 Type=simple
 User=moku
 Group=developers
+# Canonical VPS deploy root: /srv/projects/yt-auto
+# systemd no expande variables en WorkingDirectory=/ExecStart= (ruta del binario);
+# esos paths deben quedar absolutos y alineados con YT_AUTO_ROOT.
+# Override en otro host: systemctl edit yt-lanes-daemon.service y redefinir
+# Environment=YT_AUTO_ROOT=..., WorkingDirectory=..., ExecStart=... y DBs.
+Environment=YT_AUTO_ROOT=/srv/projects/yt-auto
 WorkingDirectory=/srv/projects/yt-auto
 Environment=YT_PROFILE=prod
 Environment=PYTHONUNBUFFERED=1
-Environment=YOUTUBE_AUTOMATION_DB=/srv/projects/yt-auto/data/shorts_queue.db
-Environment=VIDEO_REVIEW_DB_PATH=/srv/projects/yt-auto/data/review_state.db
+Environment=YOUTUBE_AUTOMATION_DB=${YT_AUTO_ROOT}/data/shorts_queue.db
+Environment=VIDEO_REVIEW_DB_PATH=${YT_AUTO_ROOT}/data/review_state.db
 # Refuerzo de recursos y anti-doble-polling: este unit es el ÚNICO productor;
 # el poller de Telegram vive en yt-review-bot.service.
 Environment=ENABLE_TELEGRAM_CALLBACK_POLLING=0

@@ -81,14 +81,38 @@ Si el build falla con `build/agy: not found`, falta el paso 1. Si el arranque fa
 
 Solo para VPS **con root**. El despliegue Docker de la sección 2 no usa systemd.
 
-- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`python3 main.py daemon --interval 60`).
-- `yt-review-bot.service`: Bot interactivo Telegram (`python3 review/review_bot_daemon.py`).
+**Root de despliegue canónico (VPS):** `/srv/projects/yt-auto`.
+
+Los unit files fijan ese path en `WorkingDirectory=` y `ExecStart=` (systemd exige rutas absolutas ahí; no expande `Environment=` en esos campos). También exportan `Environment=YT_AUTO_ROOT=/srv/projects/yt-auto` (default documentado) y derivan rutas de DB con `${YT_AUTO_ROOT}` donde sí hay sustitución.
+
+- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`main.py daemon --interval 60`).
+- `yt-review-bot.service`: Bot interactivo Telegram (`deploy/tmux_review_bot.py`).
 
 ```bash
-# Systemd setup (requiere sudo)
+# Systemd setup (requiere sudo; checkout en /srv/projects/yt-auto)
 sudo cp deploy/systemd/*.service /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo systemctl enable --now yt-lanes-daemon.service yt-review-bot.service
 
 # Respaldo SQLite verificado y barrido de cola
 python3 main.py backup && python3 main.py queue sweep
+```
+
+### Instalar fuera de `/srv/projects/yt-auto`
+
+No editar a mano el unit copiado: usar drop-in para mantener `WorkingDirectory`, `ExecStart` y `YT_AUTO_ROOT` alineados.
+
+```bash
+sudo systemctl edit yt-lanes-daemon.service
+# [Service]
+# Environment=YT_AUTO_ROOT=/opt/yt-auto
+# WorkingDirectory=/opt/yt-auto
+# Environment=YOUTUBE_AUTOMATION_DB=/opt/yt-auto/data/shorts_queue.db
+# Environment=VIDEO_REVIEW_DB_PATH=/opt/yt-auto/data/review_state.db
+# ExecStart=/opt/yt-auto/.venv/bin/python main.py daemon --interval 60
+
+sudo systemctl edit yt-review-bot.service
+# [Service]
+# Environment=YT_AUTO_ROOT=/opt/yt-auto
+# WorkingDirectory=/opt/yt-auto
+# ExecStart=/opt/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
 ```
