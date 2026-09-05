@@ -38,11 +38,11 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 
 ## Auto-approve / Autopilot (HITL)
 
-Para decisiones rutinarias sin widget humano (bot **Auto** / Yon):
+Defaults de producción: `AUTO_APPROVE=0` y `ENABLE_AUTO_PUBLISH_SWEEP=0` (`.env.example` y `docker-compose.yml`). Opt-in explícito:
 
-1. Completar preflight de secretos (`python3 main.py run --preflight`) — Telegram + YouTube/Drive siguen obligatorios según el modo.
-2. En `.env` / compose: `AUTO_APPROVE=1` y, si se desea el barrido del daemon, `ENABLE_AUTO_PUBLISH_SWEEP=1`.
-3. `AUTO_APPROVE` solo aprueba la puerta de revisión; la subida a YouTube sigue gated por cookies/token del canal.
+1. Completar preflight (`python3 main.py run --preflight`) — Telegram + YouTube/Drive siguen obligatorios; el opt-in **no** omite la validación.
+2. En `.env` (no en el YAML base): `AUTO_APPROVE=1` y, si aplica, `ENABLE_AUTO_PUBLISH_SWEEP=1`.
+3. `AUTO_APPROVE` solo aprueba la puerta HITL; YouTube sigue gated por cookies/token del canal.
 4. `TEST_MODE=1` sigue **prohibido** en producción.
 
 ```bash
@@ -53,30 +53,30 @@ AUTO_APPROVE=1 ENABLE_AUTO_PUBLISH_SWEEP=1 python3 main.py daemon --interval 60
 
 ## 2. Despliegue con Docker Compose (`docker-compose.yml`)
 
-Camino feliz **sin sudo en el host**. El contenedor es autocontenido (FFmpeg, Chromium, `agy` en `/usr/local/bin/agy`). No monta el CLI ni `~/.gemini` del usuario.
+Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en `/usr/local/bin/agy`). Secretos solo en `./secrets:/run/secrets:ro`.
 
 - **Límites de Recursos (low-RAM primero)**: el techo del compose base es `mem_limit: 6g` / `cpus: 4.0` / `shm_size: 1g` (path pesado / reencode). **Camino recomendado de despliegue**: overlay small — `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` → `2g` / `2` CPU / `shm 256m` / tmpfs `/tmp` 512m. Smoke live (etapas 8–9) ≈ 84–88 MB RSS. Presupuesto CI (`src/core/rss_budgets.py`): ΔRSS 8/9 ≤16 MB, peak ≤512 MB — cabe holgado bajo `mem_limit: 2g` del overlay small. No bajar el techo del compose base (6g) hasta full-render RSS.
 - **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` (2 GB en base; 512m con small), `cap_drop: ALL`, usuario no-root `appuser:10001`, named volumes (no bind del workdir). Secretos solo en `./secrets:/run/secrets:ro`.
 - **Servidor Telegram Local**: Puerto `127.0.0.1:8081`, hasta 2 GB, zero-copy `file:///`.
 - **Antigravity**: AppData en el volumen `yt_agy_home` (`/home/appuser/.gemini`). El token OAuth se copia desde `secrets/antigravity-oauth-token` (login `agy` en una máquina con navegador; el contenedor no abre OAuth interactivo).
 
-```bash
-# 1. Stage del ELF agy (gitignored; build/agy no se commitea)
-./scripts/stage_agy.sh
+### Checklist deploy (pasos 0→8)
 
-# 2. Construir e iniciar — preferir overlay low-RAM (small)
-docker compose -f docker-compose.yml -f docker-compose.small.yml build
-docker compose -f docker-compose.yml -f docker-compose.small.yml up -d
+| Paso | Acción | Criterio de OK |
+|---|---|---|
+| **0** | Árbol vacío / clone limpio; `cp .env.example .env` y editar (sin secretos en git). | `.env` local `chmod 600`; no commitear. |
+| **1** | Layout `secrets/`: `drive_key.json`, `youtube_token.json`, `youtube_token_aelithia.json`, `decrypted_cookies.json`, `cookies_channel2.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
+| **2** | Completar `.env`: Telegram (`TELEGRAM_*` + `TELEGRAM_ALLOWED_CHAT_ID`), Drive IDs (`DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`, …), channel IDs; `TELEGRAM_API_ID`/`HASH` para sidecar. | Placeholders secretos no vacíos en runtime. |
+| **3** | `./scripts/stage_agy.sh` | `build/agy` existe (gitignored). |
+| **4** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |
+| **5** | Preferir path low-RAM: `docker compose -f docker-compose.yml -f docker-compose.small.yml build` | Build OK. |
+| **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados. |
+| **7** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-automation` + `telegram-bot-api` healthy/up. |
+| **8** | Logs: `… logs --follow yt-automation` | Sin FAIL de preflight; daemon en intervalo. |
 
-# Path pesado (6g) solo si hace falta reencode / carga alta:
-# docker compose build && docker compose up -d
+Path pesado (6g/4 CPU) solo si hace falta reencode: `docker compose build && docker compose up -d`. Overlay small → `2g` / `2` CPU / `shm 256m` / tmpfs `/tmp` 512m. Defaults compose: `AUTO_APPROVE: "0"`, `ENABLE_AUTO_PUBLISH_SWEEP: "0"` (**no flippear** en el YAML).
 
-# Ver logs / estado
-docker compose -f docker-compose.yml -f docker-compose.small.yml logs --follow yt-automation
-docker compose -f docker-compose.yml -f docker-compose.small.yml ps
-```
-
-Si el build falla con `build/agy: not found`, falta el paso 1. Si el arranque falla por directorios no escribibles, recrear volúmenes: `docker compose down -v` (borra estado de data/work).
+Si `build/agy: not found` → paso 3. Si uid 10001 no escribe → `docker compose down -v` y `up` de nuevo.
 
 ---
 

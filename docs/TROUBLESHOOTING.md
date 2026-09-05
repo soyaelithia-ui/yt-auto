@@ -1,7 +1,7 @@
 # Diagnóstico Rápido y Resolución de Errores (Troubleshooting)
 
 > **Estado:** REPOSITORIO / OFICIAL  
-> **Última actualización:** 2026-08  
+> **Última actualización:** 2026-09  
 
 Matriz de diagnóstico operativo para rápida resolución de incidentes.
 
@@ -9,6 +9,10 @@ Matriz de diagnóstico operativo para rápida resolución de incidentes.
 
 | Síntoma / Error | Causa Probable | Diagnóstico / Verificación | Solución Recomendada |
 |---|---|---|---|
+| **`Production preflight: FAIL` (Drive)** | Faltan `DRIVE_FOLDER_ID` / `DRIVE_APPROVED_VIDEO_FOLDER_ID` o credencial Drive. | `python3 main.py run --preflight` | Completar IDs y `DRIVE_KEY_PATH` (o OAuth con scope Drive). Ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3 y checklist [OPERACION.md](OPERACION.md) pasos 1–4. |
+| **`Production preflight: FAIL` (YouTube publish)** | Cookies/token o channel ID ausentes por canal. | Mismo preflight; `auth check -c <canal>` | Colocar tokens/cookies en `secrets/`; IDs `UC…` en `.env`. §3 CONFIG + pasos 1–4 OPERACION. |
+| **`Production preflight: FAIL` (Telegram / TEST_MODE)** | `TELEGRAM_*` incompletos o `TEST_MODE=1`. | Mismo preflight | Rellenar token/chat/user/`TELEGRAM_ALLOWED_CHAT_ID`; `TEST_MODE=0`. §3 CONFIG. |
+| **`AUTO_APPROVE=1` pero preflight falla** | Opt-in HITL no omite validación ni puerta YouTube. | Preflight + compose defaults `"0"` | Completar secretos; no esperar bypass. §3 CONFIG; Auto-approve en OPERACION. |
 | **HTTP 429 / `WAITING_LLM_QUOTA`** | Límite de cuota diaria o RPM en Google Gemini API. | `python3 main.py status` | Mantener el trabajo en cola; el planificador reintenta automáticamente tras el periodo de enfriamiento. |
 | **`NotFoundError` en llamada IA** | Modelo de Gemini retirado o nombre inválido. | Revisar modelo en `src/agents/base_agent.py` | Configurar el modelo canónico `gemini-3.7-flash` o secundario `gemini-3.6-flash`. |
 | **Cookies de Sesión Expiradas / `EXPIRING_SOON`** | Vencimiento de tokens `LOGIN_INFO` o `SAPISID`. | Bot Telegram `/health` o `SessionHealthValidator` | Extraer cookies Netscape actualizadas del navegador y guardarlas en `secrets/cookies_<canal>.txt`. |

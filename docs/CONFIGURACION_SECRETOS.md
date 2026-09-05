@@ -42,10 +42,13 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 ### C. Google Drive API v3 (Respaldo)
 | Variable | Descripción | Valor Predeterminado / Requisito |
 |---|---|---|
-| `DRIVE_ROOT_FOLDER_ID` | ID de carpeta raíz en Google Drive. | Requerido (formato alfanumérico). |
-| `DRIVE_APPROVED_FOLDER_ID` | ID de carpeta para videos aprobados. | Requerido. |
-| `DRIVE_USE_GCLOUD` | Utilizar credenciales activas de `gcloud auth`. | `0` (inactivo) / `1` (activo). |
-| `DRIVE_KEY_PATH` | Ruta al archivo JSON de credenciales Service Account. | `/run/secrets/drive_key.json` |
+| `DRIVE_FOLDER_ID` | Carpeta raíz operativa (preflight `require_drive`). | Obligatorio para respaldar. |
+| `DRIVE_APPROVED_VIDEO_FOLDER_ID` | Carpeta de videos aprobados (preflight). | Obligatorio para respaldar. |
+| `DRIVE_ROOT_FOLDER_ID` | Alias/carpeta raíz en Drive (compose). | Opcional si `DRIVE_FOLDER_ID` cubre. |
+| `DRIVE_APPROVED_FOLDER_ID` | Carpeta aprobados (legado/compose). | Opcional. |
+| `DRIVE_APPROVED_COVER_FOLDER_ID` / `DRIVE_METADATA_FOLDER_ID` / `DRIVE_PUBLISHED_FOLDER_ID` / `DRIVE_REJECTED_FOLDER_ID` / `DRIVE_ARCHIVE_FOLDER_ID` | Carpetas de ciclo de vida (compose). | IDs vacíos en plantilla. |
+| `DRIVE_USE_GCLOUD` | Credenciales activas de `gcloud auth`. | `0` / `1`. |
+| `DRIVE_KEY_PATH` | JSON Service Account (si no hay OAuth Drive en token de canal). | `secrets/drive_key.json` → `/run/secrets/drive_key.json` |
 
 ### D. Canales de YouTube, Identidades y Publicación
 | Variable | Descripción | Detalle / Dinámico |
@@ -63,17 +66,17 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 ### E. Telegram Bot API y Puerta de Revisión
 | Variable | Descripción | Valor Predeterminado / Ejemplo |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | Token de BotFather para interacción. | Requerido (`id:secret`). |
-| `TELEGRAM_CHAT_ID` | Chat principal para recepción de videos. | Requerido (entero). |
-| `TELEGRAM_ALLOWED_USER_ID` | ID de usuario de Telegram autorizado para aprobar. | Requerido (entero). |
-| `TELEGRAM_API_BASE_URL` | URL base del servidor de Telegram Bot API. | `http://telegram-bot-api:8081` |
-| `TELEGRAM_LOCAL` | Habilitar soporte para servidor local (hasta 2 GB). | `true` |
-| `TELEGRAM_USE_LOCAL_FILES` | Habilitar transporte zero-copy `file:///`. | `1` |
-| `AUTO_APPROVE` | Aprueba revisión HITL sin botones de Telegram (camino Auto/autopilot). **No** omite preflight ni secretos de YouTube/Drive. | `0` (poner `1` para Auto). |
-| `ENABLE_AUTO_PUBLISH_SWEEP` | Barrido del daemon tras `AUTO_PUBLISH_TIMEOUT_HOURS` para publicar pendientes aprobados/stale vía `ReviewJobManager`. | `0` (poner `1` con Auto). |
-| `AUTO_PUBLISH_TIMEOUT_HOURS` | Ventana antes del sweep de auto-publicación. | `24` |
-
----
+| `TELEGRAM_BOT_TOKEN` | Token de BotFather. | Requerido (preflight). |
+| `TELEGRAM_CHAT_ID` | Chat de entrega de videos. | Requerido (numérico). |
+| `TELEGRAM_ALLOWED_USER_ID` | Usuario autorizado a aprobar. | Requerido (numérico). |
+| `TELEGRAM_ALLOWED_CHAT_ID` | Chat autorizado (preflight). | Requerido (numérico). |
+| `TELEGRAM_API_BASE_URL` | Bot API local o cloud. | `http://telegram-bot-api:8081` |
+| `TELEGRAM_LOCAL` / `TELEGRAM_USE_LOCAL_FILES` | API local + zero-copy `file:///`. | `true` / `1` |
+| `TELEGRAM_REQUEST_TIMEOUT_SECONDS` / `TELEGRAM_MEDIA_TIMEOUT_SECONDS` / `TELEGRAM_MAX_FILE_SIZE_MB` | Timeouts y techo de archivo. | `60` / `1800` / `2000` |
+| `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | Credenciales del sidecar `telegram-bot-api`. | Vacías en plantilla. |
+| `AUTO_APPROVE` | Aprueba HITL sin botones. **No** omite preflight ni puerta YouTube. | `0` (compose `"0"`). |
+| `ENABLE_AUTO_PUBLISH_SWEEP` | Sweep tras `AUTO_PUBLISH_TIMEOUT_HOURS` vía `ReviewJobManager`. | `0` (compose `"0"`). |
+| `AUTO_PUBLISH_TIMEOUT_HOURS` | Ventana del sweep. | `24` |
 
 ---
 
@@ -115,8 +118,13 @@ El sistema utiliza las bibliotecas oficiales de Google (`google-auth`, `google-a
 
 ## 3. Validación de Configuración (Preflight)
 
-Para comprobar que todas las dependencias y secretos requeridos estén configurados correctamente antes de iniciar producción:
+`python3 main.py run --preflight` invoca `validate_runtime_config(require_drive=True, require_publish=True, require_review=True)`.
+Salida OK: `Production preflight: PASS`. Fallo: `Production preflight: FAIL: …` (exit 1).
 
-```bash
-python3 main.py run --preflight
-```
+| Modo | Comprueba | Mensajes FAIL típicos | Corrección |
+|---|---|---|---|
+| `require_drive` | `DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`; credencial Drive (`DRIVE_KEY_PATH` o OAuth canal con scope Drive o `DRIVE_USE_GCLOUD=1`) | `DRIVE_FOLDER_ID es obligatorio…`; `DRIVE_APPROVED_VIDEO_FOLDER_ID…`; `Falta DRIVE_KEY_PATH y no hay un token OAuth…` | Completar IDs en `.env`; colocar `secrets/drive_key.json` o token con scope Drive. |
+| `require_publish` | Por canal: cookies + token OAuth + `*_YOUTUBE_CHANNEL_ID` | `{canal}: faltan cookies o token de YouTube`; `{canal}: falta el channel ID…` | Layout `secrets/` + IDs UC…; `auth login` / `auth check`. |
+| `require_review` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_ALLOWED_USER_ID`, `TELEGRAM_ALLOWED_CHAT_ID`; dir escribible de `VIDEO_REVIEW_DB_PATH`; `TEST_MODE≠1` | `TELEGRAM_* obligatorio/debe ser numérico`; `TEST_MODE=1 no está permitido…`; directorio de revisión | Rellenar Telegram; `TEST_MODE=0`; crear dir de review. |
+
+**Nota:** `AUTO_APPROVE=1` / `ENABLE_AUTO_PUBLISH_SWEEP=1` son opt-in HITL; **no** omiten este preflight ni la puerta de cookies/token de YouTube.
