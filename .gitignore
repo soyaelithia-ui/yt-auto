@@ -66,11 +66,13 @@ tmp/
 .config/
 
 # Agent/Local System files
+.agents
 .agents/
 .atl/
 .claude/
 .copilot/
 .gemini/
+.grok/
 .hermes/
 .mcp.json
 .codex/*
