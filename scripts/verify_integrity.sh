@@ -98,7 +98,7 @@ fi
 
 echo "⏳ Running automated anti-regression test suite..."
 if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" tests/unit/test_anti_regression_guardrails.py -q > /dev/null 2>&1; then
-    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-11) passed 100%."
+    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-13) passed 100%."
 else
     echo "❌ [FAIL] Anti-regression test suite failed or pytest not executable!"
     FAILURES=$((FAILURES + 1))
@@ -110,6 +110,17 @@ if [ -d ".github/skills" ] || [ -d "assets/vendor" ] || git ls-files | grep -E '
     FAILURES=$((FAILURES + 1))
 else
     echo "✅ [PASS] Anti-Bloat: zero vendored skills or third-party minified libraries."
+fi
+
+# 8. Caption burn must not return on the loop pipeline
+if grep -q "burn_subtitles" src/pipeline.py; then
+    echo "❌ [FAIL] Caption burn flag reintroduced in src/pipeline.py (REG-13)."
+    FAILURES=$((FAILURES + 1))
+elif grep -q "stream_copy_mode = True" src/pipeline.py; then
+    echo "✅ [PASS] Loop pipeline muxes captions; no burn_subtitles."
+else
+    echo "❌ [FAIL] src/pipeline.py lost stream_copy_mode = True (REG-13)."
+    FAILURES=$((FAILURES + 1))
 fi
 
 echo "======================================================================"

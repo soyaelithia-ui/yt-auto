@@ -322,3 +322,34 @@ class TestFFmpeg61LibassPathGuardrails:
         )
 
 
+class TestLoopHotPathNoBurnGuardrails:
+    """Product path is catalog loop + -c:v copy + mov_text mux. Burn/Chromium must not return."""
+
+    def test_reg13_pipeline_never_burns_captions(self) -> None:
+        text = (SRC_DIR / "pipeline.py").read_text(encoding="utf-8")
+        assert "burn_subtitles" not in text, (
+            "REG-13 VIOLATION: src/pipeline.py reintroduced caption burn"
+        )
+        assert "stream_copy_mode = True" in text
+        assert "FORCE_MULTISCENE" in text
+        assert "is_multiscene_mode = False" in text
+
+    def test_reg13_stream_copy_cmd_muxes_not_libass(self) -> None:
+        text = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
+        start = text.find("def build_stream_copy_composition_cmd")
+        end = text.find("\n    def compose(", start)
+        assert start != -1 and end != -1
+        body = text[start:end]
+        assert "ass=" not in body, (
+            "REG-13 VIOLATION: stream-copy cmd builds a libass burn filter"
+        )
+        assert "libx264" not in body
+        assert "subtitle_mux_ffmpeg_parts" in body
+        assert '"copy"' in body or "'copy'" in body
+
+    def test_reg13_compose_does_not_disable_copy_when_captions_active(self) -> None:
+        text = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
+        assert "bool(stream_copy) and (not subs_active)" not in text
+        assert "is_stream_copy = (not subs_active)" not in text
+
+
