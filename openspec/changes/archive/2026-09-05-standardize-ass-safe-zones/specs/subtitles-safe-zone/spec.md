@@ -1,26 +1,9 @@
 # Delta Specification: Subtitles Safe Zone
 
-## Capability Overview
-The `subtitles-safe-zone` capability specifies Advanced SubStation Alpha (.ass) subtitle generation, safe-zone positioning rules, and karaoke timing chunking. This delta binds scene-level ASS subtitle positioning ($MarginV \ge 480\text{px}$) dynamically to 2.5D camera drift transformations, multi-scene resolution boundaries, and dynamic Rec.709 color grade burning.
+## MODIFIED Requirements
 
-## Modified Requirements
-
-### Requirement 1: Dynamic Camera Drift Bound Vertical Safe-Zone for Shorts
-For 9:16 portrait video formats ($1080\times 1920$), subtitle styling headers MUST configure bottom vertical margin $MarginV \ge 480\text{px}$ (at least $25\%$ of canvas height) to completely clear the 450px bottom UI danger zone of mobile video players. When procedural 2.5D camera drift or vertical tilt is active, the generator MUST compensate margin offsets such that subtitle text lines remain strictly contained above the 450px UI overlay floor regardless of camera translation.
-
-#### Scenario: Generation of portrait ASS subtitles with safe vertical margin under camera drift (Happy Path)
-- **Given** a 9:16 video canvas ($1080\times 1920$) with active 2.5D downward camera drift ($\Delta y = +30\text{px}$)
-- **When** `ASSSubtitleGenerator` (`src/media/subtitles_ass.py`) builds the style header
-- **Then** the `Style` definition MUST set $MarginV \ge 480$ (scaled to $\ge 510\text{px}$ with camera drift compensation)
-- **And** rendered subtitle lines MUST remain fully visible strictly above the 450px mobile UI danger zone.
-
-#### Scenario: Subtitle generation for landscape aspect ratio with camera zoom (Edge Case)
-- **Given** a horizontal video canvas ($1920\times 1080$) with dynamic camera zoom ramp ($s = 1.15$)
-- **When** subtitle header generation is invoked
-- **Then** $MarginV$ MUST scale proportionally to landscape standard ($\approx 12\%$ of height, minimum 130px)
-- **And** font scaling MUST maintain readability without exceeding canvas boundaries.
-
-### Requirement 3: Multi-Scene Resolution Boundary and Horizontal Safe Margin Binding
+### Requirement: Multi-Scene Resolution Boundary and Horizontal Safe Margin Binding
+(Previously: MarginL >= 40px and MarginR >= 40px static across all resolutions)
 Subtitle generators MUST maintain horizontal boundaries based on canvas aspect ratio: in 9:16 portrait ($1080\times 1920$), MarginR MUST be $\ge 130\text{px}$ (or $\ge 12\%$ canvas width) to clear the right mobile UI interaction rail, and MarginL MUST be $\ge 64\text{px}$ (or $\ge 6\%$ canvas width). In 16:9 landscape ($1920\times 1080$), MarginL and MarginR MUST both be $\ge 40\text{px}$. Generators MUST enforce non-overlapping temporal intervals across sequential cues and bind text wrapping to active scene resolution boundaries across multi-act scene transitions.
 
 #### Scenario: Portrait subtitle horizontal safe margins (Happy Path)
@@ -41,22 +24,7 @@ Subtitle generators MUST maintain horizontal boundaries based on canvas aspect r
 - **Then** the generator MUST sanitize start and end values such that $end \ge start + 0.05\text{s}$
 - **And** all timestamp strings MUST format to valid ASS timestamp format `H:MM:SS.cs`.
 
-## Added Requirements
-
-### Requirement 4: Per-Scene Dynamic Color Palette Subtitle Burning
-Subtitle generators MUST accept dynamic color palette configurations from the narrative Rec.709 color grade, setting primary text color, high-contrast dark outline (`BorderStyle=1`, `Outline=3`, `OutlineColour=&H00000000`), and accent highlight colors on active karaoke words (`\k` tags) to ensure readability across dark, glowing, or high-luminance procedural shader backgrounds.
-
-#### Scenario: Subtitles styled with theme-aligned Rec.709 highlight palette (Happy Path)
-- **Given** a scene with a green terminal aesthetic (theme `"scp_foundation"`, accent color `#00FF66`)
-- **When** the subtitle generator renders ASS styles for the scene
-- **Then** the primary text and karaoke highlight tags MUST incorporate the `#00FF66` color code in ASS hex format (`&H0066FF00`)
-- **And** the outline MUST provide high contrast against the background shader.
-
-#### Scenario: High-luminance or noisy background shader overlay (Edge Case)
-- **Given** a scene containing bright explosion flashes or high-luminance particle shaders
-- **When** subtitle styling is compiled
-- **Then** the generator MUST enforce an opaque bounding shadow or high-density outline ($Outline \ge 3$)
-- **And** the subtitle text MUST retain a minimum contrast ratio $\ge 4.5:1$ against the background.
+## ADDED Requirements
 
 ### Requirement: Adaptive Font Sizing and Word Chunking
 Subtitle font size MUST scale adaptively with canvas height: setting a base of $52\text{px}$ for $1920\text{px}$ vertical height and a base of $38\text{px}$ for $1080\text{px}$ horizontal height, proportional to canvas dimensions without causing horizontal overflow. Cues SHOULD chunk sequential narration words into groups of $\le 3$ words.

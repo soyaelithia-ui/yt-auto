@@ -11,7 +11,11 @@ import pytest
 
 from src.media.subtitles_ass import (
     ASSSubtitleGenerator,
+    calculate_font_size,
+    calculate_safe_margins,
+    escape_ffmpeg_filter_path,
     format_ass_timestamp,
+    has_active_subtitles,
     sanitize_timestamps,
 )
 
@@ -198,7 +202,7 @@ def test_ut_f10_15_ass_generator_integration(tmp_path: Path):
     assert "[Events]" in content
     assert "PlayResX: 1080" in content
     assert "PlayResY: 1920" in content
-    assert ",260," in content or ",260" in content  # MarginV=260
+    assert ",480," in content or ",480" in content  # Canonical MarginV >= 480 for 1080x1920
     assert r"{\kf" in content
     assert "Dialogue:" in content
 
@@ -274,3 +278,154 @@ def test_ut_f09_words_per_cue_chunking(tmp_path: Path):
     content = out_file.read_text(encoding="utf-8")
     dialogue_lines = [l for l in content.splitlines() if l.startswith("Dialogue:")]
     assert len(dialogue_lines) == 3
+
+
+# ==============================================================================
+# Phase 1: ASS Safe Zones, Dynamic Margins, Sentinel, and Escaping
+# ==============================================================================
+
+def test_calculate_safe_margins_portrait_and_drift():
+    """1.1 RED: 1080x1920 portrait MarginV >= 480, MarginR >= 130, MarginL >= 64; +30px drift MarginV >= 510."""
+    margin_l, margin_r, margin_v = calculate_safe_margins(1080, 1920)
+    assert margin_v >= 480
+    assert margin_r >= 130
+    assert margin_l >= 64
+    assert (margin_l, margin_r, margin_v) == (64, 130, 480)
+
+    # Downward procedural camera drift +30px
+    margin_l_drift, margin_r_drift, margin_v_drift = calculate_safe_margins(1080, 1920, downward_drift_px=30)
+    assert margin_v_drift >= 510
+    assert margin_v_drift == 510
+    assert margin_r_drift >= 130
+    assert margin_l_drift >= 64
+
+
+def test_calculate_safe_margins_landscape():
+    """1.1 RED: 1920x1080 landscape MarginV >= 130, MarginL/R >= 40."""
+    margin_l, margin_r, margin_v = calculate_safe_margins(1920, 1080)
+    assert margin_v >= 130
+    assert margin_l >= 40
+    assert margin_r >= 40
+    assert (margin_l, margin_r, margin_v) == (40, 40, 130)
+
+
+def test_calculate_font_size_adaptive():
+    """1.2 RED: 52px at 1920h portrait, 38px at 1080h landscape."""
+    assert calculate_font_size(1080, 1920) == 52
+    assert calculate_font_size(1920, 1080) == 38
+
+
+def test_has_active_subtitles_matrix(tmp_path: Path):
+    """1.3 RED: Sentinel checks None, missing path, 0-byte file, header-only, whitespace Dialogue, valid Dialogue."""
+    # 1. None
+    assert has_active_subtitles(None) is False
+
+    # 2. Missing path
+    assert has_active_subtitles(tmp_path / "nonexistent.ass") is False
+
+    # 3. 0-byte file
+    empty_file = tmp_path / "empty.ass"
+    empty_file.write_bytes(b"")
+    assert has_active_subtitles(empty_file) is False
+
+    # 4. Header-only file (no Dialogue:)
+    header_only = tmp_path / "header_only.ass"
+    header_only.write_text(
+        "[Script Info]\nTitle: Test\n\n[V4+ Styles]\nFormat: Name, Fontname\nStyle: Default,Arial\n\n[Events]\nFormat: Layer, Start, End, Text\n",
+        encoding="utf-8",
+    )
+    assert has_active_subtitles(header_only) is False
+
+    # 5. Whitespace-only Dialogue:
+    ws_dialogue = tmp_path / "ws_dialogue.ass"
+    ws_dialogue.write_text(
+        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,   \n"
+        "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,\t\n",
+        encoding="utf-8",
+    )
+    assert has_active_subtitles(ws_dialogue) is False
+
+    # 6. Valid Dialogue line
+    valid_file = tmp_path / "valid.ass"
+    valid_file.write_text(
+        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Active subtitle content\n",
+        encoding="utf-8",
+    )
+    assert has_active_subtitles(valid_file) is True
+
+    # 7. SRT with cue text is active; header/timestamp-only SRT is not
+    srt_active = tmp_path / "cue.srt"
+    srt_active.write_text("1\n00:00:00,000 --> 00:00:01,000\nHello\n", encoding="utf-8")
+    assert has_active_subtitles(srt_active) is True
+    srt_empty = tmp_path / "empty_cues.srt"
+    srt_empty.write_text("1\n00:00:00,000 --> 00:00:01,000\n\n", encoding="utf-8")
+    assert has_active_subtitles(srt_empty) is False
+
+
+def test_escape_ffmpeg_filter_path_threat_matrix():
+    """1.4 RED: Threat matrix escaping colons, single quotes, and backslashes."""
+    # Windows path backslashes converted to forward slashes
+    win_path = r"C:\media\video\track.ass"
+    assert escape_ffmpeg_filter_path(win_path) == "C\\:/media/video/track.ass"
+
+    # Colons escaped with \:
+    colon_path = "subtitle:final:v1.ass"
+    assert escape_ffmpeg_filter_path(colon_path) == "subtitle\\:final\\:v1.ass"
+
+    # Single quotes escaped with \'
+    quote_path = "user's_file.ass"
+    assert escape_ffmpeg_filter_path(quote_path) == "user\\'s_file.ass"
+
+    # Combined complex injection path
+    complex_path = r"C:\subtitles\user's:cut.ass"
+    assert escape_ffmpeg_filter_path(complex_path) == "C\\:/subtitles/user\\'s\\:cut.ass"
+
+    # Path object input
+    path_obj = Path("simple_path/track.ass")
+    assert escape_ffmpeg_filter_path(path_obj) == "simple_path/track.ass"
+
+
+def test_generator_uses_dynamic_safe_margins_and_adaptive_font(tmp_path: Path):
+    """1.6 RED: ASSSubtitleGenerator uses dynamic margins (MarginV >= 480 for 1080x1920) and adaptive font (52)."""
+    generator = ASSSubtitleGenerator()
+    out_portrait = tmp_path / "portrait.ass"
+    generator.generate_ass_file(
+        word_timestamps=[{"word": "Hello", "start": 0.0, "end": 1.0}],
+        output_path=out_portrait,
+        video_width=1080,
+        video_height=1920,
+    )
+    content_p = out_portrait.read_text(encoding="utf-8")
+    # MarginL=64, MarginR=130, MarginV=480, Fontsize=52
+    assert "Style: Default,Montserrat Black,52," in content_p
+    assert ",64,130,480,0" in content_p
+
+    # Landscape 1920x1080: MarginL=40, MarginR=40, MarginV=130, Fontsize=38
+    out_landscape = tmp_path / "landscape.ass"
+    generator.generate_ass_file(
+        word_timestamps=[{"word": "Hello", "start": 0.0, "end": 1.0}],
+        output_path=out_landscape,
+        video_width=1920,
+        video_height=1080,
+    )
+    content_l = out_landscape.read_text(encoding="utf-8")
+    assert "Style: Default,Montserrat Black,38," in content_l
+    assert ",40,40,130,0" in content_l
+
+
+def test_generator_safe_cue_chunking_clamped_to_max_3(tmp_path: Path):
+    """1.2/1.6 RED: Cues chunk words into <= 3 words per event even if words_per_cue > 3 is requested."""
+    generator = ASSSubtitleGenerator()
+    out_file = tmp_path / "clamped_chunks.ass"
+    words = [{"word": f"word{i}", "start": i * 0.5, "end": (i + 1) * 0.5} for i in range(6)]
+
+    # Requesting 5 words per cue should be clamped to 3 -> 2 dialogue cues of 3 words each
+    generator.generate_ass_file(words, out_file, words_per_cue=5)
+    content = out_file.read_text(encoding="utf-8")
+    dialogue_lines = [l for l in content.splitlines() if l.startswith("Dialogue:")]
+    assert len(dialogue_lines) == 2
+
+
+

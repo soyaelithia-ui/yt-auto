@@ -287,7 +287,12 @@ class TestLoopSubtitlesConfiguration(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root_path = Path(self.temp_dir.name)
         self.sub_path = self.root_path / "subtitles.ass"
-        self.sub_path.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+        self.sub_path.write_text(
+            "[Script Info]\nTitle: Test\n\n[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Active test cue\n",
+            encoding="utf-8",
+        )
         self.engine = LoopVideoEngine()
 
     def tearDown(self):

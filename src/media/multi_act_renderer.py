@@ -24,6 +24,12 @@ from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError, probe_media
 from src.log import get_logger
 from src.media.director_single_pass import director_single_pass_enabled
 from src.media.encode_defaults import default_render_crf, default_render_preset
+from src.media.subtitles_ass import (
+    calculate_font_size,
+    calculate_safe_margins,
+    escape_ffmpeg_filter_path,
+    has_active_subtitles,
+)
 
 logger = get_logger("multi_act_renderer")
 
@@ -486,9 +492,8 @@ class MultiActVideoRenderer:
         """Generates a clean, styled ASS subtitle file for the video acts."""
         width = 1080 if is_vertical else 1920
         height = 1920 if is_vertical else 1080
-        font_size = 38 if is_vertical else 32
-        base_margin_v = max(480, int(height * 0.25)) if is_vertical else max(130, int(height * 0.12))
-        margin_v = base_margin_v + max(0, int(downward_drift_px))
+        font_size = calculate_font_size(width, height)
+        margin_l, margin_r, margin_v = calculate_safe_margins(width, height, downward_drift_px)
 
         ass_content = f"""[Script Info]
 Title: SCP-5000 Dynamic Subtitles
@@ -499,8 +504,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Liberation Sans,{font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,3,2,2,40,40,{margin_v},1
-Style: Highlight,Liberation Sans,{font_size + 4},&H0000FF55,&H0000FFFF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,1,3,3,2,40,40,{margin_v},1
+Style: Default,Liberation Sans,{font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,3,2,2,{margin_l},{margin_r},{margin_v},1
+Style: Highlight,Liberation Sans,{font_size + 4},&H0000FF55,&H0000FFFF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,1,3,3,2,{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -582,7 +587,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for act in acts
         ]
         has_hud = any(bool(s) for s in hud_snippets)
-        has_subtitles = bool(ass_subtitles and ass_subtitles.is_file())
+        has_subtitles = has_active_subtitles(ass_subtitles)
         homogeneous = self._loops_homogeneous_for_stream_copy(loop_paths, w, h)
         can_stream_copy = (
             director_single_pass_enabled()
@@ -685,8 +690,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             filter_parts.append(f"{labels}concat=n={len(acts)}:v=1:a=0[v_concat]")
             chained = "[v_concat]"
 
-        if ass_subtitles and ass_subtitles.is_file():
-            sub_path_esc = str(ass_subtitles).replace("\\", "/").replace(":", "\\:")
+        if ass_subtitles and has_active_subtitles(ass_subtitles):
+            sub_path_esc = escape_ffmpeg_filter_path(ass_subtitles)
             filter_parts.append(f"{chained}subtitles='{sub_path_esc}'[vout]")
             v_final = "[vout]"
         else:

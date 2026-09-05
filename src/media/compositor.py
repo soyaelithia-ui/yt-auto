@@ -42,7 +42,9 @@ from src.media.hybrid_engine import HybridVideoEngine
 from src.media.proc_engine import ProceduralVideoEngine
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
 from src.media.subtitles_ass import (
+    escape_ffmpeg_filter_path,
     force_pillow_subtitles_enabled,
+    has_active_subtitles,
     write_ass_from_cues_or_words,
 )
 from src.scene_manifest import (
@@ -289,7 +291,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
             if force_pillow and subtitle_cues:
                 # Explicit legacy path: cues already burned per-frame; skip second burn.
                 sub_p = None
-            has_ass_burn = bool(sub_p and sub_p.is_file())
+            has_ass_burn = bool(sub_p and has_active_subtitles(sub_p))
 
             self._master_assembly(
                 video_input=video_only_assembled,
@@ -591,14 +593,15 @@ class MultiSceneCompositor(BaseVideoCompositor):
         Stream copies pre-rendered 1080p video in ~1s and mixes EBU R128 audio with sidechain ducking.
         """
         cmd: List[str] = ["ffmpeg", "-y", "-i", str(video_input)]
-        video_copy = subtitle_path is None or not subtitle_path.is_file()
+        video_copy = not has_active_subtitles(subtitle_path)
 
-        if not video_copy:
-            sub_escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+        if not video_copy and subtitle_path:
+            sub_escaped = escape_ffmpeg_filter_path(subtitle_path)
             vf_chain = f"scale={width}:{height}:flags=lanczos,deband=1thr=0.03:2thr=0.03:3thr=0.03:range=16:blur=false"
             if str(subtitle_path).lower().endswith(".ass"):
                 fonts_dir = Path("assets/fonts").resolve()
-                fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
+                fonts_esc = escape_ffmpeg_filter_path(fonts_dir)
+                fonts_opt = f":fontsdir='{fonts_esc}'" if fonts_dir.is_dir() else ""
                 vf_chain += f",ass=filename='{sub_escaped}'{fonts_opt}"
             else:
                 vf_chain += f",subtitles=filename='{sub_escaped}'"
