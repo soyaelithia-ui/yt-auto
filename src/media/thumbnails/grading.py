@@ -71,3 +71,26 @@ class ChiaroscuroColorGrader:
         img_rgba = img.convert("RGBA")
         graded = Image.alpha_composite(img_rgba, overlay).convert("RGB")
         return graded
+
+
+    @staticmethod
+    def process_analog_horror(
+        base_img: Image.Image,
+        target_w: int,
+        target_h: int,
+        *,
+        with_osd: bool = True,
+        osd_kwargs: Dict | None = None,
+        seed: int = 42,
+    ) -> Image.Image:
+        """Found-footage grade aligned to Aelithia quality ref (VHS/CCTV)."""
+        from src.media.thumbnails.analog_horror import apply_analog_horror_grade
+
+        return apply_analog_horror_grade(
+            base_img,
+            target_size=(target_w, target_h),
+            with_osd=with_osd,
+            osd_kwargs=osd_kwargs,
+            seed=seed,
+        )
+

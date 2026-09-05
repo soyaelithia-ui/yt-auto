@@ -8,10 +8,18 @@ Tailored specifically to:
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path as _Path
+_REPO = _Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
 import os
 from pathlib import Path
 from typing import Tuple, List, Optional
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps
+
+from src.media.thumbnails.analog_horror import apply_analog_horror_grade, draw_camcorder_osd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -126,40 +134,36 @@ def draw_hazard_stripes(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int
 # 1. SCP-173 SHORT (Vertical 9:16 - 1080x1920)
 # ==============================================================================
 def create_scp_impeccable_thumbnail(base_path: str, output_path: str) -> str:
-    base = Image.open(base_path).convert("RGBA")
+    base = Image.open(base_path).convert("RGB")
     w, h = 1080, 1920
-    base = base.resize((w, h), Image.Resampling.LANCZOS)
 
-    # Cinematic grading: contrast and cold industrial tone
-    graded = ImageEnhance.Contrast(base.convert("RGB")).enhance(1.24)
-    graded = ImageEnhance.Color(graded).enhance(1.10)
-    graded = ImageEnhance.Sharpness(graded).enhance(1.30).convert("RGBA")
+    # Analog-horror plate (VHS/CCTV) — quality bar from aelithia_quality_ref
+    graded_rgb = apply_analog_horror_grade(
+        base,
+        target_size=(w, h),
+        with_osd=True,
+        osd_kwargs={
+            "cam_label": "CAM 04 [SECTOR-19 VAULT]",
+            "date_label": "1994-10-31",
+            "timecode": "03:17:42:08",
+            "battery": 0.7,
+        },
+        seed=173,
+    )
+    graded = graded_rgb.convert("RGBA")
 
     # Dark gradient over the dark corridor (right side) to let typography shine
     corridor_gradient = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     cg_draw = ImageDraw.Draw(corridor_gradient)
     for x in range(400, w):
         progress = (x - 400) / (w - 400)
-        alpha = int(220 * (progress ** 1.3))
+        alpha = int(200 * (progress ** 1.3))
         cg_draw.line([(x, 0), (x, h)], fill=(4, 4, 8, alpha))
     graded.paste(corridor_gradient, (0, 0), corridor_gradient)
 
-    # Top overlay for camera HUD
-    top_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    to_draw = ImageDraw.Draw(top_overlay)
-    for y in range(250):
-        alpha = int(210 * (1.0 - (y / 250) ** 1.2))
-        to_draw.line([(0, y), (w, y)], fill=(3, 3, 5, alpha))
-    graded.paste(top_overlay, (0, 0), top_overlay)
-
     draw = ImageDraw.Draw(graded)
 
-    # --- A. Security Cam HUD (Top) ---
-    f_hud = get_font(26)
-    # Red recording dot
-    draw.ellipse([60, 68, 80, 88], fill=(255, 30, 30))
-    draw.text((95, 65), "CAM-04 [EN VIVO] · 03:17:42", font=f_hud, fill="#F0F0F0")
-    draw.text((w - 380, 65), "SECTOR-19 // VAULT", font=f_hud, fill="#AAAAAA")
+    # --- A. Classification strip (OSD already painted by analog grade) ---
 
     # --- B. Foundation Classification Banner ---
     draw.rounded_rectangle([60, 120, w - 60, 175], radius=8, fill=(15, 10, 15, 235), outline="#FF1E27", width=2)
@@ -358,39 +362,34 @@ def create_aita_impeccable_thumbnail(base_path: str, output_path: str) -> str:
 # 3. MOKU HORROR LONGFORM (Horizontal 16:9 - 1920x1080)
 # ==============================================================================
 def create_horror_impeccable_thumbnail(base_path: str, output_path: str) -> str:
-    base = Image.open(base_path).convert("RGBA")
+    base = Image.open(base_path).convert("RGB")
     w, h = 1920, 1080
-    base = base.resize((w, h), Image.Resampling.LANCZOS)
 
-    # Grade: Deep blacks, cold storm blues, radioactive phosphor greens
-    graded = ImageEnhance.Contrast(base.convert("RGB")).enhance(1.28)
-    graded = ImageEnhance.Color(graded).enhance(1.18)
-    graded = ImageEnhance.Sharpness(graded).enhance(1.35).convert("RGBA")
+    graded_rgb = apply_analog_horror_grade(
+        base,
+        target_size=(w, h),
+        with_osd=True,
+        osd_kwargs={
+            "cam_label": "CAM 04 [SUB-LEVEL B]",
+            "date_label": "1994-10-31",
+            "timecode": "03:42:19:12",
+            "battery": 0.65,
+        },
+        seed=1047,
+    )
+    graded = graded_rgb.convert("RGBA")
 
     # Dark gradient over upper sky/window to frame typography perfectly
     sky_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     so_draw = ImageDraw.Draw(sky_overlay)
     for y in range(650):
-        alpha = int(225 * (1.0 - (y / 650) ** 1.3))
+        alpha = int(210 * (1.0 - (y / 650) ** 1.3))
         so_draw.line([(0, y), (1200, y)], fill=(3, 5, 8, alpha))
     graded.paste(sky_overlay, (0, 0), sky_overlay)
 
-    # Ultra-subtle CRT Scanlines across the entire image (analog feel)
-    scanlines = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    sc_draw = ImageDraw.Draw(scanlines)
-    for y in range(0, h, 4):
-        sc_draw.line([(0, y), (w, y)], fill=(0, 0, 0, 35))
-    graded.paste(scanlines, (0, 0), scanlines)
-
     draw = ImageDraw.Draw(graded)
 
-    # --- A. Camcorder / VHS Analog HUD (Top) ---
-    # Red recording light
-    draw.ellipse([80, 58, 102, 80], fill=(255, 20, 20))
-    f_rec = get_font(28)
-    draw.text((115, 55), "● REC [03:42:19 AM]", font=f_rec, fill="#FFEEEE")
-
-    # Audio frequency badge
+    # --- A. Frequency badge (OSD already painted) ---
     draw.rounded_rectangle([680, 48, 1080, 95], radius=8, fill=(5, 20, 10, 240), outline="#00FF88", width=2)
     f_freq = get_font(26)
     draw.text((705, 58), "FREQ: 104.7 MHz  ·  SEÑAL ANÓMALA", font=f_freq, fill="#00FF99")

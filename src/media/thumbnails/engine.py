@@ -161,15 +161,34 @@ class ThumbnailEngine:
             except (ValueError, TypeError):
                 pass
 
-        graded_bg = self.grader.process_background(
-            base_img=base_img,
-            target_w=w,
-            target_h=h,
-            blur_radius=config.blur_radius,
-            contrast_boost=contrast_boost,
-            vignette_strength=channel_prof.visual.vignette_default_strength,
-            accent_color_hex=accent,
-        )
+        # Analog-horror lanes (moku / scp / vhs) use found-footage grade; else chiaroscuro.
+        arch_key = f"{eff_archetype} {eff_lane} {eff_channel}".lower()
+        use_analog = any(
+            k in arch_key
+            for k in ("horror", "scp", "vhs", "analog", "creepy", "moku", "nosleep")
+        ) and "aita" not in arch_key
+        if use_analog:
+            graded_bg = self.grader.process_analog_horror(
+                base_img=base_img,
+                target_w=w,
+                target_h=h,
+                with_osd=True,
+                osd_kwargs={
+                    "cam_label": "CAM 04 [SUB-LEVEL B]",
+                    "date_label": "1994-10-31",
+                },
+                seed=abs(hash(eff_lane)) % (2**31),
+            )
+        else:
+            graded_bg = self.grader.process_background(
+                base_img=base_img,
+                target_w=w,
+                target_h=h,
+                blur_radius=config.blur_radius,
+                contrast_boost=contrast_boost,
+                vignette_strength=channel_prof.visual.vignette_default_strength,
+                accent_color_hex=accent,
+            )
 
         # 3. Enhance Focal Subject with Depth & Subtle Rim Light Glow
         subject_composited = AdaptiveSubjectCompositor.composite_thematic_subject(

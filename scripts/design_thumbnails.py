@@ -6,10 +6,18 @@ multi-layer 3D shadows, contrast curves, and high-impact category badges.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path as _Path
+_REPO = _Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
 import os
 from pathlib import Path
 from typing import Tuple, List, Optional
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps
+
+from src.media.thumbnails.analog_horror import apply_analog_horror_grade
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -163,10 +171,19 @@ def apply_cinematic_grade(img: Image.Image, vignette_strength: float = 0.4) -> I
 
 def design_scp_short_thumbnail(base_path: str, output_path: str) -> str:
     """Design 9:16 vertical thumbnail for SCP-173 Short."""
-    base = Image.open(base_path).convert("RGBA")
+    base = Image.open(base_path).convert("RGB")
     w, h = 1080, 1920
-    base = base.resize((w, h), Image.Resampling.LANCZOS)
-    graded = apply_cinematic_grade(base.convert("RGB"), vignette_strength=0.35).convert("RGBA")
+    graded = apply_analog_horror_grade(
+        base,
+        target_size=(w, h),
+        with_osd=True,
+        osd_kwargs={
+            "cam_label": "CAM 04 [SECTOR-19 VAULT]",
+            "date_label": "1994-10-31",
+            "timecode": "03:17:42:08",
+        },
+        seed=173,
+    ).convert("RGBA")
 
     # Gradient overlay at top for text readability
     top_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -350,10 +367,19 @@ def design_aita_thumbnail(base_path: str, output_path: str) -> str:
 
 def design_horror_thumbnail(base_path: str, output_path: str) -> str:
     """Design 16:9 horizontal thumbnail for Moku Horror Longform."""
-    base = Image.open(base_path).convert("RGBA")
+    base = Image.open(base_path).convert("RGB")
     w, h = 1920, 1080
-    base = base.resize((w, h), Image.Resampling.LANCZOS)
-    graded = apply_cinematic_grade(base.convert("RGB"), vignette_strength=0.38).convert("RGBA")
+    graded = apply_analog_horror_grade(
+        base,
+        target_size=(w, h),
+        with_osd=True,
+        osd_kwargs={
+            "cam_label": "CAM 04 [SUB-LEVEL B]",
+            "date_label": "1994-10-31",
+            "timecode": "03:42:19:12",
+        },
+        seed=1047,
+    ).convert("RGBA")
 
     # Dark gradient on upper-left to frame text against dark clouds
     ul_gradient = Image.new("RGBA", (w, h), (0, 0, 0, 0))
