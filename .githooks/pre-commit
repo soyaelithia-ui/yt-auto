@@ -72,8 +72,8 @@ if [ ${#RETIRED_IMPORT_FILES[@]} -gt 0 ]; then
     exit 1
 fi
 
-# 6. Agent homedirs are local-only (never stage .codex/.claude/.gemini/...)
-AGENT_HOMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.(codex|claude|gemini|agents|opencode|grok|copilot|atl|cursor)/' || true)
+# 6. Agent homedirs are local-only (never stage .codex/.claude/.gemini/.hermes/...)
+AGENT_HOMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.(codex|claude|gemini|agents|opencode|grok|copilot|atl|cursor|hermes)/' || true)
 if [ -n "$AGENT_HOMES" ]; then
     echo "❌ ERROR: Agent homedir files must not be committed:"
     echo "$AGENT_HOMES"
@@ -81,15 +81,27 @@ if [ -n "$AGENT_HOMES" ]; then
     exit 1
 fi
 
-# 7. Production-format secrets: fail on path only, never print the match.
+# 7. Secret-shaped filenames: reject on path only (.env except .env.example).
+SECRET_NAMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)\.env($|\.)|(^|/)cookies\.json$|(^|/)secrets/' | grep -vE '(^|/)\.env\.example$' || true)
+if [ -n "$SECRET_NAMES" ]; then
+    echo "❌ ERROR: Secret-shaped filename must not be committed:"
+    echo "$SECRET_NAMES"
+    echo "Keep .env (except .env.example), cookies.json, and secrets/ untracked."
+    exit 1
+fi
+
+# 8. Production-format secrets: fail on path only, never print the match.
 SECRET_HIT_FILES=()
 while IFS= read -r file; do
     if [ -z "$file" ] || [ ! -f "$file" ]; then
         continue
     fi
     if grep -I -E -q \
-        'AIzaSy[a-zA-Z0-9_-]{33}|GOCSPX-[a-zA-Z0-9_-]{28}|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|[0-9]{8,10}:[A-Za-z0-9_-]{35}|[0-9]{12}-[a-z0-9]{32}' \
+        'AIzaSy[a-zA-Z0-9_-]{33}|GOCSPX-[a-zA-Z0-9_-]{28}|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|[0-9]{8,10}:[A-Za-z0-9_-]{35}|[0-9]{12}-[a-z0-9]{32}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ya29\.[A-Za-z0-9_-]{50,}|AKIA[0-9A-Z]{16}' \
         "$file"; then
+        SECRET_HIT_FILES+=("$file")
+    elif grep -I -E -q '"type"[[:space:]]*:[[:space:]]*"service_account"' "$file" \
+        && grep -I -E -q '"private_key"' "$file"; then
         SECRET_HIT_FILES+=("$file")
     fi
 done < <(git diff --cached --name-only --diff-filter=ACM)

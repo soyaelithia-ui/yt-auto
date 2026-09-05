@@ -33,6 +33,9 @@ cookies/
 .bot_home*/
 *.token
 *cookies*.json
+cookies.txt
+*cookies*.txt
+drive_key.json
 *token*.json
 *client_secret*.json
 
