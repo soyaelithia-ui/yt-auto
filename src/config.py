@@ -387,10 +387,10 @@ def validate_runtime_config(
     if require_review:
         if os.environ.get("TEST_MODE") == "1":
             errors.append("TEST_MODE=1 no está permitido en producción")
-        if os.environ.get("AUTO_APPROVE") == "1":
-            errors.append("AUTO_APPROVE=1 no está permitido en producción")
-        if os.environ.get("ENABLE_AUTO_PUBLISH_SWEEP") == "1":
-            errors.append("ENABLE_AUTO_PUBLISH_SWEEP=1 requiere una activación explícita posterior")
+        # AUTO_APPROVE / ENABLE_AUTO_PUBLISH_SWEEP are allowed when review secrets
+        # below validate. They auto-approve HITL / run timeout sweep; YouTube upload
+        # still requires channel cookies+token (require_publish) and never bypasses
+        # credential preflight.
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         allowed_user = os.environ.get("TELEGRAM_ALLOWED_USER_ID", "").strip()

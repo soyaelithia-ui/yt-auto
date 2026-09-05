@@ -69,7 +69,9 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 | `TELEGRAM_API_BASE_URL` | URL base del servidor de Telegram Bot API. | `http://telegram-bot-api:8081` |
 | `TELEGRAM_LOCAL` | Habilitar soporte para servidor local (hasta 2 GB). | `true` |
 | `TELEGRAM_USE_LOCAL_FILES` | Habilitar transporte zero-copy `file:///`. | `1` |
-| `ENABLE_AUTO_PUBLISH_SWEEP` | Habilitar barrido automático tras ventana de 6h. | `0` (requiere activación explícita). |
+| `AUTO_APPROVE` | Aprueba revisión HITL sin botones de Telegram (camino Auto/autopilot). **No** omite preflight ni secretos de YouTube/Drive. | `0` (poner `1` para Auto). |
+| `ENABLE_AUTO_PUBLISH_SWEEP` | Barrido del daemon tras `AUTO_PUBLISH_TIMEOUT_HOURS` para publicar pendientes aprobados/stale vía `ReviewJobManager`. | `0` (poner `1` con Auto). |
+| `AUTO_PUBLISH_TIMEOUT_HOURS` | Ventana antes del sweep de auto-publicación. | `24` |
 
 ---
 
