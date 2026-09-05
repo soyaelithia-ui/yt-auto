@@ -27,7 +27,7 @@ from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.core.catalog import LoopCatalogRepository
 from src.log import get_logger
-from src.media.subtitles_ass import escape_ffmpeg_filter_path, has_active_subtitles
+from src.media.subtitles_ass import escape_ffmpeg_filter_path, has_active_subtitles, libass_filter_clause
 
 from lib.ffmpeg import (
     FFmpegError,
@@ -403,18 +403,15 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         if include_subtitles and subtitle_path and has_active_subtitles(subtitle_path):
             sub_p = Path(subtitle_path)
-            # Escape path characters for FFmpeg filter argument
-            sub_escaped = escape_ffmpeg_filter_path(sub_p)
-            fonts_clause = ""
             resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
-            if resolved_fonts.exists() and resolved_fonts.is_dir():
-                fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
-                fonts_clause = f":fontsdir={fonts_esc}"
-
-            is_ass = sub_p.suffix.lower() == ".ass"
-            if is_ass:
-                sub_filter = f"ass=filename={sub_escaped}{fonts_clause}"
+            fonts_arg = resolved_fonts if resolved_fonts.exists() and resolved_fonts.is_dir() else None
+            if sub_p.suffix.lower() == ".ass":
+                sub_filter = libass_filter_clause(sub_p, fonts_arg)
             else:
+                sub_escaped = escape_ffmpeg_filter_path(sub_p)
+                fonts_clause = (
+                    f":fontsdir={escape_ffmpeg_filter_path(fonts_arg)}" if fonts_arg else ""
+                )
                 sub_filter = f"subtitles=filename={sub_escaped}{fonts_clause}"
 
             return f"[0:v]{base_filter}[vbase];[vbase]{sub_filter}[vsubbed];[vsubbed]format=yuv420p[vout]"
@@ -594,16 +591,15 @@ class LoopVideoEngine(BaseVideoCompositor):
         # Subtitle overlay on [vbase]
         if include_subtitles and subtitle_path and has_active_subtitles(subtitle_path):
             sub_escaped = escape_ffmpeg_filter_path(subtitle_path)
-            fonts_clause = ""
             fonts_dir = kwargs.get("fonts_dir")
             resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
-            if resolved_fonts.exists() and resolved_fonts.is_dir():
-                fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
-                fonts_clause = f":fontsdir={fonts_esc}"
-            is_ass = Path(subtitle_path).suffix.lower() == ".ass"
-            if is_ass:
-                sub_filter = f"[vbase]ass=filename={sub_escaped}{fonts_clause}[vout];"
+            fonts_arg = resolved_fonts if resolved_fonts.exists() and resolved_fonts.is_dir() else None
+            if Path(subtitle_path).suffix.lower() == ".ass":
+                sub_filter = f"[vbase]{libass_filter_clause(subtitle_path, fonts_arg)}[vout];"
             else:
+                fonts_clause = (
+                    f":fontsdir={escape_ffmpeg_filter_path(fonts_arg)}" if fonts_arg else ""
+                )
                 sub_filter = f"[vbase]subtitles=filename={sub_escaped}{fonts_clause}[vout];"
         else:
             sub_filter = "[vbase]null[vout];"

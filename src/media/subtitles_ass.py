@@ -95,6 +95,24 @@ def escape_ffmpeg_filter_path(path: Path | str) -> str:
     return p_str.replace(":", "\\:").replace("'", "\\'")
 
 
+def libass_filter_clause(
+    subtitle_path: Path | str,
+    fonts_dir: Path | str | None = None,
+) -> str:
+    """Unquoted FFmpeg 6.1-safe ``ass=filename=...[:fontsdir=...]`` fragment.
+
+    Wrapping the path in single quotes breaks libass on FFmpeg 6.1. Colons and
+    quotes inside the path are escaped; the filter value itself stays unquoted.
+    """
+    clause = f"ass=filename={escape_ffmpeg_filter_path(subtitle_path)}"
+    if fonts_dir is None:
+        return clause
+    fonts = Path(fonts_dir)
+    if fonts.exists() and fonts.is_dir():
+        clause += f":fontsdir={escape_ffmpeg_filter_path(fonts)}"
+    return clause
+
+
 def sanitize_timestamps(
     word_timestamps: Optional[List[Dict[str, Any]]],
     min_word_duration: float = 0.08,

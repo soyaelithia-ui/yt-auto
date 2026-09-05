@@ -298,3 +298,27 @@ class TestRetiredSubsystemGuardrails:
             "REG-11 VIOLATION: openspec/config.yaml must declare Pillow thumbs SSOT"
         )
 
+
+# =============================================================================
+# REG-12: FFmpeg 6.1 unquoted libass filter paths
+# =============================================================================
+
+class TestFFmpeg61LibassPathGuardrails:
+    """Quoted ass=/fontsdir= values break libass on FFmpeg 6.1."""
+
+    def test_reg12_no_quoted_ass_or_fontsdir_filter_paths(self) -> None:
+        targets = list(MEDIA_DIR.glob("**/*.py")) + [REPO_ROOT / "lib" / "video.py"]
+        forbidden = ("ass=filename='", "ass='", "fontsdir='")
+        violations: list[str] = []
+        for path in targets:
+            if "_legacy" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for needle in forbidden:
+                if needle in text:
+                    violations.append(f"{path.relative_to(REPO_ROOT)} contains {needle!r}")
+        assert not violations, (
+            "REG-12 VIOLATION: quoted FFmpeg 6.1 libass paths:\n" + "\n".join(violations)
+        )
+
+

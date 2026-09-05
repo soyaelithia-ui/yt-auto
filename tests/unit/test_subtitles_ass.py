@@ -428,4 +428,23 @@ def test_generator_safe_cue_chunking_clamped_to_max_3(tmp_path: Path):
     assert len(dialogue_lines) == 2
 
 
+def test_libass_filter_clause_is_unquoted_for_ffmpeg_61(tmp_path: Path):
+    """FFmpeg 6.1 libass rejects quote-wrapped filter paths; clause must stay unquoted."""
+    import src.media.subtitles_ass as mod
+
+    assert hasattr(mod, "libass_filter_clause")
+    ass_path = tmp_path / "subs.ass"
+    ass_path.write_text("[Script Info]\n", encoding="utf-8")
+    fonts_dir = tmp_path / "fonts"
+    fonts_dir.mkdir()
+
+    clause = mod.libass_filter_clause(ass_path, fonts_dir)
+    assert clause.startswith("ass=filename=")
+    assert "'" not in clause
+    assert "ass=filename='" not in clause
+    assert "fontsdir='" not in clause
+    assert f"filename={ass_path}" in clause
+    assert f"fontsdir={fonts_dir}" in clause
+
+
 

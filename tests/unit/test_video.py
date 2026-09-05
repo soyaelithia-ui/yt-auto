@@ -735,8 +735,9 @@ class TestVideo(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         fg_idx = cmd.index("-filter_complex")
         filtergraph = cmd[fg_idx + 1]
-        self.assertIn("fontsdir='", filtergraph)
-        self.assertIn("/assets/fonts'", filtergraph)
+        self.assertIn("fontsdir=", filtergraph)
+        self.assertNotIn("fontsdir='", filtergraph)
+        self.assertIn("/assets/fonts", filtergraph)
 
     def test_subtitle_filtergraph_is_labeled_and_burned(self):
         """Regression: the ASS/subtitles filter MUST carry an output label.
@@ -775,11 +776,12 @@ class TestVideo(unittest.TestCase):
             fg_idx = cmd.index("-filter_complex")
             filtergraph = cmd[fg_idx + 1]
             self.assertIn("ass=filename=", filtergraph)
-            # the subtitle chain must be labeled and feed [vout]; the optional
-            # :fontsdir= option (vendored brand font) may follow filename=
+            self.assertNotIn("ass=filename='", filtergraph)
+            self.assertNotIn("fontsdir='", filtergraph)
+            # Unquoted FFmpeg 6.1 libass path; optional :fontsdir= may follow.
             self.assertRegex(
                 filtergraph,
-                r"ass=filename='[^']*'(:fontsdir='[^']*')?\[vsubbed\]",
+                r"ass=filename=[^':]+(:fontsdir=[^':]+)?\[vsubbed\]",
             )
             self.assertIn(";[vsubbed]format=yuv420p[vout]", filtergraph)
             self.assertIn("-map", cmd)
