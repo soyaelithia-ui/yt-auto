@@ -182,10 +182,16 @@ def _catalog_shots_from_manifest(
     loop_engine: Any,
     orientation: str,
 ) -> tuple[list[str], list[float], str]:
-    """Turn a scene-planner manifest into catalog loop paths + durations (no pixel burn)."""
+    """Turn a scene-planner manifest into loop paths + durations (no pixel burn).
+
+    Live director mix: majority of shots reuse one settled background (already
+    decided, not negotiated). A minority is designed in the moment. Does not
+    bake or grow a loop catalog.
+    """
+    from src.agents.shot_mix import DESIGNED, assign_roles
+
     scenes = manifest.get("scenes") or []
-    paths: list[str] = []
-    durs: list[float] = []
+    usable: list[dict[str, Any]] = []
     last_cat = "dark_ambient"
     for sc in scenes:
         if not isinstance(sc, dict):
@@ -203,11 +209,28 @@ def _catalog_shots_from_manifest(
             or last_cat
         )
         last_cat = str(cat).strip().lower().replace(" ", "_") or last_cat
-        path = loop_engine.resolve_loop_video(
-            last_cat, allow_fallback=True, orientation=orientation
+        usable.append({"duration": dur, "category": last_cat, "scene": sc})
+
+    roles = assign_roles(len(usable))
+    paths: list[str] = []
+    durs: list[float] = []
+    settled_path: str | None = None
+    for item, role in zip(usable, roles):
+        durs.append(item["duration"])
+        item["scene"]["director_role"] = role
+        if role != DESIGNED and settled_path is not None:
+            paths.append(settled_path)
+            continue
+        path = str(
+            loop_engine.resolve_loop_video(
+                item["category"],
+                allow_fallback=True,
+                orientation=orientation,
+            )
         )
-        paths.append(str(path))
-        durs.append(dur)
+        if settled_path is None:
+            settled_path = path
+        paths.append(path)
     return paths, durs, last_cat
 
 
