@@ -11,6 +11,7 @@ from src.media.multi_act_renderer import (
     MultiActVideoRenderer,
     NarrativeSceneAct,
     calculate_xfade_duration,
+    clamp_transition_duration,
     multiact_xfade_enabled,
 )
 
@@ -620,5 +621,181 @@ def test_multiact_inhomogeneous_falls_back_to_veryfast_crf21(tmp_path, monkeypat
     assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
     assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
+
+
+def test_multiact_xfade_disparate_durations_offsets_and_t_alignment(tmp_path, monkeypatch):
+    """Sequences of 3 or more acts with disparate durations verify continuous offsets and contractual -t."""
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    captured = {}
+
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd)
+        out.write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "1")
+
+    # 3 acts with disparate durations (>= 2.5s, standard 0.75s transition):
+    # Act 0: 5.0s, Act 1: 3.0s, Act 2: 4.0s
+    acts = [
+        NarrativeSceneAct(0, 0.0, 5.0, "Act 1", "scp"),
+        NarrativeSceneAct(1, 5.0, 3.0, "Act 2", "scp"),
+        NarrativeSceneAct(2, 8.0, 4.0, "Act 3", "scp"),
+    ]
+    expected_dur = calculate_xfade_duration([5.0, 3.0, 4.0], 0.75, clamp=True)
+    # Expected: 5.0 + (3.0 - 0.75) + (4.0 - 0.75) = 10.500
+    assert expected_dur == pytest.approx(10.5)
+
+    # Pass mismatched total_duration to verify contract enforcement and warning
+    r.composite_multi_act_video(acts, audio, out, total_duration=12.0)
+
+    cmd = captured["cmd"]
+    assert "-filter_complex" in cmd
+    fc = cmd[cmd.index("-filter_complex") + 1]
+
+    # Exactly 2 xfade filters chained
+    xfade_filters = [p for p in fc.split(";") if "xfade=transition=fade" in p]
+    assert len(xfade_filters) == 2
+
+    # Transition 1: [v_act0][v_act1]xfade=transition=fade:duration=0.750:offset=4.250[vx1]
+    # offset 0 = 5.0 - 0.75 = 4.250
+    assert "[v_act0][v_act1]xfade=transition=fade:duration=0.750:offset=4.250[vx1]" in xfade_filters[0]
+
+    # Transition 2: [vx1][v_act2]xfade=transition=fade:duration=0.750:offset=6.500[v_xfaded]
+    # cum = 5.0 + 3.0 - 0.75 = 7.250; offset 1 = 7.250 - 0.75 = 6.500
+    assert "[vx1][v_act2]xfade=transition=fade:duration=0.750:offset=6.500[v_xfaded]" in xfade_filters[1]
+
+    # Final output -t matches calculate_xfade_duration
+    out_t = float([cmd[i + 1] for i, x in enumerate(cmd) if x == "-t"][-1])
+    assert out_t == pytest.approx(expected_dur)
+
+    # Both video and audio mapped before -t
+    map_indices = [i for i, x in enumerate(cmd) if x == "-map"]
+    t_indices = [i for i, x in enumerate(cmd) if x == "-t"]
+    assert len(map_indices) >= 2
+    assert t_indices[-1] > map_indices[0] and t_indices[-1] > map_indices[1]
+
+
+def test_multiact_xfade_short_acts_clamped_transition(tmp_path, monkeypatch):
+    """Short acts (< 2.5s) apply 30% clamp_transition_duration rule without exception."""
+    # Unit checks on clamp_transition_duration boundary values
+    assert clamp_transition_duration(1.0, 2.0, 0.75) == pytest.approx(0.30)
+    assert clamp_transition_duration(0.1, 0.1, 0.75) == pytest.approx(0.05)  # min floor 0.05
+    assert clamp_transition_duration(5.0, 5.0, 0.75) == pytest.approx(0.75)
+
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    captured = {}
+
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd)
+        out.write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "1")
+
+    # Short acts: 2.0s, 1.0s, 2.0s (< 2.5s)
+    # Transition 0: min(2.0, 1.0) * 0.30 = 0.300s (< 0.75s)
+    # Offset 0: 2.0 - 0.30 = 1.700s, cum after = 2.700s
+    # Transition 1: min(1.0, 2.0) * 0.30 = 0.300s
+    # Offset 1: 2.700 - 0.30 = 2.400s, cum after = 4.400s
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "Short 1", "scp"),
+        NarrativeSceneAct(1, 2.0, 1.0, "Short 2", "scp"),
+        NarrativeSceneAct(2, 3.0, 2.0, "Short 3", "scp"),
+    ]
+    expected_dur = calculate_xfade_duration([2.0, 1.0, 2.0], 0.75, clamp=True)
+    assert expected_dur == pytest.approx(4.4)
+
+    r.composite_multi_act_video(acts, audio, out, total_duration=expected_dur)
+
+    cmd = captured["cmd"]
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    xfade_filters = [p for p in fc.split(";") if "xfade=transition=fade" in p]
+    assert len(xfade_filters) == 2
+
+    # Clamped duration 0.300s reflected in filtergraph
+    assert "duration=0.300:offset=1.700" in xfade_filters[0]
+    assert "duration=0.300:offset=2.400" in xfade_filters[1]
+    assert "duration=0.750" not in fc
+
+    out_t = float([cmd[i + 1] for i, x in enumerate(cmd) if x == "-t"][-1])
+    assert out_t == pytest.approx(4.4)
+
+
+def test_multiact_stream_copy_homogeneous_multiact_xfade_zero_zero_encodes(tmp_path, monkeypatch):
+    """Homogeneous loops with MULTIACT_XFADE=0 assemble via concat demuxer with 0 video re-encodes."""
+    loop_a = tmp_path / "a.mp4"
+    loop_b = tmp_path / "b.mp4"
+    loop_c = tmp_path / "c.mp4"
+    for p in (loop_a, loop_b, loop_c):
+        p.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    # All 3 loops have identical WxH, codec, pix_fmt, time_base matching target canvas (1920x1080)
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda *a, **k: _probe(1920, 1080, codec="h264", pix_fmt="yuv420p", time_base="1/90000"),
+    )
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    paths = [loop_a, loop_b, loop_c]
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: paths.pop(0))
+
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "Act A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 3.0, "Act B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(2, 5.0, 2.5, "Act C", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=7.5, is_vertical=False)
+
+    # Strict Zero-Encode assertions:
+    # No filter_complex and no libx264
+    assert not any("-filter_complex" in c for c in cmds)
+    assert not any("libx264" in c for c in cmds)
+
+    # Exactly 3 trim operations using -c:v copy
+    trim_cmds = [c for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy"]
+    assert len(trim_cmds) == 3
+
+    # Exactly 1 concat demuxer command using -c:v copy
+    concat_cmds = [c for c in cmds if "-f" in c and "concat" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy"]
+    assert len(concat_cmds) == 1
+    mux_cmd = concat_cmds[0]
+    assert mux_cmd[mux_cmd.index("-c:v") + 1] == "copy"
+    assert mux_cmd[mux_cmd.index("-c:a") + 1] == "aac"
+    assert mux_cmd[mux_cmd.index("-t") + 1] == "7.500"
+
+
+def test_multiact_empty_acts_raises_value_error(tmp_path):
+    """Empty acts list immediately raises ValueError without unhandled exceptions."""
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    with pytest.raises(ValueError, match="No acts provided"):
+        r.composite_multi_act_video([], tmp_path / "a.wav", tmp_path / "out.mp4", total_duration=0.0)
+
 
 

@@ -539,6 +539,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """
         Builds a multi-act FFmpeg graph combining procedural loops with HUD telemetry and crossfades.
         """
+        if not acts:
+            raise ValueError("No acts provided for multi-act compositing.")
+
         logger.info("🎬 Componiendo Video Multi-Escena (%d Actos, %.1fs, %s)...",
                     len(acts), total_duration, "9:16 Vertical" if is_vertical else "16:9 Horizontal")
         
@@ -567,7 +570,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         act_durs = [float(a.duration_sec) for a in acts]
         if use_xfade:
             contract_dur = calculate_xfade_duration(act_durs, 0.75, clamp=True)
-            if total_duration > 0 and abs(float(total_duration) - contract_dur) > 0.05:
+            if total_duration > 0 and abs(float(total_duration) - contract_dur) > 0.001:
                 logger.warning(
                     "MultiAct total_duration=%.3f differs from calculate_xfade_duration=%.3f; "
                     "using contract duration for A/V -t alignment (pass calculate_xfade_duration).",
@@ -577,7 +580,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             out_dur = contract_dur
         else:
             # No overlap shrink: keep full act sum (or caller total when provided).
-            out_dur = float(total_duration) if total_duration > 0 else float(sum(act_durs))
+            act_sum = float(sum(act_durs))
+            if total_duration > 0 and abs(float(total_duration) - act_sum) > 0.001:
+                logger.warning(
+                    "MultiAct total_duration=%.3f differs from sum(act_durs)=%.3f; "
+                    "using caller total_duration.",
+                    float(total_duration),
+                    act_sum,
+                )
+            out_dur = float(total_duration) if total_duration > 0 else act_sum
 
         # Check for director single-pass stream-copy eligibility:
         # Near-zero CPU: when DIRECTOR_SINGLE_PASS=1, no xfade, no HUD, no subtitles,
@@ -683,6 +694,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
                 current = out_tag
                 cum += float(acts[k + 1].duration_sec) - t
+            if abs(cum - contract_dur) > 0.001:
+                logger.warning(
+                    "MultiAct accumulated xfade timeline cum=%.3f differs from contract_dur=%.3f",
+                    cum,
+                    contract_dur,
+                )
             chained = current
         else:
             # Safe non-shrinking path: concat acts (opt-out via MULTIACT_XFADE=0).
