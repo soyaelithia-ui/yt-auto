@@ -17,6 +17,7 @@ from src.core.repository import (
     touch_daemon_liveness,
 )
 from src.core.guard import ConsecutiveFailureBreaker, ensure_disk_available
+from src.core.process_watch import reap_zombies
 from src.core.scheduler import PersistentScheduler
 from src.log import get_logger
 from src.observability.alerts import send_operational_alert
@@ -340,6 +341,187 @@ def _responsive_sleep(seconds: float, tick: float = 1.0) -> bool:
     return _SHUTDOWN_EVENT.wait(timeout=max(0.0, seconds)) or _SHUTDOWN_REQUESTED
 
 
+def _reap_zombies_safe() -> None:
+    """Reap exited children in production only. Pytest hosts other children."""
+    from src.config import is_test_environment
+
+    if is_test_environment():
+        return
+    try:
+        reap_zombies()
+    except Exception:
+        logger.debug("zombie reap skipped", exc_info=True)
+
+
+def _turn_timeout_seconds() -> float:
+    raw = os.environ.get("DAEMON_TURN_TIMEOUT_SECONDS")
+    if raw:
+        try:
+            return max(0.05, float(raw))
+        except ValueError:
+            pass
+    try:
+        return float(os.environ.get("RENDER_TIMEOUT_SECONDS", "10800"))
+    except ValueError:
+        return 10800.0
+
+
+def _watchdog_tick_seconds() -> float:
+    try:
+        return max(0.05, float(os.environ.get("DAEMON_WATCHDOG_TICK_SECONDS", "5")))
+    except ValueError:
+        return 5.0
+
+
+def _await_future_responsive(
+    future,
+    *,
+    timeout: float,
+    database: str,
+    tick: float = 5.0,
+    touch_heartbeat: bool | None = None,
+):
+    """Wait for ``future`` in short slices: reap zombies and refresh liveness.
+
+    Returns ``(result, timed_out)``. Never calls ``future.result()`` without a
+    timeout, so a hung FFmpeg turn cannot pin the scheduler loop.
+    """
+    from concurrent.futures import wait, FIRST_COMPLETED
+
+    from src.config import is_test_environment
+
+    if touch_heartbeat is None:
+        touch_heartbeat = not is_test_environment()
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        _reap_zombies_safe()
+        if touch_heartbeat:
+            try:
+                touch_daemon_liveness(database)
+            except Exception:
+                logger.debug("daemon liveness touch failed", exc_info=True)
+        if is_shutdown_requested():
+            return None, True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None, True
+        done, _pending = wait(
+            {future}, timeout=min(tick, remaining), return_when=FIRST_COMPLETED
+        )
+        if future in done:
+            return future.result(), False
+
+
+def _timeout_result(pick: Any | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "RETRYABLE_FAILED",
+        "error": "turn timed out waiting for worker",
+        "error_code": "timeout",
+    }
+    if pick is None:
+        return payload
+    payload["lane"] = getattr(pick, "lane_id", None)
+    channel = getattr(pick, "channel", None)
+    payload["channel"] = getattr(channel, "value", channel)
+    return payload
+
+
+def _collect_futures_responsive(
+    futures: dict[Any, Any],
+    *,
+    timeout: float,
+    database: str,
+    tick: float = 5.0,
+    touch_heartbeat: bool | None = None,
+) -> list[dict[str, Any]]:
+    """Drain a batch of lane futures without an unbounded ``result()`` wait."""
+    from concurrent.futures import wait, FIRST_COMPLETED
+
+    from src.config import is_test_environment
+    from src.core.process_watch import terminate_hung_ffmpeg
+
+    if touch_heartbeat is None:
+        touch_heartbeat = not is_test_environment()
+    results: list[dict[str, Any]] = []
+    pending = set(futures)
+    deadline = time.monotonic() + max(0.0, timeout)
+    while pending:
+        _reap_zombies_safe()
+        if touch_heartbeat:
+            try:
+                touch_daemon_liveness(database)
+            except Exception:
+                logger.debug("daemon liveness touch failed", exc_info=True)
+        if is_shutdown_requested():
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            if not is_test_environment():
+                try:
+                    terminate_hung_ffmpeg(
+                        max_age_seconds=0,
+                        parent_pid=os.getpid(),
+                        grace_seconds=1.0,
+                    )
+                except Exception:
+                    logger.debug("hung ffmpeg terminate failed", exc_info=True)
+            for fut in pending:
+                results.append(_timeout_result(futures.get(fut)))
+            break
+        done, pending = wait(
+            pending, timeout=min(tick, remaining), return_when=FIRST_COMPLETED
+        )
+        for fut in done:
+            pick = futures[fut]
+            try:
+                results.append(fut.result())
+            except Exception as exc:
+                logger.error(
+                    "Lane %s falló de forma inesperada: %s",
+                    getattr(pick, "lane_id", "?"),
+                    exc,
+                )
+                results.append(
+                    {
+                        "status": "RETRYABLE_FAILED",
+                        "lane": getattr(pick, "lane_id", None),
+                        "error": str(exc),
+                    }
+                )
+    return results
+
+
+def _run_turn_responsive(fn, *, timeout: float, database: str, tick: float | None = None):
+    """Run one pipeline turn; in production, watchdog the worker thread."""
+    from src.config import is_test_environment
+
+    if is_test_environment():
+        return fn(), False
+
+    from concurrent.futures import ThreadPoolExecutor
+    from src.core.process_watch import terminate_hung_ffmpeg
+
+    timed_out = False
+    tick_s = _watchdog_tick_seconds() if tick is None else tick
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="turn")
+    try:
+        future = pool.submit(fn)
+        result, timed_out = _await_future_responsive(
+            future, timeout=timeout, database=database, tick=tick_s
+        )
+        if timed_out:
+            try:
+                terminate_hung_ffmpeg(
+                    max_age_seconds=0, parent_pid=os.getpid(), grace_seconds=1.0
+                )
+            except Exception:
+                logger.debug("hung ffmpeg terminate failed", exc_info=True)
+            return _timeout_result(), True
+        return result, False
+    finally:
+        pool.shutdown(wait=not timed_out, cancel_futures=True)
+
+
 def _run_auto_publish_sweep() -> None:
     """Publish pending reviews whose approval window (6h default) has elapsed."""
     if os.environ.get("ENABLE_AUTO_PUBLISH_SWEEP") != "1":
@@ -424,6 +606,7 @@ def start_daemon(
     if max_runs is None:
         _start_telegram_callback_poller()
     while not _SHUTDOWN_REQUESTED and (max_runs is None or attempts < max_runs):
+        _reap_zombies_safe()
         if not is_test_environment():
             _run_auto_publish_sweep()
         try:
@@ -459,18 +642,29 @@ def start_daemon(
             extra = {}
             if video_mode is not None:
                 extra["video_mode"] = video_mode
-            result = run_pipeline_once(
-                channel=decision.channel.value,
-                db_path=database,
-                **extra,
+            result, timed_out = _run_turn_responsive(
+                lambda: run_pipeline_once(
+                    channel=decision.channel.value,
+                    db_path=database,
+                    **extra,
+                ),
+                timeout=_turn_timeout_seconds(),
+                database=database,
             )
-            status_value = str(result.get("status", ""))
-            if status_value in {"PUBLISHED", "COMPLETED"}:
-                breaker.record_success(decision.channel.value)
-            elif status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED"}:
+            if timed_out:
+                result = dict(result or {})
+                result.setdefault("channel", decision.channel.value)
                 _register_turn_failure(
                     database, decision.channel.value, breaker, result.get("error")
                 )
+            else:
+                status_value = str(result.get("status", ""))
+                if status_value in {"PUBLISHED", "COMPLETED"}:
+                    breaker.record_success(decision.channel.value)
+                elif status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED"}:
+                    _register_turn_failure(
+                        database, decision.channel.value, breaker, result.get("error")
+                    )
         except QuotaError as exc:
             delay = backoff_with_jitter(
                 attempts,
@@ -661,6 +855,7 @@ def start_daemon_lanes(
     ticks = 0
     with ThreadPoolExecutor(max_workers=parallel, thread_name_prefix="lane") as pool:
         while not _SHUTDOWN_REQUESTED:
+            _reap_zombies_safe()
             if max_ticks is not None and ticks >= max_ticks:
                 break
             ticks += 1
@@ -697,14 +892,14 @@ def start_daemon_lanes(
                 ): pick
                 for pick in picks
             }
-            for future, pick in futures.items():
-                try:
-                    results.append(future.result())
-                except Exception as exc:  # defensive: _execute never raises
-                    logger.error("Lane %s falló de forma inesperada: %s", pick.lane_id, exc)
-                    results.append(
-                        {"status": "RETRYABLE_FAILED", "lane": pick.lane_id, "error": str(exc)}
-                    )
+            results.extend(
+                _collect_futures_responsive(
+                    futures,
+                    timeout=_turn_timeout_seconds(),
+                    database=database,
+                    tick=_watchdog_tick_seconds(),
+                )
+            )
             attempts += 1
             if _responsive_sleep(min(interval_seconds, 30)):
                 break
