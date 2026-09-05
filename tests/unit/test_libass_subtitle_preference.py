@@ -219,5 +219,43 @@ def test_proc_engine_default_path_uses_libass_not_pillow(tmp_path: Path, monkeyp
     assert out_sub.exists()
     assert seen_cmds, "expected libass ffmpeg path via run_ffmpeg"
     joined = " ".join(seen_cmds[0])
-    assert "ass=" in joined or "ass=filename=" in joined
+    assert "ass=filename=" in joined
+    assert "ass=filename='" not in joined
+    assert "fontsdir='" not in joined
     assert "rawvideo" not in seen_cmds[0], "must not use Pillow rawvideo bridge by default"
+
+
+def test_hybrid_libass_burn_is_unquoted_for_ffmpeg_61(tmp_path: Path, monkeypatch):
+    """Hybrid post-pass libass must use unquoted ass=filename= (FFmpeg 6.1)."""
+    from src.media.hybrid_engine import HybridVideoEngine
+    from src.media.subtitles_ass import write_ass_from_cues_or_words
+
+    out_path = tmp_path / "scene.mp4"
+    out_path.write_bytes(b"dummy")
+    words = [{"word": "Hola", "start": 0.0, "end": 0.3}]
+    cues = CodeSubtitleDrawer.parse_word_timestamps(words)
+    captured: list[list[str]] = []
+
+    def fake_run(cmd, *a, **k):
+        captured.append([str(c) for c in cmd])
+        Path(cmd[-1]).write_bytes(b"ok")
+
+    monkeypatch.setattr("src.media.hybrid_engine.run_ffmpeg", fake_run)
+    engine = HybridVideoEngine(output_dir=tmp_path)
+    engine._burn_libass_subtitles(
+        out_path=out_path,
+        subtitle_cues=cues,
+        width=320,
+        height=180,
+        scene_start_sec=0.0,
+        crf=21,
+        preset="veryfast",
+        threads_val="2",
+        write_ass_from_cues_or_words=write_ass_from_cues_or_words,
+    )
+    assert captured
+    vf = captured[0][captured[0].index("-vf") + 1]
+    assert vf.startswith("ass=filename=")
+    assert "ass=filename='" not in vf
+    assert "fontsdir='" not in vf
+

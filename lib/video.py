@@ -32,6 +32,7 @@ from lib.ffmpeg import (
 MIN_VIDEO_DURATION_SEC = 60.0
 DEFAULT_MIN_DURATION = 120.0
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
+from src.media.subtitles_ass import libass_filter_clause
 
 SHORT_RES = SHORT_RESOLUTION
 LONGFORM_RES = LONGFORM_RESOLUTION
@@ -940,7 +941,7 @@ def _ass_fontsdir_option() -> str:
             return ""
     except OSError:
         return ""
-    return f":fontsdir='{_escape_filter_path(str(fonts_dir))}'"
+    return f":fontsdir={_escape_filter_path(str(fonts_dir))}"
 
 
 def _pan_crop_expressions(w: int, h: int, dur_i: float, index: int) -> tuple[str, str]:
@@ -1310,15 +1311,13 @@ def compose_video(
             )
 
         if subtitle_path and os.path.exists(subtitle_path):
-            sub_escaped = _escape_filter_path(str(subtitle_path))
             if subtitle_path.lower().endswith(".ass"):
-                # fontsdir lets libass resolve the vendored brand font for the
-                # "Montserrat Black"/"Montserrat" style families; omitted when
-                # the directory does not exist (filtergraph stays byte-identical
-                # to the pre-2d shape in that case).
-                vchain += f";[vconcat]ass=filename='{sub_escaped}'{_ass_fontsdir_option()}[vsubbed]"
+                fonts_dir = _repo_root() / "assets" / "fonts"
+                fonts_arg = fonts_dir if fonts_dir.is_dir() else None
+                vchain += f";[vconcat]{libass_filter_clause(subtitle_path, fonts_arg)}[vsubbed]"
             else:
-                vchain += f";[vconcat]subtitles=filename='{sub_escaped}'[vsubbed]"
+                sub_escaped = _escape_filter_path(str(subtitle_path))
+                vchain += f";[vconcat]subtitles=filename={sub_escaped}[vsubbed]"
             # Cada rama por escena ya emite yuv420p; solo afirmamos el formato
             # (sin el rescale out_range=tv redundante a resolución completa).
             vchain += ";[vsubbed]format=yuv420p[vout]"

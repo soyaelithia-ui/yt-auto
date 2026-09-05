@@ -45,6 +45,7 @@ from src.media.subtitles_ass import (
     escape_ffmpeg_filter_path,
     force_pillow_subtitles_enabled,
     has_active_subtitles,
+    libass_filter_clause,
     write_ass_from_cues_or_words,
 )
 from src.scene_manifest import (
@@ -596,15 +597,13 @@ class MultiSceneCompositor(BaseVideoCompositor):
         video_copy = not has_active_subtitles(subtitle_path)
 
         if not video_copy and subtitle_path:
-            sub_escaped = escape_ffmpeg_filter_path(subtitle_path)
             vf_chain = f"scale={width}:{height}:flags=lanczos,deband=1thr=0.03:2thr=0.03:3thr=0.03:range=16:blur=false"
             if str(subtitle_path).lower().endswith(".ass"):
                 fonts_dir = Path("assets/fonts").resolve()
-                fonts_esc = escape_ffmpeg_filter_path(fonts_dir)
-                fonts_opt = f":fontsdir={fonts_esc}" if fonts_dir.is_dir() else ""
-                vf_chain += f",ass=filename={sub_escaped}{fonts_opt}"
+                fonts_arg = fonts_dir if fonts_dir.is_dir() else None
+                vf_chain += f",{libass_filter_clause(subtitle_path, fonts_arg)}"
             else:
-                vf_chain += f",subtitles=filename={sub_escaped}"
+                vf_chain += f",subtitles=filename={escape_ffmpeg_filter_path(subtitle_path)}"
             vf_chain += ",format=yuv420p"
 
         # Audio handling

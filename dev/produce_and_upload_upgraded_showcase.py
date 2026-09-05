@@ -87,8 +87,8 @@ def assemble_master_video(
 
     filter_complex = f"[0:v]scale={width}:{height},fps={fps},format=yuv420p"
     if subtitles_path and subtitles_path.is_file():
-        sub_escaped = str(subtitles_path.resolve()).replace(":", "\\:").replace("'", "\\'")
-        filter_complex += f",ass='{sub_escaped}'"
+        from src.media.subtitles_ass import libass_filter_clause
+        filter_complex += f",{libass_filter_clause(subtitles_path)}"
     filter_complex += "[v]"
 
     cmd.extend([

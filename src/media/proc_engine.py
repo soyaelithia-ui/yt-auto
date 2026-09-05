@@ -263,6 +263,7 @@ class ProceduralVideoEngine(BaseVideoCompositor):
 
             from src.media.subtitles_ass import (
                 force_pillow_subtitles_enabled,
+                libass_filter_clause,
                 write_ass_from_cues_or_words,
             )
             use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
@@ -277,10 +278,9 @@ class ProceduralVideoEngine(BaseVideoCompositor):
                     video_height=height,
                     time_offset_sec=float(scene_start_sec or 0.0),
                 )
-                sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
                 fonts_dir = Path("assets/fonts").resolve()
-                fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
-                vf = f"scale={width}:{height},ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
+                fonts_arg = fonts_dir if fonts_dir.is_dir() else None
+                vf = f"scale={width}:{height},{libass_filter_clause(ass_path, fonts_arg)},format=yuv420p"
                 ffmpeg_cmd = [
                     "ffmpeg", "-y",
                     "-f", "concat", "-safe", "0", "-i", str(concat_txt),

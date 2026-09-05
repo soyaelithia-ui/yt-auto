@@ -11,6 +11,7 @@ import subprocess
 import threading
 from pathlib import Path
 from src.media.encode_defaults import default_render_crf, default_render_preset
+from src.media.subtitles_ass import libass_filter_clause
 from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 
@@ -92,14 +93,10 @@ class UnifiedEncoder:
 
         filter_chains: List[str] = []
 
-        # 1. Video Filter: libass subtitle burn-in
+        # 1. Video Filter: libass subtitle burn-in (unquoted FFmpeg 6.1 paths)
         if self.ass_subtitle_path and self.ass_subtitle_path.exists():
-            escaped_ass = str(self.ass_subtitle_path).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
-            if self.fonts_dir and self.fonts_dir.exists():
-                escaped_fonts = str(self.fonts_dir).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
-                filter_chains.append(f"[0:v]ass='{escaped_ass}':fontsdir='{escaped_fonts}'[v]")
-            else:
-                filter_chains.append(f"[0:v]ass='{escaped_ass}'[v]")
+            fonts = self.fonts_dir if self.fonts_dir and self.fonts_dir.exists() else None
+            filter_chains.append(f"[0:v]{libass_filter_clause(self.ass_subtitle_path, fonts)}[v]")
         else:
             filter_chains.append("[0:v]null[v]")
 

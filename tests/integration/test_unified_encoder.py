@@ -105,6 +105,27 @@ def test_encoder_command_construction_complete_graph(tmp_path: Path):
     assert str(out_mp4) in cmd
 
 
+def test_encoder_ass_filter_is_unquoted_for_ffmpeg_61(tmp_path: Path):
+    """UnifiedEncoder must emit unquoted ass=filename= (FFmpeg 6.1 libass)."""
+    ass_file = tmp_path / "subs.ass"
+    ass_file.write_text("[Script Info]\n", encoding="utf-8")
+    fonts_dir = tmp_path / "fonts"
+    fonts_dir.mkdir()
+    encoder = UnifiedEncoder(
+        output_mp4=tmp_path / "out.mp4",
+        ass_subtitle_path=ass_file,
+        fonts_dir=fonts_dir,
+    )
+    cmd = encoder.build_ffmpeg_command()
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "ass=filename=" in fc
+    assert "ass='" not in fc
+    assert "ass=filename='" not in fc
+    assert "fontsdir='" not in fc
+    assert f"filename={ass_file}" in fc
+    assert f"fontsdir={fonts_dir}" in fc
+
+
 def test_encoder_audio_variations(tmp_path: Path):
     """Verify filtergraph builds properly across various audio input combinations."""
     out_mp4 = tmp_path / "test.mp4"

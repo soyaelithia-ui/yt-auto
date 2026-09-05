@@ -59,9 +59,10 @@ class TestFontVendoring(unittest.TestCase):
         if not (Path(_repo_root()) / "assets" / "fonts").is_dir():
             self.skipTest("assets/fonts directory not present")
         option = _ass_fontsdir_option()
-        self.assertTrue(option.startswith(":fontsdir='"))
+        self.assertTrue(option.startswith(":fontsdir="))
+        self.assertFalse(option.startswith(":fontsdir='"))
         self.assertIn("/assets/fonts", option)
-        self.assertTrue(option.endswith("'"))
+        self.assertNotIn("'", option)
 
     def test_ass_fontsdir_option_empty_when_dir_missing(self):
         """No font dir -> empty option, filtergraph keeps the legacy shape."""
@@ -107,8 +108,9 @@ class TestFontVendoring(unittest.TestCase):
             self.skipTest("assets/fonts directory not present")
 
         graph = self._compose_filtergraph_for(sub_path)
-        self.assertIn(".ass':fontsdir=", graph)
-        self.assertIn("fontsdir='" + str(Path(_repo_root()) / "assets" / "fonts"), graph)
+        self.assertIn(".ass:fontsdir=", graph)
+        self.assertNotIn("fontsdir='", graph)
+        self.assertIn("fontsdir=" + str(Path(_repo_root()) / "assets" / "fonts"), graph)
 
     def test_srt_branch_has_no_fontsdir_option(self):
         """Only libass burn-in needs the font dir; SRT path stays untouched."""

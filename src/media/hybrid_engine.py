@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.log import get_logger
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
+from src.media.subtitles_ass import libass_filter_clause
 from src.scene_manifest import (
     CameraMotionConfig,
     HybridAIConfig,
@@ -405,10 +406,12 @@ class HybridVideoEngine(BaseVideoCompositor):
                 video_height=height,
                 time_offset_sec=float(scene_start_sec or 0.0),
             )
-            sub_escaped = str(ass_path.resolve()).replace('\\', '/').replace(':', '\\:').replace("'", "\\'")
             fonts_dir = Path("assets/fonts").resolve()
-            fonts_opt = f":fontsdir='{fonts_dir}'" if fonts_dir.is_dir() else ""
-            vf = f"ass=filename='{sub_escaped}'{fonts_opt},format=yuv420p"
+            sub_clause = libass_filter_clause(
+                ass_path,
+                fonts_dir if fonts_dir.is_dir() else None,
+            )
+            vf = f"{sub_clause},format=yuv420p"
             burn_cmd = [
                 "ffmpeg", "-y",
                 "-i", str(out_path),
