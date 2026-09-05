@@ -23,7 +23,9 @@ from src.media.multi_act_renderer import (
     niche_hud_from_act,
     niche_hud_from_mapping,
     resolve_hud_accent_color,
+    _escape_ffmpeg_color,
 )
+from src.agents.scene_planner import validate_hex_color
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.layout import AspectLayoutManager
 
@@ -468,3 +470,28 @@ def test_build_niche_hud_filter_module_api_matches_renderer():
     a = build_niche_hud_filter(1080, 1920, cfg, 8.0)
     b = MultiActVideoRenderer().build_scene_hud_filter(1080, 1920, cfg, 8.0)
     assert a == b
+
+
+def test_escape_ffmpeg_color_rejects_corrupt_hex():
+    assert _escape_ffmpeg_color("#00FF66") == "#00FF66"
+    assert _escape_ffmpeg_color("#ff4081") == "#FF4081"
+    assert _escape_ffmpeg_color("0x00F0FF") == "#00F0FF"
+    assert _escape_ffmpeg_color("malicious:box=1", default="#00FF88") == "#00FF88"
+    assert validate_hex_color("bad", default="#AABBCC") == "#AABBCC"
+
+
+def test_corrupt_accent_does_not_leak_into_ffmpeg_filter():
+    filt = MultiActVideoRenderer().build_scene_hud_filter(
+        1080,
+        1920,
+        NicheHudConfig(
+            hud_layout="top_bar",
+            hud_badge="TEST",
+            hud_site="SITE",
+            telemetry_label="TEL",
+            accent_color_hex="malicious:box=1;rm",
+        ),
+        10.0,
+    )
+    assert "malicious" not in filt
+    assert "#00FF88" in filt

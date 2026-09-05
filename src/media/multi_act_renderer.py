@@ -14,12 +14,15 @@ import json
 import logging
 import math
 import os
+import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
+from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError, probe_media
 from src.log import get_logger
+from src.media.director_single_pass import director_single_pass_enabled
 from src.media.encode_defaults import default_render_crf, default_render_preset
 
 logger = get_logger("multi_act_renderer")
@@ -111,6 +114,20 @@ HUD_FONT_META = 16
 HUD_BORDERW = 2
 HUD_BORDERCOLOR = "black@0.85"
 _GENERIC_HUD_ACCENTS = frozenset({"", "#00ff88"})  # NicheHudConfig default only
+HEX_COLOR_PATTERN = re.compile(r"^#([0-9a-fA-F]{6})$")
+
+
+def _escape_ffmpeg_color(color: Any, default: str = "#00FF88") -> str:
+    """Keep only #RRGGBB so corrupt accents cannot leak into drawbox/drawtext."""
+    if not color or not isinstance(color, str):
+        return default
+    s = color.strip()
+    if s.startswith("0x") and len(s) == 8:
+        s = "#" + s[2:]
+    m = HEX_COLOR_PATTERN.match(s)
+    if m:
+        return f"#{m.group(1).upper()}"
+    return default
 
 
 def _escape_drawtext(text: str) -> str:
@@ -127,7 +144,9 @@ def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", stor
     """
     raw = (accent_color_hex or "").strip()
     if raw and raw.lower() not in _GENERIC_HUD_ACCENTS:
-        return raw
+        escaped = _escape_ffmpeg_color(raw, default="")
+        if escaped:
+            return escaped
     key = (lane_id or "").strip()
     if key:
         try:
@@ -135,10 +154,10 @@ def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", stor
 
             accent = (ChannelProfileRegistry.get_channel(key).visual.palette.accent or "").strip()
             if accent:
-                return accent
+                return _escape_ffmpeg_color(accent, default="#00FF88")
         except Exception:
             pass
-    return raw or "#00FF88"
+    return _escape_ffmpeg_color(raw, default="#00FF88")
 
 
 def hud_safe_margins(width: int, height: int) -> Dict[str, int]:
@@ -192,8 +211,13 @@ def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudC
     """Build NicheHudConfig from planner/manifest ``niche_hud`` dict when present."""
     if not isinstance(data, dict) or not data:
         return None
+    if data.get("enabled") is False or data.get("hud_enabled") is False:
+        return None
+    raw_layout = str(data.get("hud_layout") or "").strip().lower()
+    if raw_layout in ("none", "off", "disabled", "false"):
+        return None
     story = str(data.get("story_type") or data.get("lane_id") or "").strip()
-    if not story and not (data.get("hud_badge") or data.get("hud_site")):
+    if not (data.get("hud_badge") or data.get("hud_site") or data.get("telemetry_label")):
         return None
     lane_id = str(data.get("lane_id") or "")
     return NicheHudConfig(
@@ -212,7 +236,7 @@ def niche_hud_from_mapping(data: Optional[Dict[str, Any]]) -> Optional[NicheHudC
     )
 
 
-def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
+def niche_hud_from_act(act: "NarrativeSceneAct") -> Optional[NicheHudConfig]:
     """Resolve niche HUD: prefer planner ``act.niche_hud`` dict, else defaults.
 
     Does NOT map theme_category keywords (scp/aita/reddit/abyss/horror) to
@@ -220,9 +244,10 @@ def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
     defaults to ``top_bar``. DIRECTOR_SINGLE_PASS / MultiSceneCompositor burn
     the same overlay when planner ``niche_hud`` is present.
     """
-    from_planner = niche_hud_from_mapping(getattr(act, "niche_hud", None))
-    if from_planner is not None:
-        return from_planner
+    if getattr(act, "niche_hud", None) is not None:
+        return niche_hud_from_mapping(act.niche_hud)
+    if not (act.hud_badge or act.hud_site or act.hud_telemetry):
+        return None
     story = str(act.theme_category or "").strip() or "generic"
     lane_id = str(getattr(act, "lane_id", "") or "")
     return NicheHudConfig(
@@ -244,7 +269,7 @@ def niche_hud_from_act(act: "NarrativeSceneAct") -> NicheHudConfig:
 def build_niche_hud_filter(
     width: int,
     height: int,
-    hud_cfg: NicheHudConfig,
+    hud_cfg: Optional[NicheHudConfig],
     duration_sec: float,
 ) -> str:
     """Build FFmpeg drawtext/drawbox HUD snippet (shared with DIRECTOR_SINGLE_PASS).
@@ -252,6 +277,11 @@ def build_niche_hud_filter(
     Geometry branches ONLY on ``hud_cfg.hud_layout`` (top_bar | card | bottom_bar).
     ``story_type`` / niche name strings MUST NOT select geometry.
     """
+    if hud_cfg is None:
+        return ""
+    layout_raw = getattr(hud_cfg, "hud_layout", "top_bar")
+    if str(layout_raw).strip().lower() in ("none", "off", "disabled", "false"):
+        return ""
     accent = resolve_hud_accent_color(
         hud_cfg.accent_color_hex,
         lane_id=hud_cfg.lane_id,
@@ -260,7 +290,9 @@ def build_niche_hud_filter(
     site_esc = _escape_drawtext(hud_cfg.hud_site)
     badge_esc = _escape_drawtext(hud_cfg.hud_badge)
     telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
-    layout = _normalize_hud_layout(getattr(hud_cfg, "hud_layout", None))
+    if not (site_esc or badge_esc or telemetry_esc):
+        return ""
+    layout = _normalize_hud_layout(layout_raw)
     filters: List[str] = []
     m = hud_safe_margins(width, height)
     is_vertical = bool(m["is_vertical"])
@@ -356,6 +388,49 @@ class MultiActVideoRenderer:
     def __init__(self, loops_dir: Optional[Path] = None):
         self.iconic_dir = ROOT_DIR / "assets" / "loops" / "thematic_iconic"
         self.loops_dir = loops_dir or (ROOT_DIR / "assets" / "loops" / "web_procedural")
+
+    def _stream_copy_signature(
+        self, loop_path: Path
+    ) -> Optional[Tuple[int, int, str, str, str]]:
+        """Return (w, h, codec, pix_fmt, time_base) for concat demuxer -c:v copy safety."""
+        try:
+            probe = probe_media(loop_path)
+            vs = probe.video_streams[0] if probe.video_streams else probe.primary_video
+            if vs is None:
+                return None
+            time_base = ""
+            for s in (probe.raw_payload or {}).get("streams", []):
+                if s.get("codec_type") == "video":
+                    time_base = str(s.get("time_base") or "")
+                    break
+            return (
+                int(vs.width),
+                int(vs.height),
+                str(getattr(vs, "codec_name", "") or ""),
+                str(getattr(vs, "pix_fmt", "") or ""),
+                time_base,
+            )
+        except Exception:
+            return None
+
+    def _loops_homogeneous_for_stream_copy(
+        self, loop_paths: List[Path], width: int, height: int
+    ) -> bool:
+        """True only when all loops share WxH/codec/pix_fmt/time_base and match target WxH."""
+        if not loop_paths:
+            return False
+        sigs: List[Tuple[int, int, str, str, str]] = []
+        for p in loop_paths:
+            sig = self._stream_copy_signature(p)
+            if sig is None:
+                return False
+            if sig[0] != int(width) or sig[1] != int(height):
+                return False
+            if not sig[2] or not sig[3]:
+                return False
+            sigs.append(sig)
+        first = sigs[0]
+        return all(s == first for s in sigs)
 
     def build_scene_hud_filter(
         self,
@@ -499,13 +574,91 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # No overlap shrink: keep full act sum (or caller total when provided).
             out_dur = float(total_duration) if total_duration > 0 else float(sum(act_durs))
 
+        # Check for director single-pass stream-copy eligibility:
+        # Near-zero CPU: when DIRECTOR_SINGLE_PASS=1, no xfade, no HUD, no subtitles,
+        # and all loop files match target geometry, codec, pixel format, and time_base.
+        hud_snippets = [
+            self.build_scene_hud_filter(w, h, niche_hud_from_act(act), float(act.duration_sec))
+            for act in acts
+        ]
+        has_hud = any(bool(s) for s in hud_snippets)
+        has_subtitles = bool(ass_subtitles and ass_subtitles.is_file())
+        homogeneous = self._loops_homogeneous_for_stream_copy(loop_paths, w, h)
+        can_stream_copy = (
+            director_single_pass_enabled()
+            and not use_xfade
+            and not has_hud
+            and not has_subtitles
+            and homogeneous
+        )
+
+        if can_stream_copy:
+            logger.info("🚀 Ejecutando ensamble stream-copy Multi-Acto (DIRECTOR_SINGLE_PASS)...")
+            with tempfile.TemporaryDirectory(prefix="multiact_stream_copy_") as tmp_dir_str:
+                tmp_dir = Path(tmp_dir_str)
+                trimmed: List[Path] = []
+                for idx, (lp, act) in enumerate(zip(loop_paths, acts)):
+                    out_seg = tmp_dir / f"act_trim_{idx:03d}.mp4"
+                    cmd_trim = [
+                        "ffmpeg", "-y",
+                        "-stream_loop", "-1",
+                        "-i", str(lp),
+                        "-t", f"{act.duration_sec:.3f}",
+                        "-c:v", "copy",
+                        "-an",
+                        "-movflags", "+faststart",
+                        str(out_seg),
+                    ]
+                    run_ffmpeg(cmd_trim, check=True)
+                    trimmed.append(out_seg)
+
+                concat_list = tmp_dir / "acts_concat.txt"
+                with open(concat_list, "w", encoding="utf-8") as f:
+                    for t_p in trimmed:
+                        f.write(f"file '{t_p.resolve()}'\n")
+
+                cmd_mux = [
+                    "ffmpeg", "-y", "-v", "error",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_list),
+                    "-i", str(audio_path),
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-ar", "44100",
+                    "-t", f"{out_dur:.3f}",
+                    "-movflags", "+faststart",
+                    str(output_video),
+                ]
+                run_ffmpeg(cmd_mux, check=True)
+                logger.info(
+                    "✅ Master Multi-Escena Stream-Copy Generado: %s (%.2f MB)",
+                    output_video.name,
+                    output_video.stat().st_size / (1024 * 1024) if output_video.exists() else 0.0,
+                )
+                return output_video
+
+        if director_single_pass_enabled():
+            logger.info(
+                "MultiAct stream-copy ineligible (xfade=%s hud=%s subs=%s homogeneous=%s); "
+                "re-encoding with preset=%s crf=%s",
+                use_xfade,
+                has_hud,
+                has_subtitles,
+                homogeneous,
+                default_render_preset(),
+                default_render_crf(),
+            )
+
         filter_parts = []
         for i, act in enumerate(acts):
-            scale_filter = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
-
-            hud_cfg = niche_hud_from_act(act)
-            hud_overlay = self.build_scene_hud_filter(w, h, hud_cfg, float(act.duration_sec))
-            hud_filters = f"{scale_filter},{hud_overlay}"
+            scale_filter = (
+                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                f"crop={w}:{h},fps=30,setsar=1,format=yuv420p"
+            )
+            hud_overlay = hud_snippets[i]
+            hud_filters = f"{scale_filter},{hud_overlay}" if hud_overlay else scale_filter
             filter_parts.append(f"[{i}:v]{hud_filters}[v_act{i}]")
 
         if len(acts) == 1:

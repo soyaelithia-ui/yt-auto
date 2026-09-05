@@ -339,3 +339,286 @@ def test_single_pass_hud_has_no_browser_or_wgpu_imports():
         hits = imported & banned_mods
         assert not hits, f"{f} imports {hits}"
 
+
+def test_multiact_stream_copy_when_homogeneous_no_hud(tmp_path, monkeypatch):
+    """MultiActVideoRenderer executes stream-copy when DIRECTOR_SINGLE_PASS=1, MULTIACT_XFADE=0, and no HUD."""
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr("src.media.multi_act_renderer.probe_media", lambda *a, **k: _homogeneous_probe(1920, 1080))
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 3.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_layout": "none"}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=5.0, is_vertical=False)
+
+    # Must NOT have run any -filter_complex re-encode command
+    assert not any("-filter_complex" in c for c in cmds)
+    # Must have run 2 trim commands with -c:v copy
+    copy_trim_cmds = [c for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy"]
+    assert len(copy_trim_cmds) == 2
+    # Must have run 1 mux concat command with -c:v copy
+    concat_cmds = [c for c in cmds if "-f" in c and "concat" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy"]
+    assert len(concat_cmds) == 1
+    mux_cmd = concat_cmds[0]
+    assert mux_cmd[mux_cmd.index("-c:a") + 1] == "aac"
+    assert mux_cmd[mux_cmd.index("-t") + 1] == "5.000"
+
+
+def test_multiact_filter_complex_has_setsar1_and_no_trailing_comma(tmp_path, monkeypatch):
+    """MultiActVideoRenderer includes setsar=1 and avoids trailing commas when mixing acts with/without HUD."""
+    from src.media.encode_defaults import default_render_crf, default_render_preset
+
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    captured = {}
+
+    def fake_run(cmd, check=True, **kw):
+        captured["cmd"] = list(cmd)
+        out.write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+    monkeypatch.delenv("RENDER_PRESET", raising=False)
+    monkeypatch.delenv("RENDER_CRF", raising=False)
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+
+    # Act 0 has HUD, Act 1 has disabled HUD
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="BADGE", hud_site="SITE", hud_telemetry="TEL"),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0, is_vertical=True)
+
+    cmd = captured["cmd"]
+    assert "-filter_complex" in cmd
+    fc = cmd[cmd.index("-filter_complex") + 1]
+
+    # setsar=1 is present on inputs before drawbox/drawtext
+    assert "setsar=1" in fc
+    # Act 0 has drawtext
+    assert "BADGE" in fc
+    # Act 1 has no trailing comma before the output tag
+    assert "format=yuv420p[v_act1]" in fc
+    assert ",[v_act1]" not in fc
+
+    # Policy checks: FFmpeg-first defaults veryfast and CRF 21
+    assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
+    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
+
+
+def test_scene_planner_hud_disabled_preserves_stream_copy(tmp_path):
+    """Scene planner respects hud_enabled: False and hud_layout: 'none' by producing niche_hud=None."""
+    from src.agents.scene_planner import ScenePlannerCompositorAgent
+    from src.media.director_single_pass import scenes_have_niche_hud
+
+    agent = ScenePlannerCompositorAgent()
+
+    # 1. Direct palette extraction
+    layout, _, _ = agent._extract_channel_palette_and_hud(
+        channel_name="moku",
+        lane_id="moku-scp-shorts",
+        meta={"hud_enabled": False},
+        visual_plan={},
+    )
+    assert layout == "none"
+
+    layout_none, _, _ = agent._extract_channel_palette_and_hud(
+        channel_name="moku",
+        lane_id="moku-scp-shorts",
+        meta={},
+        visual_plan={},
+        explicit_hud_layout="none",
+    )
+    assert layout_none == "none"
+
+    # 2. plan_manifest with hud_enabled: False
+    dummy_audio = tmp_path / "dummy_narr.wav"
+    dummy_audio.write_bytes(b"RIFF" + b"\0" * 40)
+    script = {
+        "metadata": {
+            "channel_lane": "moku-scp-shorts",
+            "hud_enabled": False,
+            "target_format": "short",
+        },
+        "acts": [
+            {
+                "dramatic_role": "intro",
+                "scenes": [
+                    {"scene_id": "sc_01", "estimated_duration_sec": 3.0, "tension_level": 3},
+                ],
+            }
+        ],
+    }
+    manifest_dict = agent.plan_manifest(
+        script=script,
+        visual_plan={},
+        story_id="test_story",
+        narration_path=str(dummy_audio),
+    )
+    scenes = manifest_dict["scenes"]
+    assert len(scenes) == 1
+    assert scenes[0]["niche_hud"] is None
+
+    # scenes_have_niche_hud must be False, preserving loop_stream_copy eligibility
+    class MockScene:
+        def __init__(self, niche_hud):
+            self.niche_hud = niche_hud
+    assert not scenes_have_niche_hud([MockScene(None)])
+
+
+def test_build_hud_concat_video_filters_setsar():
+    """build_hud_concat_video_filters ensures setsar=1 is in each input branch."""
+    from src.media.director_single_pass import build_hud_concat_video_filters
+
+    parts, out = build_hud_concat_video_filters(2, ["drawtext=text=TEST", None])
+    joined = ";".join(parts)
+    assert "[0:v]setsar=1,drawtext=text=TEST,format=yuv420p[v0]" in joined
+    assert "[1:v]setsar=1,format=yuv420p[v1]" in joined
+
+
+def _probe(width, height, codec="h264", pix_fmt="yuv420p", time_base="1/90000"):
+    vs = MagicMock(width=width, height=height, codec_name=codec, pix_fmt=pix_fmt)
+    return MagicMock(
+        video_streams=[vs],
+        primary_video=vs,
+        raw_payload={"streams": [{"codec_type": "video", "time_base": time_base}]},
+    )
+
+
+def test_loops_homogeneous_for_stream_copy_requires_wxh_codec_pixfmt_timebase(tmp_path, monkeypatch):
+    """Strict concat-copy gate: any WxH/codec/pix_fmt/time_base mismatch is ineligible."""
+    a = tmp_path / "a.mp4"
+    b = tmp_path / "b.mp4"
+    a.write_bytes(b"\0" * 32)
+    b.write_bytes(b"\0" * 32)
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+
+    probes = {str(a.resolve()): _probe(1920, 1080), str(b.resolve()): _probe(1920, 1080)}
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda p, **k: probes[str(Path(p).resolve())],
+    )
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is True
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1080, 1920) is False
+
+    probes[str(b.resolve())] = _probe(1920, 1080, codec="hevc")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1920, 1080, pix_fmt="yuv422p")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1920, 1080, time_base="1/30000")
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+    probes[str(b.resolve())] = _probe(1280, 720)
+    assert r._loops_homogeneous_for_stream_copy([a, b], 1920, 1080) is False
+
+
+def test_multiact_stream_copy_vertical_when_homogeneous_no_hud(tmp_path, monkeypatch):
+    """Vertical 1080x1920 homogeneous loops stream-copy the same as horizontal."""
+    loop = tmp_path / "loop.mp4"
+    loop.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda *a, **k: _homogeneous_probe(1080, 1920),
+    )
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: loop)
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_layout": "none"}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0, is_vertical=True)
+
+    assert not any("-filter_complex" in c for c in cmds)
+    assert sum(1 for c in cmds if "-stream_loop" in c and "-c:v" in c and c[c.index("-c:v") + 1] == "copy") == 2
+    assert any("-f" in c and "concat" in c and c[c.index("-c:v") + 1] == "copy" for c in cmds)
+
+
+def test_multiact_inhomogeneous_falls_back_to_veryfast_crf21(tmp_path, monkeypatch):
+    """Mismatched pix_fmt must not stream-copy; one veryfast/CRF21 encode with setsar=1."""
+    from src.media.encode_defaults import default_render_crf, default_render_preset
+
+    loop_a = tmp_path / "a.mp4"
+    loop_b = tmp_path / "b.mp4"
+    loop_a.write_bytes(b"\0" * 64)
+    loop_b.write_bytes(b"\0" * 64)
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"RIFF" + b"\0" * 40)
+    out = tmp_path / "out.mp4"
+    cmds = []
+    probes = {
+        str(loop_a.resolve()): _probe(1920, 1080),
+        str(loop_b.resolve()): _probe(1920, 1080, pix_fmt="yuv422p"),
+    }
+
+    def fake_run(cmd, check=True, **kw):
+        cmds.append(list(cmd))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(
+        "src.media.multi_act_renderer.probe_media",
+        lambda p, **k: probes[str(Path(p).resolve())],
+    )
+    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
+    monkeypatch.setenv("MULTIACT_XFADE", "0")
+    monkeypatch.delenv("RENDER_PRESET", raising=False)
+    monkeypatch.delenv("RENDER_CRF", raising=False)
+
+    r = MultiActVideoRenderer(loops_dir=tmp_path)
+    paths = [loop_a, loop_b]
+    monkeypatch.setattr(r, "resolve_loop_for_theme", lambda *a, **k: paths.pop(0))
+    acts = [
+        NarrativeSceneAct(0, 0.0, 2.0, "A", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+        NarrativeSceneAct(1, 2.0, 2.0, "B", "scp", hud_badge="", hud_site="", hud_telemetry="", niche_hud={"hud_enabled": False}),
+    ]
+    r.composite_multi_act_video(acts, audio, out, total_duration=4.0, is_vertical=False)
+
+    assert not any("-c:v" in c and c[c.index("-c:v") + 1] == "copy" for c in cmds)
+    fc_cmds = [c for c in cmds if "-filter_complex" in c]
+    assert len(fc_cmds) == 1
+    cmd = fc_cmds[0]
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "setsar=1" in fc
+    assert "concat=n=2" in fc
+    assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
+    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+
+
