@@ -2,9 +2,30 @@
 
 import os
 import re
+import subprocess
 from pathlib import Path
 
 from src.config import BASE_DIR, MOKU, AELITHIA, SETTINGS
+
+_AGENT_HOME_GITIGNORE = (
+    ".codex/",
+    ".claude/",
+    ".gemini/",
+    ".agents/",
+    ".opencode/",
+)
+
+_AGENT_HOME_PREFIXES = (
+    ".codex/",
+    ".claude/",
+    ".gemini/",
+    ".agents/",
+    ".opencode/",
+    ".grok/",
+    ".copilot/",
+    ".cursor/",
+    ".atl/",
+)
 
 # Format signatures only. Never embed live credential literals in tests or fixtures.
 _PRODUCTION_SECRET_PATTERNS = [
@@ -69,6 +90,9 @@ def test_gitignore_enforces_secret_rules():
     assert "*.token" in lines or "*.key" in lines
     assert "*token*.json" in lines
     assert "*client_secret*.json" in lines
+    for home in _AGENT_HOME_GITIGNORE:
+        assert home in lines, f"{home} must be gitignored"
+    assert "!.codex/hooks.json" not in lines
 
 
 def test_no_live_secrets_in_tracked_python_files():
@@ -86,3 +110,18 @@ def test_no_live_secrets_in_tracked_python_files():
                     f"Hardcoded credential pattern found in {py_file.relative_to(BASE_DIR)}"
                 )
     assert scanned > 0, "Expected to scan at least one Python file"
+
+
+def test_no_agent_homedirs_tracked():
+    """Agent homedirs and hooks must not be present in git ls-files."""
+    tracked = subprocess.check_output(
+        ["git", "ls-files"],
+        cwd=BASE_DIR,
+        text=True,
+    ).splitlines()
+    leaked = [
+        path
+        for path in tracked
+        if path.startswith(_AGENT_HOME_PREFIXES) or path in {p.rstrip("/") for p in _AGENT_HOME_PREFIXES}
+    ]
+    assert leaked == [], f"Agent homedir files are tracked: {leaked}"

@@ -13,8 +13,11 @@
 
 ## 3. Security, Credentials & Memory Governance
 - **Zero Secrets in Memory**: Never persist credentials, OAuth tokens, API keys, cookies, cookie jars, `.env` values, or secrets into Engram, agent notes, session summaries, or logs. Always redact (`[REDACTED]`).
+- **Zero Live Literals**: Never commit real credentials in source, tests, fixtures, mocks, or audit scripts. Do not use live secrets as regex needles. Use generic format signatures or runtime-built synthetic tokens. Never print matched secrets in logs or assertion messages.
+- **Zero Agent Homedirs in Git**: Never add `.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`, `.cursor/`, or similar agent homes (including `hooks.json`). They are local-only; `.gitignore` and the pre-commit hook must reject them.
 - **Strict Project Isolation**: Keep agent context, memory operations, and commands bound strictly to this project (`yt-auto`). Never read, write, or leak files outside the yt-auto workspace root (including `~/.ssh`, `~/.config`, sibling repositories, and unrelated directories).
 - **Environment Isolation**: `.env`, `cookies.json`, and database state files remain local, untracked, and strictly non-extractable.
+- **Leak Response**: If credentials leak, do not file a public issue. Make the GitHub repository private, invalidate the affected GCP project/APIs, rotate every credential, and keep scanners green before resuming production.
 
 ## 4. Concurrent Agent Worktrees
 - Use `scripts/agent_worktree.sh` for create, force-remove, list, and prune. It MUST NOT delete or alter the primary repository checkout under any cleanup flag or argument error.

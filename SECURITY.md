@@ -25,21 +25,40 @@ To prevent credential leaks and unauthorized access, the following rules are str
 4. **Data Sanitization & Telemetry Hygiene**:
    - Dict representations intended for public logging, Telegram messages, or CLI output (such as `ChannelSettings.public_dict()`) MUST NOT expose filesystem paths to secret files or raw credential payloads. Only boolean availability flags are permitted.
    - Loggers and health reporters MUST never log raw cookie values, session tokens, or OAuth authorization codes.
-5. **Session Memory Scrubbing**:
-   - Automated browser sessions (Playwright / Chromium) MUST explicitly clear session cookies from context (`context.clear_cookies()`) and terminate child processes cleanly on teardown to avoid lingering in-memory secrets.
+    5. **Session Memory Scrubbing**:
+       - Automated browser sessions (Playwright / Chromium) MUST explicitly clear session cookies from context (`context.clear_cookies()`) and terminate child processes cleanly on teardown to avoid lingering in-memory secrets.
+    6. **No Live Literals in Tests or Audits**:
+       - Tests, fixtures, mocks, and audit scripts MUST NEVER embed real credentials, even as "forbidden string" matchers.
+       - Scan with generic format signatures (for example Google API key / OAuth client-secret shapes) or runtime-built synthetic tokens. Assertion messages MUST NOT print matched secret values.
+    7. **Agent Homedirs Are Local-Only**:
+       - `.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`, `.cursor/`, `.copilot/`, `.grok/`, and `.atl/` MUST remain gitignored and untracked, including hooks and session files.
 
 ---
 
 ## 2. Automated Security Verification
 
-The test suite enforces credential hygiene automatically:
-- Automated tests verify that `.gitignore` contains all necessary secret patterns.
-- Automated tests scan tracked files to ensure no real API keys, OAuth secrets, or raw credential paths are committed.
+The test suite and pre-commit hook enforce credential hygiene automatically:
+- Automated tests verify that `.gitignore` contains secret patterns and agent-homedir rules.
+- Automated tests scan tracked Python trees so production-format keys, OAuth secrets, bot tokens, and GitHub PATs are not committed.
+- The pre-commit hook rejects staged agent homedirs and production-format secret signatures, reporting **file paths only** (never the match).
 - Preflight commands (`python main.py run --preflight`) validate required environment variables before production runs.
 
 ---
 
-## 3. Reporting a Vulnerability
+## 3. Incident Response (Credential Leak)
+
+If live credentials appear in git history, logs, or a public clone:
+
+1. **Do NOT open a public GitHub issue.**
+2. Make the canonical GitHub repository **private** immediately.
+3. Invalidate the leaked Google credentials: delete or shut down the affected GCP project, or disable the consumer APIs and rotate keys/OAuth clients. Revoke Telegram bot tokens in BotFather.
+4. Rotate every credential that may have been copied (API keys, OAuth client secret, refresh tokens, cookies, GitHub tokens).
+5. Remove literals from `HEAD` using generic scanners. History rewrite is optional and does not un-leak existing clones.
+6. Keep the repository private. Do not re-publish until new credentials exist and scanners are green.
+
+---
+
+## 4. Reporting a Vulnerability
 
 If you discover a security vulnerability or accidental credential exposure in `yt-auto`:
 
@@ -49,4 +68,4 @@ If you discover a security vulnerability or accidental credential exposure in `y
    - Description of the vulnerability.
    - Steps to reproduce or proof of concept.
    - Affected files and components.
-4. If real credentials were inadvertently exposed, rotate the affected API keys and OAuth client secrets immediately in the Google Cloud Console / Telegram BotFather before reporting.
+4. Follow **Incident Response** above before treating the report as closed.

@@ -66,18 +66,19 @@ tmp/
 .idea/
 .config/
 
-# Agent/Local System files
+# Agent/Local System files — never track homedirs, hooks, or session state
 .agents
 .agents/
 .atl/
 .claude/
 .copilot/
+.cursor/
 .gemini/
 .grok/
 .hermes/
+.opencode/
+.codex/
 .mcp.json
-.codex/*
-!.codex/hooks.json
 cookies.json
 PIPELINE_STATE.json
 payload.json
