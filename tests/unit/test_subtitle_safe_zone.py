@@ -13,9 +13,12 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 import pytest
 
+import src.media.compositor as compositor_mod
+import src.media.loop_engine as loop_engine_mod
+import src.media.multi_act_renderer as multi_act_mod
 from src.media.loop_engine import LoopVideoEngine
 from src.media.compositor import MultiSceneCompositor
 from src.media.multi_act_renderer import MultiActVideoRenderer, NarrativeSceneAct
@@ -121,7 +124,7 @@ def test_loop_video_engine_build_render_command_active_subtitles(
 
 
 def test_loop_video_engine_compose_stream_copy_preserved_on_inactive_subtitles(
-    tmp_path: Path, header_only_ass_file: Path
+    tmp_path: Path, header_only_ass_file: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """2.1 RED: LoopVideoEngine.compose preserves stream-copy (-c:v copy) when subtitles are inactive."""
     engine = LoopVideoEngine()
@@ -142,18 +145,18 @@ def test_loop_video_engine_compose_stream_copy_preserved_on_inactive_subtitles(
         out_video.write_bytes(b"rendered")
         return MagicMock(returncode=0)
 
-    with patch("src.media.loop_engine.probe_media", return_value=mock_probe), \
-         patch("src.media.loop_engine.run_ffmpeg", side_effect=fake_run_ffmpeg):
+    monkeypatch.setattr(loop_engine_mod, "probe_media", lambda *a, **k: mock_probe)
+    monkeypatch.setattr(loop_engine_mod, "run_ffmpeg", fake_run_ffmpeg)
 
-        engine.compose(
-            audio_path=fake_audio,
-            output_video_path=out_video,
-            video_loop_path=fake_video,
-            orientation="horizontal",
-            stream_copy=True,
-            include_subtitles=True,
-            subtitle_path=header_only_ass_file,
-        )
+    engine.compose(
+        audio_path=fake_audio,
+        output_video_path=out_video,
+        video_loop_path=fake_video,
+        orientation="horizontal",
+        stream_copy=True,
+        include_subtitles=True,
+        subtitle_path=header_only_ass_file,
+    )
 
     assert len(captured_cmds) == 1
     stream_cmd = captured_cmds[0]
@@ -171,6 +174,7 @@ def test_multi_scene_compositor_master_assembly_inactive_subtitles(
     empty_ass_file: Path,
     header_only_ass_file: Path,
     whitespace_dialogue_ass_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """2.2 RED: MultiSceneCompositor._master_assembly preserves video_copy=True and omits ass= when subtitles inactive."""
     compositor = MultiSceneCompositor()
@@ -185,20 +189,20 @@ def test_multi_scene_compositor_master_assembly_inactive_subtitles(
             captured_cmds.append(list(cmd))
             return MagicMock(returncode=0)
 
-        with patch("src.media.compositor.run_ffmpeg", side_effect=fake_run_ffmpeg):
-            compositor._master_assembly(
-                video_input=video_input,
-                narration_audio=None,
-                music_audio=None,
-                music_volume=0.0,
-                subtitle_path=inactive_sub,
-                total_duration=5.0,
-                width=1920,
-                height=1080,
-                crf=23,
-                preset="veryfast",
-                output_mp4=output_mp4,
-            )
+        monkeypatch.setattr(compositor_mod, "run_ffmpeg", fake_run_ffmpeg)
+        compositor._master_assembly(
+            video_input=video_input,
+            narration_audio=None,
+            music_audio=None,
+            music_volume=0.0,
+            subtitle_path=inactive_sub,
+            total_duration=5.0,
+            width=1920,
+            height=1080,
+            crf=23,
+            preset="veryfast",
+            output_mp4=output_mp4,
+        )
 
         assert len(captured_cmds) == 1
         cmd = captured_cmds[0]
@@ -210,7 +214,7 @@ def test_multi_scene_compositor_master_assembly_inactive_subtitles(
 
 
 def test_multi_scene_compositor_master_assembly_active_subtitles(
-    tmp_path: Path, active_ass_file: Path
+    tmp_path: Path, active_ass_file: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """2.2 RED: MultiSceneCompositor._master_assembly re-encodes and injects escaped ass= filter when active."""
     compositor = MultiSceneCompositor()
@@ -224,20 +228,20 @@ def test_multi_scene_compositor_master_assembly_active_subtitles(
         captured_cmds.append(list(cmd))
         return MagicMock(returncode=0)
 
-    with patch("src.media.compositor.run_ffmpeg", side_effect=fake_run_ffmpeg):
-        compositor._master_assembly(
-            video_input=video_input,
-            narration_audio=None,
-            music_audio=None,
-            music_volume=0.0,
-            subtitle_path=active_ass_file,
-            total_duration=5.0,
-            width=1920,
-            height=1080,
-            crf=23,
-            preset="veryfast",
-            output_mp4=output_mp4,
-        )
+    monkeypatch.setattr(compositor_mod, "run_ffmpeg", fake_run_ffmpeg)
+    compositor._master_assembly(
+        video_input=video_input,
+        narration_audio=None,
+        music_audio=None,
+        music_volume=0.0,
+        subtitle_path=active_ass_file,
+        total_duration=5.0,
+        width=1920,
+        height=1080,
+        crf=23,
+        preset="veryfast",
+        output_mp4=output_mp4,
+    )
 
     assert len(captured_cmds) == 1
     cmd = captured_cmds[0]
@@ -258,6 +262,7 @@ def test_multi_act_video_renderer_composite_omits_inactive_subtitles(
     empty_ass_file: Path,
     header_only_ass_file: Path,
     whitespace_dialogue_ass_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """2.3 RED: MultiActVideoRenderer.composite_multi_act_video omits subtitles= filter when inactive."""
     renderer = MultiActVideoRenderer()
@@ -267,6 +272,8 @@ def test_multi_act_video_renderer_composite_omits_inactive_subtitles(
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"dummy")
     output_video = tmp_path / "out.mp4"
+    dummy_loop = tmp_path / "dummy_loop.mp4"
+    dummy_loop.write_bytes(b"dummy")
 
     for inactive_sub in [None, empty_ass_file, header_only_ass_file, whitespace_dialogue_ass_file]:
         captured_cmds: list[list[str]] = []
@@ -276,16 +283,16 @@ def test_multi_act_video_renderer_composite_omits_inactive_subtitles(
             output_video.write_bytes(b"done")
             return MagicMock(returncode=0)
 
-        with patch("src.media.multi_act_renderer.run_ffmpeg", side_effect=fake_run_ffmpeg), \
-             patch.object(renderer, "resolve_loop_for_theme", return_value=tmp_path / "dummy_loop.mp4"):
-            renderer.composite_multi_act_video(
-                acts=acts,
-                audio_path=audio_path,
-                output_video=output_video,
-                total_duration=5.0,
-                is_vertical=False,
-                ass_subtitles=inactive_sub,
-            )
+        monkeypatch.setattr(multi_act_mod, "run_ffmpeg", fake_run_ffmpeg)
+        monkeypatch.setattr(renderer, "resolve_loop_for_theme", lambda *a, **k: dummy_loop)
+        renderer.composite_multi_act_video(
+            acts=acts,
+            audio_path=audio_path,
+            output_video=output_video,
+            total_duration=5.0,
+            is_vertical=False,
+            ass_subtitles=inactive_sub,
+        )
 
         assert len(captured_cmds) == 1
         cmd_str = " ".join(captured_cmds[0])
@@ -294,7 +301,7 @@ def test_multi_act_video_renderer_composite_omits_inactive_subtitles(
 
 
 def test_multi_act_video_renderer_composite_active_subtitles(
-    tmp_path: Path, active_ass_file: Path
+    tmp_path: Path, active_ass_file: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """2.3 RED: MultiActVideoRenderer.composite_multi_act_video injects escaped subtitles= filter when active."""
     renderer = MultiActVideoRenderer()
@@ -304,6 +311,8 @@ def test_multi_act_video_renderer_composite_active_subtitles(
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"dummy")
     output_video = tmp_path / "out.mp4"
+    dummy_loop = tmp_path / "dummy_loop.mp4"
+    dummy_loop.write_bytes(b"dummy")
 
     captured_cmds: list[list[str]] = []
 
@@ -312,16 +321,16 @@ def test_multi_act_video_renderer_composite_active_subtitles(
         output_video.write_bytes(b"done")
         return MagicMock(returncode=0)
 
-    with patch("src.media.multi_act_renderer.run_ffmpeg", side_effect=fake_run_ffmpeg), \
-         patch.object(renderer, "resolve_loop_for_theme", return_value=tmp_path / "dummy_loop.mp4"):
-        renderer.composite_multi_act_video(
-            acts=acts,
-            audio_path=audio_path,
-            output_video=output_video,
-            total_duration=5.0,
-            is_vertical=False,
-            ass_subtitles=active_ass_file,
-        )
+    monkeypatch.setattr(multi_act_mod, "run_ffmpeg", fake_run_ffmpeg)
+    monkeypatch.setattr(renderer, "resolve_loop_for_theme", lambda *a, **k: dummy_loop)
+    renderer.composite_multi_act_video(
+        acts=acts,
+        audio_path=audio_path,
+        output_video=output_video,
+        total_duration=5.0,
+        is_vertical=False,
+        ass_subtitles=active_ass_file,
+    )
 
     assert len(captured_cmds) == 1
     cmd_str = " ".join(captured_cmds[0])
@@ -381,8 +390,8 @@ def test_multi_act_inactive_ass_does_not_block_stream_copy(tmp_path: Path, heade
         primary_video=vs,
         raw_payload={"streams": [{"codec_type": "video", "time_base": "1/90000"}]},
     )
-    monkeypatch.setattr("src.media.multi_act_renderer.probe_media", lambda *a, **k: probe)
-    monkeypatch.setattr("src.media.multi_act_renderer.run_ffmpeg", fake_run)
+    monkeypatch.setattr(multi_act_mod, "probe_media", lambda *a, **k: probe)
+    monkeypatch.setattr(multi_act_mod, "run_ffmpeg", fake_run)
     monkeypatch.setenv("DIRECTOR_SINGLE_PASS", "1")
     monkeypatch.setenv("MULTIACT_XFADE", "0")
 

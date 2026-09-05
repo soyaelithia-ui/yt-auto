@@ -601,10 +601,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
             if str(subtitle_path).lower().endswith(".ass"):
                 fonts_dir = Path("assets/fonts").resolve()
                 fonts_esc = escape_ffmpeg_filter_path(fonts_dir)
-                fonts_opt = f":fontsdir='{fonts_esc}'" if fonts_dir.is_dir() else ""
-                vf_chain += f",ass=filename='{sub_escaped}'{fonts_opt}"
+                fonts_opt = f":fontsdir={fonts_esc}" if fonts_dir.is_dir() else ""
+                vf_chain += f",ass=filename={sub_escaped}{fonts_opt}"
             else:
-                vf_chain += f",subtitles=filename='{sub_escaped}'"
+                vf_chain += f",subtitles=filename={sub_escaped}"
             vf_chain += ",format=yuv420p"
 
         # Audio handling

@@ -692,7 +692,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if ass_subtitles and has_active_subtitles(ass_subtitles):
             sub_path_esc = escape_ffmpeg_filter_path(ass_subtitles)
-            filter_parts.append(f"{chained}subtitles='{sub_path_esc}'[vout]")
+            filter_parts.append(f"{chained}subtitles=filename={sub_path_esc}[vout]")
             v_final = "[vout]"
         else:
             filter_parts.append(f"{chained}null[vout]")

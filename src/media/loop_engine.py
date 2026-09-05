@@ -409,13 +409,13 @@ class LoopVideoEngine(BaseVideoCompositor):
             resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
             if resolved_fonts.exists() and resolved_fonts.is_dir():
                 fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
-                fonts_clause = f":fontsdir='{fonts_esc}'"
+                fonts_clause = f":fontsdir={fonts_esc}"
 
             is_ass = sub_p.suffix.lower() == ".ass"
             if is_ass:
-                sub_filter = f"ass=filename='{sub_escaped}'{fonts_clause}"
+                sub_filter = f"ass=filename={sub_escaped}{fonts_clause}"
             else:
-                sub_filter = f"subtitles='{sub_escaped}'{fonts_clause}"
+                sub_filter = f"subtitles=filename={sub_escaped}{fonts_clause}"
 
             return f"[0:v]{base_filter}[vbase];[vbase]{sub_filter}[vsubbed];[vsubbed]format=yuv420p[vout]"
 
@@ -599,12 +599,12 @@ class LoopVideoEngine(BaseVideoCompositor):
             resolved_fonts = Path(fonts_dir) if fonts_dir else (BASE_DIR / "assets" / "fonts")
             if resolved_fonts.exists() and resolved_fonts.is_dir():
                 fonts_esc = escape_ffmpeg_filter_path(resolved_fonts)
-                fonts_clause = f":fontsdir='{fonts_esc}'"
+                fonts_clause = f":fontsdir={fonts_esc}"
             is_ass = Path(subtitle_path).suffix.lower() == ".ass"
             if is_ass:
-                sub_filter = f"[vbase]ass=filename='{sub_escaped}'{fonts_clause}[vout];"
+                sub_filter = f"[vbase]ass=filename={sub_escaped}{fonts_clause}[vout];"
             else:
-                sub_filter = f"[vbase]subtitles='{sub_escaped}'{fonts_clause}[vout];"
+                sub_filter = f"[vbase]subtitles=filename={sub_escaped}{fonts_clause}[vout];"
         else:
             sub_filter = "[vbase]null[vout];"
 
