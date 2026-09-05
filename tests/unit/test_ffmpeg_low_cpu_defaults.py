@@ -68,10 +68,12 @@ def test_pipeline_rejects_slow_hot_path_literal():
     assert "default_render_preset()" in src
 
 
-def test_horizontal_stream_copy_policy_in_pipeline():
+def test_stream_copy_policy_skips_only_burned_subtitles():
+    """Vertical loops may -c:v copy; LoopVideoEngine already geometry-gates."""
     src = Path("src/pipeline.py").read_text(encoding="utf-8")
-    assert 'stream_copy_mode = bool(lane.orientation == "horizontal" and not burn_subtitles)' in src
+    assert 'stream_copy_mode = bool(not burn_subtitles)' in src
     assert "stream_copy=stream_copy_mode" in src
+    assert 'lane.orientation == "horizontal" and not burn_subtitles' not in src
 
 
 def test_loop_stream_copy_cmd_uses_copy_codec():

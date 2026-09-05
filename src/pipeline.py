@@ -975,7 +975,7 @@ def run_pipeline_once(
                 from src.scene_manifest import build_scene_manifest
                 manifest_slot = story.get("object_class") or channel_name
                 burn_subtitles = bool(lane.orientation == "vertical" and subtitles_active and ass_path.is_file())
-                stream_copy_mode = bool(lane.orientation == "horizontal" and not burn_subtitles)
+                stream_copy_mode = bool(not burn_subtitles)
 
                 manifest_path = build_scene_manifest(
                     work_dir=work_dir,
