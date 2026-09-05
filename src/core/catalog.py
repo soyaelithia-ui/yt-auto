@@ -28,15 +28,35 @@ __all__ = [
     "compute_file_sha256",
 ]
 
+# Migration remap only: SQLite `video_loops.file_path` may still store absolute
+# paths from prior host checkouts. These prefixes are NOT the live install root
+# (that is YT_AUTO_ROOT on VPS/systemd, else BASE_DIR for the current checkout).
+# Prefer repo-relative paths for new rows. Do not drop these until catalogs are
+# rewritten, or resolution of existing loop assets breaks after moves/clones.
 _LEGACY_CHECKOUT_PREFIXES = (
     "/home/moku/projects/yt-auto",
     "/srv/projects/yt-auto",
 )
 
 
+def _catalog_repo_root(repo_root: Path | None = None) -> Path:
+    """Prefer explicit arg, then YT_AUTO_ROOT env, then BASE_DIR (repo-relative)."""
+    if repo_root is not None:
+        return Path(repo_root)
+    env_root = os.environ.get("YT_AUTO_ROOT", "").strip()
+    if env_root:
+        return Path(env_root).expanduser()
+    return BASE_DIR
+
+
 def resolve_loop_file_path(path: str | Path, repo_root: Path | None = None) -> Path:
-    """Map a catalog path onto the current checkout. Never rewrite to a foreign host root."""
-    root = Path(repo_root) if repo_root is not None else BASE_DIR
+    """Map a catalog path onto the current checkout.
+
+    Order: existing file as stored → strip legacy host prefixes onto
+    YT_AUTO_ROOT/BASE_DIR → join relative paths under that root.
+    Never rewrite a missing path onto a foreign host root.
+    """
+    root = _catalog_repo_root(repo_root)
     p = Path(path)
     if p.is_file():
         return p
