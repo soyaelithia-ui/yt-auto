@@ -207,7 +207,7 @@ def _run_sweep(max_age_seconds: int, db_conn: Optional[Any] = None) -> List[str]
 
 
 async def process_approval_timeout(db_conn: Optional[Any] = None) -> List[str]:
-    """Async entrypoint running the 6-hour auto-publish sweep."""
+    """Async entrypoint running the AUTO_PUBLISH_TIMEOUT_HOURS auto-publish sweep."""
     return _run_sweep(int(AUTO_PUBLISH_TIMEOUT_HOURS * 3600), db_conn=db_conn)
 
 

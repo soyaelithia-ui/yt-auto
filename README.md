@@ -117,5 +117,5 @@ Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
 ## 🔒 Seguridad, Revisión y Política AI-First
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
-2. **Auto-Publicación Segura**: Ventana de revisión de 6h configurable. Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
+2. **Auto-Publicación Segura**: Ventana de revisión configurable vía `AUTO_PUBLISH_TIMEOUT_HOURS` (default **24h**). Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
 3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). `native_procedural`/wgpu está **quarantined** bajo `src/media/_legacy` (`ENABLE_NATIVE_PROCEDURAL=0` por defecto; no forma parte del SSOT de producción).
