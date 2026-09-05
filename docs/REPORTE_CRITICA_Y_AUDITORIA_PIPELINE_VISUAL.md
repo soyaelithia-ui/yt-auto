@@ -104,7 +104,7 @@ Sin embargo, desde una perspectiva de **Arquitectura de Software y Sistemas Grá
   > `src/media/web_renderer.py`, `src/media/web_templates/*.html`, `requirements.txt` *(Sección 3, Diagrama de Blast Radius)*
 - **Tipo de fallo:** `Inconsistencia`
 - **Diagnóstico técnico:**
-  El análisis de impacto omite módulos clave que dependen directamente de Playwright y de la resolución de ejecutables de Chrome, tales como [`src/media/realtime_video_engine.py`](file:///home/moku/projects/yt-auto/src/media/realtime_video_engine.py), [`src/media/loop_worker.py`](file:///home/moku/projects/yt-auto/src/media/loop_worker.py) y las suites de pruebas de integración asociadas.
+  El análisis de impacto omite módulos clave que dependen directamente de Playwright y de la resolución de ejecutables de Chrome, tales como [`src/media/realtime_video_engine.py`](../src/media/realtime_video_engine.py), [`src/media/loop_worker.py`](../src/media/loop_worker.py) y las suites de pruebas de integración asociadas.
 - **Corrección propuesta:**
   > Incluir en el plan de refactorización y deprecación a `src/media/realtime_video_engine.py`, `src/media/loop_worker.py` y actualizar las fixtures de prueba en `tests/unit/` y `tests/integration/`.
 
