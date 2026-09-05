@@ -18,13 +18,14 @@ Audio mastering MUST execute in a single consolidated FFmpeg `filter_complex` pa
 - **Then** FFmpeg MUST emit a stereo 48 kHz master audio file in a single execution pass.
 
 ## Requirement: Native Procedural and Vector Rendering (Zero-Browser Policy)
-Video synthesis MUST utilize deterministic WebGPU fragment shaders (`wgpu-py`) with CPU software rasterizer fallback (Mesa Lavapipe) and declarative SVG rasterization (`resvg-py`). Headless browser runtimes (Playwright, Puppeteer, Chromium, SwiftShader) and HTML/CSS web templates are strictly prohibited in the media generation pipeline.
+Production video synthesis MUST use FFmpeg (lavfi/catalog loops, concat demuxer `-c:v copy` when `stream_copy_mode`, `DIRECTOR_SINGLE_PASS` assembly, libass subtitles). wgpu-py, resvg-py, WebGPU, and GLSL MUST NOT be the production stack; they MAY run only when `ENABLE_NATIVE_PROCEDURAL` is explicitly enabled from `src/media/_legacy`. Headless browser runtimes (Playwright, Puppeteer, Chromium, SwiftShader) and HTML/CSS web templates are strictly prohibited in the media generation pipeline.
 
 ### Scenario: Procedural Rendering without Browser Subprocesses
 - **Given** a video scene requiring procedural backgrounds or HUD telemetry
 - **When** the media pipeline generates visual frames
-- **Then** frames MUST be rendered via native WebGPU shaders or `resvg-py`
-- **And** zero browser subprocesses or Chromium dependencies MUST be spawned.
+- **Then** frames MUST be produced via FFmpeg lavfi/catalog (HUD via `drawtext`/`drawbox` when `niche_hud` is present)
+- **And** zero browser subprocesses or Chromium dependencies MUST be spawned
+- **And** wgpu-py and resvg-py MUST NOT be required on the production hot path.
 
 ## Requirement: libass Subtitle Rendering and Safe Area
 Subtitles generated for 9:16 vertical Shorts MUST be compiled into Advanced SubStation Alpha (`.ass`) scripts and burned natively via FFmpeg `libass`. Subtitles MUST enforce bottom UI Safe Area ($MarginV \ge 240\text{px}$, canonical $260\text{px}$) and word-level karaoke timing (`{\kf}`). Frame-by-frame Python/Pillow text rasterization loops are strictly prohibited.
@@ -36,9 +37,10 @@ Subtitles generated for 9:16 vertical Shorts MUST be compiled into Advanced SubS
 - **And** FFmpeg MUST burn subtitles during the unified encoding pass via `libass`.
 
 ## Requirement: Atomic Single-Pass Video Transcoding and Asynchronous Pipe Drain
-Video encoding MUST execute in a single atomic FFmpeg `-filter_complex` pass combining raw RGBA video streaming, `libass` subtitle burning, audio sidechain ducking, and EBU R128 normalization. The encoder process MUST drain `stderr` asynchronously in a background thread to prevent OS pipe buffer deadlocks. Intermediate MP4 video chunks on disk are strictly prohibited.
+When `stream_copy_mode` is true, production MUST assemble with concat demuxer `-c:v copy` and MUST NOT force a single `-filter_complex` of raw RGBA streaming. When encode is required (HUD, scale, xfade, or burned subtitles), FFmpeg MUST use one encode pass (`encode_defaults` veryfast/CRF 21) with libass and EBU R128 as applicable, and MUST drain `stderr` asynchronously. Intermediate MP4 chunks on disk remain prohibited. Raw RGBA stdin streaming MAY run only when `ENABLE_NATIVE_PROCEDURAL` is enabled.
 
-### Scenario: Single-Pass Video Generation
-- **Given** raw video frames and master audio tracks
-- **When** `UnifiedEncoder` renders the final video
-- **Then** FFmpeg MUST stream directly to the target MP4 container in a single pass without intermediate disk chunks.
+### Scenario: Homogeneous beats stay stream-copy (Happy Path)
+- **Given** horizontal orientation, no burned subtitles, and no `niche_hud`
+- **When** beats/loop composition runs
+- **Then** FFmpeg MUST use concat demuxer `-c:v copy`
+- **And** MUST NOT require raw RGBA stdin.

@@ -1,0 +1,25 @@
+change_name: ffmpeg-first-ssot-policy
+current_phase: propose
+status: in-progress
+delivery_strategy: ask-on-risk
+artifact_store: openspec
+research: unselected
+product_decisions: confirmed
+proposal_ready: true
+preproposal:
+  schema: gentle-ai.sdd-preproposal/v1
+  revision: 1
+  exploration_outcome: success
+  research_request: unselected
+  decisions: confirmed
+orca:
+  repo_id: 491ea72a-7387-4130-a154-4c6519dd7b5b
+  worktree_id: 491ea72a-7387-4130-a154-4c6519dd7b5b::/home/moku/projects/yt-auto
+  instance_id: aff10192-496d-46ed-8a92-46f085fc5ee3
+  project_id: github:ade-ia2005/yt-auto
+  runtime_id: 733ac789-94a4-4416-8f4a-880673f63b56
+phases:
+  explore:
+    status: completed
+  proposal:
+    status: completed

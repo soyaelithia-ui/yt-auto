@@ -24,6 +24,24 @@ SRC_DIR = REPO_ROOT / "src"
 MEDIA_DIR = SRC_DIR / "media"
 
 
+def _openspec_context_block(content: str) -> str:
+    """Return the YAML `context: |` block from openspec/config.yaml."""
+    lines = content.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.startswith("context:"):
+            start = i + 1
+            break
+    if start is None:
+        return ""
+    collected: list[str] = []
+    for line in lines[start:]:
+        if line and not line.startswith(" ") and not line.startswith("\t"):
+            break
+        collected.append(line)
+    return "\n".join(collected)
+
+
 class ImportScanner(ast.NodeVisitor):
     def __init__(self) -> None:
         self.imports: list[str] = []
@@ -261,11 +279,22 @@ class TestRetiredSubsystemGuardrails:
         )
 
     def test_reg11_zero_playwright_in_openspec_config(self) -> None:
-        """Assert openspec/config.yaml context does not claim Playwright or Pillow in its media stack."""
+        """Assert openspec/config.yaml lists Pillow thumbs SSOT and not Playwright/wgpu-py/resvg-py as production."""
         config_path = REPO_ROOT / "openspec" / "config.yaml"
         if not config_path.is_file():
             return
         content = config_path.read_text(encoding="utf-8")
-        assert "Playwright" not in content, "REG-11 VIOLATION: openspec/config.yaml still declares Playwright!"
-        assert "Pillow" not in content, "REG-11 VIOLATION: openspec/config.yaml still declares Pillow!"
+        context = _openspec_context_block(content)
+        assert "Playwright" not in context, (
+            "REG-11 VIOLATION: openspec/config.yaml still declares Playwright as production media"
+        )
+        assert "wgpu-py" not in context, (
+            "REG-11 VIOLATION: openspec/config.yaml lists wgpu-py as production stack"
+        )
+        assert "resvg-py" not in context, (
+            "REG-11 VIOLATION: openspec/config.yaml lists resvg-py as production stack"
+        )
+        assert "Pillow" in context and "thumb" in context.lower(), (
+            "REG-11 VIOLATION: openspec/config.yaml must declare Pillow thumbs SSOT"
+        )
 

@@ -2,7 +2,7 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Python 3.12/3.13, FFmpeg-first media (stream-copy, libass, EBU R128), Edge-TTS, SQLite WAL
+  Tech stack: Python 3.12/3.13, FFmpeg-first media (stream-copy, libass, EBU R128), Pillow thumbs SSOT, Edge-TTS, SQLite WAL
   Architecture: Multi-lane YouTube pipeline (agents, media DSP, sanitizers, Telegram review, publishing)
   Testing: pytest (pytest-asyncio, pytest-timeout); tests/{unit,integration,e2e}; live excluded by default
   Style: Modular Python, dataclasses/Pydantic, strict schema validation, offline-mockable
