@@ -1484,16 +1484,27 @@ def run_pipeline_once(
                         drive_url=drive_url,
                     )
 
-                    if is_test_environment() or os.environ.get("TEST_MODE") == "1":
+                    auto_approve = (
+                        is_test_environment()
+                        or os.environ.get("TEST_MODE") == "1"
+                        or os.environ.get("AUTO_APPROVE", "").strip() == "1"
+                    )
+                    if auto_approve:
                         reviewer_user_id = int(
                             os.environ.get("REVIEW_APPROVER_USER_ID")
                             or os.environ.get("TELEGRAM_ALLOWED_USER_ID")
-                            or "1"
+                            or "0"
                         )
                         review_manager.store.approve_job(
                             story_id, review_job.version, reviewer_user_id
                         )
                         review_job.status = ReviewStatus.APPROVED.value
+                        if os.environ.get("AUTO_APPROVE", "").strip() == "1":
+                            logger.info(
+                                "AUTO_APPROVE=1: review job %s v%s approved without Telegram HITL",
+                                story_id,
+                                review_job.version,
+                            )
 
                     if review_job.status == ReviewStatus.FAILED.value:
                         return _fail(

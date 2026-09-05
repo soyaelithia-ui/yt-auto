@@ -35,6 +35,22 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 
 ---
 
+
+## Auto-approve / Autopilot (HITL)
+
+Para decisiones rutinarias sin widget humano (bot **Auto** / Yon):
+
+1. Completar preflight de secretos (`python3 main.py run --preflight`) — Telegram + YouTube/Drive siguen obligatorios según el modo.
+2. En `.env` / compose: `AUTO_APPROVE=1` y, si se desea el barrido del daemon, `ENABLE_AUTO_PUBLISH_SWEEP=1`.
+3. `AUTO_APPROVE` solo aprueba la puerta de revisión; la subida a YouTube sigue gated por cookies/token del canal.
+4. `TEST_MODE=1` sigue **prohibido** en producción.
+
+```bash
+# Ejemplo (no publica sin credenciales de canal)
+AUTO_APPROVE=1 ENABLE_AUTO_PUBLISH_SWEEP=1 python3 main.py daemon --interval 60
+```
+
+
 ## 2. Despliegue con Docker Compose (`docker-compose.yml`)
 
 Camino feliz **sin sudo en el host**. El contenedor es autocontenido (FFmpeg, Chromium, `agy` en `/usr/local/bin/agy`). No monta el CLI ni `~/.gemini` del usuario.
