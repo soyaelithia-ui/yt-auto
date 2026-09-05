@@ -13,6 +13,9 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 > 4. Solo el archivo plantilla `.env.example` debe versionarse, conteniendo únicamente nombres de variables con valores vacíos (`VARIABLE=`).
 > 5. Los diccionarios y logs públicos (como `ChannelSettings.public_dict()`) NUNCA deben exponer rutas de disco a secretos ni valores de cookies/tokens; solo indicadores booleanos de disponibilidad.
 > 6. Las sesiones automatizadas de Playwright deben purgar sus cookies de memoria (`context.clear_cookies()`) antes del cierre para evitar residuos en memoria.
+> 7. Tests, fixtures, mocks y scripts de auditoría NUNCA pueden incrustar credenciales reales ni usarlas como agujas de regex. Solo firmas de formato genéricas o tokens sintéticos construidos en runtime.
+> 8. Homes de agentes (`.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`) son locales y no se versionan.
+> 9. Si hay una filtración: no abrir issue público; hacer el repositorio privado; rotar todas las credenciales; invalidar el proyecto/API de Google afectado.
 
 ---
 

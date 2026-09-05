@@ -72,5 +72,36 @@ if [ ${#RETIRED_IMPORT_FILES[@]} -gt 0 ]; then
     exit 1
 fi
 
-echo "✅ [pre-commit] All anti-regression and anti-bloat checks passed cleanly."
+# 6. Agent homedirs are local-only (never stage .codex/.claude/.gemini/...)
+AGENT_HOMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.(codex|claude|gemini|agents|opencode|grok|copilot|atl|cursor)/' || true)
+if [ -n "$AGENT_HOMES" ]; then
+    echo "❌ ERROR: Agent homedir files must not be committed:"
+    echo "$AGENT_HOMES"
+    echo "These paths are local-only. Keep them gitignored."
+    exit 1
+fi
+
+# 7. Production-format secrets: fail on path only, never print the match.
+SECRET_HIT_FILES=()
+while IFS= read -r file; do
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+        continue
+    fi
+    if grep -I -E -q \
+        'AIzaSy[a-zA-Z0-9_-]{33}|GOCSPX-[a-zA-Z0-9_-]{28}|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|[0-9]{8,10}:[A-Za-z0-9_-]{35}|[0-9]{12}-[a-z0-9]{32}' \
+        "$file"; then
+        SECRET_HIT_FILES+=("$file")
+    fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+if [ ${#SECRET_HIT_FILES[@]} -gt 0 ]; then
+    echo "❌ ERROR: Production-format secret signature detected in staged file(s):"
+    for sf in "${SECRET_HIT_FILES[@]}"; do
+        echo "   - $sf"
+    done
+    echo "Use generic format regexes or runtime-built synthetic tokens. Never embed live credentials."
+    exit 1
+fi
+
+echo "✅ [pre-commit] All anti-regression, anti-bloat, and secret-hygiene checks passed cleanly."
 exit 0

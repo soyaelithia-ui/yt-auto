@@ -79,7 +79,7 @@ def check_git_leaks() -> list[str]:
 
 def check_code_secret_patterns() -> list[str]:
     issues = []
-    raw_token_pat = re.compile(r"\b8831760214:[A-Za-z0-9_-]{35}\b")
+    raw_token_pat = re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b")
     google_secret_pat = re.compile(r"GOCSPX-[A-Za-z0-9_-]{20,}")
 
     try:
@@ -140,9 +140,11 @@ def main() -> int:
 
     print("\n4. Verificando ofuscación en logs...")
     from src.log import redact_secrets
-    sample = "Telegram token 8831760214:AAEQN8Ku1thrKba1rgf7MIcJT9ldxVA2Dlg test"
+    # Build a synthetic token at runtime so this file never contains a live-format literal.
+    synthetic_payload = "A" * 35
+    sample = f"Telegram token {'0' * 9}:{synthetic_payload} test"
     redacted = redact_secrets(sample)
-    if "AAEQN8Ku1thrKba1rgf7MIcJT9ldxVA2Dlg" in redacted:
+    if synthetic_payload in redacted:
         print("  ❌ Falló la prueba de ofuscación de logs.")
         all_issues.append("Log redaction failed")
     else:
