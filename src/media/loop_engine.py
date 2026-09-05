@@ -547,6 +547,14 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         return cmd
 
+    @staticmethod
+    def _shot_video_filter(idx: int, width: int, height: int, fps: int, kwargs: dict) -> str:
+        from src.agents.shot_mix import SETTLED, video_filter_for_role
+
+        roles = kwargs.get("shot_roles") or []
+        role = roles[idx] if idx < len(roles) else SETTLED
+        return video_filter_for_role(str(role), width, height, fps)
+
     def build_multi_shot_filter_graph(
         self,
         scene_images: list[str | Path],
@@ -574,7 +582,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             else:
                 cmd.extend(["-stream_loop", "-1", "-t", f"{max(0.1, float(s_dur)):.3f}", "-i", str(p)])
             filter_inputs.append(
-                f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1,format=yuv420p[v_shot_{idx}];"
+                f"[{idx}:v]{self._shot_video_filter(idx, w, h, fps, kwargs)}[v_shot_{idx}];"
             )
 
         n_scenes = len(scene_images)

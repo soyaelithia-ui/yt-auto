@@ -45,3 +45,13 @@ def test_catalog_shots_reuse_settled_background():
     assert durs == [8.0, 8.0, 8.0, 8.0]
     assert paths[0] == paths[1] == paths[2]
     assert paths[3] != paths[0]
+
+
+def test_designed_filter_is_not_the_settled_grade():
+    from src.agents.shot_mix import video_filter_for_role
+
+    settled = video_filter_for_role(SETTLED, 1080, 1920, 30)
+    designed = video_filter_for_role(DESIGNED, 1080, 1920, 30)
+    assert "colorchannelmixer" not in settled
+    assert "colorchannelmixer" in designed
+    assert designed != settled

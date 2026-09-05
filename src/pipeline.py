@@ -1139,6 +1139,11 @@ def run_pipeline_once(
                     stream_copy=stream_copy_mode,
                     scene_images=scene_bg_list,
                     shot_durations=shot_durations,
+                    shot_roles=[
+                        str(sc.get("director_role") or "settled")
+                        for sc in (manifest_payload.get("scenes") or [])
+                        if isinstance(sc, dict)
+                    ],
                 )
                 visual_integrity_report = {
                     "passed": True,
