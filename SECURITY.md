@@ -31,7 +31,9 @@ To prevent credential leaks and unauthorized access, the following rules are str
        - Tests, fixtures, mocks, and audit scripts MUST NEVER embed real credentials, even as "forbidden string" matchers.
        - Scan with generic format signatures (for example Google API key / OAuth client-secret shapes) or runtime-built synthetic tokens. Assertion messages MUST NOT print matched secret values.
     7. **Agent Homedirs Are Local-Only**:
-       - `.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`, `.cursor/`, `.copilot/`, `.grok/`, and `.atl/` MUST remain gitignored and untracked, including hooks and session files.
+       - `.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`, `.cursor/`, `.hermes/`, `.copilot/`, `.grok/`, and `.atl/` MUST remain gitignored and untracked, including hooks and session files.
+    8. **Residual History / Ref Risk**:
+       - Rotated literals MAY remain in git objects and stale refs. History rewrite is not required. Scanners and hooks apply to HEAD and new content; main history stays intact.
 
 ---
 

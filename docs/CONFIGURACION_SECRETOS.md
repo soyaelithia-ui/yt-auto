@@ -16,6 +16,7 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 > 7. Tests, fixtures, mocks y scripts de auditoría NUNCA pueden incrustar credenciales reales ni usarlas como agujas de regex. Solo firmas de formato genéricas o tokens sintéticos construidos en runtime.
 > 8. Homes de agentes (`.codex/`, `.claude/`, `.gemini/`, `.agents/`, `.opencode/`) son locales y no se versionan.
 > 9. Si hay una filtración: no abrir issue público; hacer el repositorio privado; rotar todas las credenciales; invalidar el proyecto/API de Google afectado.
+> 10. Residual risk: rotated literals MAY remain in git objects and stale refs. History rewrite is not required.
 
 ---
 
