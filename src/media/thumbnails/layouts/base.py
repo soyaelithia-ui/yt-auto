@@ -23,6 +23,9 @@ class BaseThumbnailLayout(ABC):
         channel_id: str,
         safe_zone: SafeZone,
         metadata: Dict[str, Any],
+        lane_id: Optional[str] = None,
+        resolved_asset_path: Optional[Union[str, Any]] = None,
+        **kwargs: Any,
     ) -> Image.Image:
         """
         Apply niche graphical overlays, HUD elements, badges, and typography to the canvas.
@@ -58,9 +61,10 @@ class LayoutRegistry:
         archetype: Optional[str] = None,
         template: Optional[str] = None,
         is_vertical: Optional[bool] = None,
+        lane_id: Optional[str] = None,
     ) -> BaseThumbnailLayout:
         """
-        Resolves the appropriate layout instance based on archetype, template, or channel_id.
+        Resolves the appropriate layout instance based on lane_id, archetype, template, or channel_id.
         Falls back to GeneralCinematicLayout if no specific match is found.
         """
         if not cls._registry:
@@ -69,12 +73,13 @@ class LayoutRegistry:
         # Channel moku horizontal longform prefers analog horror when registered.
         # Former scp/reddit lane ids are not registered and fall through to GeneralCinematicLayout.
         norm_chan = str(channel_id or "").lower()
-        if norm_chan == "moku" and not archetype and not template:
+        norm_lane = str(lane_id or "").lower()
+        if (norm_chan == "moku" or norm_lane == "moku" or "horror" in norm_lane) and not archetype and not template:
             if is_vertical is False and "moku-horror-long" in cls._registry:
                 return cls._registry["moku-horror-long"]()
 
         keys_to_try = [
-            k.lower() for k in [archetype, template, channel_id] if k
+            k.lower() for k in [lane_id, archetype, template, channel_id] if k
         ]
 
         # 1. Exact match

@@ -602,5 +602,205 @@ def test_qa_gatekeeper_auto_discovers_thumbnail_artifact(tmp_path: Path):
         assert not any(i.code == "ERR_QA_THUMBNAIL_DEFECT" for i in report.issues)
 
 
+def test_parametric_cinematic_layout_text_box_styles(tmp_path: Path):
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
+    layout = GeneralCinematicLayout()
+    safe_zone = AspectLayoutManager.get_safe_zone(1280, 720)
+    canvas = Image.new("RGB", (1280, 720), (20, 24, 30))
+
+    styles = ["badge", "boxed", "outline", "banner", "minimal"]
+    for style in styles:
+        out_img = layout.apply_layout(
+            canvas=canvas,
+            title=f"TEST STYLE {style.upper()}",
+            channel_id="moku",
+            safe_zone=safe_zone,
+            metadata={"text_box_style": style},
+        )
+        assert out_img.size == (1280, 720)
+        p = tmp_path / f"thumb_style_{style}.jpg"
+        out_img.save(p, "JPEG", quality=95)
+        assert p.stat().st_size > 10000
+
+
+def test_parametric_channel_palette_resolution():
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
+
+    # 1. Existing channels
+    pal_moku = GeneralCinematicLayout.resolve_channel_palette("moku")
+    assert pal_moku["accent"] == "#00FF66"
+
+    pal_aelithia = GeneralCinematicLayout.resolve_channel_palette("aelithia")
+    assert pal_aelithia["accent"] == "#FF4081"
+
+    pal_scifi = GeneralCinematicLayout.resolve_channel_palette("scifi")
+    assert pal_scifi["accent"] == "#00F0FF"
+
+    # 2. Metadata overrides
+    pal_override = GeneralCinematicLayout.resolve_channel_palette(
+        "moku", metadata={"accent_color": "#FFCC00", "primary_color": "#FFFFFF"}
+    )
+    assert pal_override["accent"] == "#FFCC00"
+    assert pal_override["primary"] == "#FFFFFF"
+
+    # 3. Non-existent channel -> degrades to neutral high-contrast
+    pal_unknown = GeneralCinematicLayout.resolve_channel_palette("unknown_nonexistent_channel")
+    assert pal_unknown["accent"] == "#FF003B"
+    assert pal_unknown["primary"] == "#FFE600"
+
+    # 4. Invalid hex in metadata -> degrades to channel or neutral
+    pal_invalid = GeneralCinematicLayout.resolve_channel_palette(
+        "moku", metadata={"accent_color": "not-a-color-123"}
+    )
+    assert pal_invalid["accent"] == "#00FF66"
+
+
+def test_parametric_subject_contrast():
+    from src.media.thumbnails.layouts.cinematic import GeneralCinematicLayout
+    layout = GeneralCinematicLayout()
+    safe_zone = AspectLayoutManager.get_safe_zone(1280, 720)
+    canvas = Image.new("RGB", (1280, 720), (50, 60, 70))
+
+    img_low = layout.apply_layout(
+        canvas=canvas,
+        title="CONTRAST TEST",
+        channel_id="moku",
+        safe_zone=safe_zone,
+        metadata={"subject_contrast": 0.5},
+    )
+
+    img_high = layout.apply_layout(
+        canvas=canvas,
+        title="CONTRAST TEST",
+        channel_id="moku",
+        safe_zone=safe_zone,
+        metadata={"subject_contrast": 2.0},
+    )
+
+    # Pixel distributions must differ due to contrast alteration
+    assert img_low.tobytes() != img_high.tobytes()
+
+
+def test_safe_zone_1280x720_and_1080x1920_qa_auditor_compliance(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    auditor = VisualAudioQAAuditorAgent()
+    engine = ThumbnailEngine()
+
+    # 1. 1280x720 Longform
+    p_720 = tmp_path / "thumb_1280x720.jpg"
+    engine.generate(ThumbnailConfig(
+        title="EXPEDICIÓN AL NÚCLEO SUBTERRÁNEO",
+        channel_id="scifi",
+        output_path=p_720,
+        width=1280,
+        height=720,
+        text_box_style="boxed",
+    ))
+    passed_720, errs_720 = auditor.audit_thumbnail(p_720)
+    assert passed_720 is True, f"1280x720 QA audit failed: {errs_720}"
+
+    # 2. 1080x1920 Shorts
+    p_1080_1920 = tmp_path / "thumb_1080x1920.jpg"
+    engine.generate(ThumbnailConfig(
+        title="EL SECRETO QUE OCULTABAN BAJO EL HIELO",
+        channel_id="aelithia",
+        output_path=p_1080_1920,
+        width=1080,
+        height=1920,
+        text_box_style="banner",
+    ))
+    passed_shorts, errs_shorts = auditor.audit_thumbnail(p_1080_1920)
+    assert passed_shorts is True, f"1080x1920 Shorts QA audit failed: {errs_shorts}"
+
+
+def test_resilient_safeguard_on_missing_or_corrupt_asset(tmp_path: Path):
+    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    auditor = VisualAudioQAAuditorAgent()
+    engine = ThumbnailEngine()
+
+    # 1. Corrupt asset file (random junk bytes, not an image)
+    corrupt_file = tmp_path / "corrupt_bg.jpg"
+    corrupt_file.write_bytes(b"\x00\xFF\xAA\x55GARBAGE_NOT_A_JPEG" * 50)
+
+    thumb_corrupt = tmp_path / "thumb_from_corrupt.jpg"
+    cfg_corrupt = ThumbnailConfig(
+        title="SEÑAL DESCONOCIDA EN EL ESPACIO",
+        channel_id="scifi",
+        output_path=thumb_corrupt,
+        width=1280,
+        height=720,
+    )
+    # Must NOT crash, falls back to controlled noise atmospheric gradient
+    res_corrupt = engine.generate(config=cfg_corrupt, base_image_path=corrupt_file)
+    assert Path(res_corrupt).is_file()
+    passed_c, errs_c = auditor.audit_thumbnail(thumb_corrupt)
+    assert passed_c is True, f"Audit failed on corrupt asset fallback: {errs_c}"
+
+    # 2. Missing asset file path
+    non_existent = tmp_path / "does_not_exist_image.jpg"
+    thumb_missing = tmp_path / "thumb_from_missing.jpg"
+    cfg_missing = ThumbnailConfig(
+        title="CRÓNICAS DE LA CIUDAD PERDIDA",
+        channel_id="unknown_channel",
+        output_path=thumb_missing,
+        width=1280,
+        height=720,
+    )
+    res_missing = engine.generate(config=cfg_missing, base_image_path=non_existent)
+    assert Path(res_missing).is_file()
+    passed_m, errs_m = auditor.audit_thumbnail(thumb_missing)
+    assert passed_m is True, f"Audit failed on missing asset fallback: {errs_m}"
+
+
+def test_atypical_text_strings_graceful_degradation(tmp_path: Path):
+    engine = ThumbnailEngine()
+
+    test_titles = [
+        "",  # Empty string
+        "    ",  # Whitespace only
+        "A" * 250,  # Extreme length string
+        "🚨🔥 ¡¿VERDAD O MENTIRA?! 😱 [CLASIFICADO] #1 // @TEST",  # Emojis & special symbols
+        "Línea uno\n\n\nLínea dos\nLínea tres con tildes áéíóú y diéresis ü",  # Multiline + accents
+    ]
+
+    for idx, title in enumerate(test_titles):
+        out_p = tmp_path / f"atypical_{idx}.jpg"
+        cfg = ThumbnailConfig(
+            title=title,
+            channel_id="moku",
+            output_path=out_p,
+            width=1280,
+            height=720,
+        )
+        res = engine.generate(config=cfg)
+        assert Path(res).is_file()
+        assert Path(res).stat().st_size > 10000
+
+
+def test_thumbnail_engine_lane_id_and_asset_path_dispatch(tmp_path: Path):
+    engine = ThumbnailEngine()
+
+    dummy_asset = tmp_path / "valid_explicit_bg.png"
+    Image.new("RGB", (1280, 720), (40, 50, 60)).save(dummy_asset)
+
+    out_p = tmp_path / "lane_dispatch.jpg"
+    cfg = ThumbnailConfig(
+        title="INVESTIGACIÓN DE CAMPO",
+        channel_id="moku",
+        lane_id="moku-scp-shorts",
+        output_path=out_p,
+        width=1080,
+        height=1920,
+        text_box_style="boxed",
+    )
+
+    res = engine.generate(config=cfg, base_image_path=dummy_asset)
+    assert Path(res).is_file()
+
+    img = Image.open(res)
+    assert img.size == (1080, 1920)
+
+
+
 
 

@@ -184,19 +184,9 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
 
         # ---------------------------------------------------------
         # Default Fallback: Clean Atmospheric Chiaroscuro Gradient
-        # (Zero primitive stick-figure vectors)
+        # with Controlled Film Grain Noise (Zero primitive stick-figures)
         # ---------------------------------------------------------
-        fallback = Image.new("RGB", (w, h), (10, 14, 20))
-        draw = ImageDraw.Draw(fallback)
-        # Vertical dark atmospheric gradient
-        for y in range(h):
-            ratio = y / max(1, h)
-            r = int(8 + 12 * ratio)
-            g = int(12 + 16 * ratio)
-            b = int(18 + 24 * ratio)
-            draw.line([(0, y), (w, y)], fill=(r, g, b))
-
-        return fallback
+        return cls.create_atmospheric_noise_background(w, h)
 
     @classmethod
     def resolve_scene_asset_path(
@@ -275,5 +265,130 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         if horror_backdrop.is_file():
             return horror_backdrop
         return TEMPLATES_DIR / "horror" / "master_backdrop.jpg"
+
+    @classmethod
+    def resolve_thumbnail_asset_path(
+        cls,
+        channel_id: str,
+        archetype: str = "",
+        explicit_path: Optional[Union[str, Path]] = None,
+        video_path: Optional[Union[str, Path]] = None,
+        is_vertical: bool = False,
+    ) -> Optional[Path]:
+        """Resolves the concrete asset path for a thumbnail backdrop if one exists on disk."""
+        if explicit_path:
+            p = Path(explicit_path).resolve()
+            if p.is_file():
+                try:
+                    with Image.open(p) as test_img:
+                        test_img.verify()
+                    return p
+                except Exception:
+                    pass
+
+        norm_arch = str(archetype or "").lower()
+        norm_chan = str(channel_id or "").lower()
+        templates_dir = Path(cls.TEMPLATES_DIR)
+        visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
+
+        # 1. Check templates by archetype
+        template_keys = []
+        if any(k in norm_arch for k in ("scp", "found-footage", "anomaly")):
+            template_keys.append("scp")
+        elif any(k in norm_arch for k in ("aita", "drama", "confession")):
+            template_keys.append("aita")
+        elif any(k in norm_arch for k in ("horror", "vhs", "analog")):
+            template_keys.append("horror")
+        elif norm_arch:
+            template_keys.append(norm_arch)
+
+        for t_key in template_keys:
+            t_dir = templates_dir / t_key
+            if t_dir.is_dir():
+                for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
+                    candidates = sorted(t_dir.glob(ext))
+                    if candidates:
+                        return candidates[0]
+
+        # 2. Check channel templates
+        chan_keys = []
+        if any(k in norm_chan for k in ("scp", "found-footage")):
+            chan_keys.append("scp")
+        elif any(k in norm_chan for k in ("aita", "drama", "aelithia")):
+            chan_keys.append("aita")
+        elif any(k in norm_chan for k in ("horror", "vhs", "analog")):
+            chan_keys.append("horror")
+        elif "moku" in norm_chan:
+            chan_keys.append("scp" if is_vertical else "horror")
+
+        for c_key in chan_keys:
+            c_dir = templates_dir / c_key
+            if c_dir.is_dir():
+                for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
+                    candidates = sorted(c_dir.glob(ext))
+                    if candidates:
+                        return candidates[0]
+
+        # 3. Check visual bank scenery
+        chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
+        visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
+        if visual_scenery_dir.is_dir():
+            for ext in ("*.jpg", "*.jpeg", "*.png"):
+                candidates = sorted(visual_scenery_dir.glob(ext))
+                if candidates:
+                    return candidates[0]
+
+        generic_bg = REPO_ROOT / "assets" / "background.jpg"
+        if generic_bg.is_file():
+            return generic_bg
+
+        return None
+
+    @staticmethod
+    def create_atmospheric_noise_background(
+        width: int,
+        height: int,
+        accent_color_hex: Optional[str] = None,
+        noise_opacity: int = 22,
+    ) -> Image.Image:
+        """
+        Generates a high-craft dark atmospheric gradient background with controlled noise
+        (film grain) as a resilient safeguard against missing or corrupted visual assets.
+        """
+        w, h = width, height
+        bg = Image.new("RGB", (w, h), (10, 14, 20))
+        draw = ImageDraw.Draw(bg)
+
+        ar, ag, ab = (12, 16, 24)
+        if accent_color_hex:
+            try:
+                from PIL import ImageColor
+                ac = ImageColor.getrgb(accent_color_hex)
+                ar, ag, ab = int(ac[0] * 0.15), int(ac[1] * 0.15), int(ac[2] * 0.15)
+            except Exception:
+                pass
+
+        step = 2 if h <= 1080 else 4
+        for y in range(0, h, step):
+            ratio = y / max(1, h)
+            r = min(255, int(8 + (12 + ar) * ratio))
+            g = min(255, int(10 + (14 + ag) * ratio))
+            b = min(255, int(14 + (20 + ab) * ratio))
+            draw.rectangle([(0, y), (w, min(h, y + step))], fill=(r, g, b))
+
+        try:
+            import os
+            noise_bytes = os.urandom(w * h)
+            noise_l = Image.frombytes("L", (w, h), noise_bytes)
+            noise_rgba = Image.merge("RGBA", (
+                noise_l,
+                noise_l,
+                noise_l,
+                Image.new("L", (w, h), min(255, max(5, noise_opacity))),
+            ))
+            bg_rgba = bg.convert("RGBA")
+            return Image.alpha_composite(bg_rgba, noise_rgba).convert("RGB")
+        except Exception:
+            return bg
 
 

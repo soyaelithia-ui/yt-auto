@@ -40,12 +40,12 @@ class AspectLayoutManager:
                 right=int(width * 0.88),     # Avoid right side icons
             )
         else:
-            # 1920x1080 Horizontal Longform
+            # 1920x1080 / 1280x720 Horizontal Longform
             return SafeZone(
                 top=int(height * 0.08),      # Top 8% margin
-                bottom=int(height * 0.88),   # Bottom 12% margin (avoiding timeline & timestamp badge)
+                bottom=int(height * 0.85),   # Bottom 15% margin (avoiding timeline & timestamp badge)
                 left=int(width * 0.05),      # Left 5% margin
-                right=int(width * 0.85),     # Right 15% margin
+                right=int(width * 0.81),     # Right 19% margin (avoiding timestamp badge)
             )
 
     @staticmethod
