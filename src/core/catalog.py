@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from src.config import DEFAULT_DB_PATH
+from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.repository import validate_db_path
 from src.log import get_logger
 
@@ -27,6 +27,30 @@ __all__ = [
     "LoopCatalogRepository",
     "compute_file_sha256",
 ]
+
+_LEGACY_CHECKOUT_PREFIXES = (
+    "/home/moku/projects/yt-auto",
+    "/srv/projects/yt-auto",
+)
+
+
+def resolve_loop_file_path(path: str | Path, repo_root: Path | None = None) -> Path:
+    """Map a catalog path onto the current checkout. Never rewrite to a foreign host root."""
+    root = Path(repo_root) if repo_root is not None else BASE_DIR
+    p = Path(path)
+    if p.is_file():
+        return p
+    text = str(p)
+    for prefix in _LEGACY_CHECKOUT_PREFIXES:
+        if text == prefix or text.startswith(prefix + "/"):
+            alt = root / text[len(prefix):].lstrip("/")
+            if alt.is_file():
+                return alt
+    if not p.is_absolute():
+        alt = root / p
+        if alt.is_file():
+            return alt
+    return p
 
 
 
@@ -249,19 +273,9 @@ class LoopCatalogRepository:
         records = [self._row_to_record(r) for r in rows]
 
         def _resolve_and_validate(rec: LoopRecord) -> Optional[LoopRecord]:
-            p = Path(rec.file_path)
-            if not p.is_file():
-                if "/home/moku/projects/yt-auto" in str(p):
-                    alt = Path(str(p).replace("/home/moku/projects/yt-auto", "/srv/projects/yt-auto"))
-                    if alt.is_file():
-                        rec.file_path = str(alt)
-                        p = alt
-                elif not p.is_absolute():
-                    alt = Path("/srv/projects/yt-auto") / p
-                    if alt.is_file():
-                        rec.file_path = str(alt)
-                        p = alt
+            p = resolve_loop_file_path(rec.file_path)
             if p.is_file() and p.stat().st_size >= 25_000:
+                rec.file_path = str(p)
                 return rec
             return None
 

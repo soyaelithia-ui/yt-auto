@@ -188,3 +188,31 @@ class TestLoopCatalogRepository(unittest.TestCase):
         # Verify ghost loop is deleted from DB
         self.assertIsNone(self.repo.get_loop_by_id("ghost_loop"))
         self.assertIsNotNone(self.repo.get_loop_by_id("real_loop"))
+
+    def test_get_best_loop_rewrites_legacy_absolute_paths_to_repo_root(self):
+        from unittest.mock import patch
+
+        repo = Path(self.temp_dir.name) / "repo"
+        dest = repo / "assets" / "loops" / "ok.mp4"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"0" * 30_000)
+        stale = "/home/moku/projects/yt-auto/assets/loops/ok.mp4"
+        self.repo.register_loop(LoopRecord(
+            loop_id="stale_abs_loop",
+            category="cosmic_horror",
+            technology="ffmpeg_lavfi",
+            orientation="vertical",
+            width=1080,
+            height=1920,
+            duration_sec=8.0,
+            fps=30,
+            file_path=stale,
+            file_size_bytes=30_000,
+            sha256="abc",
+        ))
+        with patch("src.core.catalog.BASE_DIR", repo):
+            best = self.repo.get_best_loop("cosmic_horror", "vertical")
+        self.assertIsNotNone(best)
+        self.assertEqual(Path(best.file_path), dest)
+        self.assertNotIn("/srv/projects", best.file_path)
+        self.assertNotIn("/home/moku/projects/yt-auto", best.file_path)
