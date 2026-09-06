@@ -6,11 +6,18 @@
   "properties": {
     "version": {
       "type": "string",
-      "enum": ["2.0"]
+      "enum": [
+        "2.0"
+      ]
     },
     "theme_lane": {
       "type": "string",
-      "enum": ["cosmic_horror", "creepypasta", "scp_foundation", "drama_aita"]
+      "enum": [
+        "cosmic_horror",
+        "creepypasta",
+        "scp_foundation",
+        "drama_aita"
+      ]
     },
     "global_color_grade": {
       "type": "object",
@@ -21,11 +28,18 @@
         },
         "color_space": {
           "type": "string",
-          "enum": ["Rec.709", "sRGB"]
+          "enum": [
+            "Rec.709",
+            "sRGB"
+          ]
         },
         "contrast_curve": {
           "type": "string",
-          "enum": ["cinematic_s_curve", "crushed_low_mid", "soft_highlight_roll"]
+          "enum": [
+            "cinematic_s_curve",
+            "crushed_low_mid",
+            "soft_highlight_roll"
+          ]
         },
         "saturation_modifier": {
           "type": "number",
@@ -262,6 +276,28 @@
         ],
         "additionalProperties": false
       }
+    },
+    "palette": {
+      "type": "object",
+      "description": "Theme palette SSOT from art_director (D2 visual coherence)",
+      "properties": {
+        "primary": {
+          "type": "string"
+        },
+        "secondary": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
+        },
+        "shadow": {
+          "type": "string"
+        },
+        "highlight": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
     }
   },
   "required": [

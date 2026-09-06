@@ -1122,10 +1122,9 @@ def run_benchmark_cycle(
                     elif stage == CanonicalStage.LOOP_SCENE:
                         time.sleep(0.005)
                     elif stage == CanonicalStage.VIDEO_RENDERING:
-                        # Simulate video rendering with moderate CPU computation & memory buffer
-                        buf = bytearray(2 * 1024 * 1024)
-                        _ = sum(buf[::1000])
-                        time.sleep(0.03)
+                        # Post-#57: lavfi/stream-copy hot path — keep mock light (was 2MiB+30ms inflate).
+                        _ = hash(b"lavfi_stream_copy_stub")
+                        time.sleep(0.008)
                     elif stage == CanonicalStage.QA_GATING:
                         time.sleep(0.005)
                     elif stage == CanonicalStage.THUMBNAIL_METADATA:

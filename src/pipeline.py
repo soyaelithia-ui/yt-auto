@@ -956,17 +956,6 @@ def run_pipeline_once(
                     size_bytes=video_path.stat().st_size,
                 )
 
-                # Record scene assets lineage into SQLite Migration 003 table
-                if scene_manifest_path.exists():
-                    try:
-                        from src.visuals import SceneAssetTracker
-                        SceneAssetTracker(repository=repository).extract_and_record(
-                            run_id=run_id,
-                            story_id=story_id,
-                            manifest_path=scene_manifest_path,
-                        )
-                    except Exception as sat_err:
-                        logger.warning("Could not record scene assets in repository: %s", sat_err, exc_info=True)
         else:
             with profiler.phase(CanonicalStage.MOOD_THEME):
                 from src.media.loop_engine import LoopVideoEngine
@@ -1182,17 +1171,19 @@ def run_pipeline_once(
                     size_bytes=video_path.stat().st_size,
                 )
 
-                # Record scene assets lineage into SQLite Migration 003 table
-                if scene_manifest_path.exists():
-                    try:
-                        from src.visuals import SceneAssetTracker
-                        SceneAssetTracker(repository=repository).extract_and_record(
-                            run_id=run_id,
-                            story_id=story_id,
-                            manifest_path=scene_manifest_path,
-                        )
-                    except Exception as sat_err:
-                        logger.warning("Could not record scene assets in repository: %s", sat_err, exc_info=True)
+
+
+        # Scene asset lineage (outside stage-9 timer — SQLite I/O is not render)
+        try:
+            if scene_manifest_path.exists():
+                from src.visuals import SceneAssetTracker
+                SceneAssetTracker(repository=repository).extract_and_record(
+                    run_id=run_id,
+                    story_id=story_id,
+                    manifest_path=scene_manifest_path,
+                )
+        except Exception as sat_err:
+            logger.warning("Could not record scene assets in repository: %s", sat_err, exc_info=True)
 
         # Record production telemetry
         try:

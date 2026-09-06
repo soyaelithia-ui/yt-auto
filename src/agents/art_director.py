@@ -211,6 +211,13 @@ class ArtDirectorMoodAgent:
         visual_plan: Dict[str, Any] = {
             "version": "2.0",
             "theme_lane": norm_lane,
+            "palette": {
+                "primary": theme_data["primary"],
+                "secondary": theme_data["secondary"],
+                "accent": theme_data["accent"],
+                "shadow": theme_data["shadow"],
+                "highlight": theme_data["highlight"],
+            },
             "global_color_grade": {
                 "lut_profile": theme_data["lut"],
                 "color_space": "Rec.709",

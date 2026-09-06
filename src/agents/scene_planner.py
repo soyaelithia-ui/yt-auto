@@ -16,6 +16,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import jsonschema
 
 from src.log import get_logger
+from src.media.visual_coherence import (
+    ordered_script_scene_ids,
+    plan_scenes_by_id,
+    timing_scales_to_audio,
+    visual_plan_palette,
+)
 from src.scene_manifest import (
     AudioTracks,
     CameraMotionConfig,
@@ -427,7 +433,8 @@ class ScenePlannerCompositorAgent:
         else:
             res = [1920, 1080]
 
-        # Flatten script scenes and visual plan scenes
+        # Flatten script scenes in act order (SSOT inclusion/order — do not reshuffle)
+        _ = ordered_script_scene_ids(script)
         script_scenes: List[Dict[str, Any]] = []
         for act in script.get("acts", []):
             act_role = act.get("dramatic_role", "")
@@ -436,9 +443,13 @@ class ScenePlannerCompositorAgent:
                     sc["dramatic_role"] = act_role
                 script_scenes.append(sc)
 
-        plan_scenes_map: Dict[str, Dict[str, Any]] = {
-            sc.get("scene_id", ""): sc for sc in visual_plan.get("scenes", [])
-        }
+        plan_scenes_map: Dict[str, Dict[str, Any]] = plan_scenes_by_id(visual_plan)
+        # Prefer art_director top-level palette when channel extract is thin
+        _vp_pal = visual_plan_palette(visual_plan)
+        if _vp_pal.get("accent") and (not resolved_accent or resolved_accent == "#00FF88"):
+            resolved_accent = _vp_pal["accent"]
+        if _vp_pal.get("primary") and (not resolved_primary or resolved_primary in ("#041421", "")):
+            resolved_primary = _vp_pal["primary"]
 
         # Resolve exact target audio duration for timing coordination
         target_duration = actual_audio_duration
@@ -451,18 +462,8 @@ class ScenePlannerCompositorAgent:
             except Exception as exc:
                 logger.debug("Failed probing narration duration in ScenePlanner: %s", exc)
 
-        # Proportional scene duration calculation aligned with actual audio track
         raw_durations = [float(sc.get("estimated_duration_sec", 60.0)) for sc in script_scenes]
-        total_raw = sum(raw_durations) if raw_durations else 0.0
-
-        if target_duration and target_duration > 0 and total_raw > 0:
-            scale = target_duration / total_raw
-            scaled_durations = [max(1.0, round(d * scale, 2)) for d in raw_durations]
-            diff = round(target_duration - sum(scaled_durations), 2)
-            if scaled_durations:
-                scaled_durations[-1] = max(1.0, round(scaled_durations[-1] + diff, 2))
-        else:
-            scaled_durations = raw_durations
+        scaled_durations = timing_scales_to_audio(raw_durations, target_duration)
 
         # Build SceneConfig objects with dynamic cinematic pacing (8-15s per cut for longform)
         current_time = 0.0
