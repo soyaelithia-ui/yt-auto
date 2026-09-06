@@ -873,7 +873,11 @@ class LoopVideoEngine(BaseVideoCompositor):
             return target
         profile = ""
         if probe.video_streams:
-            profile = str(getattr(probe.video_streams[0], "profile", "") or "")
+            vs0 = probe.video_streams[0]
+            if isinstance(vs0, dict):
+                profile = str(vs0.get("profile") or "")
+            else:
+                profile = str(getattr(vs0, "profile", "") or "")
         normalized = profile.strip().lower().replace(" ", "")
         if normalized in {"main", "baseline", "constrainedbaseline", "constrained_baseline"}:
             return target
@@ -886,8 +890,9 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-map", "0:v:0", "-map", "0:a:0?",
             "-c:v", "libx264",
             "-profile:v", "main",
+            "-level", "4.0",
             "-pix_fmt", "yuv420p",
-            "-preset", str(preset_v),
+            "-preset", "veryfast" if str(preset_v) == "ultrafast" else str(preset_v),
             "-crf", str(crf_v),
             "-c:a", "aac",
             "-b:a", "192k",
