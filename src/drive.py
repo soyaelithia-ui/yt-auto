@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
 import os
-import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -17,12 +15,12 @@ from src.core.domain import (
     ProviderValidationError,
     QuotaError,
 )
+from src.core.google_auth import build_drive_service, get_drive_credentials
 from src.core.providers import DriveProof, backoff_with_jitter, classify_provider_failure
 from src.log import get_logger
 
 
 logger = get_logger("drive")
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 
 def _mock_enabled() -> bool:
@@ -31,52 +29,14 @@ def _mock_enabled() -> bool:
     ) == "1"
 
 
-def _gcloud_enabled() -> bool:
-    return os.environ.get("DRIVE_USE_GCLOUD", "0").strip() == "1"
-
-
-def _gcloud_credentials():
-    """Build in-memory Drive credentials from the active gcloud account."""
-    try:
-        completed = subprocess.run(
-            ["gcloud", "auth", "print-access-token"],
-            shell=False,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise AuthenticationError("gcloud no pudo proporcionar un token de Drive") from exc
-    access_token = completed.stdout.strip()
-    if not access_token:
-        raise AuthenticationError("gcloud no devolvió un token de Drive")
-    from google.oauth2.credentials import Credentials
-
-    return Credentials(token=access_token, scopes=[DRIVE_SCOPE])
-
-
-def _credentials(sa_key_path: str | None, token_path: str | None):
-    from src.core.google_auth import load_authorized_user_credentials
-
-    if _gcloud_enabled():
-        return _gcloud_credentials()
-    if sa_key_path and Path(sa_key_path).is_file():
-        data = json.loads(Path(sa_key_path).read_text(encoding="utf-8"))
-        if data.get("type") == "service_account":
-            from google.oauth2 import service_account
-
-            return service_account.Credentials.from_service_account_file(
-                sa_key_path,
-                scopes=[DRIVE_SCOPE],
-            )
-        if data.get("refresh_token") or data.get("token") or data.get("access_token"):
-            return load_authorized_user_credentials(sa_key_path, scopes=[DRIVE_SCOPE])
-        raise AuthenticationError("DRIVE_KEY_PATH no es ni service account ni token OAuth")
-    if token_path and Path(token_path).is_file():
-        return load_authorized_user_credentials(token_path, scopes=[DRIVE_SCOPE])
-    raise AuthenticationError(
-        "Drive requiere DRIVE_KEY_PATH o un token OAuth elegido explícitamente"
+def _drive_service(
+    sa_key_path: str | None,
+    token_path: str | None,
+):
+    """Official Drive v3 client via google_auth SSOT (no local credential builders)."""
+    return build_drive_service(
+        sa_key_path=sa_key_path,
+        token_path=token_path,
     )
 
 
@@ -91,13 +51,15 @@ def preflight_drive_access(
         raise AuthenticationError("DRIVE_FOLDER_ID es obligatorio")
     sa_exists = bool(sa_key_path and Path(sa_key_path).is_file())
     token_exists = bool(token_path and Path(token_path).is_file())
-    credentials = _credentials(
+    # Resolve credentials first so auth errors surface before discovery build.
+    _ = get_drive_credentials(
+        sa_key_path=sa_key_path if sa_exists else None,
+        token_path=token_path if token_exists else None,
+    )
+    service = _drive_service(
         sa_key_path if sa_exists else None,
         token_path if token_exists else None,
     )
-    from googleapiclient.discovery import build
-
-    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
     try:
         folder = (
             service.files()
@@ -108,7 +70,9 @@ def preflight_drive_access(
             .execute()
         )
     except Exception as exc:
-        if not sa_exists and not _gcloud_enabled():
+        if not sa_exists and not (
+            os.environ.get("DRIVE_USE_GCLOUD", "0").strip() == "1"
+        ):
             logger.warning(
                 "Drive preflight notice: no se pudo verificar la carpeta con el "
                 "token OAuth disponible (la clave de servicio no está montada): %s",
@@ -158,16 +122,18 @@ def upload_to_drive_verified(
 
     sa_exists = bool(sa_key_path and Path(sa_key_path).is_file())
     token_exists = bool(token_path and Path(token_path).is_file())
-    if not _gcloud_enabled() and not sa_exists and not token_exists:
+    if (
+        os.environ.get("DRIVE_USE_GCLOUD", "0").strip() != "1"
+        and not sa_exists
+        and not token_exists
+    ):
         raise FileNotFoundError(
             f"Neither Drive service account key ({sa_key_path}) nor token path ({token_path}) exists."
         )
 
-    credentials = _credentials(sa_key_path if sa_exists else None, token_path)
-    from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
-    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    service = _drive_service(sa_key_path if sa_exists else None, token_path)
     raw_key = idempotency_key or f"{folder_id}:{name}:{target.stat().st_size}"
     stable_key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     property_name = "yt_backup_key"
@@ -329,10 +295,10 @@ def move_drive_file(
 
     sa_exists = bool(sa_key_path and Path(sa_key_path).is_file())
     token_exists = bool(token_path and Path(token_path).is_file())
-    credentials = _credentials(sa_key_path if sa_exists else None, token_path if token_exists else None)
-    from googleapiclient.discovery import build
-
-    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    service = _drive_service(
+        sa_key_path if sa_exists else None,
+        token_path if token_exists else None,
+    )
     file_info = service.files().get(fileId=file_id, fields="parents").execute()
     previous_parents = ",".join(file_info.get("parents") or [])
     service.files().update(
@@ -343,4 +309,3 @@ def move_drive_file(
     ).execute()
     logger.info("Drive file %s moved to folder %s", file_id, target_folder_id)
     return True
-

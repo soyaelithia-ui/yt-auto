@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -19,11 +18,9 @@ from googleapiclient.discovery import Resource, build
 import google_auth_oauthlib.flow
 
 from src.config import (
-    BASE_DIR,
     DRIVE_KEY_PATH,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
-    SECRETS_DIR,
     YOUTUBE_TOKEN_PATH,
     resolve_channel2_token_path,
 )
@@ -44,12 +41,12 @@ DRIVE_SCOPES: List[str] = [
 
 DEFAULT_SCOPES: List[str] = list(dict.fromkeys(YOUTUBE_SCOPES + DRIVE_SCOPES))
 
+# Loopback only — Google deprecated urn:ietf:wg:oauth:2.0:oob (RFC 8252).
 DEFAULT_REDIRECT_URIS: List[str] = [
     "http://localhost:8585/",
     "http://localhost:8080/",
     "http://127.0.0.1:8585/",
     "http://127.0.0.1:8080/",
-    "urn:ietf:wg:oauth:2.0:oob",
 ]
 
 

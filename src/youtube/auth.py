@@ -11,13 +11,8 @@ from typing import Optional
 from src.config import BASE_DIR, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, YOUTUBE_TOKEN_PATH
 from src.core.google_auth import (
     DEFAULT_SCOPES,
-    DRIVE_SCOPES,
-    YOUTUBE_SCOPES,
-    build_client_config,
     create_oauth_flow,
-    load_authorized_user_credentials,
     save_credentials,
-    standardize_token_file,
 )
 from src.log import get_logger
 
@@ -27,9 +22,13 @@ CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or GOOGLE_CLIENT_ID
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET") or GOOGLE_CLIENT_SECRET
 TOKEN_PATH = str(BASE_DIR / "secrets" / "youtube_token.json")
 
+# Loopback redirects only (Google deprecated OOB).
+_DEFAULT_REDIRECT = "http://localhost:8585/"
+_ALT_REDIRECT = "http://localhost:8080/"
+
 
 def get_auth_url(
-    redirect_uri: str = "http://localhost:8585/",
+    redirect_uri: str = _DEFAULT_REDIRECT,
     scopes: Optional[list[str]] = None,
 ) -> str:
     """Generate the official Google OAuth 2.0 authorization URL."""
@@ -66,7 +65,7 @@ def get_auth_url(
 
 def exchange_code(
     code: str,
-    redirect_uri: str = "urn:ietf:wg:oauth:2.0:oob",
+    redirect_uri: str = _DEFAULT_REDIRECT,
     token_path: Optional[str] = None,
     scopes: Optional[list[str]] = None,
 ) -> None:
@@ -87,8 +86,7 @@ def exchange_code(
         except Exception:
             pass
 
-    # Try matching redirect_uri or localhost default
-    code_verifier = verifiers.get(redirect_uri) or verifiers.get("http://localhost:8585/")
+    code_verifier = verifiers.get(redirect_uri) or verifiers.get(_DEFAULT_REDIRECT)
 
     flow = create_oauth_flow(
         client_id=client_id,
@@ -102,9 +100,12 @@ def exchange_code(
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
-        logger.warning("fetch_token with redirect_uri=%s failed: %s. Trying fallback uri...", redirect_uri, exc)
-        # Try alternate redirect URI if OOB or localhost failed
-        alt_uri = "http://localhost:8585/" if redirect_uri != "http://localhost:8585/" else "urn:ietf:wg:oauth:2.0:oob"
+        logger.warning(
+            "fetch_token with redirect_uri=%s failed: %s. Trying fallback uri...",
+            redirect_uri,
+            exc,
+        )
+        alt_uri = _ALT_REDIRECT if redirect_uri != _ALT_REDIRECT else _DEFAULT_REDIRECT
         alt_verifier = verifiers.get(alt_uri) or code_verifier
         flow = create_oauth_flow(
             client_id=client_id,
@@ -117,7 +118,6 @@ def exchange_code(
         try:
             flow.fetch_token(code=code)
         except Exception:
-            # Fallback: retry without verifier in case it was a plain auth URL
             flow.code_verifier = None
             flow.fetch_token(code=code)
 
@@ -166,5 +166,5 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1:
         exchange_code(sys.argv[1])
     else:
-        print("Auth URL (localhost):", get_auth_url("http://localhost:8585/"))
-        print("Auth URL (OOB):", get_auth_url("urn:ietf:wg:oauth:2.0:oob"))
+        print("Auth URL (localhost:8585):", get_auth_url(_DEFAULT_REDIRECT))
+        print("Auth URL (localhost:8080):", get_auth_url(_ALT_REDIRECT))
