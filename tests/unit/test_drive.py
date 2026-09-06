@@ -5,7 +5,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.core.domain import AmbiguousUploadError, ProviderValidationError
-from src.drive import _credentials, upload_to_drive, upload_to_drive_verified
+from src.core.google_auth import get_drive_credentials
+from src.drive import upload_to_drive, upload_to_drive_verified
 
 
 class TestDriveUploader(unittest.TestCase):
@@ -27,12 +28,12 @@ class TestDriveUploader(unittest.TestCase):
             os.environ["DRIVE_USE_GCLOUD"] = self.previous_gcloud
         self.temp_dir.cleanup()
 
-    @patch("src.drive.subprocess.run")
+    @patch("src.core.google_auth.subprocess.run")
     def test_gcloud_credentials_are_in_memory_and_token_is_not_logged(self, mock_run):
         mock_run.return_value.stdout = "mock-access-token\n"
         os.environ["DRIVE_USE_GCLOUD"] = "1"
 
-        credentials = _credentials(None, None)
+        credentials = get_drive_credentials(None, None)
 
         self.assertEqual(credentials.token, "mock-access-token")
         mock_run.assert_called_once_with(
@@ -57,13 +58,12 @@ class TestDriveUploader(unittest.TestCase):
         self.assertTrue(proof.exists)
 
     @patch("src.drive._mock_enabled", return_value=False)
-    @patch("googleapiclient.discovery.build")
-    @patch("google.oauth2.service_account.Credentials.from_service_account_file")
+    @patch("src.drive._drive_service")
     def test_success_requires_independent_remote_verification(
-        self, _credentials, mock_build, _mock
+        self, mock_drive_service, _mock
     ):
         service = MagicMock()
-        mock_build.return_value = service
+        mock_drive_service.return_value = service
         service.files().create.return_value.execute.return_value = {
             "id": "drive_file_abc123"
         }
@@ -91,13 +91,12 @@ class TestDriveUploader(unittest.TestCase):
             upload_to_drive(self.dummy_file, "")
 
     @patch("src.drive._mock_enabled", return_value=False)
-    @patch("googleapiclient.discovery.build")
-    @patch("google.oauth2.service_account.Credentials.from_service_account_file")
+    @patch("src.drive._drive_service")
     def test_mismatch_never_returns_fake_success(
-        self, _credentials, mock_build, _mock
+        self, mock_drive_service, _mock
     ):
         service = MagicMock()
-        mock_build.return_value = service
+        mock_drive_service.return_value = service
         service.files().create.return_value.execute.return_value = {
             "id": "drive_file_abc123"
         }
@@ -117,13 +116,12 @@ class TestDriveUploader(unittest.TestCase):
                 )
 
     @patch("src.drive._mock_enabled", return_value=False)
-    @patch("googleapiclient.discovery.build")
-    @patch("google.oauth2.service_account.Credentials.from_service_account_file")
+    @patch("src.drive._drive_service")
     def test_existing_idempotent_backup_skips_create(
-        self, _credentials, mock_build, _mock
+        self, mock_drive_service, _mock
     ):
         service = MagicMock()
-        mock_build.return_value = service
+        mock_drive_service.return_value = service
         service.files().list.return_value.execute.return_value = {
             "files": [
                 {
@@ -148,13 +146,12 @@ class TestDriveUploader(unittest.TestCase):
         callback.assert_called_once_with("existing_drive_id")
 
     @patch("src.drive._mock_enabled", return_value=False)
-    @patch("googleapiclient.discovery.build")
-    @patch("google.oauth2.service_account.Credentials.from_service_account_file")
+    @patch("src.drive._drive_service")
     def test_ambiguous_create_is_never_repeated(
-        self, _credentials, mock_build, _mock
+        self, mock_drive_service, _mock
     ):
         service = MagicMock()
-        mock_build.return_value = service
+        mock_drive_service.return_value = service
         service.files().list.return_value.execute.side_effect = [
             {"files": []},
             {"files": []},
@@ -170,13 +167,12 @@ class TestDriveUploader(unittest.TestCase):
         service.files().create.assert_called_once()
 
     @patch("src.drive._mock_enabled", return_value=False)
-    @patch("googleapiclient.discovery.build")
-    @patch("google.oauth2.service_account.Credentials.from_service_account_file")
+    @patch("src.drive._drive_service")
     def test_file_id_callback_runs_before_remote_verification(
-        self, _credentials, mock_build, _mock
+        self, mock_drive_service, _mock
     ):
         service = MagicMock()
-        mock_build.return_value = service
+        mock_drive_service.return_value = service
         service.files().list.return_value.execute.return_value = {"files": []}
         service.files().create.return_value.execute.return_value = {
             "id": "known_drive_id"

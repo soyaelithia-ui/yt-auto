@@ -824,8 +824,8 @@ def test_read_only_remote_preflights_validate_drive_and_youtube(monkeypatch, tmp
         "trashed": False,
         "capabilities": {"canAddChildren": True},
     }
-    monkeypatch.setattr("src.drive._credentials", lambda *args, **kwargs: object())
-    monkeypatch.setattr("googleapiclient.discovery.build", lambda *args, **kwargs: drive)
+    monkeypatch.setattr("src.drive.get_drive_credentials", lambda *args, **kwargs: object())
+    monkeypatch.setattr("src.drive._drive_service", lambda *args, **kwargs: drive)
     token = tmp_path / "token.json"
     token.write_text("{}", encoding="utf-8")
     proof = preflight_drive_access(
