@@ -21,95 +21,18 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps
 
 from src.media.thumbnails.analog_horror import apply_analog_horror_grade, draw_camcorder_osd
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
-
-def resolve_thumbnail_output_dir(custom_path: str | Path | None = None) -> Path:
-    if custom_path:
-        target = Path(custom_path).resolve()
-    elif os.getenv("YT_THUMBNAILS_DIR"):
-        target = Path(os.environ["YT_THUMBNAILS_DIR"]).resolve()
-    else:
-        target = (REPO_ROOT / "artifacts" / "thumbnails").resolve()
-
-    # Enforce Strict Confinement Guardrail
-    try:
-        target.relative_to(REPO_ROOT)
-    except ValueError:
-        raise PermissionError(
-            f"Security Violation: Target path '{target}' escapes workspace root '{REPO_ROOT}'."
-        )
-
-    target.mkdir(parents=True, exist_ok=True)
-    return target
-
-
-def get_font(size: int) -> ImageFont.FreeTypeFont:
-    font_path = REPO_ROOT / "assets" / "fonts" / "Montserrat-Black.ttf"
-    if not font_path.exists():
-        raise FileNotFoundError(f"Required font asset does not exist: {font_path}")
-    return ImageFont.truetype(str(font_path), size=size)
-
-def draw_text_with_effects(
-    draw: ImageDraw.ImageDraw,
-    canvas_size: Tuple[int, int],
-    text: str,
-    position: Tuple[int, int],
-    font: ImageFont.FreeTypeFont,
-    text_color: str = "#FFFFFF",
-    stroke_color: str = "#000000",
-    stroke_width: int = 10,
-    shadow_offset: Tuple[int, int] = (6, 10),
-    shadow_color: Tuple[int, int, int, int] = (0, 0, 0, 240),
-    glow_color: Optional[Tuple[int, int, int, int]] = None,
-    glow_radius: int = 20,
-) -> Tuple[int, int, int, int]:
-    """Draws master typography with multi-layer shadow, stroke and optional ambient glow."""
-    x, y = position
-    w, h = canvas_size
-
-    # 1. Glow layer
-    if glow_color:
-        glow_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        g_draw = ImageDraw.Draw(glow_layer)
-        g_draw.text(
-            (x, y),
-            text,
-            font=font,
-            fill=glow_color,
-            stroke_width=stroke_width + glow_radius,
-            stroke_fill=glow_color,
-        )
-        glow_blurred = glow_layer.filter(ImageFilter.GaussianBlur(glow_radius))
-        draw._image.paste(glow_blurred, (0, 0), glow_blurred)
-
-    # 2. Heavy 3D drop shadow (sharp + blurred)
-    sx, sy = shadow_offset
-    shadow_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow_layer)
-    s_draw.text(
-        (x + sx, y + sy),
-        text,
-        font=font,
-        fill=shadow_color,
-        stroke_width=stroke_width + 4,
-        stroke_fill=shadow_color,
-    )
-    shadow_blurred = shadow_layer.filter(ImageFilter.GaussianBlur(8))
-    draw._image.paste(shadow_blurred, (0, 0), shadow_blurred)
-
-    # 3. Main text with sharp stroke
-    draw.text(
-        (x, y),
-        text,
-        font=font,
-        fill=text_color,
-        stroke_width=stroke_width,
-        stroke_fill=stroke_color,
-    )
-
-    bbox = font.getbbox(text)
-    return (x, y, x + (bbox[2] - bbox[0]), y + (bbox[3] - bbox[1]))
+import sys
+from pathlib import Path as _P
+_ROOT = _P(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from scripts.lib.thumb_common import (
+    REPO_ROOT,
+    resolve_thumbnail_output_dir,
+    get_font,
+    draw_text_with_effects,
+)
 
 
 def draw_hazard_stripes(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], stripe_width: int = 18):

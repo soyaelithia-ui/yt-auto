@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from src.media.lavfi_palettes import resolve_lavfi_palette
 from src.media.encode_defaults import (
     default_ffmpeg_threads,
     default_render_crf,
@@ -461,26 +462,15 @@ class ProceduralVideoEngine(BaseVideoCompositor):
             return "drama_aita"
         return "atmospheric_landscape"
 
-    _FALLBACK_PALETTES: dict[str, tuple[str, str]] = {
-        "drama_aita": ("0x2d3436", "0x636e72"),
-        "cosmic_horror": ("0x0c101c", "0x2c1f3d"),
-        "scp": ("0x1a252f", "0x34495e"),
-        "classified_terminal": ("0x1a252f", "0x34495e"),
-        "dark_forest": ("0x0f2417", "0x1e452e"),
-        "dark_ambient": ("0x181a1b", "0x2f3542"),
-        "monsters": ("0x231515", "0x452222"),
-        "space_abyss": ("0x0a0e17", "0x1d273a"),
-        "atmospheric_landscape": ("0x181a1b", "0x34495e"),
-        "cosmic_singularity": ("0x0c101c", "0x2c1f3d"),
-    }
 
     def _generate_fallback_loop(
         self, category: str, width: int, height: int, fps: int, duration_sec: float, out_path: Path
     ) -> Path:
         """Near-zero-RAM fallback: FFmpeg lavfi gradients (no numpy/PIL frame pump)."""
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        norm = (category or "").strip().lower().replace("-", "_").replace(" ", "_")
-        c0, c1 = self._FALLBACK_PALETTES.get(norm, ("0x181a1b", "0x34495e"))
+        from src.media.lavfi_palettes import normalize_palette_key
+        norm = normalize_palette_key(category)
+        c0, c1 = resolve_lavfi_palette(category)
         # Keep even dims for yuv420p
         w = width - (width % 2)
         h = height - (height % 2)
