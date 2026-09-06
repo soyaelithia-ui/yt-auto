@@ -589,24 +589,24 @@ class LoopVideoEngine(BaseVideoCompositor):
         if has_music:
             lp_clause = f"lowpass=f={lowpass_freq}," if lowpass_freq and lowpass_freq > 0 else ""
             graph = (
-                f"[1:a]aresample=48000,asplit=2[speech_sc][speech_mix];"
-                f"[2:a]aresample=48000,{lp_clause}volume={music_volume:.4f}[music_in];"
+                f"[1:a]aresample=44100,asplit=2[speech_sc][speech_mix];"
+                f"[2:a]aresample=44100,{lp_clause}volume={music_volume:.4f}[music_in];"
                 f"[music_in][speech_sc]sidechaincompress=threshold={ducking_threshold}:ratio={ducking_ratio}:attack={ducking_attack_ms}:release={ducking_release_ms}:makeup=1[music_ducked];"
                 f"[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed];"
             )
             if master_loudness:
-                graph += f"[amixed]loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                graph += f"[amixed]loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
             else:
-                graph += f"[amixed]aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                graph += f"[amixed]aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
             return graph
         else:
             if master_loudness:
                 return (
-                    f"[1:a]aresample=48000,loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},"
-                    f"aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                    f"[1:a]aresample=44100,loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},"
+                    f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
                 )
             else:
-                return f"[1:a]aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                return f"[1:a]aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
 
     def build_composition_filter_graph(
         self,
@@ -686,7 +686,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-crf", str(crf),
             "-c:a", "aac",
             "-b:a", "192k",
-            "-ar", "48000",
+            "-ar", "44100",
             "-ac", "2",
             "-movflags", "+faststart",
         ])
@@ -802,7 +802,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-crf", str(crf),
             "-c:a", "aac",
             "-b:a", "192k",
-            "-ar", "48000",
+            "-ar", "44100",
             "-ac", "2",
             "-movflags", "+faststart",
         ])
@@ -898,7 +898,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-crf", str(crf_v),
             "-c:a", "aac",
             "-b:a", "192k",
-            "-ar", "48000",
+            "-ar", "44100",
             "-ac", "2",
             "-threads", str(threads_v),
             "-movflags", "+faststart",
@@ -975,7 +975,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "-c:v", "copy",
             "-c:a", "aac",
             "-b:a", "192k",
-            "-ar", "48000",
+            "-ar", "44100",
             "-ac", "2",
             "-threads", str(threads),
             "-movflags", "+faststart",

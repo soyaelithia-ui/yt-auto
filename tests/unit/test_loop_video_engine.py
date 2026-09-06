@@ -266,7 +266,7 @@ class TestLoopAudioSidechainDucking(unittest.TestCase):
         self.assertIn("sidechaincompress=threshold=0.035:ratio=8.0:attack=20.0:release=350.0:makeup=1[music_ducked]", af)
         self.assertIn("[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed]", af)
         self.assertIn("loudnorm=I=-14.0:TP=-1.5:LRA=11.0", af)
-        self.assertIn("aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]", af)
+        self.assertIn("aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]", af)
 
     def test_audio_filter_without_music(self):
         """When no background music is provided, passes narration directly through loudnorm."""
@@ -278,7 +278,7 @@ class TestLoopAudioSidechainDucking(unittest.TestCase):
 
         self.assertNotIn("sidechaincompress", af)
         self.assertNotIn("amix", af)
-        self.assertIn("[1:a]aresample=48000,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", af)
+        self.assertIn("[1:a]aresample=44100,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", af)
         self.assertIn("[aout]", af)
 
 

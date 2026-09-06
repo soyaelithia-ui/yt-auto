@@ -337,7 +337,7 @@ class TestAdversarialFilterGraphMatrix(unittest.TestCase):
         filt = cmd[cmd.index("-filter_complex") + 1]
         self.assertNotIn("sidechaincompress", filt)
         self.assertNotIn("amix", filt)
-        self.assertIn("[1:a]aresample=48000,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", filt)
+        self.assertIn("[1:a]aresample=44100,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", filt)
         self.assertNotIn("subtitles=", filt)
         self.assertNotIn("ass=", filt)
 
@@ -427,14 +427,14 @@ class TestAdversarialFilterGraphMatrix(unittest.TestCase):
             master_loudness=False,
         )
         self.assertNotIn("loudnorm", filt)
-        self.assertIn("[amixed]aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]", filt)
+        self.assertIn("[amixed]aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]", filt)
 
         filt_nomusic = self.engine.build_audio_filter(
             has_music=False,
             master_loudness=False,
         )
         self.assertNotIn("loudnorm", filt_nomusic)
-        self.assertIn("[1:a]aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]", filt_nomusic)
+        self.assertIn("[1:a]aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]", filt_nomusic)
 
     def test_lowpass_frequency_custom_and_disabled(self):
         """lowpass filter omitted when 0 or None, included when positive integer."""
@@ -537,7 +537,7 @@ class TestEmpiricalEndToEndFFmpegExecution(unittest.TestCase):
         cmd_aud = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-            "-ar", "48000", "-ac", "2",
+            "-ar", "44100", "-ac", "2",
             str(self.synth_audio)
         ]
         subprocess.run(cmd_aud, check=True, capture_output=True)
@@ -547,7 +547,7 @@ class TestEmpiricalEndToEndFFmpegExecution(unittest.TestCase):
         cmd_bgm = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", "sine=frequency=220:duration=5",
-            "-ar", "48000", "-ac", "2",
+            "-ar", "44100", "-ac", "2",
             str(self.synth_bgm)
         ]
         subprocess.run(cmd_bgm, check=True, capture_output=True)
@@ -590,7 +590,7 @@ class TestEmpiricalEndToEndFFmpegExecution(unittest.TestCase):
         self.assertAlmostEqual(info.duration, 3.0, delta=0.5)
         self.assertEqual(info.video_streams[0].width, 1080)
         self.assertEqual(info.video_streams[0].height, 1920)
-        self.assertEqual(info.audio_streams[0].sample_rate, 48000)
+        self.assertEqual(info.audio_streams[0].sample_rate, 44100)
         self.assertEqual(info.audio_streams[0].channels, 2)
 
     def test_empirical_render_horizontal_longform_fallback_image(self):
