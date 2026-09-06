@@ -617,11 +617,33 @@ def validate_prepublication(
             plan = json.loads(Path(visual_plan_path).read_text(encoding="utf-8"))
             scenes = plan.get("scenes") or []
             duration = float(report.facts.get("duration") or 0)
-            covered = float(plan.get("covered_seconds") or 0)
-            scene_durations = [float(scene.get("duration") or 0) for scene in scenes]
+
+            def _scene_duration(scene: dict) -> float:
+                return float(
+                    scene.get("duration")
+                    or scene.get("duration_sec")
+                    or 0
+                )
+
+            def _scene_source(scene: dict) -> str:
+                return str(
+                    scene.get("source")
+                    or scene.get("image_path")
+                    or scene.get("path")
+                    or ""
+                )
+
+            scene_durations = [_scene_duration(scene) for scene in scenes if isinstance(scene, dict)]
+            covered = float(
+                plan.get("covered_seconds")
+                or plan.get("duration_sec")
+                or 0
+            )
+            if covered <= 0 and scene_durations:
+                covered = float(sum(scene_durations))
             if not scenes or int(plan.get("black_fallbacks") or 0) != 0:
                 report.issues.append("cobertura visual ausente o con fallback negro")
-            
+
             is_loop_plan = (
                 (video_engine is not None and str(video_engine).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor"))
                 or str(plan.get("video_engine", "")).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor")
@@ -636,7 +658,11 @@ def validate_prepublication(
                     report.issues.append(f"cadencia visual fuera del intervalo {int(min_cadence)}-{int(max_cadence)} segundos")
             if duration <= 0 or abs(covered - duration) > 1.0:
                 report.issues.append("el plan visual no cubre toda la duración")
-            if any(not Path(str(scene.get("source") or "")).is_file() for scene in scenes):
+            if any(
+                not Path(_scene_source(scene)).is_file()
+                for scene in scenes
+                if isinstance(scene, dict)
+            ):
                 report.issues.append("el plan visual referencia recursos ausentes")
             report.facts["scene_count"] = len(scenes)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):

@@ -251,6 +251,56 @@ class TestPrepublicationLoopPlanCadence(unittest.TestCase):
         self.assertTrue(report.passed, f"Prepublication QA failed with issues: {report.issues}")
         self.assertEqual(report.facts.get("scene_count"), 1)
 
+    @patch("src.core.quality.ffprobe")
+    @patch("src.core.quality.has_faststart", return_value=True)
+    @patch("src.core.quality.detect_long_black_frames", return_value=(0.0, []))
+    @patch("src.core.quality.analyze_perceptual_luminance", return_value={"avg_luminance": 80.0, "dark_ratio": 0.05, "passed": True})
+    def test_validate_prepublication_accepts_scene_manifest_aliases(
+        self, mock_lum, mock_black, mock_faststart, mock_probe
+    ):
+        """QA accepts duration_sec/image_path aliases used by scene_manifest-shaped plans."""
+        mock_probe.return_value = {
+            "format": {"duration": "39.72"},
+            "streams": [
+                {"codec_type": "video", "codec_name": "h264", "width": 1080, "height": 1920, "pix_fmt": "yuv420p"},
+                {"codec_type": "audio", "codec_name": "aac"},
+            ],
+        }
+        visual_plan_path = self.root_path / "visual_plan_aliases.json"
+        visual_plan_path.write_text(
+            json.dumps({
+                "video_engine": "loop",
+                "loop": True,
+                "mode": "loop",
+                "scenes": [
+                    {"duration_sec": 7.8, "image_path": str(self.background_video)},
+                    {"duration_sec": 10.64, "image_path": str(self.background_video)},
+                    {"duration_sec": 9.58, "image_path": str(self.background_video)},
+                    {"duration_sec": 11.7, "image_path": str(self.background_video)},
+                ],
+                "black_fallbacks": 0,
+            }),
+            encoding="utf-8",
+        )
+        report = validate_prepublication(
+            channel=CanonicalChannel.MOKU,
+            script=(
+                "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
+                "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad."
+            ),
+            title="La casa donde nadie debía entrar",
+            description="Esta es una descripción completa en español para la historia de terror que se publica hoy.",
+            video_path=self.video_path,
+            subtitle_path=None,
+            thumbnail_path=self.thumbnail_path,
+            visual_plan_path=visual_plan_path,
+            video_mode="short",
+            video_engine="loop",
+            require_subtitles=False,
+        )
+        self.assertTrue(report.passed, f"Prepublication QA failed with issues: {report.issues}")
+        self.assertEqual(report.facts.get("scene_count"), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
