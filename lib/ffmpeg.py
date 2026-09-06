@@ -103,6 +103,7 @@ class VideoStreamInfo:
     duration: float
     bit_rate: Optional[int] = None
     nb_frames: Optional[int] = None
+    profile: Optional[str] = None
 
 
 @dataclass
@@ -582,6 +583,7 @@ def probe_media(
             v_br = int(s.get("bit_rate")) if s.get("bit_rate") is not None else None
             nb_frames = int(s.get("nb_frames")) if s.get("nb_frames") is not None else None
 
+            v_profile = s.get("profile")
             video_streams.append(
                 VideoStreamInfo(
                     codec_name=v_codec,
@@ -592,6 +594,7 @@ def probe_media(
                     duration=v_dur,
                     bit_rate=v_br,
                     nb_frames=nb_frames,
+                    profile=str(v_profile) if v_profile is not None else None,
                 )
             )
         elif codec_type == "audio":
