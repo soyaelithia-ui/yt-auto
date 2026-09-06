@@ -1017,6 +1017,54 @@ def run_pipeline_once(
                     if scene_bg_list and shot_durations:
                         resolved_loop_path = scene_bg_list[0]
                         planned = True
+                        # Overlay QA contract fields required by validate_prepublication.
+                        # ArtDirector writes creative scenes (no duration/source); without
+                        # this rewrite, shorts smoke fails cadence/coverage/missing-source.
+                        total_audio_sec = float(sum(float(d) for d in shot_durations))
+                        scenes_plan = []
+                        creative_scenes = (
+                            visual_plan_payload.get("scenes")
+                            if isinstance(visual_plan_payload, dict)
+                            else None
+                        ) or []
+                        for s_idx, (shot_path, shot_dur) in enumerate(
+                            zip(scene_bg_list, shot_durations)
+                        ):
+                            base = (
+                                dict(creative_scenes[s_idx])
+                                if s_idx < len(creative_scenes)
+                                and isinstance(creative_scenes[s_idx], dict)
+                                else {}
+                            )
+                            base.update(
+                                {
+                                    "duration": float(shot_dur),
+                                    "source": str(shot_path),
+                                    "category": str(target_category),
+                                    "shot_index": s_idx,
+                                }
+                            )
+                            scenes_plan.append(base)
+                        if not isinstance(visual_plan_payload, dict):
+                            visual_plan_payload = {}
+                        visual_plan_payload.update(
+                            {
+                                "video_engine": "loop",
+                                "loop": True,
+                                "mode": "loop",
+                                "category": str(target_category),
+                                "scenes": scenes_plan,
+                                "covered_seconds": total_audio_sec,
+                                "black_fallbacks": 0,
+                                "shot_durations": [float(d) for d in shot_durations],
+                            }
+                        )
+                        visual_plan_path.write_text(
+                            json.dumps(
+                                visual_plan_payload, indent=2, ensure_ascii=False
+                            ),
+                            encoding="utf-8",
+                        )
                         logger.info(
                             "Scene director planned %s shots; assembling with loop stream-copy",
                             len(scene_bg_list),
