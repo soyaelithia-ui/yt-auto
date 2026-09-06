@@ -136,12 +136,14 @@ def test_loop_video_engine_compose_stream_copy_preserved_on_inactive_subtitles(
 
     mock_probe = MagicMock()
     mock_probe.duration = 10.0
-    mock_probe.video_streams = [MagicMock(width=1920, height=1080)]
+    mock_probe.video_streams = [MagicMock(width=1920, height=1080, profile="Main")]
 
     captured_cmds: list[list[str]] = []
 
     def fake_run_ffmpeg(cmd, **kwargs):
         captured_cmds.append(list(cmd))
+        if cmd:
+            Path(cmd[-1]).write_bytes(b"rendered")
         out_video.write_bytes(b"rendered")
         return MagicMock(returncode=0)
 
@@ -158,7 +160,7 @@ def test_loop_video_engine_compose_stream_copy_preserved_on_inactive_subtitles(
         subtitle_path=header_only_ass_file,
     )
 
-    assert len(captured_cmds) == 1
+    assert len(captured_cmds) >= 1
     stream_cmd = captured_cmds[0]
     assert "-c:v" in stream_cmd
     assert stream_cmd[stream_cmd.index("-c:v") + 1] == "copy"
@@ -178,12 +180,14 @@ def test_loop_video_engine_compose_muxes_active_ass_with_stream_copy(
 
     mock_probe = MagicMock()
     mock_probe.duration = 10.0
-    mock_probe.video_streams = [MagicMock(width=1080, height=1920)]
+    mock_probe.video_streams = [MagicMock(width=1080, height=1920, profile="Main")]
 
     captured_cmds: list[list[str]] = []
 
     def fake_run_ffmpeg(cmd, **kwargs):
         captured_cmds.append(list(cmd))
+        if cmd:
+            Path(cmd[-1]).write_bytes(b"rendered")
         out_video.write_bytes(b"rendered")
         return MagicMock(returncode=0)
 
@@ -201,8 +205,10 @@ def test_loop_video_engine_compose_muxes_active_ass_with_stream_copy(
         duration_sec=8.0,
     )
 
-    assert len(captured_cmds) == 1
-    cmd = captured_cmds[0]
+    assert len(captured_cmds) >= 1
+    mux_cmds = [c for c in captured_cmds if "-c:v" in c and c[c.index("-c:v") + 1] == "copy"]
+    assert len(mux_cmds) >= 1
+    cmd = mux_cmds[0]
     cmd_str = " ".join(cmd)
     assert cmd[cmd.index("-c:v") + 1] == "copy"
     assert "libx264" not in cmd

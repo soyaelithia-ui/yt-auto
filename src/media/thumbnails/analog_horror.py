@@ -35,8 +35,8 @@ def deepen_blacks(img: Image.Image, crush: float = 0.22) -> Image.Image:
     return Image.fromarray((arr * 255.0).astype(np.uint8), "RGB")
 
 
-def apply_scanlines(img: Image.Image, alpha: int = 55, step: int = 2) -> Image.Image:
-    """CRT scanlines (stronger than the previous 35/4 subtle pass)."""
+def apply_scanlines(img: Image.Image, alpha: int = 35, step: int = 4) -> Image.Image:
+    """CRT scanlines (subtle pass avoiding high-contrast edge artifacts in safe zones)."""
     rgba = img.convert("RGBA")
     w, h = rgba.size
     overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -46,7 +46,7 @@ def apply_scanlines(img: Image.Image, alpha: int = 55, step: int = 2) -> Image.I
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
-def apply_vhs_grain(img: Image.Image, amount: float = 0.12, seed: int = 42) -> Image.Image:
+def apply_vhs_grain(img: Image.Image, amount: float = 0.025, seed: int = 42) -> Image.Image:
     """Integrated film/VHS grain (not a flat overlay plate)."""
     rng = np.random.default_rng(seed)
     arr = np.asarray(img.convert("RGB"), dtype=np.float32)
@@ -140,22 +140,26 @@ def draw_camcorder_osd(
 
     # Timecode (top-right)
     tc_plate = render_pixel_text(timecode, "#E8E8E8", scale=scale)
-    overlay.paste(tc_plate, (w - margin - tc_plate.width, margin), tc_plate)
+    tc_x = w - margin - tc_plate.width
+    overlay.paste(tc_plate, (tc_x, margin), tc_plate)
 
-    # Bottom-left metadata
-    by = h - margin - 28 * scale
-    draw_pixel_text(overlay, (margin, by), cam_label, fill="#E0E0E0", scale=scale)
-    draw_pixel_text(overlay, (margin, by + 14 * scale), date_label, fill="#B0B0B0", scale=scale)
-
-    # Battery (bottom-right)
+    # Battery (top-right, placed safely to the left of timecode to avoid YouTube timestamp safe-zone collision)
     bw, bh = max(28, 18 * scale), max(12, 8 * scale)
-    bx1 = w - margin - bw - 6
-    by1 = h - margin - bh - 4
+    bx1 = tc_x - bw - 12
+    by1 = margin + max(0, (tc_plate.height - bh) // 2)
     draw.rectangle([bx1, by1, bx1 + bw, by1 + bh], outline=(40, 200, 80, 255), width=2)
     draw.rectangle([bx1 + bw, by1 + bh // 4, bx1 + bw + 4, by1 + 3 * bh // 4], fill=(40, 200, 80, 255))
     fill_w = int((bw - 4) * max(0.0, min(1.0, battery)))
     if fill_w > 0:
         draw.rectangle([bx1 + 2, by1 + 2, bx1 + 2 + fill_w, by1 + bh - 2], fill=(40, 220, 90, 255))
+
+    # Bottom-left metadata (clearing YouTube Shorts bottom 450px UI overlay in vertical mode)
+    if h > w:
+        by = min(h - margin - 28 * scale, h - 480 - 28 * scale)
+    else:
+        by = h - margin - 28 * scale
+    draw_pixel_text(overlay, (margin, by), cam_label, fill="#E0E0E0", scale=scale)
+    draw_pixel_text(overlay, (margin, by + 14 * scale), date_label, fill="#B0B0B0", scale=scale)
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
@@ -166,12 +170,12 @@ def apply_analog_horror_grade(
     target_size: Optional[Tuple[int, int]] = None,
     contrast: float = 1.32,
     ca_shift: int = 3,
-    grain: float = 0.11,
-    scanline_alpha: int = 55,
+    grain: float = 0.025,
+    scanline_alpha: int = 35,
     cast_strength: float = 0.26,
     crush: float = 0.18,
     seed: int = 42,
-    with_osd: bool = True,
+    with_osd: bool = False,
     osd_kwargs: Optional[dict] = None,
 ) -> Image.Image:
     """Full found-footage grade pipeline for thumbnail plates."""
@@ -184,7 +188,7 @@ def apply_analog_horror_grade(
     out = ImageEnhance.Contrast(out).enhance(contrast)
     out = apply_chromatic_aberration(out, shift=ca_shift)
     out = apply_vhs_grain(out, amount=grain, seed=seed)
-    out = apply_scanlines(out, alpha=scanline_alpha, step=2)
+    out = apply_scanlines(out, alpha=scanline_alpha, step=4)
     if with_osd:
         out = draw_camcorder_osd(out, **(osd_kwargs or {}))
     return out

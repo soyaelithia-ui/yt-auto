@@ -41,43 +41,65 @@ class MokuHorrorCurator(INarrativeCurator):
         if "001" in top_lower or "001" in scp_id or "dios roto" in top_lower or "mekhane" in top_lower:
             return (
                 "Este archivo borró una costa entera. "
-                "En 1942, fanáticos de la Iglesia del Dios Roto ensamblaron un coloso biomecánico en Baja California creyendo que resucitaban a su deidad Mekhane para salvar a la humanidad. "
-                "Pero cometieron un error fatal: el corazón instalado provenía de la infame Fábrica, desatando un titán insaciable devorador de metales que asimiló ciudades enteras y casi aniquila por completo el continente. "
-                "La Fundación tuvo que activar el rayo orbital del satélite 2399 para pulverizar la abominación en una explosión atómica colosal... "
-                "y la razón por la que el mar sigue temblando hoy en día..."
+                "En 1942, fanáticos de la Iglesia del Dios Roto ensamblaron un coloso biomecánico en las costas de Baja California "
+                "creyendo resucitar a su deidad Mekhane para salvar a la humanidad. Pero cometieron un error fatal: el corazón instalado "
+                "provenía de la infame Fábrica, una entidad corrupta que transformó la máquina en un titán insaciable devorador de metales "
+                "y carne viva. La masa de engranajes hirvientes asimiló aldeas enteras, absorbiendo trenes, búnkeres y civiles en su torso "
+                "de acero chirriante. Desesperada por evitar la aniquilación continental, la Fundación activó el cañón orbital de partículas "
+                "para vaporizar la abominación en una detonación atómica clasificada... "
+                "y la aterradora razón por la que el fondo marino aún emite pulsos mecánicos..."
             )
 
-        # 3. Incident 096-1-A & SCP-096 (El Chico Tímido / Inevitabilidad / LaloBeRoth style)
+        # 3. Incident 096-1-A: La Fuga de los Cuatro Píxeles
+        if "096-1-a" in top_lower or "incidente 096" in top_lower:
+            return (
+                "El incidente 096-1-A demostró que la Fundación jamás podrá contener lo inevitable. "
+                "Veinte años después de unas vacaciones familiares en la montaña, un civil miró una vieja foto donde apenas cuatro píxeles "
+                "borrosos revelaban el rostro de SCP-096. A miles de kilómetros de distancia, la criatura rompió su celda blindada en el Sitio-19 "
+                "y comenzó una carrera frenética e imparable hacia el objetivo. Ni los ataques aéreos coordinados con misiles guiados, ni los proyectiles "
+                "pesados de grueso calibre ni las unidades móviles de choque pudieron frenar el avance del monstruo. El escuadrón entero fue "
+                "despedazado en segundos y la anomalía masacró al objetivo civil junto a todos los testigos del perímetro... "
+                "y la inquietante advertencia de revisar cada rincón de tus fotografías antiguas..."
+            )
+
+        # 4. SCP-096: El Chico Tímido (Inevitabilidad / Terror cinético)
         if "096" in top_lower or "096" in scp_id or "tímido" in top_lower or "shy guy" in top_lower:
             return (
-                "Cuatro píxeles. Bastó para matar un batallón. "
-                "Conocido como el Chico Tímido, SCP-096 entra en un estado de furia ciega incontrolable si alguien observa sus rasgos faciales, incluso en una grabación digital borrosa o el tenue reflejo de un cristal. "
-                "En ese milisegundo, absolutamente nada en la Tierra puede detener su carrera: derriba búnkeres subterráneos de titanio a velocidades supersónicas hasta no dejar ningún rastro del observador con vida. "
-                "Nadie sobrevive tras ver su cara en este mundo... "
-                "y la prueba irrefutable de que no puedes escapar de su mirada..."
+                "Cuatro píxeles en el fondo de una fotografía familiar bastaron para sentenciar a muerte a decenas de personas. "
+                "SCP-096 parece un humanoide dócil y demacrado que pasa los días sollozando en posición fetal contra las paredes de su celda blindada. "
+                "Pero en el instante exacto en que alguien observa sus rasgos faciales, ya sea en persona, video o mediante un reflejo insignificante, "
+                "entra en una crisis homicida de pánico absoluto. La criatura emite alaridos inhumanos ensordecedores mientras rompe la contención a "
+                "velocidades supersónicas, destrozando búnkeres de titanio, muros de hormigón y escuadrones fuertemente armados con un único objetivo: "
+                "despedazar físicamente al observador sin dejar el menor rastro con vida... "
+                "y la aterradora certeza de que jamás podrás esconderte de su mirada..."
             )
 
-        # 4. SCP-1048: The Builder Bear (El Oso Constructor / LaloBeRoth style)
+        # 5. SCP-1048: The Builder Bear (El Oso Constructor / LaloBeRoth style)
         if "1048" in top_lower or "1048" in scp_id or "oso" in top_lower or "builder bear" in top_lower:
             return (
-                "Un oso de peluche. Réplicas hechas de orejas. "
-                "Clasificado inicialmente como Seguro, SCP-1048 comenzó a recolectar materiales biológicos en secreto por los pasillos subterráneos de la instalación. "
-                "Una noche encontraron a su primera creación en la cafetería: un oso idéntico hecho enteramente con orejas humanas vivas que emitía chillidos ultrasónicos mortales capaces de reventar los órganos internos del personal de guardia al instante. "
-                "El equipo de contención fue masacrado y el oso original sigue escondido en los conductos de ventilación... "
-                "por eso, si alguna vez encuentras un juguete abandonado en la oscuridad..."
+                "Un tierno oso de peluche que se convirtió en la peor pesadilla biológica del Sitio-24 de la Fundación. "
+                "Clasificado inicialmente como Seguro por deambular libremente abrazando con afecto a todo el personal, SCP-1048 comenzó "
+                "a recolectar tejido humano en secreto durante las noches. La alarma general sonó cuando descubrieron en la cafetería a "
+                "SCP-1048-A, una réplica grotesca construida enteramente con orejas humanas vivas amputadas. Al ser acorralada, la abominación "
+                "emitió un chillido ultrasónico ensordecedor que hizo brotar cartílago de forma descontrolada dentro de los pulmones y gargantas "
+                "de los guardias, asfixiándolos con su propia carne. El oso original continúa prófugo deslizándose por los conductos de ventilación "
+                "subterráneos... "
+                "por eso, si alguna vez encuentras un juguete de trapo mirándote desde la oscuridad..."
             )
 
-        # 5. SCP-049: El Doctor de la Plaga (Locura quirúrgica)
+        # 6. SCP-049: El Doctor de la Plaga (Locura quirúrgica)
         if "049" in top_lower or "049" in scp_id or "plaga" in top_lower or "peste" in top_lower:
             return (
-                "Su máscara esconde la cura más atroz. "
-                "SCP-049 insiste en que todos nosotros padecemos una enfermedad terminal desconocida llamada la Pestilencia. "
-                "Su contacto biológico directo detiene las funciones del corazón al instante sin causar dolor, para luego reanimar los cadáveres mediante toscas cirugías quirúrgicas transformándolos en marionetas obedientes sin voluntad propia ni recuerdos. "
-                "Cualquier intento de diálogo debe realizarse detrás de mamparas blindadas y bajo estricta vigilancia armada con rifles tranquilizantes de alto calibre para evitar una brecha biológica inminente... "
-                "y la única señal de que la cura ya ha comenzado en tu cuerpo..."
+                "Bajo su túnica negra y máscara de cuervo medieval no hay un salvador, sino la cura más atroz de la Fundación. "
+                "SCP-049 insiste con fría y siniestra obsesión en que toda la humanidad padece una misteriosa enfermedad terminal llamada la Pestilencia. "
+                "Un simple roce de sus manos enguantadas paraliza de golpe el sistema nervioso y detiene el corazón al instante sin causar dolor visible. "
+                "Acto seguido, extrae de su maletín escalpelos e hilos oxidados para realizar brutales incisiones quirúrgicas en los tejidos, "
+                "reanimando los cadáveres como criaturas desalmadas e hiperagresivas obedientes a sus órdenes. Los investigadores vigilan su celda "
+                "tras mamparas blindadas armados con tranquilizantes pesados, conscientes de que para el doctor todos somos pacientes terminales... "
+                "y la única señal de que su tratamiento ya comenzó en tus venas..."
             )
 
-        # 6. SCP-3008: El IKEA Infinito (Supervivencia no euclidiana)
+        # 7. SCP-3008: El IKEA Infinito (Supervivencia no euclidiana)
         if "3008" in top_lower or "3008" in scp_id or "ikea" in top_lower:
             return (
                 "Entraste buscando muebles comunes para tu hogar, pero al darte la vuelta las puertas automáticas de cristal habían desaparecido para siempre en la nada absoluta. "
@@ -87,7 +109,7 @@ class MokuHorrorCurator(INarrativeCurator):
                 "y la razón por la que nunca debes entrar solo a una tienda desconocida..."
             )
 
-        # 7. Incident Clef-Kondraki / SCP-239 (Crossover de personal mítico / LaloBeRoth style)
+        # 8. Incident Clef-Kondraki / SCP-239 (Crossover de personal mítico / LaloBeRoth style)
         if "clef" in top_lower or "kondraki" in top_lower or "239" in top_lower:
             return (
                 "El incidente más caótico y desquiciado en la historia de la Fundación SCP ocurrió cuando el doctor Clef intentó eliminar a una niña con poderes de alteración de la realidad. "
@@ -97,7 +119,7 @@ class MokuHorrorCurator(INarrativeCurator):
                 "por eso, cuando dos científicos legendarios entran en conflicto en el Sitio..."
             )
 
-        # 8. SCP-173: La Escultura de Concreto
+        # 9. SCP-173: La Escultura de Concreto
         if "173" in top_lower or "173" in scp_id or "escultura" in top_lower:
             return (
                 "Bajo ninguna circunstancia apartes la vista ni parpadees frente a esta escultura de concreto y varillas de acero reforzado. "
@@ -107,7 +129,7 @@ class MokuHorrorCurator(INarrativeCurator):
                 "y el motivo por el cual tus ojos comienzan a arder en este momento..."
             )
 
-        # 9. Generic SCP Fallback (Dynamic, high retention, no boilerplate)
+        # 10. Generic SCP Fallback (Dynamic, high retention, no boilerplate)
         if scp_entry:
             scp_name = scp_entry.get("name", "Anomalía")
             obj_class = scp_entry.get("object_class", "Euclid")
@@ -121,7 +143,7 @@ class MokuHorrorCurator(INarrativeCurator):
                 "por eso, si alguna vez te encuentras frente a esta anomalía prohibida..."
             )
 
-        # 10. General Horror / Creepypasta Short (High tension, visceral dread, seamless loop)
+        # 11. General Horror / Creepypasta Short (High tension, visceral dread, seamless loop)
         clean_topic = re.sub(r"[""'']", "", topic).strip()
         return (
             f"A las tres de la madrugada, los sensores perimetrales de la estación registraron una presencia imposible alrededor de {clean_topic}. "

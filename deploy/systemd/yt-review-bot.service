@@ -11,6 +11,7 @@ Group=developers
 # esos paths deben quedar absolutos y alineados con YT_AUTO_ROOT.
 # Override en otro host: systemctl edit yt-review-bot.service y redefinir
 # Environment=YT_AUTO_ROOT=..., WorkingDirectory=... y ExecStart=...
+EnvironmentFile=-/srv/projects/yt-auto/.env
 Environment=YT_AUTO_ROOT=/srv/projects/yt-auto
 WorkingDirectory=/srv/projects/yt-auto
 Environment=YT_PROFILE=prod

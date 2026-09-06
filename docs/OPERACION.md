@@ -86,27 +86,44 @@ Solo para VPS **con root**. El despliegue Docker de la sección 2 no usa systemd
 
 **Root de despliegue canónico (VPS):** `/srv/projects/yt-auto`.
 
-Los unit files fijan ese path en `WorkingDirectory=` y `ExecStart=` (systemd exige rutas absolutas ahí; no expande `Environment=` en esos campos). También exportan `Environment=YT_AUTO_ROOT=/srv/projects/yt-auto` (default documentado) y derivan rutas de DB con `${YT_AUTO_ROOT}` donde sí hay sustitución.
+Los unit files fijan ese path en `WorkingDirectory=` y `ExecStart=` (systemd exige rutas absolutas ahí; no expande `Environment=` en esos campos). También exportan `EnvironmentFile=-/srv/projects/yt-auto/.env` para carga de credenciales, `Environment=YT_AUTO_ROOT=/srv/projects/yt-auto` (default documentado) y derivan rutas de DB con `${YT_AUTO_ROOT}` donde sí hay sustitución.
 
-- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`main.py daemon --interval 60`). Default `MemoryMax=6G`; low-RAM: drop-in `deploy/systemd/yt-lanes-daemon.service.d/low-ram.conf` → `MemoryMax=2G`.
-- `yt-review-bot.service`: Bot interactivo Telegram (`deploy/tmux_review_bot.py`).
+- `yt-lanes-daemon.service`: Daemon autónomo multi-carril (`main.py daemon --interval 60`). Default `MemoryMax=6G`; low-RAM: drop-in `deploy/systemd/yt-lanes-daemon.service.d/low-ram.conf` → `MemoryMax=2G`. Anti-doble-polling: `ENABLE_TELEGRAM_CALLBACK_POLLING=0`.
+- `yt-review-bot.service`: Bot interactivo Telegram (`deploy/tmux_review_bot.py`). Único poller autorizado: `ENABLE_TELEGRAM_CALLBACK_POLLING=1`. Default `MemoryMax=1G`.
 
 ```bash
 # Systemd setup (requiere sudo; checkout en /srv/projects/yt-auto)
-sudo cp deploy/systemd/*.service /etc/systemd/system/ && sudo systemctl daemon-reload
+sudo cp deploy/systemd/*.service /etc/systemd/system/
+# Opcional (recomendado para hosts con <=4GB RAM): instalar drop-in low-ram
+sudo cp -r deploy/systemd/yt-lanes-daemon.service.d /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable --now yt-lanes-daemon.service yt-review-bot.service
 
 # Respaldo SQLite verificado y barrido de cola
 python3 main.py backup && python3 main.py queue sweep
 ```
 
+### Checklist de Despliegue VPS (Systemd / Tmux)
+
+| Paso | Control / Tarea | Comando de Verificación / Acción | Criterio de Aceptación |
+|---|---|---|---|
+| **1. Usuario y Grupo** | Verificar pertenencia al grupo `developers` y usuario `moku`. | `id -Gn \| grep -w developers` (si falta: `sudo groupadd -f developers && sudo usermod -aG developers $USER`) | El usuario de ejecución pertenece a `developers`. |
+| **2. Permisos y Entorno** | Permisos estrictos de secrets/env y script de control ejecutable. | `chmod 600 .env`<br>`chmod +x deploy/ctl.sh` | `.env` protegido; `./deploy/ctl.sh` ejecutable (`100755`). |
+| **3. Virtualenv y Deps** | Python 3.12 y dependencias instaladas en canonical path. | `/srv/projects/yt-auto/.venv/bin/python --version`<br>`ffmpeg -version` | `.venv` y FFmpeg funcionales. |
+| **4. Preflight Check** | Validación de APIs, tokens y carpetas de Drive. | `python3 main.py run --preflight` | `Production preflight: PASS`. |
+| **5. Instalación Systemd** | Copia de units y drop-in low-RAM si aplica. | `sudo cp deploy/systemd/*.service /etc/systemd/system/`<br>`sudo cp -r deploy/systemd/yt-lanes-daemon.service.d /etc/systemd/system/`<br>`sudo systemctl daemon-reload` | Unidades registradas sin sintaxis rota. |
+| **6. Inicio de Servicios** | Arranque atómico de bot de review y daemon productor. | `sudo systemctl enable --now yt-review-bot.service yt-lanes-daemon.service` | Ambos servicios `active (running)`. |
+| **7. Operación sin Systemd (Tmux)** | Alternativa en hosts sin root mediante script supervisor. | `./deploy/ctl.sh status`<br>`./deploy/ctl.sh start all` | Sesiones `ytauto-sched` y `ytauto-bot` activas. |
+| **8. Verificación Operacional** | Diagnóstico en vivo de logs y base de datos. | `systemctl status yt-lanes-daemon.service yt-review-bot.service`<br>`python3 main.py status --apis` | Sin colisiones de polling ni fallas de memoria. |
+
 ### Instalar fuera de `/srv/projects/yt-auto`
 
-No editar a mano el unit copiado: usar drop-in para mantener `WorkingDirectory`, `ExecStart` y `YT_AUTO_ROOT` alineados.
+No editar a mano el unit copiado: usar drop-in para mantener `WorkingDirectory`, `ExecStart`, `EnvironmentFile` y `YT_AUTO_ROOT` alineados.
 
 ```bash
 sudo systemctl edit yt-lanes-daemon.service
 # [Service]
+# EnvironmentFile=-/opt/yt-auto/.env
 # Environment=YT_AUTO_ROOT=/opt/yt-auto
 # WorkingDirectory=/opt/yt-auto
 # Environment=YOUTUBE_AUTOMATION_DB=/opt/yt-auto/data/shorts_queue.db
@@ -115,6 +132,7 @@ sudo systemctl edit yt-lanes-daemon.service
 
 sudo systemctl edit yt-review-bot.service
 # [Service]
+# EnvironmentFile=-/opt/yt-auto/.env
 # Environment=YT_AUTO_ROOT=/opt/yt-auto
 # WorkingDirectory=/opt/yt-auto
 # ExecStart=/opt/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
