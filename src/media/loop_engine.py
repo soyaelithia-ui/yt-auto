@@ -847,6 +847,64 @@ class LoopVideoEngine(BaseVideoCompositor):
         cmd.append(str(output_path))
         return cmd
 
+
+    def ensure_h264_main_profile(
+        self,
+        video_path: Path | str,
+        *,
+        crf: int | None = None,
+        preset: str | None = None,
+        threads: int | None = None,
+        timeout: int = 600,
+    ) -> Path:
+        """Re-encode to H.264 Main when the file is High/other (YouTube gate).
+
+        Loop bank assets are often High; stream-copy preserves that and YouTube
+        rejects with "Invalid video profile: High (expected Main)". No-op when
+        already Main/Baseline/Constrained Baseline.
+        """
+        target = Path(video_path)
+        if not target.is_file() or target.stat().st_size <= 0:
+            return target
+        try:
+            probe = probe_media(target)
+        except Exception as exc:
+            logger.warning("ensure_h264_main_profile: probe failed for %s: %s", target, exc)
+            return target
+        profile = ""
+        if probe.video_streams:
+            profile = str(getattr(probe.video_streams[0], "profile", "") or "")
+        normalized = profile.strip().lower().replace(" ", "")
+        if normalized in {"main", "baseline", "constrainedbaseline", "constrained_baseline"}:
+            return target
+        out_tmp = target.with_name(target.stem + ".main" + target.suffix)
+        crf_v = default_render_crf() if crf is None else crf
+        preset_v = preset or default_render_preset()
+        threads_v = threads or default_ffmpeg_threads()
+        cmd = [
+            "ffmpeg", "-y", "-i", str(target),
+            "-map", "0:v:0", "-map", "0:a:0?",
+            "-c:v", "libx264",
+            "-profile:v", "main",
+            "-pix_fmt", "yuv420p",
+            "-preset", str(preset_v),
+            "-crf", str(crf_v),
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-ar", "48000",
+            "-ac", "2",
+            "-threads", str(threads_v),
+            "-movflags", "+faststart",
+            str(out_tmp),
+        ]
+        logger.info(
+            "Re-encoding %s to H.264 Main (was profile=%r)", target.name, profile or "unknown"
+        )
+        run_ffmpeg(cmd, timeout=timeout, check=True)
+        out_tmp.replace(target)
+        return target
+
+
     def build_stream_copy_composition_cmd(
         self,
         concat_list_path: Path,
@@ -1033,6 +1091,13 @@ class LoopVideoEngine(BaseVideoCompositor):
                     )
                     logger.info("Executing Stream-Copy LoopVideoEngine command: %s", " ".join(cmd_sc))
                     run_ffmpeg(cmd_sc, timeout=timeout, check=True)
+                    self.ensure_h264_main_profile(
+                        out_path,
+                        crf=crf,
+                        preset=preset,
+                        threads=kwargs.get("threads"),
+                        timeout=timeout,
+                    )
                     return str(out_path)
             except Exception as exc:
                 logger.warning("Stream-Copy failed (%s); falling back to re-encoding filtergraph.", exc)
