@@ -441,12 +441,12 @@ def detect_opening_hook_strength(
         positive_markers.append(f"stakes_or_time_constraint: {', '.join(matched_stakes)}")
         positive_bonus += 0.20
 
-    # Spoken ≤3s hook budget (Shorts retention)
+    # Spoken ≤3s bonus for Shorts; only penalize long openings that lack tension cues
     within, hook_secs, _hook_txt = opening_hook_within_budget(clean_title, clean_content, max_seconds=3.0)
     if within and positive_bonus > 0:
         positive_bonus += 0.10
         positive_markers.append(f"spoken_hook_within_3s:{hook_secs:.2f}s")
-    elif not within and hook_secs > 4.5:
+    elif (not within) and hook_secs > 4.5 and positive_bonus < 0.25:
         negative_penalty += 0.15
         negative_penalties.append(f"spoken_hook_too_long:{hook_secs:.2f}s")
 
