@@ -874,10 +874,12 @@ class LoopVideoEngine(BaseVideoCompositor):
         profile = ""
         if probe.video_streams:
             vs0 = probe.video_streams[0]
-            if isinstance(vs0, dict):
-                profile = str(vs0.get("profile") or "")
-            else:
-                profile = str(getattr(vs0, "profile", "") or "")
+            profile = str(getattr(vs0, "profile", None) or "")
+        if not profile:
+            for s in (probe.raw_payload or {}).get("streams", []) or []:
+                if s.get("codec_type") == "video":
+                    profile = str(s.get("profile") or "")
+                    break
         normalized = profile.strip().lower().replace(" ", "")
         if normalized in {"main", "baseline", "constrainedbaseline", "constrained_baseline"}:
             return target
