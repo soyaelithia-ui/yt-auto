@@ -1,20 +1,22 @@
-# Lote D2 — Baseline timing (mock) + cuellos ≥25%
+# Lote D2 — Baseline timing + cuellos ≥25%
 
-Date: 2026-09-05 (America/El_Salvador). Harness: `main.py profile -c moku --lane moku-scp-shorts --mock --iterations 1`.
+Sources: Live `/tmp/d2-baseline.json` + Nova mock profile (`moku-scp-shorts`).
 
-| Phase | wall-clock (s) | % of total |
-|-------|----------------|------------:|
-| **9_video_rendering** | **0.0316** | **25.4%** ≥25% |
-| 5_tts_synthesis | 0.0208 | 16.7% |
-| 2_ingest_translate | 0.0117 | 9.4% |
-| 11_thumbnail_metadata | 0.0101 | 8.1% |
-| (rest) | <0.007 each | <6% each |
+## Live baseline
+- wall-clock **~0.132 s** · peak RSS **~87.16 MB** · Δ8=0 / Δ9 gate OK
+- Top stages (mock harness — real FFmpeg/TTS will grow):
 
-**Total mock wall-clock:** 0.1243 s (RSS ~89 MB).
+| Phase | sec | % |
+|-------|----:|--:|
+| `9_video_rendering` | 0.0314 | **23.9%** (just under 25%) |
+| `5_tts_synthesis` | 0.0212 | 16.1% |
+| `2_ingest_translate` | 0.0124 | 9.4% |
+| `11_thumbnail_metadata` | 0.0111 | 8.4% |
 
-Notes for Quill:
-- Mock path understates real FFmpeg/TTS; expect `9_video_rendering` (and possibly TTS) to dominate a live `-t` / full render.
-- Live D1 smoke already showed stages 8–9 ~84–88 MB with lavfi; this baseline is *time* share, not RSS.
-- Next: re-run with `--mock false` / synthetic `-t` when secrets allow and compare %.
+## Cuellos ≥25%
+- **Ninguno estricto en mock Live** (tope `9_video_rendering` 23.9%).
+- Hipótesis prod: `9_video_rendering` (+ TTS) cruzará ≥25% en render real → mantener lavfi/stream-copy (#57); no reintroducir numpy frame-pump.
 
-Bottleneck action (≥25%): keep stream-copy / lavfi hot path; avoid numpy reintroductions (covered by #57).
+## PRs Nova D2
+- `feat/lote-d2-stories-perf` — Reddit hybrid scoring on ingest + hooks ≤3s + 3 títulos Moku/SCP (rama local, Scrub push).
+- REDUCE aparte con Scrub (thumbs helper dedupe / lavfi palette share) — sin assets/loops/.
