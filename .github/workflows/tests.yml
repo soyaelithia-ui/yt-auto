@@ -29,6 +29,10 @@ jobs:
         env:
           YT_PROFILE: test
         run: pytest tests/unit/test_live_rss_gate.py -q --timeout=120
+      - name: D2 mock timing gate (moku-scp-shorts)
+        env:
+          YT_PROFILE: test
+        run: pytest tests/unit/test_d2_timing_gate.py -q --timeout=120
       - name: Run offline suite (live tests excluded)
         env:
           YT_PROFILE: test
