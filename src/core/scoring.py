@@ -308,6 +308,49 @@ _NEGATIVE_PREAMBLE_PATTERNS = [
 ]
 
 
+
+def estimate_spoken_seconds(text: str, *, words_per_sec: float = 2.7) -> float:
+    """Rough Spanish narration duration from word count (~2.7 wps)."""
+    words = re.findall(r"\b\w+\b", text or "")
+    if not words or words_per_sec <= 0:
+        return 0.0
+    return round(len(words) / float(words_per_sec), 3)
+
+
+def first_spoken_hook(text: str, *, max_seconds: float = 3.0, words_per_sec: float = 2.7) -> str:
+    """Return the leading clause intended as ≤max_seconds spoken hook."""
+    clean = re.sub(r"\s+", " ", (text or "").strip())
+    if not clean:
+        return ""
+    # Prefer first sentence-like unit
+    parts = re.split(r"(?<=[.!?…])\s+", clean)
+    candidate = parts[0] if parts else clean
+    max_words = max(1, int(max_seconds * words_per_sec))
+    words = re.findall(r"\S+", candidate)
+    if len(words) > max_words:
+        candidate = " ".join(words[:max_words]).rstrip(",;:") + "."
+    return candidate
+
+
+def opening_hook_within_budget(
+    title: str,
+    content: str,
+    *,
+    max_seconds: float = 3.0,
+) -> tuple[bool, float, str]:
+    """True when the natural first spoken sentence fits within max_seconds.
+
+    Does not truncate: measures the real opening clause, then returns a
+    budget-trimmed hook string for callers that need a ≤3s line.
+    """
+    clean = re.sub(r"\s+", " ", (content or title or "").strip())
+    parts = re.split(r"(?<=[.!?…])\s+", clean) if clean else [""]
+    natural = parts[0] if parts else ""
+    secs = estimate_spoken_seconds(natural)
+    trimmed = first_spoken_hook(clean, max_seconds=max_seconds)
+    return secs <= max_seconds + 0.05, secs, trimmed
+
+
 def detect_opening_hook_strength(
     title: str,
     content: str,
@@ -397,6 +440,15 @@ def detect_opening_hook_strength(
     if matched_stakes:
         positive_markers.append(f"stakes_or_time_constraint: {', '.join(matched_stakes)}")
         positive_bonus += 0.20
+
+    # Spoken ≤3s bonus for Shorts; only penalize long openings that lack tension cues
+    within, hook_secs, _hook_txt = opening_hook_within_budget(clean_title, clean_content, max_seconds=3.0)
+    if within and positive_bonus > 0:
+        positive_bonus += 0.10
+        positive_markers.append(f"spoken_hook_within_3s:{hook_secs:.2f}s")
+    elif (not within) and hook_secs > 4.5 and positive_bonus < 0.25:
+        negative_penalty += 0.15
+        negative_penalties.append(f"spoken_hook_too_long:{hook_secs:.2f}s")
 
     raw_score = base_score + positive_bonus - negative_penalty
     clamped_score = max(0.0, min(1.0, raw_score))

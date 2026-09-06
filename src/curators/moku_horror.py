@@ -30,7 +30,7 @@ class MokuHorrorCurator(INarrativeCurator):
         # 1. SCP-027: El Dios de las Alimañas (Body horror visceral / JOMOSU style)
         if "027" in top_lower or "027" in scp_id or "alimañas" in top_lower or "vermin" in top_lower:
             return (
-                "Si sientes un cosquilleo inexplicable bajo tu piel, aléjate de esta celda de inmediato. "
+                "Cosquilleo bajo la piel: sal de esa celda. "
                 "En el Sitio-19 de la Fundación, el anfitrión de SCP-027 no puede cerrar los ojos sin que miles de cucarachas, arañas venenosas y roedores broten espontáneamente a su alrededor en la oscuridad. "
                 "Tres toneladas de vacío continuo incineran a las criaturas día y noche, pero las biopsias del personal médico revelaron lo peor: el enjambre no ataca al sujeto, sino que lo obedece como a una deidad viviente. "
                 "Y si su corazón se detiene por un infarto o eutanasia profiláctica, la plaga saltará en un microsegundo al humano vivo más cercano en la habitación... "
@@ -40,7 +40,7 @@ class MokuHorrorCurator(INarrativeCurator):
         # 2. SCP-001: El Dios Roto (Mekhane / Apocalipsis industrial / JOMOSU style)
         if "001" in top_lower or "001" in scp_id or "dios roto" in top_lower or "mekhane" in top_lower:
             return (
-                "Este archivo clasificado provocó la destrucción de una costa entera y el nacimiento de un nuevo océano en el planeta. "
+                "Este archivo borró una costa entera. "
                 "En 1942, fanáticos de la Iglesia del Dios Roto ensamblaron un coloso biomecánico en Baja California creyendo que resucitaban a su deidad Mekhane para salvar a la humanidad. "
                 "Pero cometieron un error fatal: el corazón instalado provenía de la infame Fábrica, desatando un titán insaciable devorador de metales que asimiló ciudades enteras y casi aniquila por completo el continente. "
                 "La Fundación tuvo que activar el rayo orbital del satélite 2399 para pulverizar la abominación en una explosión atómica colosal... "
@@ -50,7 +50,7 @@ class MokuHorrorCurator(INarrativeCurator):
         # 3. Incident 096-1-A & SCP-096 (El Chico Tímido / Inevitabilidad / LaloBeRoth style)
         if "096" in top_lower or "096" in scp_id or "tímido" in top_lower or "shy guy" in top_lower:
             return (
-                "Cuatro míseros píxeles en una fotografía antigua. Eso fue todo lo que necesitó esta criatura para aniquilar un batallón blindado entero a miles de kilómetros de distancia. "
+                "Cuatro píxeles. Bastó para matar un batallón. "
                 "Conocido como el Chico Tímido, SCP-096 entra en un estado de furia ciega incontrolable si alguien observa sus rasgos faciales, incluso en una grabación digital borrosa o el tenue reflejo de un cristal. "
                 "En ese milisegundo, absolutamente nada en la Tierra puede detener su carrera: derriba búnkeres subterráneos de titanio a velocidades supersónicas hasta no dejar ningún rastro del observador con vida. "
                 "Nadie sobrevive tras ver su cara en este mundo... "
@@ -60,7 +60,7 @@ class MokuHorrorCurator(INarrativeCurator):
         # 4. SCP-1048: The Builder Bear (El Oso Constructor / LaloBeRoth style)
         if "1048" in top_lower or "1048" in scp_id or "oso" in top_lower or "builder bear" in top_lower:
             return (
-                "Imaginen un tierno oso de peluche que se pasea libre por la base haciéndose amigo de todos los guardias... hasta que descubren de qué construye sus réplicas. "
+                "Un oso de peluche. Réplicas hechas de orejas. "
                 "Clasificado inicialmente como Seguro, SCP-1048 comenzó a recolectar materiales biológicos en secreto por los pasillos subterráneos de la instalación. "
                 "Una noche encontraron a su primera creación en la cafetería: un oso idéntico hecho enteramente con orejas humanas vivas que emitía chillidos ultrasónicos mortales capaces de reventar los órganos internos del personal de guardia al instante. "
                 "El equipo de contención fue masacrado y el oso original sigue escondido en los conductos de ventilación... "
@@ -70,7 +70,7 @@ class MokuHorrorCurator(INarrativeCurator):
         # 5. SCP-049: El Doctor de la Plaga (Locura quirúrgica)
         if "049" in top_lower or "049" in scp_id or "plaga" in top_lower or "peste" in top_lower:
             return (
-                "Bajo una máscara de cerámica medieval fusionada directamente a su piel, este doctor oculta la cura más aterradora de toda la historia humana. "
+                "Su máscara esconde la cura más atroz. "
                 "SCP-049 insiste en que todos nosotros padecemos una enfermedad terminal desconocida llamada la Pestilencia. "
                 "Su contacto biológico directo detiene las funciones del corazón al instante sin causar dolor, para luego reanimar los cadáveres mediante toscas cirugías quirúrgicas transformándolos en marionetas obedientes sin voluntad propia ni recuerdos. "
                 "Cualquier intento de diálogo debe realizarse detrás de mamparas blindadas y bajo estricta vigilancia armada con rifles tranquilizantes de alto calibre para evitar una brecha biológica inminente... "

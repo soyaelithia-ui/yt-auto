@@ -295,16 +295,33 @@ def run_pipeline_once(
         if not directed and not is_test_environment():
 
             from src.db import is_story_duplicate
+            from src.core.scoring import filter_and_score_story
+
             stories = fetch_reddit_stories(subreddit=settings.source_feed, limit=25)
+            ingest_lane = resolve_lane_for_run(channel_key, lane_id)
             for s_item in stories:
-                if not is_story_duplicate(channel_name, s_item["id"], s_item.get("content"), database):
-                    repository.enqueue(
-                        s_item["id"],
-                        s_item["title"],
-                        s_item["content"],
-                        s_item["url"],
-                        channel_key,
+                if is_story_duplicate(channel_name, s_item["id"], s_item.get("content"), database):
+                    continue
+                verdict = filter_and_score_story(s_item, lane=ingest_lane)
+                if not verdict.passed:
+                    logger.info(
+                        "Skipping Reddit story %s (hybrid=%.3f): %s",
+                        s_item.get("id"),
+                        verdict.hybrid_score,
+                        verdict.rejection_summary or "quality_gate",
                     )
+                    continue
+                repository.enqueue(
+                    s_item["id"],
+                    s_item["title"],
+                    s_item["content"],
+                    s_item["url"],
+                    channel_key,
+                    score=int(verdict.db_rank_score),
+                    upvote_ratio=float(s_item.get("upvote_ratio") or 0.0),
+                    num_comments=int(s_item.get("num_comments") or 0),
+                    lane_id=getattr(ingest_lane, "id", None),
+                )
         if directed:
             story = repository.claim_exact(
                 requested_story_id,

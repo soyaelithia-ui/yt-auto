@@ -654,7 +654,7 @@ class CinematicScriptCuratorAgent:
         # Built-in robust text templates
         if "scp" in lane_key:
             return (
-                f"Ítem #: SCP-173. Clasificación de Objeto: Euclid. "
+                f"SCP-173. No parpadees. Contención Euclid. "
                 "Los protocolos de contención primaria exigen sellado hermético en búnker subterráneo de hormigón y titanio con tres operarios Clase-D. "
                 "Durante la prueba de telemetría, los sensores registraron fluctuaciones fuera de escala mientras el contacto visual se rompía por un parpadeo involuntario. "
                 "A las cero trescientas horas, la compuerta blindada colapsó ante una fuerza descomunal, desatando la brecha crítica de contención en el sector siete. "
@@ -662,7 +662,7 @@ class CinematicScriptCuratorAgent:
             )
         elif "aita" in lane_key:
             return (
-                f"¿Soy la mala por negarme a entregar los ahorros de toda mi vida a mi hermana tras descubrir lo que planeaba en su fiesta de compromiso? "
+                f"¿Soy la mala por negarles mi dinero? "
                 "Durante diez años trabajé turnos dobles para comprar mi primera vivienda, pero mi familia organizó una cena sorpresa para exigirme que saldara sus deudas. "
                 "Cuando me negué con serenidad, la mesa se convirtió en un tribunal de reproches donde me acusaron de egoísta y amenazaron con expulsarme del círculo familiar. "
                 "Descubrí además que habían falsificado documentos notariales para intentar acceder a mis cuentas bancarias sin mi consentimiento. "
@@ -672,7 +672,7 @@ class CinematicScriptCuratorAgent:
             )
         else: # horror
             return (
-                f"A las tres de la madrugada, las alertas de la estación de monitoreo solitaria registraron una oscilación electromagnética imposible en torno a {title}. "
+                f"03:00. Alarmas imposibles en {title}. "
                 "La niebla densa cubría los pinos centenarios mientras el frío glacial congelaba el vaho de mi respiración en la cabina de control. "
                 "Al revisar los archivadores de acero, encontré los diarios de guardia de operadores desaparecidos que describían exactamente las mismas señales y advertían no responder a la radio. "
                 "Una sombra alargada comenzó a deslizarse bajo el umbral de la puerta blindada mientras los altavoces repetían mi propio nombre en tiempo real. "

@@ -146,13 +146,22 @@ class SeoOptimizerAgent:
         if not slug:
             slug = "Curiosidades"
 
-        is_scp = "scp" in clean_topic.lower()
-        if is_scp:
-            viral_titles = [
-                f"El Secreto Prohibido de {clean_topic} (Clase Thaumiel)",
-                f"¿Qué Oculta Realmente {clean_topic}? La Verdad de la Fundación",
-                f"NUNCA Mires los Archivos de {clean_topic} a Solas",
-            ]
+        niche_l = (niche or "").lower()
+        is_scp = "scp" in clean_topic.lower() or "scp" in niche_l
+        is_moku_horror = any(k in niche_l or k in clean_topic.lower() for k in ("moku", "horror", "terror", "creepy", "nosleep"))
+        if is_scp or is_moku_horror:
+            if is_scp:
+                viral_titles = [
+                    f"El Secreto Prohibido de {clean_topic} (Clase Thaumiel)",
+                    f"¿Qué Oculta Realmente {clean_topic}? La Verdad de la Fundación",
+                    f"NUNCA Mires los Archivos de {clean_topic} a Solas",
+                ]
+            else:
+                viral_titles = [
+                    f"Lo que pasó en {clean_topic} (nadie volvió igual)",
+                    f"NUNCA ignores esta advertencia sobre {clean_topic}",
+                    f"Escuché esto sobre {clean_topic}… y no pude dormir",
+                ]
             selected_title = viral_titles[0]
             description = (
                 f"⚠️ ARCHIVO CLASIFICADO: Descubre los expedientes secretos sobre {clean_topic}.\n\n"
