@@ -107,7 +107,7 @@ class TestGeminiDirectREST:
 
     def test_gemini_rest_success(self, monkeypatch):
         monkeypatch.setenv("GEMINI_API_KEY", "fake_test_key_12345")
-        monkeypatch.setenv("GEMINI_MODEL", "gemini-3.7-flash")
+        monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash-high")
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -135,7 +135,7 @@ class TestGeminiDirectREST:
             called_headers = mock_post.call_args[1].get("headers", {})
             assert "generativelanguage.googleapis.com" in called_url
             assert called_headers.get("x-goog-api-key") == "fake_test_key_12345"
-            assert "gemini-3.7-flash" in called_url
+            assert "gemini-3.8-flash-high" in called_url
 
     def test_gemini_rest_http_error_records_failure(self, monkeypatch):
         monkeypatch.setenv("GEMINI_API_KEY", "fake_key")

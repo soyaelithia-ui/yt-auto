@@ -70,18 +70,24 @@ def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
     secrets_dir = Path(os.environ.get("SECRETS_DIR", str(PROJECT_ROOT / "secrets")))
     if _is_external_interactive_cli(secrets_dir):
         return
+    targets = [bot_appdata]
+    nested = bot_appdata / ".gemini" / "antigravity-cli"
+    if nested != bot_appdata:
+        targets.append(nested)
     for name in ("antigravity-oauth-token", "settings.json"):
         src = secrets_dir / name
-        dst = bot_appdata / name
         if not src.is_file() or _is_external_interactive_cli(src.parent):
             continue
-        if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
-            continue
-        shutil.copy2(src, dst)
-        try:
-            os.chmod(dst, 0o600)
-        except OSError:
-            pass
+        for target_dir in targets:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dst = target_dir / name
+            if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+                continue
+            shutil.copy2(src, dst)
+            try:
+                os.chmod(dst, 0o600)
+            except OSError:
+                pass
 
 
 def _scrub_external_antigravity_env(cli_env: dict[str, str], *, isolated_root: Path) -> None:
@@ -138,7 +144,7 @@ def _resolve_default_app_data_dir(instance_id: str = "default") -> Path:
 
 DEFAULT_APP_DATA_DIR = _resolve_default_app_data_dir()
 AGENT_GENERATED_DIR = PROJECT_ROOT / "data" / "worksets" / "generated"
-CANONICAL_MODEL = os.environ.get("AGY_MODEL", os.environ.get("GEMINI_MODEL", "gemini-3.7-flash"))
+CANONICAL_MODEL = os.environ.get("AGY_MODEL", os.environ.get("GEMINI_MODEL", "gemini-3.8-flash-high"))
 CLI_TIMEOUT_SECONDS = 300
 
 SATURATION_PATTERNS = (
@@ -337,11 +343,14 @@ class AgyStreamClient:
             cmd = [
                 str(self.agy_bin_path),
                 "--model", self.model,
-                "--effort", self.reasoning_effort,
                 "--output-format", "json",
                 "--dangerously-skip-permissions",
                 "-p", prompt,
             ]
+            model_lower = str(self.model).lower()
+            has_effort_suffix = any(model_lower.endswith(f"-{eff}") for eff in ("low", "medium", "high"))
+            if not has_effort_suffix and self.reasoning_effort:
+                cmd.extend(["--effort", self.reasoning_effort])
             if schema:
                 if isinstance(schema, (dict, str)):
                     cmd += ["--json-schema", json.dumps(schema) if isinstance(schema, dict) else schema]

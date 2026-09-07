@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import socket
 import threading
 import time
 from typing import Any
@@ -722,7 +723,7 @@ def _execute_lane_pick(
     from src.pipeline import run_pipeline_once as safe_run
 
     repository = QueueRepository(database)
-    owner = f"lane-{pick.lane_id}"
+    owner = f"lane-{pick.lane_id}:{socket.gethostname()}:{os.getpid()}"
     lease_seconds = max(900, int(os.environ.get("RENDER_TIMEOUT_SECONDS", "10800")) // 2)
     job: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
@@ -811,17 +812,19 @@ def _execute_lane_pick(
     if result is None:
         return {"status": "LANE_EMPTY", "lane": pick.lane_id, "channel": pick.channel.value}
 
-    scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
     status_value = str(result.get("status", ""))
-    if status_value in {"PUBLISHED", "COMPLETED"}:
+    if status_value in {"PUBLISHED", "COMPLETED", "RENDERED"}:
+        scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
         breaker.record_success(pick.channel.value)
-    elif status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED"}:
-        _register_turn_failure(database, pick.channel.value, breaker, result.get("error"))
-    elif status_value in {"STORY_NOT_CLAIMABLE", "NO_PENDING_STORIES"} and job:
-        try:
-            repository.finish_lane_run(job["run_id"], JobStatus.RETRYABLE_FAILED, owner=owner)
-        except Exception:
-            pass
+    else:
+        scheduler_commit_empty(pick)
+        if status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED", "WAITING_LLM_QUOTA"}:
+            _register_turn_failure(database, pick.channel.value, breaker, result.get("error"))
+        elif status_value in {"STORY_NOT_CLAIMABLE", "NO_PENDING_STORIES"} and job:
+            try:
+                repository.finish_lane_run(job["run_id"], JobStatus.RETRYABLE_FAILED, owner=owner)
+            except Exception:
+                pass
     return result
 
 
@@ -872,6 +875,11 @@ def start_daemon_lanes(
     if not is_test_environment():
         _startup_incident_check(database, interval_seconds)
         try:
+            from src.core.lease_reaper import LeaseReaper
+            LeaseReaper(db_path=database).reap_once(startup=True)
+        except Exception:
+            logger.warning("Startup lease reap failed", exc_info=True)
+        try:
             from src.cleaner import (
                 clean_expired_failed_runs,
                 clean_untracked_temp_files,
@@ -888,6 +896,11 @@ def start_daemon_lanes(
     with ThreadPoolExecutor(max_workers=parallel, thread_name_prefix="lane") as pool:
         while not _SHUTDOWN_REQUESTED:
             _reap_zombies_safe()
+            try:
+                from src.core.lease_reaper import LeaseReaper
+                LeaseReaper(db_path=database).reap_once()
+            except Exception:
+                pass
             if max_ticks is not None and ticks >= max_ticks:
                 break
             ticks += 1

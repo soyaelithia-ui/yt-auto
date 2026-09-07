@@ -93,7 +93,7 @@ El stack visual de **producción** es **FFmpeg-first y determinista** (sin naveg
 
 ## 🤖 Arnés Antigravity Multi-Agente (6 Agentes Especializados)
 
-El sistema integra un pipeline desacoplado de 6 agentes regidos por contratos JSON Schema Draft-07 bajo el CLI local `agy` (`gemini-3.7-flash`):
+El sistema integra un pipeline desacoplado de 6 agentes regidos por contratos JSON Schema Draft-07 bajo el CLI local `agy` (`gemini-3.8-flash-high`):
 1. **Agent 1: Script Curator** (`src/agents/script_curator.py`): Guión optimizado para retención con gancho en los primeros 3 segundos.
 2. **Agent 2: Art Director** (`src/agents/art_director.py`): Graduación de color Rec.709, dinámica de iluminación y partículas.
 3. **Agent 3: Scene Planner** (`src/agents/scene_planner.py`): Construcción del manifiesto canónico `SceneManifestV2`.
@@ -118,4 +118,4 @@ Centralizadas en `dev/` para ejecución local y pruebas desatendidas:
 
 1. **Revisión por Código & Despacho**: Veredicto determinista de código (`CodeReviewVerdict`) evaluando integridad, compuertas QA (LUFS/freeze/drift) y auto-aprobación con fallback a Telegram local `telegram-bot-api:8081` (hasta 2 GB zero-copy `file:///`).
 2. **Auto-Publicación Segura**: Ventana de revisión configurable vía `AUTO_PUBLISH_TIMEOUT_HOURS` (default **24h**). Barrido de aprobación ejecutable vía `python3 main.py queue sweep`.
-3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.7-flash`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). `native_procedural`/wgpu está **quarantined** bajo `src/media/_legacy` (`ENABLE_NATIVE_PROCEDURAL=0` por defecto; no forma parte del SSOT de producción).
+3. **Política AI-First**: Tareas creativas emplean agentes bajo arnés Antigravity (`gemini-3.8-flash-high`) con failover a Gemini REST y política fail-closed. Los agentes emiten texto/JSON; el renderizado de producción es FFmpeg (beats stream-copy / director zoompan), subtítulos ASS/libass y persistencia 100% determinista local (dueño de los píxeles). `native_procedural`/wgpu está **quarantined** bajo `src/media/_legacy` (`ENABLE_NATIVE_PROCEDURAL=0` por defecto; no forma parte del SSOT de producción).

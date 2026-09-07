@@ -37,6 +37,7 @@ def validate_narrative_coherence(
     script: str,
     channel: str = "moku",
     duration_type: str = "short",
+    max_words: Optional[int] = None,
     **kwargs: Any,
 ) -> NarrativeCoherenceResult:
     """
@@ -59,9 +60,10 @@ def validate_narrative_coherence(
 
     # 1. Word budget boundary checks
     is_short = duration_type in ("short", "vertical", "9:16")
-    if is_short and word_count > 170:
+    effective_max = max_words or kwargs.get("max_words") or 350
+    if is_short and word_count > effective_max:
         errors.append(
-            f"Script word count ({word_count}) exceeds short maximum threshold of 170 words"
+            f"Script word count ({word_count}) exceeds short maximum threshold of {effective_max} words"
         )
     elif is_short and word_count < 15:
         errors.append(

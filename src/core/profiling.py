@@ -238,7 +238,15 @@ def _read_vm_rss_bytes() -> int:
 
 
 def _get_peak_rss_bytes() -> int:
-    """Return process + child peak RSS in bytes via getrusage."""
+    """Return process + child peak RSS in bytes via /proc/self/status or getrusage."""
+    try:
+        if os.path.exists("/proc/self/status"):
+            with open("/proc/self/status", encoding="ascii") as handle:
+                for line in handle:
+                    if line.startswith("VmHWM:"):
+                        return int(line.split()[1]) * 1024
+    except Exception:
+        pass
     try:
         ru_self = resource.getrusage(resource.RUSAGE_SELF)
         ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)

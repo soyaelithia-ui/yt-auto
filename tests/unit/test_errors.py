@@ -93,14 +93,14 @@ class TestPipelineErrorHierarchy(unittest.TestCase):
         err = LLMGenerationError(
             "Invalid JSON output from model",
             provider="gemini",
-            model="gemini-3.6-flash",
+            model="gemini-3.8-flash-high",
             prompt_preview="Generate story about...",
             details={"attempt": 3},
         )
         self.assertIsInstance(err, PipelineError)
         self.assertEqual(err.component, "llm")
         self.assertEqual(err.provider, "gemini")
-        self.assertEqual(err.model, "gemini-3.6-flash")
+        self.assertEqual(err.model, "gemini-3.8-flash-high")
         self.assertEqual(err.prompt_preview, "Generate story about...")
 
     def test_tts_synthesis_error_attributes(self):
@@ -196,7 +196,7 @@ class TestPolicyEngineClassification(unittest.TestCase):
     def test_should_fallback_policy(self):
         """should_fallback must return True for fallback-eligible subsystems and errors."""
         self.assertTrue(should_fallback(TTSSynthesisError("TTS failure", voice="es-MX-JorgeNeural")))
-        self.assertTrue(should_fallback(LLMGenerationError("LLM parse failure", model="gemini-3.6-flash")))
+        self.assertTrue(should_fallback(LLMGenerationError("LLM parse failure", model="gemini-3.8-flash-high")))
         self.assertTrue(should_fallback(TransientAPIError("Primary endpoint down", http_status=503)))
         self.assertTrue(should_fallback(QuotaExceededError("Primary account quota exhausted")))
 
@@ -217,7 +217,7 @@ class TestDiagnosticsFormatting(unittest.TestCase):
                 raise LLMGenerationError(
                     "Narrative generation failed",
                     provider="gemini",
-                    model="gemini-3.6-flash",
+                    model="gemini-3.8-flash-high",
                     prompt_preview="Story about ghosts...",
                     details={"attempt": 2},
                 ) from exc
@@ -228,7 +228,7 @@ class TestDiagnosticsFormatting(unittest.TestCase):
             self.assertEqual(diagnostics["message"], "Narrative generation failed")
             self.assertEqual(diagnostics["component"], "llm")
             self.assertTrue(diagnostics["retryable"])
-            self.assertEqual(diagnostics["details"]["model"], "gemini-3.6-flash")
+            self.assertEqual(diagnostics["details"]["model"], "gemini-3.8-flash-high")
             self.assertEqual(diagnostics["details"]["provider"], "gemini")
             self.assertEqual(diagnostics["details"]["prompt_preview"], "Story about ghosts...")
             self.assertEqual(diagnostics["details"]["attempt"], 2)

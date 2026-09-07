@@ -6,10 +6,10 @@ services:
     image: yt-automation:local
     container_name: yt-automation
     restart: unless-stopped
-    depends_on:
-      - telegram-bot-api
     init: true
+    hostname: yt-automation
     environment:
+      TINI_SUBREAPER: "1"
       YT_PROFILE: prod
       FFMPEG_THREADS: "4"
       # R9: align effective encode quality with .env.example (CRF 21) while
@@ -38,7 +38,7 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_ALLOWED_USER_ID: ${TELEGRAM_ALLOWED_USER_ID:-}
       TELEGRAM_ALLOWED_CHAT_ID: ${TELEGRAM_ALLOWED_CHAT_ID:-}
-      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://telegram-bot-api:8081}
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
       TELEGRAM_REQUEST_TIMEOUT_SECONDS: ${TELEGRAM_REQUEST_TIMEOUT_SECONDS:-60}
       TELEGRAM_MEDIA_TIMEOUT_SECONDS: ${TELEGRAM_MEDIA_TIMEOUT_SECONDS:-1800}
       TELEGRAM_MAX_FILE_SIZE_MB: ${TELEGRAM_MAX_FILE_SIZE_MB:-2000}
@@ -48,7 +48,8 @@ services:
       ENABLE_AUTO_PUBLISH_SWEEP: "0"
       ENABLE_TELEGRAM_CALLBACK_POLLING: "1"
       DRIVE_KEY_PATH: /run/secrets/drive_key.json
-      AGY_MODEL: gemini-3.6-flash-medium
+      AGY_MODEL: gemini-3.8-flash-high
+      GEMINI_MODEL: gemini-3.8-flash-high
       AGY_CREDITS_DISABLED_CONFIRMED: ${AGY_CREDITS_DISABLED_CONFIRMED:-0}
       DRIVE_FOLDER_ID: ${DRIVE_FOLDER_ID:-}
       DRIVE_ROOT_FOLDER_ID: ${DRIVE_ROOT_FOLDER_ID:-}
@@ -82,6 +83,7 @@ services:
     command: ["python", "main.py", "daemon", "--channel", "all", "--interval", "60"]
 
   telegram-bot-api:
+    profiles: ["local-telegram"]
     image: aiogram/telegram-bot-api:latest
     container_name: telegram-bot-api
     restart: unless-stopped

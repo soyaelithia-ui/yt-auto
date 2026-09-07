@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       ffmpeg \
       fonts-dejavu-core \
-      fonts-montserrat \
       libass-dev \
       libx264-dev \
       tini \

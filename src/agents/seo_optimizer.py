@@ -45,7 +45,7 @@ class SeoOptimizerAgent:
         schema_file: Optional[Path] = None,
         model: str = CANONICAL_MODEL,
         instance_id: str = "pipeline_seo",
-        reasoning_effort: str = "low",
+        reasoning_effort: str = "high",
     ) -> None:
         self.schema_path = schema_file or SCHEMA_PATH
         self.model = model

@@ -41,7 +41,7 @@ class TranslatorAgent(ProgrammaticAgent):
         self,
         model: str = CANONICAL_MODEL,
         instance_id: str = "pipeline_translator",
-        reasoning_effort: str = "low",
+        reasoning_effort: str = "high",
     ) -> None:
         super().__init__(
             system_instructions=TRANSLATOR_SYSTEM_INSTRUCTION,

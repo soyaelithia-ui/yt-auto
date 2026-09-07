@@ -303,6 +303,16 @@ class ReviewJobManager:
             except Exception as exc:
                 return _error(f"Cannot approve job for publication: {exc}")
 
+        # If local video path is defined but does not exist on disk, fail closed.
+        video_path = str(job.original_video_path or "").strip()
+        if video_path and not os.path.exists(video_path):
+            logger.error("action_publish aborted for %s v%s: local video file missing: %s", job_id, version, video_path)
+            try:
+                self.store.update_job_status(job_id, version, ReviewStatus.REJECTED)
+            except Exception as rej_exc:
+                logger.warning("Could not transition job %s v%s to REJECTED: %s", job_id, version, rej_exc)
+            return _error(f"Local video file missing: {video_path}")
+
         # Single atomic claim (APPROVED -> PUBLISHING), enforced at DB level.
         try:
             claimed = self.gate.verify_and_claim_publication(
@@ -319,6 +329,13 @@ class ReviewJobManager:
         try:
             result = handler(claimed) or {}
         except Exception as exc:
+            if isinstance(exc, FileNotFoundError) or "no existe o está vacío" in str(exc).lower():
+                logger.error("Job %s v%s publish failed due to missing file; marking REJECTED: %s", job_id, version, exc)
+                try:
+                    self.store.update_job_status(job_id, version, ReviewStatus.REJECTED)
+                except Exception:
+                    self._revert_for_retry(job_id, version)
+                return _error(f"Local video file missing: {exc}")
             self._revert_for_retry(job_id, version)
             return _error(str(exc))
 

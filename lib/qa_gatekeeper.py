@@ -246,7 +246,7 @@ class QAGatekeeper:
         facts.av_sync_drift_sec = round(abs(video_dur - audio_dur), 6)
 
         # ---------------- size gate ----------------
-        max_size = 500 * 1024 * 1024 if video_mode in ("long", "longform") else _MAX_FILESIZE_BYTES
+        max_size = 2048 * 1024 * 1024 if video_mode in ("long", "longform") else _MAX_FILESIZE_BYTES
         try:
             size = Path(video_path).stat().st_size
         except OSError:

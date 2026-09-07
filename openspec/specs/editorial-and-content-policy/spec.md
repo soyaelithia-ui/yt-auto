@@ -1,7 +1,7 @@
 # Spec: Editorial and Content Governance Policy
 
 ## Requirement: AI-First Semantic Curation and Fail-Closed Behavior
-The system MUST execute all narrative curation, translation, and SEO metadata generation exclusively through native LLM agents (`gemini-3.7-flash` primary, `gemini-3.6-flash` secondary) under the `agy` CLI harness. When LLM provider quota is exhausted or circuit breakers open, the pipeline MUST fail closed with `AIProviderChainExhausted` rather than falling back to low-quality deterministic dummy scripts.
+The system MUST execute all narrative curation, translation, and SEO metadata generation exclusively through native LLM agents (`gemini-3.8-flash-high` primary, `gemini-3.7-flash` / `gemini-3.6-flash` secondary) under the `agy` CLI harness. When LLM provider quota is exhausted or circuit breakers open, the pipeline MUST fail closed with `AIProviderChainExhausted` rather than falling back to low-quality deterministic dummy scripts.
 
 ### Scenario: LLM Quota Exhaustion Fails Closed
 - **Given** a story in state `CLAIMED`

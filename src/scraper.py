@@ -563,7 +563,11 @@ async def async_fetch_reddit_stories(
                     is_404 = True
                     pullpush_failed = True
                     break
-                elif pp_status in (429, 500, 502, 503, 504, 0):
+                elif pp_status == 429:
+                    logger.warning(f"PullPush API rate limited (429) for r/{subreddit}, skipping retries to activate local canonical fallback...")
+                    pullpush_failed = True
+                    break
+                elif pp_status in (500, 502, 503, 504, 0):
                     if attempt < max_retries - 1:
                         await _async_backoff_sleep(attempt, base=1.0)
                         continue
@@ -761,6 +765,9 @@ def replenish_queue(channel: str = "terror", min_stories: int = 25, db_path: Opt
     return _run_sync(async_replenish_queue(channel=channel, min_stories=min_stories, db_path=db_path))
 
 
+_LANE_REPLENISH_BACKOFF: dict[str, float] = {}
+
+
 async def async_ensure_queue_depth(
     lane: Any,
     db_path: Optional[str] = None,
@@ -778,6 +785,16 @@ async def async_ensure_queue_depth(
     lane_id = getattr(lane, "id", str(lane))
     sources = getattr(lane, "sources", None)
     target_depth = getattr(sources, "queue_target_pending", 25) if sources else 25
+
+    now = time.time()
+    backoff_until = _LANE_REPLENISH_BACKOFF.get(lane_id, 0.0)
+    if now < backoff_until:
+        logger.debug(
+            "Lane [%s] replenishment in backoff cooldown for another %.1fs; skipping scrape.",
+            lane_id,
+            backoff_until - now,
+        )
+        return 0
 
     def _get_count() -> int:
         with connect(path, read_only=True) as conn:
@@ -875,6 +892,7 @@ async def async_ensure_queue_depth(
                         min_length=scrape_min_length,
                         session=session,
                     )
+                newly_enqueued = 0
                 for s in fetched:
                     # Filter for topic/lane relevance
                     if not filter_story_for_lane(s["title"], s["content"], lane):
@@ -902,6 +920,13 @@ async def async_ensure_queue_depth(
                         source_license=s.get("source_license"),
                         db_path=path,
                     )
+                    newly_enqueued += 1
+
+                # If stories came from local canonical workset, or nothing was newly enqueued,
+                # skip the remaining sort categories for this subreddit to avoid redundant queries.
+                is_canonical = any("canonical" in str(s.get("url", "")) for s in fetched)
+                if is_canonical or (fetched and newly_enqueued == 0):
+                    break
             except Exception as e:
                 logger.warning(
                     "Error replenishing queue for lane [%s] from r/%s (%s): %s",
@@ -934,6 +959,15 @@ async def async_ensure_queue_depth(
             )
 
     updated_count = await asyncio.to_thread(_get_count)
+    if updated_count <= pending_count:
+        _LANE_REPLENISH_BACKOFF[lane_id] = time.time() + 300.0
+        logger.info(
+            "Lane [%s] replenishment yielded 0 new stories; setting 300s backoff cooldown.",
+            lane_id,
+        )
+    else:
+        _LANE_REPLENISH_BACKOFF.pop(lane_id, None)
+
     logger.info(
         "Queue depth for lane [%s] replenished. Total pending: %d (target: %d)",
         lane_id,

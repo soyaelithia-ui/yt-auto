@@ -3,7 +3,9 @@
 .env
 .env.*
 secrets/
-data/
+data/*
+!data/worksets/
+!data/worksets/**
 work/
 artifacts/
 logs/

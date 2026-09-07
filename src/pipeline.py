@@ -216,24 +216,47 @@ def _catalog_shots_from_manifest(
     durs: list[float] = []
     settled_path: str | None = None
     settled_elapsed = 0.0
+    total_dur = sum(float(item["duration"]) for item in usable)
+    max_settled_dur = (total_dur * 0.24) if (len(usable) > 4 or (len(usable) == 4 and total_dur > 40.0)) else 90.0
+    asset_durations: dict[str, float] = {}
+
     for idx, (item, role) in enumerate(zip(usable, roles)):
-        durs.append(item["duration"])
+        dur = float(item["duration"])
+        durs.append(dur)
         item["scene"]["director_role"] = role
-        settled_elapsed += item["duration"]
-        if role != DESIGNED and settled_path is not None and (len(usable) <= 4 or settled_elapsed < 90.0):
+        settled_elapsed += dur
+        if (
+            role != DESIGNED
+            and settled_path is not None
+            and (asset_durations.get(settled_path, 0.0) + dur <= max_settled_dur)
+            and (len(usable) <= 4 or settled_elapsed <= max_settled_dur)
+        ):
             paths.append(settled_path)
+            asset_durations[settled_path] = asset_durations.get(settled_path, 0.0) + dur
             continue
-        path = str(
-            loop_engine.resolve_loop_video(
-                item["category"],
-                allow_fallback=True,
-                orientation=orientation,
-                seed=idx * 79 + 17,
+        exclude = [p for p, d in asset_durations.items() if (d + dur) > max_settled_dur]
+        try:
+            path = str(
+                loop_engine.resolve_loop_video(
+                    item["category"],
+                    allow_fallback=True,
+                    orientation=orientation,
+                    seed=idx * 79 + 17,
+                    exclude_loop_ids=exclude,
+                )
             )
-        )
-        if settled_path is None or settled_elapsed >= 90.0:
-            settled_path = path
-            settled_elapsed = 0.0
+        except TypeError:
+            path = str(
+                loop_engine.resolve_loop_video(
+                    item["category"],
+                    allow_fallback=True,
+                    orientation=orientation,
+                    seed=idx * 79 + 17,
+                )
+            )
+        settled_path = path
+        settled_elapsed = 0.0
+        asset_durations[path] = asset_durations.get(path, 0.0) + dur
         paths.append(path)
     return paths, durs, last_cat
 
@@ -299,7 +322,7 @@ def run_pipeline_once(
         except Exception as exc:
             logger.warning("Failed to recover expired leases on startup: %s", exc)
         if owner is None:
-            owner = f"lane-{lane_id}" if lane_id else f"{socket.gethostname()}:{os.getpid()}"
+            owner = f"lane-{lane_id}:{socket.gethostname()}:{os.getpid()}" if lane_id else f"{socket.gethostname()}:{os.getpid()}"
         lease_seconds = SETTINGS.render_timeout_seconds + 1_800
 
         if story is not None:
@@ -660,6 +683,22 @@ def run_pipeline_once(
             # re-condensation): fail-closed before spending TTS/render resources.
             if not is_test_environment():
                 validate_pre_tts_script(clean_script)
+                from src.narrative.quality_gate import validate_narrative_coherence
+
+                coherence = validate_narrative_coherence(
+                    clean_script,
+                    channel=channel_name,
+                    duration_type="short" if getattr(lane, "orientation", "vertical") == "vertical" else "long",
+                    max_words=words_max,
+                )
+                if not coherence.valid:
+                    logger.warning(
+                        "Narrative coherence gate detected issues: %s (score=%.2f)",
+                        coherence.errors,
+                        coherence.score,
+                    )
+                    if coherence.score < 0.5:
+                        raise ValueError(f"Narrative coherence gate rejected script: {coherence.errors}")
 
             script_path.write_text(clean_script, encoding="utf-8")
             repository.record_artifact(

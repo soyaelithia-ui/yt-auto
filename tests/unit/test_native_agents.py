@@ -21,7 +21,7 @@ from src.agents.seo_optimizer import SeoOptimizerAgent
 
 
 def test_canonical_model_is_gemini_flash():
-    assert CANONICAL_MODEL in ("gemini-3.6-flash", "gemini-3.7-flash")
+    assert CANONICAL_MODEL == "gemini-3.8-flash-high"
 
 
 def test_programmatic_agent_consume(tmp_path):
@@ -57,6 +57,20 @@ def test_programmatic_agent_run_success(mock_cli, tmp_path):
     assert data["output"]["conversation_id"] == "conv_123"
     assert data["output"]["usage"]["total_tokens"] == 15
     assert data["agent"]["instance_id"] == "test_worker"
+
+
+def test_agent_defaults_are_canonical_model_and_high_effort():
+    inv = StoryInvestigatorAgent()
+    assert inv.model == CANONICAL_MODEL
+    assert inv.reasoning_effort == "high"
+
+    trans = TranslatorAgent()
+    assert trans.model == CANONICAL_MODEL
+    assert trans.reasoning_effort == "high"
+
+    seo = SeoOptimizerAgent()
+    assert seo.model == CANONICAL_MODEL
+    assert seo.reasoning_effort == "high"
 
 
 def test_story_investigator_agent_instantiation():
@@ -173,8 +187,8 @@ def test_agy_stream_client_send_task(mock_run, tmp_path):
     mock_run.return_value = mock_proc
 
     client = AgyStreamClient(
-        model="gemini-3.7-flash",
-        reasoning_effort="medium",
+        model="gemini-3.8-flash-high",
+        reasoning_effort="high",
         app_data_dir=tmp_path / "app_data",
     )
     res = client.send_task("Hola stream")

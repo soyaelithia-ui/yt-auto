@@ -1,6 +1,7 @@
 """Comprehensive tests for yt-auto v3.1 architectural components."""
 
 import os
+import socket
 import sqlite3
 import time
 import pytest
@@ -217,6 +218,96 @@ def test_lease_reaper_clears_dead_worker(tmp_path):
         story_status = conn.execute("SELECT status FROM stories WHERE story_id = 'job_1'").fetchone()[0]
         assert remaining_leases == 0
         assert story_status == "RETRYABLE_FAILED"
+
+
+def test_is_local_hostname_parsing():
+    cur_host = socket.gethostname()
+    # Multi-segment owner
+    assert is_local_hostname(f"lane-moku-scp-shorts:{cur_host}:1234") is True
+    assert is_local_hostname(f"lane-moku-scp-shorts:foreign_host_999:1234") is False
+    assert is_local_hostname(f"worker:{cur_host}:5678") is True
+    assert is_local_hostname(f"worker:foreign_box:5678") is False
+    # Two-segment owner
+    assert is_local_hostname("worker:1234") is True
+    assert is_local_hostname("legacy:1234") is True
+    assert is_local_hostname(f"{cur_host}:1234") is True
+    assert is_local_hostname("otherhost:1234") is False
+    assert is_local_hostname("") is False
+
+
+def test_lease_reaper_clears_expired_ttl_leases(tmp_path):
+    db_file = tmp_path / "shorts_queue.db"
+    now_ts = int(time.time())
+    with sqlite3.connect(str(db_file)) as conn:
+        conn.execute("""
+            CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, published_at TEXT)
+        """)
+        conn.execute("""
+            CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)
+        """)
+        conn.execute("""
+            CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)
+        """)
+        conn.execute("""
+            CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)
+        """)
+
+        # Foreign hostname, but expired TTL
+        conn.execute("INSERT INTO stories (story_id, status, run_id) VALUES ('job_expired', 'CLAIMED', 'run_exp')")
+        conn.execute("INSERT INTO runs (run_id, status) VALUES ('run_exp', 'RUNNING')")
+        conn.execute(
+            "INSERT INTO lane_leases (lane_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
+            "VALUES ('lane_1', 'moku', 'lane-lane_1:foreign_container:99', 'run_exp', ?, ?, ?)",
+            (now_ts - 200, now_ts - 200, now_ts - 10),
+        )
+        conn.commit()
+
+    reaper = LeaseReaper(db_path=db_file)
+    reaped = reaper.reap_once()
+    assert reaped == 1
+
+    with sqlite3.connect(str(db_file)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 0
+
+
+def test_lease_reaper_clears_orphan_remote_leases(tmp_path):
+    """Leases from a dead prior container hostname must be reaped even before 5400s TTL."""
+    db_file = tmp_path / "shorts_queue.db"
+    now_ts = int(time.time())
+    with sqlite3.connect(str(db_file)) as conn:
+        conn.execute("""
+            CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, published_at TEXT)
+        """)
+        conn.execute("""
+            CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)
+        """)
+        conn.execute("""
+            CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)
+        """)
+        conn.execute("""
+            CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)
+        """)
+
+        # Prior dead container lease with TTL 5400s in the future
+        conn.execute("INSERT INTO stories (story_id, status, run_id) VALUES ('job_remote', 'PROCESSING', 'run_rem')")
+        conn.execute("INSERT INTO runs (run_id, status) VALUES ('run_rem', 'PROCESSING')")
+        conn.execute(
+            "INSERT INTO lane_leases (lane_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
+            "VALUES ('lane-long', 'aelithia', 'lane-aelithia-aita-long:dead_container_4415:8', 'run_rem', ?, ?, ?)",
+            (now_ts - 500, now_ts - 500, now_ts + 5000),
+        )
+        conn.commit()
+
+    reaper = LeaseReaper(db_path=db_file)
+    reaped = reaper.reap_once()
+    assert reaped == 1
+
+    with sqlite3.connect(str(db_file)) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 0
+        story = conn.execute("SELECT status, error_msg FROM stories WHERE story_id = 'job_remote'").fetchone()
+        assert story[0] == "RETRYABLE_FAILED"
+        assert "Orphan remote lease" in story[1]
+
 
 
 # ============================================================================

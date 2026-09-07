@@ -565,8 +565,13 @@ class LoopCatalogRepository:
                 if _is_foreign_channel(rec):
                     continue
 
-                # Exclusion check
-                if rec.loop_id in exclude_set:
+                # Exclusion check (matches loop_id, file_path, or filename)
+                if (
+                    rec.loop_id in exclude_set
+                    or rec.file_path in exclude_set
+                    or Path(rec.file_path).name in exclude_set
+                    or str(resolve_loop_file_path(rec.file_path)) in exclude_set
+                ):
                     continue
 
                 # Validate file on disk (min 25KB)

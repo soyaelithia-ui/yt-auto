@@ -39,10 +39,20 @@ ALLOWED_TRANSITIONS: Dict[str, frozenset[str]] = {
         }
     ),
     ReviewStatus.APPROVED.value: frozenset(
-        {ReviewStatus.PUBLISHING.value, ReviewStatus.PUBLISHED.value, ReviewStatus.EXPIRED.value}
+        {
+            ReviewStatus.PUBLISHING.value,
+            ReviewStatus.PUBLISHED.value,
+            ReviewStatus.EXPIRED.value,
+            ReviewStatus.REJECTED.value,
+        }
     ),
     ReviewStatus.PUBLISHING.value: frozenset(
-        {ReviewStatus.PUBLISHED.value, ReviewStatus.APPROVED.value}
+        {
+            ReviewStatus.PUBLISHED.value,
+            ReviewStatus.APPROVED.value,
+            ReviewStatus.REJECTED.value,
+            ReviewStatus.FAILED.value,
+        }
     ),
     ReviewStatus.PUBLISHED.value: frozenset(),
     ReviewStatus.REJECTED.value: frozenset({ReviewStatus.APPROVED.value}),

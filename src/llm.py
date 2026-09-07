@@ -244,7 +244,7 @@ def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
     content = (story_text or "").strip()
 
     is_content_es = is_spanish_neutral(content) if len(content.split()) >= 20 else is_spanish_text(content)
-    is_title_es = is_spanish_neutral(clean_t, minimum_words=3) if len(clean_t.split()) >= 3 else is_spanish_text(clean_t)
+    is_title_es = is_spanish_text(clean_t) or (len(clean_t.split()) >= 8 and is_spanish_neutral(clean_t, minimum_words=8))
 
     if is_content_es and is_title_es:
         return content, clean_t
@@ -316,7 +316,7 @@ def _curate_with_gemini(prompt: str) -> Optional[str]:
             logger.debug("GEMINI_API_KEY not configured; Provider B unavailable")
         return None
 
-    model = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash").strip()
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash-high").strip()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     payload = {
