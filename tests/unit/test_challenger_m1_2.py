@@ -7,6 +7,15 @@ import tempfile
 from pathlib import Path
 import pytest
 
+def _committed_loop_media_count() -> int:
+    """Count real loop media files in repo assets/loops (excludes empty checkout)."""
+    from src.config import BASE_DIR
+    root = BASE_DIR / "assets" / "loops"
+    if not root.is_dir():
+        return 0
+    return len(list(root.rglob("*.mp4"))) + len(list(root.rglob("*.webm")))
+
+
 from src.config import DEFAULT_DB_PATH
 from src.core.catalog import (
     LoopCatalogRepository,
@@ -18,6 +27,8 @@ from src.media.loop_engine import LoopVideoEngine
 
 def test_challenger_idempotent_sync():
     """Test 1: Idempotent Sync over 3 consecutive executions."""
+    if _committed_loop_media_count() < 50:
+        pytest.skip("assets/loops has no committed cinematic media in this checkout")
     real_db = Path(DEFAULT_DB_PATH)
     assert real_db.is_file(), f"Real DB not found: {real_db}"
 
@@ -51,15 +62,6 @@ def test_challenger_idempotent_sync():
 
 def test_challenger_real_db_audit():
     """Test 2: Real Database Audit on shorts_queue.db."""
+    if _committed_loop_media_count() < 50:
+        pytest.skip("assets/loops has no committed cinematic media in this checkout")
 
-    # Skip when CI checkout has empty assets/loops / empty DEFAULT_DB
-    from src.core.catalog import LoopCatalogRepository as _LCR
-    from src.config import DEFAULT_DB_PATH as _DB
-    _probe = _LCR(db_path=str(_DB), auto_seed=True)
-    if _probe.count_loops() < 50:
-        # auto_seed may synthesize; real-db audit wants on-disk cinematic media
-        from pathlib import Path as _P
-        from src.config import BASE_DIR as _BD
-        _media = list((_BD / "assets" / "loops").rglob("*.mp4"))
-        if len(_media) < 50:
-            pytest.skip("real DB audit requires committed loop media")
