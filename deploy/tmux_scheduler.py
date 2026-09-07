@@ -99,6 +99,7 @@ def main() -> int:
         env = dict(os.environ)
         env.setdefault("FFMPEG_THREADS", "2")
         env.setdefault("YT_PROFILE", "prod")
+        env["ENABLE_TELEGRAM_CALLBACK_POLLING"] = "0"
         child = subprocess.Popen(
             [PY, str(PROJECT / "main.py"), *DAEMON_ARGS],
             cwd=str(PROJECT),
