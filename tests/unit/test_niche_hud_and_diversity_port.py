@@ -322,14 +322,17 @@ def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
 
 
 def test_visual_bank_scenery_assets_present():
+    """Scenery bank + template backdrops that used to be duplicated as scenery copies."""
     root = Path("assets/visual_bank")
+    templates = Path("assets/thumbnails/templates")
     expected = [
         root / "aelithia" / "scenery" / "dna_secret.jpg",
-        root / "aelithia" / "scenery" / "wedding_drama.jpg",
         root / "moku" / "scenery" / "abyssal_creature.jpg",
-        root / "moku" / "scenery" / "radio_station.jpg",
         root / "moku" / "scenery" / "scp_3008_infinite.jpg",
         root / "moku" / "scenery" / "scp_containment.jpg",
+        # Canonical backdrops (deduped away from visual_bank/*/scenery/)
+        templates / "aita" / "master_backdrop.jpg",
+        templates / "horror" / "master_backdrop.jpg",
     ]
     for p in expected:
         assert p.is_file() and p.stat().st_size > 1000
