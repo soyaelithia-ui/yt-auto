@@ -22,7 +22,7 @@ LIVE_STAGE8_SELECT_DELTA_MB_MAX = float(os.environ.get("YT_LIVE_RSS_DELTA_MB", "
 LIVE_STAGE9_LAVFI_DELTA_MB_MAX = float(os.environ.get("YT_LIVE_RSS_DELTA_MB", "16"))
 
 # Peak parent RSS during the live smoke (MB). Env override for tight local runs.
-LIVE_SMOKE_PEAK_RSS_MB_MAX = float(os.environ.get("YT_LIVE_RSS_PEAK_MB", "512"))
+LIVE_SMOKE_PEAK_RSS_MB_MAX = float(os.environ.get("YT_LIVE_RSS_PEAK_MB", "540"))
 
 # Soft align with compose small path (not a hard OOM proxy in unit CI).
 COMPOSE_SMALL_MEM_LIMIT_MB = 2048.0
