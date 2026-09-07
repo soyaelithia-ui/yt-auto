@@ -641,3 +641,29 @@ def build_short_narrative(
 ) -> str:
     """Compatibility alias for legacy orchestrators and test harnesses."""
     return build_channel_narrative(topic, channel=channel, video_mode="short", **kwargs)
+
+
+def get_fallback_story(
+    channel: str = "moku",
+    *,
+    topic: str | None = None,
+    is_short: bool = True,
+    seed: int | None = None,
+    **kwargs: Any,
+) -> str:
+    """Returns an authentic channel-specific fallback story for offline or fallback operation.
+
+    Horror/creepypasta/SCP for Moku; human dilemma/drama for Aelithia.
+    """
+    ch = (channel or "moku").strip().lower()
+    if ch in ("aelithia", "drama", "aita"):
+        default_topic = topic or "la herencia familiar y el límite del perdón"
+        if is_short:
+            return build_aelithia_short_narrative(default_topic, channel="aelithia", **kwargs)
+        return build_aelithia_longform_narrative(default_topic, channel="aelithia", target_duration_minutes=10.5, **kwargs)
+
+    default_topic = topic or "SCP-087 y la escalera del silencio"
+    if is_short:
+        return build_moku_short_narrative(default_topic, channel="moku", **kwargs)
+    return build_moku_longform_narrative(default_topic, channel="moku", target_duration_minutes=10.5, **kwargs)
+

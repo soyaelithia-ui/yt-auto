@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.media.interface import (
     BaseVideoCompositor,
     CompositorError,
@@ -408,6 +409,125 @@ class TestCompositorFactoryRegistrationAndRender(unittest.TestCase):
         self.assertEqual(res["output_path"], str(self.out_video))
         self.assertEqual(res["category"], "cosmic_horror")
         self.assertEqual(res["resolution"], "1080x1920")
+
+
+class TestLoopCategoryAliasingAndSelection(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root_path = Path(self.temp_dir.name)
+        self.loops_dir = self.root_path / "loops"
+        self.loops_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path = os.path.join(self.temp_dir.name, "test_loops.db")
+        self.catalog = LoopCatalogRepository(db_path=self.db_path)
+        self.engine = LoopVideoEngine(loops_root_dir=self.loops_dir, catalog=self.catalog)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _create_dummy_video(self, subpath: str, size: int = 30_000) -> Path:
+        p = self.loops_dir / subpath
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"0" * size)
+        return p
+
+    def test_thematic_categories_expansion(self):
+        """THEMATIC_CATEGORIES includes all required catalog categories."""
+        expected = {
+            "horror", "drama", "scifi", "dark_forest", "dark_ambient",
+            "cosmic_horror", "cozy_ambient", "space_abyss", "monsters"
+        }
+        for cat in expected:
+            self.assertIn(cat, LoopVideoEngine.THEMATIC_CATEGORIES)
+
+    def test_category_aliases_mapping(self):
+        """CATEGORY_ALIASES maps pipeline / channel themes to canonical catalog categories."""
+        from src.media.loop_engine import CATEGORY_ALIASES
+        self.assertEqual(CATEGORY_ALIASES.get("tactical_chamber"), "horror")
+        self.assertEqual(CATEGORY_ALIASES.get("scp"), "horror")
+        self.assertEqual(CATEGORY_ALIASES.get("containment"), "horror")
+        self.assertEqual(CATEGORY_ALIASES.get("bunker"), "horror")
+        self.assertEqual(CATEGORY_ALIASES.get("creepy_woods"), "dark_forest")
+        self.assertEqual(CATEGORY_ALIASES.get("reddit_aita"), "drama")
+        self.assertIn(CATEGORY_ALIASES.get("cozy_hearth"), ("drama", "cozy_ambient"))
+
+    def test_normalize_category_with_aliases(self):
+        """normalize_category resolves aliased names into canonical categories."""
+        self.assertEqual(self.engine.normalize_category("tactical_chamber"), "horror")
+        self.assertEqual(self.engine.normalize_category("TACTICAL-CHAMBER"), "horror")
+        self.assertEqual(self.engine.normalize_category("scp"), "horror")
+        self.assertEqual(self.engine.normalize_category("reddit_aita"), "drama")
+
+    def test_resolve_tactical_chamber_to_horror_loop(self):
+        """Resolving tactical_chamber resolves to an available horror loop in catalog."""
+        horror_file = self._create_dummy_video("horizontal/horror/atomic/moku_bunker.mp4")
+        self.catalog.register_loop(LoopRecord(
+            loop_id="moku_bunker_h",
+            category="horror",
+            technology="pre-rendered",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=str(horror_file),
+            file_size_bytes=30_000,
+            sha256="sha_h",
+        ))
+
+        resolved = self.engine.resolve_loop_video("tactical_chamber", orientation="horizontal")
+        self.assertEqual(resolved, horror_file)
+
+    def test_resolve_with_exclude_loop_ids(self):
+        """resolve_loop_video respects exclude_loop_ids."""
+        f1 = self._create_dummy_video("horizontal/horror/atomic/moku_1.mp4")
+        f2 = self._create_dummy_video("horizontal/horror/atomic/moku_2.mp4")
+        self.catalog.register_loop(LoopRecord(
+            loop_id="moku_1", category="horror", technology="pre-rendered", orientation="horizontal",
+            width=1920, height=1080, duration_sec=6.0, fps=30, file_path=str(f1), file_size_bytes=30_000, sha256="sha1",
+        ))
+        self.catalog.register_loop(LoopRecord(
+            loop_id="moku_2", category="horror", technology="pre-rendered", orientation="horizontal",
+            width=1920, height=1080, duration_sec=6.0, fps=30, file_path=str(f2), file_size_bytes=30_000, sha256="sha2",
+        ))
+
+        r1 = self.engine.resolve_loop_video("horror", orientation="horizontal", exclude_loop_ids=["moku_1"])
+        self.assertEqual(r1, f2)
+
+    def test_no_monochrome_fallback_on_unknown_category(self):
+        """resolve_loop_video for unknown category does not return maritime_lighthouse or arctic_desolation."""
+        f_cine = self._create_dummy_video("horizontal/dark_ambient/ambient_cine.mp4")
+        f_mono = self._create_dummy_video("procedural/maritime_lighthouse/loop_maritime_lighthouse_horizontal_544374.mp4")
+
+        self.catalog.register_loop(LoopRecord(
+            loop_id="loop_maritime_lighthouse_h_544374",
+            category="maritime_lighthouse",
+            technology="ffmpeg_lavfi",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=str(f_mono),
+            file_size_bytes=30_000,
+            sha256="procedural",
+        ))
+        self.catalog.register_loop(LoopRecord(
+            loop_id="dark_ambient_cine",
+            category="dark_ambient",
+            technology="pre-rendered",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=str(f_cine),
+            file_size_bytes=30_000,
+            sha256="sha_cine",
+        ))
+
+        resolved = self.engine.resolve_loop_video("unknown_niche_theme", allow_fallback=True, orientation="horizontal")
+        self.assertNotEqual(resolved, f_mono)
+        self.assertEqual(resolved, f_cine)
 
 
 if __name__ == "__main__":

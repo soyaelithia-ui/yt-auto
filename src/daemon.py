@@ -445,6 +445,7 @@ def _collect_futures_responsive(
     results: list[dict[str, Any]] = []
     pending = set(futures)
     deadline = time.monotonic() + max(0.0, timeout)
+    last_sweep_time = 0.0
     while pending:
         _reap_zombies_safe()
         if touch_heartbeat:
@@ -452,6 +453,9 @@ def _collect_futures_responsive(
                 touch_daemon_liveness(database)
             except Exception:
                 logger.debug("daemon liveness touch failed", exc_info=True)
+            if time.monotonic() - last_sweep_time >= 30.0:
+                last_sweep_time = time.monotonic()
+                _run_auto_publish_sweep()
         if is_shutdown_requested():
             break
         remaining = deadline - time.monotonic()
@@ -714,6 +718,7 @@ def _execute_lane_pick(
     generate_only: bool = False,
 ) -> dict[str, Any]:
     """Run one lane iteration: claim → pipeline → cadence bookkeeping."""
+    from src.config import is_test_environment
     from src.pipeline import run_pipeline_once as safe_run
 
     repository = QueueRepository(database)
@@ -731,6 +736,25 @@ def _execute_lane_pick(
                 pick.lane_id, pick.channel.value, owner, lease_seconds=lease_seconds
             )
             mode = "fresh"
+        if job is None and not is_test_environment():
+            try:
+                from src.scraper import ensure_queue_depth
+                from src.core.lanes import resolve_lane_for_run
+
+                lane_def = resolve_lane_for_run(pick.channel, pick.lane_id)
+                logger.info(
+                    "Lane %s sin historias pendientes; reponiendo con ensure_queue_depth...",
+                    pick.lane_id,
+                )
+                ensure_queue_depth(lane_def, db_path=database)
+                job = repository.claim_for_lane(
+                    pick.lane_id, pick.channel.value, owner, lease_seconds=lease_seconds
+                )
+                mode = "fresh_replenished"
+            except Exception as repl_exc:
+                logger.warning(
+                    "Fallo al reponer cola para lane %s: %s", pick.lane_id, repl_exc
+                )
         if job is None:
             scheduler_commit_empty(pick)
             return {
@@ -748,6 +772,9 @@ def _execute_lane_pick(
                 generate_only=generate_only,
                 story_id=job["story_id"],
                 lane_id=pick.lane_id,
+                run_id=job.get("run_id"),
+                owner=owner,
+                story=job,
             )
     except QuotaError as exc:
         result = {
@@ -790,6 +817,11 @@ def _execute_lane_pick(
         breaker.record_success(pick.channel.value)
     elif status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED"}:
         _register_turn_failure(database, pick.channel.value, breaker, result.get("error"))
+    elif status_value in {"STORY_NOT_CLAIMABLE", "NO_PENDING_STORIES"} and job:
+        try:
+            repository.finish_lane_run(job["run_id"], JobStatus.RETRYABLE_FAILED, owner=owner)
+        except Exception:
+            pass
     return result
 
 

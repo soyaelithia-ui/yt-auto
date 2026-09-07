@@ -75,7 +75,7 @@
   },
   "auth": {
     "cookies_path": "secrets/cookies_channel2.txt",
-    "youtube_token_path": "secrets/youtube_token_secondary.json",
+    "youtube_token_path": "secrets/youtube_token_aelithia.json",
     "expected_youtube_channel_id": "UCviycs3wnL019JwUwb8Hkig",
     "source_feed": "r/AmItheAsshole+r/relationship_advice"
   }

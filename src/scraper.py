@@ -844,7 +844,11 @@ async def async_ensure_queue_depth(
         categories = (("hot", "day"), ("top", "week"), ("new", "all"))
 
     limit_per_fetch = getattr(sources, "limit_per_fetch", 25) if sources else 25
-    words_min = getattr(lane, "words_min", 10)
+    scrape_min_length = (
+        min(getattr(lane, "words_min", 100), 100)
+        if getattr(lane, "multistory_collection", False)
+        else min(getattr(lane, "words_min", 100), 250)
+    )
 
     for sub in subreddits:
         for sort_cat, t_filter in categories:
@@ -860,7 +864,7 @@ async def async_ensure_queue_depth(
                         limit=limit_per_fetch,
                         sort=sort_cat,
                         time_filter=t_filter,
-                        min_length=words_min,
+                        min_length=scrape_min_length,
                     )
                 else:
                     fetched = await async_fetch_reddit_stories(
@@ -868,7 +872,7 @@ async def async_ensure_queue_depth(
                         limit=limit_per_fetch,
                         sort=sort_cat,
                         time_filter=t_filter,
-                        min_length=words_min,
+                        min_length=scrape_min_length,
                         session=session,
                     )
                 for s in fetched:

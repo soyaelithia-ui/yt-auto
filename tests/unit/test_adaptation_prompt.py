@@ -185,9 +185,9 @@ def test_provider_a_builds_prompt_via_build_adaptation_prompt(monkeypatch):
 
     captured: dict = {}
 
-    def fake_build(title, content, channel="moku", max_words=None):
+    def fake_build(title, content, channel="moku", max_words=None, min_words=None):
         captured.update({"title": title, "content": content, "channel": channel,
-                         "max_words": max_words})
+                         "max_words": max_words, "min_words": min_words})
         return f"BUILT::{title}::{max_words}"
 
     with (
@@ -210,6 +210,7 @@ def test_provider_a_builds_prompt_via_build_adaptation_prompt(monkeypatch):
         "content": _content(),
         "channel": "aelithia",
         "max_words": 250,
+        "min_words": 40,
     }
 
 
@@ -257,3 +258,13 @@ def test_curate_script_signature_and_fail_closed_chain_preserved():
         pytest.raises(AIProviderChainExhausted),
     ):
         llm.curate_script(_content(), title="T", provider="A", min_words=40)
+
+
+def test_prompt_contains_longform_budget_when_min_words_set():
+    prompt = llm._build_adaptation_prompt(
+        "Terror en el Faro", _content(), channel="moku", min_words=2600
+    )
+    assert "2600" in prompt
+    assert "FORMATO LARGO" in prompt
+    assert "MÍNIMO" in prompt
+    assert "NUNCA resumas ni condenses" in prompt

@@ -99,3 +99,45 @@ Integrity mode: development
 ### Suite de Pruebas y Certificación
 - [ ] `pytest tests/unit/test_native_procedural_uniforms.py tests/unit/test_cinematic_storyboard.py tests/integration/test_multiscene_dispatch.py tests/unit/test_loop_video_engine.py` pasa al 100% (todos los tests en verde).
 - [ ] La suite general del proyecto corre limpia sin bloqueos de base de datos (`database is locked`) ni excepciones de dependencias.
+
+## 2026-09-07T19:33:24Z
+
+Reparar y enriquecer integralmente la calidad visual y estética de los videos producidos en `yt-auto` (Shorts y Videos Largos), activando el catálogo existente de loops temáticos, restaurando subtítulos dinámicos estilizados y asegurando coherencia narrativa en los guiones con máxima eficiencia y bajo consumo de recursos.
+
+Working directory: /home/moku/projects/yt-auto
+Integrity mode: development
+
+## Requirements
+
+### R1. Activación e Indexación Exhaustiva del Catálogo de Loops Visuales
+Indexar y verificar en la base de datos SQLite (`video_loops`) todos los bucles de video cinemáticos de alta calidad existentes en el repositorio (`assets/loops/horizontal/` y `assets/loops/vertical/`), organizados por canal (`moku`, `aelithia`) y categorías temáticas (`horror`, `dark_forest`, `cosmic_horror`, `drama`, `cozy_ambient`, etc.). Eliminar la dependencia exclusiva de los dos loops planos monocromáticos sintéticos (`loop_maritime_lighthouse_h` y `loop_arctic_desolation_v`), garantizando rotación automática y diversidad visual entre producciones.
+
+### R2. Subtitulado Dinámico y Enriquecimiento Estético (Shorts y Longs)
+Reactivar el flujo de subtitulado (`subtitles_active = True`) que fue desactivado arbitrariamente en `src/pipeline.py`. Implementar estilos tipográficos estéticos (fuente clara, stroke/sombra de alto contraste, ubicación equilibrada para 9:16 Shorts y 16:9 Longform). Añadir dinamismo visual ligero y eficiente (overlays cinemáticos sutiles, transiciones limpias entre escenas de 8-15s en videos largos según el `visual_plan.json` o gradación de color sin sobrecargar la CPU).
+
+### R3. Coherencia Narrativa y Control de Calidad de Guiones
+Auditar y afinar los generadores de historias y scrapers para garantizar coherencia temática estricta: progresión en 3 actos, coherencia psicológica de personajes, giros dramáticos convincentes y fluidez en español neutro (sin frases inconexas, rupturas tonales o muletillas repetitivas). Incorporar validación de coherencia narrativa previa a la síntesis TTS.
+
+### R4. Eficiencia de Recursos, Estabilidad del Pipeline y Despliegue Bare-Metal
+Todas las composiciones FFmpeg y procesos de generación deben ejecutarse con máxima eficiencia (preset rápido, multiplexación por stream-copy o filtros ligeros) garantizando tiempos de render contenidos (<5 min para shorts, <15 min para longs) sin fugas de memoria RSS, compatibilidad con la suite de pruebas unitarias existente (`pytest`) y preservando la operación bajo el supervisor Tmux (`./deploy/ctl.sh`).
+
+## Acceptance Criteria
+
+### [Catálogo y Variedad Visual]
+- [ ] La tabla `video_loops` contiene indexados y verificados >50 bucles de video con categorización correcta para `moku` y `aelithia`.
+- [ ] Los videos generados para `moku` y `aelithia` seleccionan loops contextuales diferentes por temática y rotan entre corridas sin reutilizar el mismo fondo plano.
+- [ ] En videos largos (>10 min), el render cambia de fondo/escena periódicamente según el `visual_plan.json` en vez de mantener un único loop estático durante todo el metraje.
+
+### [Estética y Subtítulos]
+- [ ] Todos los Shorts generados muestran subtítulos legibles y estéticos sincronizados con el audio (`speech.wav`).
+- [ ] Los videos no presentan pantallas vacías o monocromáticas sin elementos visuales o tipográficos.
+- [ ] El tiempo de render por minuto de video no excede los límites presupuestados de CPU en bare-metal.
+
+### [Coherencia de Guiones]
+- [ ] Los guiones generados presentan estructura narrativa clara (inicio, desarrollo, clímax, desenlace) y superan la validación de coherencia sin incongruencias de trama.
+- [ ] Vocabulario y tono adaptados al canal: terror/misterio inmersivo en Moku, dilemas morales y drama humano en Aelithia.
+
+### [Integridad del Pipeline y Operación]
+- [ ] La suite de pruebas de regresión (`pytest tests/unit/`) pasa al 100% (0 fallos).
+- [ ] El demonio y el bot operan de manera ordenada en Tmux (`./deploy/ctl.sh status`).
+

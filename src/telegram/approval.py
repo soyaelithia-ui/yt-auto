@@ -63,7 +63,8 @@ def get_expired_pending_videos(
 
     store = ReviewStateStore()
     out: List[Dict[str, Any]] = []
-    for job in store.get_stale_pending_jobs(max_age_seconds=max_age):
+    cooldown = int(os.environ.get("APPROVED_RETRY_COOLDOWN_SECONDS", "900"))
+    for job in store.get_stale_pending_jobs(max_age_seconds=max_age, approved_retry_cooldown_seconds=cooldown):
         metadata = job.metadata if isinstance(job.metadata, dict) else {}
         if isinstance(metadata.get("code_verdict"), dict) and metadata["code_verdict"]:
             logger.info(

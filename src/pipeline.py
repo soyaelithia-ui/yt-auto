@@ -215,10 +215,12 @@ def _catalog_shots_from_manifest(
     paths: list[str] = []
     durs: list[float] = []
     settled_path: str | None = None
-    for item, role in zip(usable, roles):
+    settled_elapsed = 0.0
+    for idx, (item, role) in enumerate(zip(usable, roles)):
         durs.append(item["duration"])
         item["scene"]["director_role"] = role
-        if role != DESIGNED and settled_path is not None:
+        settled_elapsed += item["duration"]
+        if role != DESIGNED and settled_path is not None and (len(usable) <= 4 or settled_elapsed < 90.0):
             paths.append(settled_path)
             continue
         path = str(
@@ -226,10 +228,12 @@ def _catalog_shots_from_manifest(
                 item["category"],
                 allow_fallback=True,
                 orientation=orientation,
+                seed=idx * 79 + 17,
             )
         )
-        if settled_path is None:
+        if settled_path is None or settled_elapsed >= 90.0:
             settled_path = path
+            settled_elapsed = 0.0
         paths.append(path)
     return paths, durs, last_cat
 
@@ -245,6 +249,10 @@ def run_pipeline_once(
     compositor: str | None = None,
     enable_subtitles: bool | None = None,
     loop_category: str | None = None,
+    run_id: str | None = None,
+    owner: str | None = None,
+    story: dict[str, Any] | None = None,
+    directed: bool | None = None,
 ) -> dict[str, Any]:
     """Produce exactly one video governed by its lane (config/lanes.json).
 
@@ -268,13 +276,14 @@ def run_pipeline_once(
 
     channel_key = canonical_channel(channel)
     channel_name = channel_key.value
-    directed = story_id is not None
-    requested_story_id = str(story_id or "").strip()
+    if directed is None:
+        directed = (story is None and story_id is not None)
+    requested_story_id = str(story_id or (story.get("story_id") if story else "") or "").strip()
     if directed and not requested_story_id:
         raise ValueError("--story-id no puede estar vacío")
 
     profiler = PipelineProfiler(
-        run_id=requested_story_id or None,
+        run_id=run_id or requested_story_id or None,
         story_id=requested_story_id or None,
         channel=channel_name,
     )
@@ -289,40 +298,13 @@ def run_pipeline_once(
             repository.recover_expired_leases()
         except Exception as exc:
             logger.warning("Failed to recover expired leases on startup: %s", exc)
-        owner = f"{socket.gethostname()}:{os.getpid()}"
+        if owner is None:
+            owner = f"lane-{lane_id}" if lane_id else f"{socket.gethostname()}:{os.getpid()}"
         lease_seconds = SETTINGS.render_timeout_seconds + 1_800
 
-        if not directed and not is_test_environment():
-
-            from src.db import is_story_duplicate
-            from src.core.scoring import filter_and_score_story
-
-            stories = fetch_reddit_stories(subreddit=settings.source_feed, limit=25)
-            ingest_lane = resolve_lane_for_run(channel_key, lane_id)
-            for s_item in stories:
-                if is_story_duplicate(channel_name, s_item["id"], s_item.get("content"), database):
-                    continue
-                verdict = filter_and_score_story(s_item, lane=ingest_lane)
-                if not verdict.passed:
-                    logger.info(
-                        "Skipping Reddit story %s (hybrid=%.3f): %s",
-                        s_item.get("id"),
-                        verdict.hybrid_score,
-                        verdict.rejection_summary or "quality_gate",
-                    )
-                    continue
-                repository.enqueue(
-                    s_item["id"],
-                    s_item["title"],
-                    s_item["content"],
-                    s_item["url"],
-                    channel_key,
-                    score=int(verdict.db_rank_score),
-                    upvote_ratio=float(s_item.get("upvote_ratio") or 0.0),
-                    num_comments=int(s_item.get("num_comments") or 0),
-                    lane_id=getattr(ingest_lane, "id", None),
-                )
-        if directed:
+        if story is not None:
+            pass
+        elif directed:
             story = repository.claim_exact(
                 requested_story_id,
                 channel_key,
@@ -331,6 +313,36 @@ def run_pipeline_once(
                 lease_seconds=lease_seconds,
             )
         else:
+            if not is_test_environment():
+
+                from src.db import is_story_duplicate
+                from src.core.scoring import filter_and_score_story
+
+                stories = fetch_reddit_stories(subreddit=settings.source_feed, limit=25)
+                ingest_lane = resolve_lane_for_run(channel_key, lane_id)
+                for s_item in stories:
+                    if is_story_duplicate(channel_name, s_item["id"], s_item.get("content"), database):
+                        continue
+                    verdict = filter_and_score_story(s_item, lane=ingest_lane)
+                    if not verdict.passed:
+                        logger.info(
+                            "Skipping Reddit story %s (hybrid=%.3f): %s",
+                            s_item.get("id"),
+                            verdict.hybrid_score,
+                            verdict.rejection_summary or "quality_gate",
+                        )
+                        continue
+                    repository.enqueue(
+                        s_item["id"],
+                        s_item["title"],
+                        s_item["content"],
+                        s_item["url"],
+                        channel_key,
+                        score=int(verdict.db_rank_score),
+                        upvote_ratio=float(s_item.get("upvote_ratio") or 0.0),
+                        num_comments=int(s_item.get("num_comments") or 0),
+                        lane_id=getattr(ingest_lane, "id", None),
+                    )
             story = repository.claim(
                 channel_key,
                 owner=owner,
@@ -384,7 +396,7 @@ def run_pipeline_once(
             logger.debug("No se pudo persistir lane_id en la historia", exc_info=True)
 
     story_id = str(story["story_id"])
-    run_id = str(story["run_id"])
+    run_id = str(story.get("run_id") or run_id)
     profiler.run_id = run_id
     profiler.story_id = story_id
 
@@ -423,13 +435,14 @@ def run_pipeline_once(
             "Supported engine modes: 'director', 'multiscene', 'hybrid', 'procedural', or 'loop'."
         )
 
-    # Product path: no karaoke / no captions. Ignore lane and env flags.
-    if enable_subtitles:
-        logger.info(
-            "Dropping subtitles on the product path; ignoring enable_subtitles=%s",
-            enable_subtitles,
-        )
-    subtitles_active = False
+    # Product path: Subtitles reactivated for vertical shorts, skipped by default for non-shorts
+    subtitles_active = True
+    if enable_subtitles is False:
+        subtitles_active = False
+    elif enable_subtitles is True:
+        subtitles_active = True
+    elif not (getattr(lane, "is_short", False) or lane.orientation == "vertical" or getattr(lane, "content_type", "") == "short"):
+        subtitles_active = False
 
     from src.core.guard import memory_checkpoint
     from src.observability import set_run_context
@@ -1162,7 +1175,7 @@ def run_pipeline_once(
                 memory_checkpoint("8_loop_scene")
                 from src.scene_manifest import build_scene_manifest
                 manifest_slot = story.get("object_class") or channel_name
-                mux_subtitles = False
+                mux_subtitles = bool(subtitles_active and ass_path.is_file())
                 stream_copy_mode = True
 
                 manifest_path = build_scene_manifest(
@@ -1585,6 +1598,12 @@ def run_pipeline_once(
                     return _fail("review_delivery_failed", str(exc))
 
             if generate_only or current_review_status != approved_status_val:
+                terminal_story_status = (
+                    JobStatus.PENDING_REVIEW
+                    if current_review_status == ReviewStatus.PENDING_REVIEW.value
+                    else JobStatus.RENDERED
+                )
+                _set_owned_status(terminal_story_status)
                 if not repository.finish_run(run_id, JobStatus.RENDERED, owner=owner):
                     raise LeaseOwnershipError("Ownership perdido antes de finalizar el run")
                 _marker(work_dir, run_id, active=False)

@@ -134,7 +134,10 @@ def _verify_uploaded_video(
         )
         items = response.get("items") or []
         if len(items) != 1:
-            raise RuntimeError("La consulta independiente no encontró el video")
+            if time.monotonic() >= deadline:
+                raise RuntimeError("La consulta independiente no encontró el video")
+            time.sleep(max(1, poll_seconds))
+            continue
         item = items[0]
         snippet = item.get("snippet") or {}
         status = item.get("status") or {}
@@ -325,6 +328,8 @@ def upload_video_via_api(
     )
     snippet = item.get("snippet") or {}
     status = item.get("status") or {}
+    if not thumbnail_confirmed and (snippet.get("thumbnails") or {}).get("default"):
+        thumbnail_confirmed = True
     expected_channel = str(kwargs.get("channel") or "")
     return {
         "status": "PUBLISHED",

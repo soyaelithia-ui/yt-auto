@@ -97,6 +97,7 @@ def main() -> int:
         log_fh = open(log_path, "ab", buffering=0)
         log_fh.write(f"\n===== [{_stamp()}] launching daemon =====\n".encode())
         env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
         env.setdefault("FFMPEG_THREADS", "2")
         env.setdefault("YT_PROFILE", "prod")
         env["ENABLE_TELEGRAM_CALLBACK_POLLING"] = "0"

@@ -1,5 +1,7 @@
 """Unit tests for native Antigravity Agents using Pro harness, persistent stream, and SDK."""
 import json
+import os
+import time
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -10,6 +12,7 @@ from src.agents.base_agent import (
     CircuitBreaker,
     AgyStreamClient,
     _resolve_default_app_data_dir,
+    _seed_appdata_from_secrets,
     cleanup_ephemeral_sessions,
 )
 from src.agents.investigator import StoryInvestigatorAgent
@@ -230,5 +233,30 @@ def test_cleanup_ephemeral_sessions(tmp_path):
     assert removed == 1
     assert not old_conv.exists()
     assert new_conv.exists()
+
+
+def test_seed_appdata_from_secrets_updates_newer(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir()
+    bot_appdata = tmp_path / "bot_appdata"
+    bot_appdata.mkdir()
+
+    token_src = secrets_dir / "antigravity-oauth-token"
+    token_src.write_text("token_v1")
+    monkeypatch.setenv("SECRETS_DIR", str(secrets_dir))
+
+    _seed_appdata_from_secrets(bot_appdata)
+    token_dst = bot_appdata / "antigravity-oauth-token"
+    assert token_dst.read_text() == "token_v1"
+
+    # Update src with newer timestamp and new content
+    import time
+    time.sleep(0.05)
+    token_src.write_text("token_v2")
+    future_time = time.time() + 10
+    os.utime(token_src, (future_time, future_time))
+
+    _seed_appdata_from_secrets(bot_appdata)
+    assert token_dst.read_text() == "token_v2"
 
 

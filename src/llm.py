@@ -397,14 +397,20 @@ def _trim_script_to_max_words(script: str, max_words: Optional[int]) -> str:
     return truncated.strip()
 
 
-def _word_budget_instruction(max_words: Optional[int]) -> str:
-    """Prompt fragment communicating the hard word budget to LLM providers."""
-    if not max_words or max_words <= 0:
-        return ""
-    return (
-        f"\n\nRestricción dura de duración: el guion final debe tener "
-        f"como máximo {int(max_words)} palabras."
-    )
+def _word_budget_instruction(max_words: Optional[int], min_words: Optional[int] = None) -> str:
+    """Prompt fragment communicating the word budget to LLM providers."""
+    parts = []
+    if min_words and min_words >= 1500:
+        parts.append(
+            f"RESTRICCIÓN DE FORMATO LARGO (10+ MINUTOS): El guion final debe tener como MÍNIMO "
+            f"{int(min_words)} palabras. Conserva todos los párrafos, diálogos, descripciones detalladas "
+            f"y giros de la historia fuente. NUNCA resumas ni condenses las escenas."
+        )
+    if max_words and max_words > 0:
+        parts.append(
+            f"Restricción dura de duración: el guion final debe tener como máximo {int(max_words)} palabras."
+        )
+    return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +513,7 @@ def _build_adaptation_prompt(
     content: str,
     channel: str = "moku",
     max_words: Optional[int] = None,
+    min_words: Optional[int] = None,
 ) -> str:
     """User-prompt half of the minimal-adaptation brief (shared by providers A/B).
 
@@ -525,7 +532,7 @@ def _build_adaptation_prompt(
         _ADAPTATION_OUTPUT_CONTRACT,
     ]
     prompt = "\n\n".join(sections)
-    return prompt + _word_budget_instruction(max_words)
+    return prompt + _word_budget_instruction(max_words, min_words)
 
 
 def curate_script(
@@ -617,6 +624,7 @@ def curate_script(
         main_title,
         channel=channel,
         max_words=max_words,
+        min_words=min_words,
     )
     if script_a and len(script_a.strip().split()) >= 40:
         return _trim_script_to_max_words(script_a, max_words)
@@ -627,6 +635,7 @@ def curate_script(
         main_content or "",
         channel=channel,
         max_words=max_words,
+        min_words=min_words,
     )
     script_b = _curate_with_gemini(gemini_prompt)
     if script_b and len(script_b.strip().split()) >= 40:
@@ -646,6 +655,7 @@ def _curate_with_agent(
     title: str,
     channel: str = "moku",
     max_words: Optional[int] = None,
+    min_words: Optional[int] = None,
 ) -> Optional[str]:
     """Provider A: Antigravity Pro harness (ProgrammaticAgent)."""
     try:
@@ -660,6 +670,7 @@ def _curate_with_agent(
             content,
             channel=channel,
             max_words=max_words,
+            min_words=min_words,
         )
         res_path = agent.run(prompt)
         res = agent.consume(res_path)

@@ -679,3 +679,9 @@ def validate_prepublication(
     except Exception:
         report.issues.append("miniatura ausente o corrupta")
     return report
+
+
+def validate_narrative_coherence(*args: Any, **kwargs: Any) -> Any:
+    from src.narrative.quality_gate import validate_narrative_coherence as _vnc
+    return _vnc(*args, **kwargs)
+

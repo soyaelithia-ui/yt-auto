@@ -68,6 +68,79 @@ class LoopCompositionError(LoopVideoError):
     pass
 
 
+CATEGORY_ALIASES: dict[str, str] = {
+    # Moku / Horror / SCP / Underground / Facility themes
+    "tactical_chamber": "horror",
+    "bunker": "horror",
+    "chamber": "horror",
+    "corridor": "horror",
+    "asylum": "horror",
+    "morgue": "horror",
+    "facility": "horror",
+    "containment": "horror",
+    "scp": "horror",
+    "moku": "horror",
+    "moku_horror": "horror",
+    "haunted_house": "horror",
+    "analog_horror": "horror",
+    "vhs": "horror",
+    "found_footage": "horror",
+
+    # Dark Forest / Outdoor Mystery / Woods
+    "creepy_woods": "dark_forest",
+    "woods": "dark_forest",
+    "forest": "dark_forest",
+    "cemetery": "dark_forest",
+    "misty_pines": "dark_forest",
+    "cabin": "dark_forest",
+    "dark_woods": "dark_forest",
+    "foggy_road": "dark_forest",
+
+    # Aelithia / Drama / Relationships / Reddit AITA
+    "cozy_hearth": "drama",
+    "aelithia": "drama",
+    "aelithia_drama": "drama",
+    "aita": "drama",
+    "drama_aita": "drama",
+    "reddit_aita": "drama",
+    "confession": "drama",
+    "relationships": "drama",
+    "family_drama": "drama",
+    "nostalgia": "drama",
+    "moral_dilemma": "drama",
+
+    # Cozy Ambient / Warm Interiors
+    "cozy_interior": "cozy_ambient",
+    "cozy_interiors": "cozy_ambient",
+    "warm_hearth": "cozy_ambient",
+    "fireplace": "cozy_ambient",
+    "cafe": "cozy_ambient",
+    "rainy_cafe": "cozy_ambient",
+    "bookstore": "cozy_ambient",
+    "art_studio": "cozy_ambient",
+
+    # SciFi / Cyber / Space / Shaders
+    "cosmic_singularity": "scifi",
+    "singularidad_scifi": "scifi",
+    "cyberpunk": "scifi",
+    "cyber_infrastructure": "scifi",
+    "synaptic_network": "scifi",
+    "arcade_vector_flight": "scifi",
+    "parkour_runner": "scifi",
+    "datacenter": "scifi",
+
+    # Space Abyss / Cosmic / Deep Space
+    "deep_space": "space_abyss",
+    "space": "space_abyss",
+    "abyss": "space_abyss",
+    "blackhole": "space_abyss",
+
+    # Procedural / Fallback
+    "maritime_lighthouse": "dark_ambient",
+    "arctic_desolation": "dark_ambient",
+}
+
+
 class LoopVideoEngine(BaseVideoCompositor):
     """
     Continuous atmospheric loop video composition engine.
@@ -76,11 +149,32 @@ class LoopVideoEngine(BaseVideoCompositor):
     """
 
     THEMATIC_CATEGORIES: tuple[str, ...] = (
+        "horror",
+        "dark_forest",
         "cosmic_horror",
+        "drama",
+        "cozy_ambient",
+        "scifi",
+        "space_abyss",
         "monsters",
         "dark_ambient",
-        "dark_forest",
-        "space_abyss",
+    )
+
+    CATEGORY_ALIASES: dict[str, str] = CATEGORY_ALIASES
+
+    SYNTHETIC_MONOCHROME_IDS: tuple[str, ...] = (
+        "loop_maritime_lighthouse_h_544374",
+        "loop_arctic_desolation_v_800210",
+    )
+
+    SYNTHETIC_MONOCHROME_CATEGORIES: tuple[str, ...] = (
+        "maritime_lighthouse",
+        "arctic_desolation",
+    )
+
+    SYNTHETIC_MONOCHROME_FILES: tuple[str, ...] = (
+        "loop_maritime_lighthouse_horizontal_544374.mp4",
+        "loop_arctic_desolation_vertical_800210.mp4",
     )
 
     DEFAULT_CATEGORY: str = "dark_ambient"
@@ -143,16 +237,20 @@ class LoopVideoEngine(BaseVideoCompositor):
             self.default_fallback_image = (BASE_DIR / "assets" / "background.jpg").resolve()
 
         self.db_path = db_path
+        self._custom_catalog = catalog is not None
         self.catalog = catalog or LoopCatalogRepository(db_path=db_path)
 
     def normalize_category(self, category: str | None) -> str:
         """
-        Normalizes category string into canonical snake_case format.
+        Normalizes category string into canonical snake_case format
+        and resolves semantic pipeline aliases to catalog categories.
         """
         if not category:
             return self.DEFAULT_CATEGORY
         normalized = str(category).strip().lower().replace("-", "_").replace(" ", "_")
-        return normalized or self.DEFAULT_CATEGORY
+        if not normalized:
+            return self.DEFAULT_CATEGORY
+        return self.CATEGORY_ALIASES.get(normalized, normalized)
 
     def scan_libraries(self, asset_root: str | Path | None = None) -> dict[str, list[Path]]:
         """
@@ -165,21 +263,13 @@ class LoopVideoEngine(BaseVideoCompositor):
         if not root.exists() or not root.is_dir():
             return library
 
-        # 1. Scan predefined thematic category folders
+        # 1. Scan predefined thematic category folders (including atomic/ subfolders)
         for cat in self.THEMATIC_CATEGORIES:
             for cat_dir in (root / cat, root / "procedural" / cat, root / "vertical" / cat, root / "horizontal" / cat):
                 if cat_dir.is_dir():
-                    for f in sorted(cat_dir.iterdir()):
-                        try:
-                            if (
-                                f.is_file()
-                                and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
-                                and f.stat().st_size > 0
-                                and f not in library[cat]
-                            ):
-                                library[cat].append(f)
-                        except OSError:
-                            continue
+                    for f in self._iter_media_files(cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, max_scan=128, recursive=True):
+                        if f not in library[cat]:
+                            library[cat].append(f)
 
         # 2. Also discover any extra subdirectories under root and root/procedural
         scan_dirs = [root]
@@ -196,17 +286,9 @@ class LoopVideoEngine(BaseVideoCompositor):
                     c_name = entry.name
                     if c_name not in library:
                         library[c_name] = []
-                    for f in sorted(entry.iterdir()):
-                        try:
-                            if (
-                                f.is_file()
-                                and f.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
-                                and f.stat().st_size > 0
-                                and f not in library[c_name]
-                            ):
-                                library[c_name].append(f)
-                        except OSError:
-                            continue
+                    for f in self._iter_media_files(entry, self.SUPPORTED_VIDEO_EXTENSIONS, max_scan=128, recursive=True):
+                        if f not in library[c_name]:
+                            library[c_name].append(f)
 
         return library
 
@@ -235,6 +317,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         extensions: tuple[str, ...],
         *,
         max_scan: int = 64,
+        recursive: bool = True,
     ):
         """Yield valid media files lazily with a hard scan cap (near-zero RAM)."""
         if not directory.is_dir():
@@ -243,10 +326,12 @@ class LoopVideoEngine(BaseVideoCompositor):
             entries = sorted(directory.iterdir())
         except OSError:
             return
+
         yielded = 0
+        subdirs: list[Path] = []
         for f in entries:
             if yielded >= max_scan:
-                break
+                return
             try:
                 if (
                     f.is_file()
@@ -255,8 +340,25 @@ class LoopVideoEngine(BaseVideoCompositor):
                 ):
                     yielded += 1
                     yield f
+                elif recursive and f.is_dir() and f.name not in (".git", "__pycache__"):
+                    subdirs.append(f)
             except OSError:
                 continue
+
+        if recursive:
+            for sdir in subdirs:
+                if yielded >= max_scan:
+                    return
+                for f in self._iter_media_files(
+                    sdir,
+                    extensions,
+                    max_scan=max_scan - yielded,
+                    recursive=True,
+                ):
+                    yielded += 1
+                    yield f
+                    if yielded >= max_scan:
+                        return
 
     def _pick_media_file(
         self,
@@ -266,10 +368,17 @@ class LoopVideoEngine(BaseVideoCompositor):
         seed: Any = None,
         name_substrs: Sequence[str] | None = None,
         max_scan: int = 64,
+        recursive: bool = True,
+        exclude_loop_ids: Sequence[str] | None = None,
     ) -> Path | None:
         """Pick one media file without materializing huge directory listings."""
         collected: list[Path] = []
-        for f in self._iter_media_files(directory, extensions, max_scan=max_scan):
+        exclude_set = {str(e).strip() for e in (exclude_loop_ids or []) if e}
+        exclude_stems = {Path(e).stem for e in exclude_set}
+
+        for f in self._iter_media_files(directory, extensions, max_scan=max_scan, recursive=recursive):
+            if exclude_set and (f.stem in exclude_stems or f.name in exclude_set or str(f) in exclude_set):
+                continue
             if name_substrs:
                 if any(s in f.name for s in name_substrs):
                     collected.append(f)
@@ -278,12 +387,16 @@ class LoopVideoEngine(BaseVideoCompositor):
             # Early exit when not seeding and we already have a preferred match
             if seed is None and collected and not name_substrs:
                 return collected[0]
+
         if name_substrs and not collected:
-            # Fall back to any valid file if name filter matched nothing
-            for f in self._iter_media_files(directory, extensions, max_scan=max_scan):
+            # Fall back to any valid file if name filter matched nothing (for example atomic clips)
+            for f in self._iter_media_files(directory, extensions, max_scan=max_scan, recursive=recursive):
+                if exclude_set and (f.stem in exclude_stems or f.name in exclude_set or str(f) in exclude_set):
+                    continue
                 collected.append(f)
                 if seed is None:
                     return f
+
         if not collected:
             return None
         if seed is not None:
@@ -335,16 +448,21 @@ class LoopVideoEngine(BaseVideoCompositor):
         root: Path,
         norm_cat: str,
         seed: Any,
+        orientation: str | None = None,
+        exclude_loop_ids: Sequence[str] | None = None,
     ) -> Path | None:
         """Lazy cross-category fallback: stop at first usable video (bounded)."""
-        # Prefer known thematic categories first, then shallow discovery.
-        candidates: list[str] = [c for c in self.THEMATIC_CATEGORIES if c != norm_cat]
+        ignored_names = {
+            "procedural", "vertical", "horizontal", norm_cat,
+            *self.SYNTHETIC_MONOCHROME_CATEGORIES
+        }
+        candidates: list[str] = [c for c in self.THEMATIC_CATEGORIES if c not in ignored_names]
         try:
             if root.is_dir():
                 for entry in sorted(root.iterdir()):
                     if (
                         entry.is_dir()
-                        and entry.name not in ("procedural", "vertical", "horizontal", norm_cat)
+                        and entry.name not in ignored_names
                         and entry.name not in candidates
                     ):
                         candidates.append(entry.name)
@@ -353,18 +471,31 @@ class LoopVideoEngine(BaseVideoCompositor):
         except OSError:
             pass
 
+        orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical" if orientation else None
+
         for cat_name in candidates:
-            for cat_dir in (
+            dirs_to_check = []
+            if orient_name:
+                dirs_to_check.append(root / orient_name / cat_name)
+            dirs_to_check.extend([
                 root / cat_name,
                 root / "procedural" / cat_name,
                 root / "vertical" / cat_name,
                 root / "horizontal" / cat_name,
-            ):
+            ])
+            for cat_dir in dirs_to_check:
                 picked = self._pick_media_file(
-                    cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, seed=seed, max_scan=32
+                    cat_dir,
+                    self.SUPPORTED_VIDEO_EXTENSIONS,
+                    seed=seed,
+                    max_scan=32,
+                    recursive=True,
+                    exclude_loop_ids=exclude_loop_ids,
                 )
                 if picked is not None:
-                    logger.info("Found fallback loop video in category '%s'", cat_name)
+                    if picked.name in self.SYNTHETIC_MONOCHROME_FILES:
+                        continue
+                    logger.info("Found fallback loop video in category '%s': %s", cat_name, picked.name)
                     return picked
         return None
 
@@ -375,57 +506,99 @@ class LoopVideoEngine(BaseVideoCompositor):
         allow_fallback: bool = True,
         seed: Any = None,
         orientation: str | None = None,
+        exclude_loop_ids: Sequence[str] | None = None,
+        channel: str | None = None,
+        **kwargs: Any,
     ) -> Path:
         """
         Resolves a loop/background asset with live-first priority:
-        1) catalog get_best_loop (live select)
-        2) on-demand synthesize_on_demand (live create) when catalog/FS miss
-        3) filesystem / backgrounds fallback (kept in parallel; last resort)
+        1) catalog get_best_loop (live select) with seed, exclude_loop_ids, channel, and monochrome guards
+        2) exact category filesystem hit (searching recursive atomic/ folders)
+        3) on-demand synthesize_on_demand (live create)
+        4) filesystem / backgrounds fallback (avoiding synthetic monochrome latching)
         """
         norm_cat = self.normalize_category(category)
         self._live_rss_checkpoint("8_loop_scene_live_select")
 
         # 0. Query SQLite loop catalog repository first (live select)
-        # Only query default catalog if asset_root is not overridden and loops_root_dir is the default assets dir
-        is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
-        if self.catalog is not None and is_default_root:
+        can_query_catalog = self.catalog is not None and asset_root is None and (
+            self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve() or self._custom_catalog
+        )
+        if can_query_catalog:
             try:
-                best_loop = self.catalog.get_best_loop(
-                    category=norm_cat,
-                    orientation=orientation or "vertical",
-                )
+                seed_int = seed if isinstance(seed, int) else None
+                exclude_list = list(exclude_loop_ids) if exclude_loop_ids else None
+                try:
+                    best_loop = self.catalog.get_best_loop(
+                        category=norm_cat,
+                        orientation=orientation or "vertical",
+                        seed=seed_int,
+                        exclude_loop_ids=exclude_list,
+                        channel=channel,
+                    )
+                except TypeError:
+                    best_loop = self.catalog.get_best_loop(
+                        category=norm_cat,
+                        orientation=orientation or "vertical",
+                    )
+
                 if best_loop and Path(best_loop.file_path).is_file() and Path(best_loop.file_path).stat().st_size > 0:
-                    self.catalog.record_loop_usage(best_loop.loop_id)
-                    logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, best_loop.file_path)
-                    self._live_rss_checkpoint("8_loop_scene_live_select_hit")
-                    return Path(best_loop.file_path)
+                    in_mono = (
+                        best_loop.loop_id in self.SYNTHETIC_MONOCHROME_IDS
+                        or getattr(best_loop, "technology", None) in ("ffmpeg_lavfi", "synthetic_monochrome")
+                        or getattr(best_loop, "category", None) in self.SYNTHETIC_MONOCHROME_CATEGORIES
+                    )
+                    requested_mono = norm_cat in self.SYNTHETIC_MONOCHROME_CATEGORIES
+
+                    if in_mono and not requested_mono:
+                        logger.info(
+                            "Skipping synthetic monochrome catalog loop '%s' for requested category '%s'",
+                            best_loop.loop_id,
+                            norm_cat,
+                        )
+                    else:
+                        self.catalog.record_loop_usage(best_loop.loop_id)
+                        logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, best_loop.file_path)
+                        self._live_rss_checkpoint("8_loop_scene_live_select_hit")
+                        return Path(best_loop.file_path)
             except Exception as e:
                 logger.warning("Could not query SQLite loop catalog: %s", e)
 
         root = Path(asset_root).expanduser().resolve() if asset_root else self.loops_root_dir
         cat_dir = root / norm_cat
 
-        # 1. Exact category filesystem hit (still live select of existing assets)
+        # 1. Exact category filesystem hit (searching recursive atomic/ folders)
         if orientation:
             orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
             name_keys = (orient_name, f"_{orient_name[:1]}_")
-            for orient_cat_dir in (root / orient_name / norm_cat, root / "procedural" / norm_cat, root / norm_cat):
-                # Prefer name-matched clips; fall back to any video in the dir
+            for orient_cat_dir in (root / orient_name / norm_cat, root / norm_cat, root / "procedural" / norm_cat):
+                use_name_keys = None if orient_cat_dir == (root / orient_name / norm_cat) else name_keys
                 picked = self._pick_media_file(
                     orient_cat_dir,
                     self.SUPPORTED_VIDEO_EXTENSIONS,
                     seed=seed,
-                    name_substrs=name_keys,
+                    name_substrs=use_name_keys,
                     max_scan=64,
+                    recursive=True,
+                    exclude_loop_ids=exclude_loop_ids,
                 )
                 if picked is not None:
+                    if picked.name in self.SYNTHETIC_MONOCHROME_FILES and norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
+                        continue
                     return picked
 
         for cat_dir in (root / norm_cat, root / "procedural" / norm_cat):
             picked = self._pick_media_file(
-                cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, seed=seed, max_scan=64
+                cat_dir,
+                self.SUPPORTED_VIDEO_EXTENSIONS,
+                seed=seed,
+                max_scan=64,
+                recursive=True,
+                exclude_loop_ids=exclude_loop_ids,
             )
             if picked is not None:
+                if picked.name in self.SYNTHETIC_MONOCHROME_FILES and norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
+                    continue
                 return picked
 
         # Fail closed: never invent backgrounds when fallback is disallowed
@@ -434,7 +607,8 @@ class LoopVideoEngine(BaseVideoCompositor):
                 f"No video loops found in category '{norm_cat}' at {cat_dir}"
             )
 
-        # 2. Live create BEFORE filesystem/background fallback (parallel path retained below)
+        # 2. Live create BEFORE filesystem/background fallback
+        is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
         synth_path = self._try_live_synthesize(
             norm_cat,
             orientation,
@@ -451,28 +625,46 @@ class LoopVideoEngine(BaseVideoCompositor):
             root,
         )
 
-        # 3. Filesystem / background fallback (kept; only after live select+create)
-        other = self._find_fallback_in_other_categories(root, norm_cat, seed)
+        # 3. Filesystem / background fallback (avoiding synthetic monochrome latching)
+        other = self._find_fallback_in_other_categories(
+            root,
+            norm_cat,
+            seed,
+            orientation=orientation,
+            exclude_loop_ids=exclude_loop_ids,
+        )
         if other is not None:
             return other
 
         if root.is_dir():
             root_hit = self._pick_media_file(
-                root, self.SUPPORTED_VIDEO_EXTENSIONS, seed=None, max_scan=32
+                root,
+                self.SUPPORTED_VIDEO_EXTENSIONS,
+                seed=None,
+                max_scan=32,
+                recursive=False,
+                exclude_loop_ids=exclude_loop_ids,
             )
-            if root_hit is not None:
+            if root_hit is not None and root_hit.name not in self.SYNTHETIC_MONOCHROME_FILES:
                 logger.info("Found fallback loop video in root loops directory: %s", root_hit.name)
                 return root_hit
 
         if self.default_fallback_dir.is_dir():
             fb_vid = self._pick_media_file(
-                self.default_fallback_dir, self.SUPPORTED_VIDEO_EXTENSIONS, max_scan=32
+                self.default_fallback_dir,
+                self.SUPPORTED_VIDEO_EXTENSIONS,
+                max_scan=32,
+                recursive=True,
+                exclude_loop_ids=exclude_loop_ids,
             )
             if fb_vid is not None:
                 logger.info("Found fallback video in backgrounds directory: %s", fb_vid.name)
                 return fb_vid
             fb_img = self._pick_media_file(
-                self.default_fallback_dir, self.SUPPORTED_IMAGE_EXTENSIONS, max_scan=32
+                self.default_fallback_dir,
+                self.SUPPORTED_IMAGE_EXTENSIONS,
+                max_scan=32,
+                recursive=True,
             )
             if fb_img is not None:
                 logger.info("Found fallback background image: %s", fb_img.name)
@@ -504,12 +696,22 @@ class LoopVideoEngine(BaseVideoCompositor):
         *,
         allow_fallback: bool = True,
         asset_root: str | Path | None = None,
+        seed: Any = None,
+        orientation: str | None = None,
+        exclude_loop_ids: Sequence[str] | None = None,
+        channel: str | None = None,
+        **kwargs: Any,
     ) -> Path:
         """Convenience alias for resolve_loop_video."""
         return self.resolve_loop_video(
             category=category,
             asset_root=asset_root,
             allow_fallback=allow_fallback,
+            seed=seed,
+            orientation=orientation,
+            exclude_loop_ids=exclude_loop_ids,
+            channel=channel,
+            **kwargs,
         )
 
     def parse_resolution(self, resolution_or_orientation: str | tuple[int, int] | list[int]) -> tuple[int, int]:
@@ -1388,6 +1590,24 @@ class LoopVideoEngine(BaseVideoCompositor):
             "category": category,
             "resolution": f"{res_tuple[0]}x{res_tuple[1]}",
         }
+
+    def assemble_multiscene_video(
+        self,
+        manifest_path: Path | str,
+        output_video_path: Path | str,
+        **extra_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Assembles multiple distinct scenes from a manifest or sequence."""
+        return self.render(manifest_path, output_video_path, **extra_kwargs)
+
+    def compose_multiscene(
+        self,
+        manifest_path: Path | str,
+        output_video_path: Path | str,
+        **extra_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Alias for assemble_multiscene_video / render."""
+        return self.render(manifest_path, output_video_path, **extra_kwargs)
 
 
 # Alias for compositor interface factory naming convention

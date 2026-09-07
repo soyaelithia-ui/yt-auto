@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-09-07T20:13:00Z",
+  "total_duration_sec": 11.24,
+  "tests": {
+    "test_1_idempotent_sync": {
+      "name": "Idempotent Sync",
+      "passed": true,
+      "runs": [
+        {
+          "run": 1,
+          "synced_returned": 88,
+          "duration_sec": 2.367,
+          "row_count": 88,
+          "count_preserved": true,
+          "usage_preserved": true,
+          "sha256_preserved": true
+        },
+        {
+          "run": 2,
+          "synced_returned": 88,
+          "duration_sec": 2.567,
+          "row_count": 88,
+          "count_preserved": true,
+          "usage_preserved": true,
+          "sha256_preserved": true
+        },
+        {
+          "run": 3,
+          "synced_returned": 88,
+          "duration_sec": 2.411,
+          "row_count": 88,
+          "count_preserved": true,
+          "usage_preserved": true,
+          "sha256_preserved": true
+        }
+      ],
+      "metrics": {
+        "baseline_count": 88,
+        "simulated_usage_loops": 10,
+        "run_durations_sec": [
+          2.366812113003107,
+          2.5669141959951958,
+          2.411344063002616
+        ],
+        "avg_duration_sec": 2.448
+      },
+      "error": null
+    },
+    "test_2_real_db_audit": {
+      "name": "Real DB Audit",
+      "passed": true,
+      "metrics": {
+        "total_loops": 88,
+        "horizontal_loops": 73,
+        "vertical_loops": 15,
+        "monochrome_count": 0,
+        "missing_files": 0,
+        "too_small_files": 0,
+        "sha_mismatches": 0,
+        "min_size_bytes": 643527,
+        "max_size_bytes": 89277436
+      },
+      "failures": []
+    },
+    "test_3_corrupt_asset_resilience": {
+      "name": "Corrupt Asset Resilience",
+      "passed": true,
+      "crashed": false,
+      "zero_byte_discarded": true,
+      "hundred_byte_discarded": true,
+      "metrics": {
+        "crashed": false,
+        "total_indexed": 0,
+        "zero_byte_in_db": 0,
+        "corrupted_small_in_db": 0
+      },
+      "findings": []
+    },
+    "test_4_monochrome_fallback_elimination": {
+      "name": "Monochrome Fallback Elimination",
+      "passed": true,
+      "total_evaluated": 180,
+      "monochrome_hits": [],
+      "channel_isolation_failures": [],
+      "nonexistent_files": [],
+      "metrics": {
+        "total_evaluations": 180,
+        "monochrome_hits_count": 0,
+        "channel_violations_count": 0,
+        "missing_files_count": 0
+      }
+    }
+  },
+  "verdict": "APPROVE"
+}

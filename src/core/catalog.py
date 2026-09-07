@@ -10,11 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
+import re
 import sqlite3
+import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.repository import validate_db_path
@@ -26,7 +29,21 @@ __all__ = [
     "LoopRecord",
     "LoopCatalogRepository",
     "compute_file_sha256",
+    "resolve_loop_file_path",
+    "CHANNEL_CATEGORIES",
+    "SYNTHETIC_MONOCHROME_LOOP_IDS",
 ]
+
+CHANNEL_CATEGORIES: Dict[str, Tuple[str, ...]] = {
+    "moku": ("horror", "dark_forest", "cosmic_horror", "dark_ambient", "moku_horror", "tactical_chamber"),
+    "aelithia": ("drama", "cozy_ambient", "nostalgia", "aelithia_drama", "cozy_hearth"),
+    "scifi": ("scifi", "deep_space", "space_abyss", "synaptic_network", "singularidad_scifi"),
+}
+
+SYNTHETIC_MONOCHROME_LOOP_IDS: Set[str] = {
+    "loop_maritime_lighthouse_h_544374",
+    "loop_arctic_desolation_v_800210",
+}
 
 # Migration remap only: SQLite `video_loops.file_path` may still store absolute
 # paths from prior host checkouts. These prefixes are NOT the live install root
@@ -86,6 +103,50 @@ def compute_file_sha256(path: str | Path) -> str:
     return h.hexdigest()
 
 
+def probe_video_metadata(file_path: Path) -> Optional[Tuple[int, int, float, int]]:
+    """Extract width, height, duration_sec, fps using ffprobe.
+
+    Returns (width, height, duration_sec, fps) if probe succeeds with valid
+    dimensions and duration, or None if ffprobe fails, produces no valid video stream,
+    or reports zero/negative dimensions.
+    """
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height,r_frame_rate,duration",
+        "-show_entries", "format=duration",
+        "-of", "json", str(file_path)
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if res.returncode != 0 or not res.stdout:
+            return None
+        data = json.loads(res.stdout)
+        streams = data.get("streams", [])
+        if not streams:
+            return None
+        stream = streams[0]
+        fmt = data.get("format", {})
+        w = int(stream.get("width") or 0)
+        h = int(stream.get("height") or 0)
+        if w <= 0 or h <= 0:
+            return None
+        dur = float(stream.get("duration") or fmt.get("duration") or 0.0)
+        if dur <= 0.0:
+            return None
+        fps_str = stream.get("r_frame_rate", "24/1")
+        if "/" in fps_str:
+            num, den = fps_str.split("/")
+            fps = round(float(num) / float(den)) if float(den) != 0 else 24
+        else:
+            fps = int(float(fps_str)) if fps_str else 24
+        if fps <= 0:
+            fps = 24
+        return w, h, dur, fps
+    except Exception:
+        return None
+
+
 @dataclass
 class LoopRecord:
     loop_id: str
@@ -109,6 +170,19 @@ class LoopRecord:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         return d
+
+    @property
+    def channel(self) -> Optional[str]:
+        ch = self.generator_params.get("channel") if self.generator_params else None
+        if ch:
+            return ch
+        for c in ("moku", "aelithia", "scifi"):
+            if c in self.theme_tags or f"channel:{c}" in self.theme_tags:
+                return c
+            stem = Path(self.file_path).stem.lower()
+            if stem.startswith(f"{c}_"):
+                return c
+        return None
 
 
 class LoopCatalogRepository:
@@ -139,9 +213,27 @@ class LoopCatalogRepository:
     CREATE INDEX IF NOT EXISTS idx_video_loops_sha ON video_loops(sha256);
     """
 
-    def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
+    def __init__(
+        self,
+        db_path: str = DEFAULT_DB_PATH,
+        auto_seed: Optional[bool] = None,
+    ) -> None:
         path_or_str = validate_db_path(db_path)
         self.db_path = ":memory:" if str(path_or_str) == ":memory:" else str(Path(path_or_str).expanduser().resolve())
+        if auto_seed is not None:
+            self.auto_seed = bool(auto_seed)
+        else:
+            is_test = os.environ.get("TEST_MODE") == "1"
+            if not is_test:
+                self.auto_seed = True
+            elif os.environ.get("YT_AUTO_SEED_CATALOG") == "1":
+                self.auto_seed = True
+            elif "autoseed" in str(self.db_path).lower():
+                self.auto_seed = True
+            elif self.db_path == str(Path(DEFAULT_DB_PATH).expanduser().resolve()):
+                self.auto_seed = True
+            else:
+                self.auto_seed = False
         self._ensure_table()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -159,6 +251,16 @@ class LoopCatalogRepository:
         with self._get_connection() as conn:
             conn.executescript(self.CREATE_TABLE_SQL)
             conn.commit()
+
+        if getattr(self, "auto_seed", True):
+            try:
+                if self.count_loops() < 50:
+                    assets_dir = _catalog_repo_root() / "assets" / "loops"
+                    if assets_dir.is_dir():
+                        logger.info("Auto-seeding loop catalog (count < 50)...")
+                        self.sync_catalog_from_assets(assets_dir)
+            except Exception as e:
+                logger.warning("Auto-seeding loop catalog failed: %s", e)
 
     def _row_to_record(self, row: sqlite3.Row) -> LoopRecord:
         try:
@@ -243,6 +345,174 @@ class LoopCatalogRepository:
         logger.info("Registered loop '%s' (cat=%s, orient=%s, tech=%s)", loop.loop_id, loop.category, loop.orientation, loop.technology)
         return True
 
+    def sync_catalog_from_assets(
+        self,
+        assets_dir: Optional[Path | str] = None,
+        force_rescan: bool = False,
+    ) -> int:
+        """
+        Enumerate all .mp4 and .webm in assets/loops/horizontal/ and vertical/ (including atomic/ subfolders),
+        extract orientation, category, dimensions, duration, fps, technology, and SHA-256 digest,
+        and upsert into the video_loops table idempotently.
+        """
+        repo_root = _catalog_repo_root()
+        if assets_dir is None:
+            loops_root = repo_root / "assets" / "loops"
+        else:
+            p = Path(assets_dir)
+            if (p / "horizontal").is_dir() or (p / "vertical").is_dir():
+                loops_root = p
+            elif (p / "loops" / "horizontal").is_dir() or (p / "loops" / "vertical").is_dir():
+                loops_root = p / "loops"
+            else:
+                loops_root = p
+
+        if not loops_root.is_dir():
+            logger.warning("Loops root directory not found: %s", loops_root)
+            return 0
+
+        upsert_sql = """
+        INSERT INTO video_loops (
+            loop_id, category, technology, theme_tags, orientation,
+            width, height, duration_sec, fps, file_path,
+            file_size_bytes, sha256, generator_params_json,
+            usage_count, last_used_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(loop_id) DO UPDATE SET
+            category = excluded.category,
+            technology = excluded.technology,
+            theme_tags = excluded.theme_tags,
+            orientation = excluded.orientation,
+            width = excluded.width,
+            height = excluded.height,
+            duration_sec = excluded.duration_sec,
+            fps = excluded.fps,
+            file_path = excluded.file_path,
+            file_size_bytes = excluded.file_size_bytes,
+            sha256 = excluded.sha256,
+            generator_params_json = excluded.generator_params_json
+        """
+
+        rows_to_upsert: List[Tuple[Any, ...]] = []
+        now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+        for orient in ("horizontal", "vertical"):
+            orient_dir = loops_root / orient
+            if not orient_dir.is_dir():
+                continue
+
+            candidates = sorted([
+                f for f in orient_dir.rglob("*")
+                if f.is_file() and f.suffix.lower() in (".mp4", ".webm")
+            ])
+
+            for file_p in candidates:
+                if file_p.name.startswith("."):
+                    continue
+                try:
+                    file_size = file_p.stat().st_size
+                except OSError:
+                    continue
+                if file_size < 25_000:
+                    continue
+
+                rel = file_p.relative_to(orient_dir)
+                if len(rel.parts) > 1:
+                    category = rel.parts[0].strip().lower().replace("-", "_")
+                    if category == "atomic":
+                        category = "general"
+                else:
+                    category = "general"
+
+                is_atomic = "atomic" in rel.parts
+                is_master = "_master_60s" in file_p.name
+                stem = file_p.stem.lower()
+
+                # Channel attribution
+                channel = None
+                for ch in ("moku", "aelithia", "scifi"):
+                    if stem.startswith(f"{ch}_") or ch in rel.parts:
+                        channel = ch
+                        break
+
+                # Extract theme tags
+                tags = {category, orient}
+                if channel:
+                    tags.add(channel)
+                    tags.add(f"channel:{channel}")
+                if is_atomic:
+                    tags.add("atomic")
+                if is_master:
+                    tags.add("master")
+                    tags.add("60s")
+
+                tokens = [t.lower() for t in re.split(r"[_\W]+", stem) if t]
+                ignored_tokens = {"mp4", "webm", "master", "60s", "moku", "aelithia", "scifi", "vertical", "horizontal", "short", "loop"}
+                for t in tokens:
+                    if t not in ignored_tokens and len(t) > 1:
+                        tags.add(t)
+
+                # Dimensions, duration, fps
+                if is_master:
+                    duration_sec = 60.46
+                    fps = 24
+                    width, height = (1920, 1080) if orient == "horizontal" else (1080, 1920)
+                    technology = "cinematic_master"
+                elif is_atomic:
+                    duration_sec = 6.04
+                    fps = 24
+                    width, height = (736, 400) if orient == "horizontal" else (400, 736)
+                    technology = "cinematic_atomic"
+                else:
+                    meta = probe_video_metadata(file_p)
+                    if not meta or meta[0] <= 0 or meta[1] <= 0 or meta[2] <= 0:
+                        logger.warning("Skipping corrupt or unreadable video file: %s", file_p)
+                        continue
+                    width, height, duration_sec, fps = meta
+                    technology = "pre-rendered"
+
+                # Relative file path when within repo root, else absolute
+                try:
+                    stored_path = str(file_p.relative_to(repo_root))
+                except ValueError:
+                    stored_path = str(file_p.resolve())
+
+                loop_id = f"loop_{orient[:1]}_{category}_{file_p.stem}"
+                sha256 = compute_file_sha256(file_p)
+                gen_params = json.dumps(
+                    {"type": "atomic" if is_atomic else "master", "channel": channel, "source": "assets_dir"},
+                    ensure_ascii=False,
+                )
+                tags_json = json.dumps(sorted(list(tags)), ensure_ascii=False)
+
+                rows_to_upsert.append((
+                    loop_id, category, technology, tags_json,
+                    orient, width, height, duration_sec, fps, stored_path,
+                    file_size, sha256, gen_params, 0, None, now_iso,
+                ))
+
+        if rows_to_upsert:
+            with self._get_connection() as conn:
+                conn.executemany(upsert_sql, rows_to_upsert)
+                conn.commit()
+            logger.info("Successfully synced %d video loops from assets", len(rows_to_upsert))
+
+        return len(rows_to_upsert)
+
+    def purge_synthetic_monochrome_loops(self) -> int:
+        """Purges synthetic monochrome loops from the database."""
+        sql = """
+        DELETE FROM video_loops
+        WHERE loop_id IN ('loop_maritime_lighthouse_h_544374', 'loop_arctic_desolation_v_800210')
+           OR (technology = 'ffmpeg_lavfi' AND sha256 = 'procedural')
+        """
+        with self._get_connection() as conn:
+            cur = conn.execute(sql)
+            deleted = cur.rowcount
+            conn.commit()
+        logger.info("Purged %d synthetic monochrome loops from catalog", deleted)
+        return deleted
+
     def get_loop_by_id(self, loop_id: str) -> Optional[LoopRecord]:
         """Fetches a loop record by its unique ID."""
         sql = "SELECT * FROM video_loops WHERE loop_id = ? LIMIT 1"
@@ -258,26 +528,80 @@ class LoopCatalogRepository:
         category: str,
         orientation: str = "vertical",
         requested_tags: Optional[Sequence[str]] = None,
+        seed: Optional[int] = None,
+        exclude_loop_ids: Optional[Sequence[str]] = None,
+        channel: Optional[str] = None,
     ) -> Optional[LoopRecord]:
         """
-        Retrieves the optimal video loop matching category and orientation.
-        Applies smart rotation (least recently used and lowest usage_count) to prevent visual repetition.
+        Retrieves the optimal video loop matching category, orientation, and channel constraints.
+        Applies 3-tier fallback, deterministic seeded rotation, exclusion filtering, and
+        channel isolation.
         """
         orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
         cat_clean = category.strip().lower().replace("-", "_").replace(" ", "_") if category else "dark_ambient"
+        exclude_set = {str(e).strip() for e in (exclude_loop_ids or []) if e}
 
-        # Query active candidates
-        sql = """
+        def _is_foreign_channel(rec: LoopRecord) -> bool:
+            if not channel:
+                return False
+            rec_ch = rec.channel
+            return bool(rec_ch and rec_ch.lower() != channel.lower())
+
+        def _filter_and_validate(rows: List[sqlite3.Row]) -> List[LoopRecord]:
+            valid_recs: List[LoopRecord] = []
+            for r in rows:
+                rec = self._row_to_record(r)
+                # Purge/deprioritize synthetic monochrome loops
+                is_synthetic_mono = (
+                    rec.loop_id in SYNTHETIC_MONOCHROME_LOOP_IDS
+                    or rec.category in ("maritime_lighthouse", "arctic_desolation")
+                    or (rec.technology == "ffmpeg_lavfi" and rec.sha256 == "procedural")
+                )
+                if is_synthetic_mono:
+                    if cat_clean not in ("maritime_lighthouse", "arctic_desolation"):
+                        continue
+
+                # Channel isolation: reject foreign channel
+                if _is_foreign_channel(rec):
+                    continue
+
+                # Exclusion check
+                if rec.loop_id in exclude_set:
+                    continue
+
+                # Validate file on disk (min 25KB)
+                p = resolve_loop_file_path(rec.file_path)
+                if p.is_file() and p.stat().st_size >= 25_000:
+                    rec.file_path = str(p)
+                    valid_recs.append(rec)
+            return valid_recs
+
+        # --- Tier 1: Exact category match ---
+        sql_exact = """
         SELECT * FROM video_loops
         WHERE category = ? AND orientation = ?
         ORDER BY usage_count ASC, last_used_at ASC, id ASC
         """
         with self._get_connection() as conn:
-            cur = conn.execute(sql, (cat_clean, orient_clean))
-            rows = cur.fetchall()
+            cur = conn.execute(sql_exact, (cat_clean, orient_clean))
+            candidates = _filter_and_validate(cur.fetchall())
 
-        if not rows:
-            # Fallback across other categories for the same orientation
+        # --- Tier 2: Same-channel compatible fallback ---
+        if not candidates and channel and channel in CHANNEL_CATEGORIES:
+            compat_cats = [c for c in CHANNEL_CATEGORIES[channel] if c != cat_clean]
+            if compat_cats:
+                placeholders = ",".join("?" for _ in compat_cats)
+                sql_ch = f"""
+                SELECT * FROM video_loops
+                WHERE orientation = ? AND category IN ({placeholders})
+                ORDER BY usage_count ASC, last_used_at ASC, id ASC
+                """
+                with self._get_connection() as conn:
+                    cur = conn.execute(sql_ch, [orient_clean] + compat_cats)
+                    candidates = _filter_and_validate(cur.fetchall())
+
+        # --- Tier 3: Generic orientation fallback (preserving channel isolation) ---
+        if not candidates:
             sql_fb = """
             SELECT * FROM video_loops
             WHERE orientation = ?
@@ -285,39 +609,49 @@ class LoopCatalogRepository:
             """
             with self._get_connection() as conn:
                 cur = conn.execute(sql_fb, (orient_clean,))
-                rows = cur.fetchall()
+                candidates = _filter_and_validate(cur.fetchall())
 
-        if not rows:
+        if not candidates:
             return None
 
-        records = [self._row_to_record(r) for r in rows]
-
-        def _resolve_and_validate(rec: LoopRecord) -> Optional[LoopRecord]:
-            p = resolve_loop_file_path(rec.file_path)
-            if p.is_file() and p.stat().st_size >= 25_000:
-                rec.file_path = str(p)
-                return rec
-            return None
-
-        # Validating file existence on disk (minimum 25KB to exclude dummy/corrupt loops)
-        valid_records = [r for rec in records if (r := _resolve_and_validate(rec)) is not None]
-        if not valid_records:
-            return None
-
-        # Tag-based ranking if requested
+        # --- Ranking and Selection ---
         if requested_tags:
             tag_set = {t.lower().strip() for t in requested_tags if t}
-            def score(rec: LoopRecord) -> Tuple[int, int, str]:
+            def tag_score(rec: LoopRecord) -> Tuple[int, int, str]:
                 rec_tags = {t.lower().strip() for t in rec.theme_tags}
                 match_count = len(tag_set.intersection(rec_tags))
                 return (-match_count, rec.usage_count, rec.last_used_at or "")
 
-            valid_records.sort(key=score)
+            candidates.sort(key=tag_score)
+            best_match_count = len({t.lower().strip() for t in candidates[0].theme_tags}.intersection(tag_set))
+            top_group = [c for c in candidates if len({t.lower().strip() for t in c.theme_tags}.intersection(tag_set)) == best_match_count]
+        else:
+            top_group = candidates
 
-        return valid_records[0]
+        # Identify ties on minimum usage_count
+        min_usage = min(r.usage_count for r in top_group)
+        tied_candidates = [r for r in top_group if r.usage_count == min_usage]
 
-    # Alias for multi-scene engines
+        # Seed-based deterministic rotation vs strict LRU
+        if seed is not None:
+            tied_candidates.sort(key=lambda r: r.loop_id)
+            rng = random.Random(seed)
+            return rng.choice(tied_candidates)
+
+        return tied_candidates[0]
+
+    # Aliases
     get_loop_for_scene = get_best_loop
+
+    def resolve_for_theme(
+        self,
+        theme: str,
+        is_vertical: bool = True,
+        **kwargs: Any,
+    ) -> Optional[LoopRecord]:
+        """Alias for thumbnail and procedural asset resolvers."""
+        orientation = "vertical" if is_vertical else "horizontal"
+        return self.get_best_loop(category=theme, orientation=orientation, **kwargs)
 
     def record_loop_usage(self, loop_id: str) -> None:
         """Increments usage counter and updates last_used_at timestamp."""

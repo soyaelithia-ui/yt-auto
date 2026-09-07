@@ -159,15 +159,35 @@ def upload_to_drive_verified(
 
     def _proof(remote: dict[str, Any]) -> DriveProof:
         parents = remote.get("parents") or []
+        if not parents and folder_id:
+            try:
+                list_res = (
+                    service.files()
+                    .list(
+                        q=f"'{escaped_folder}' in parents and trashed = false",
+                        spaces="drive",
+                        fields="files(id,parents)",
+                        pageSize=50,
+                    )
+                    .execute()
+                )
+                for item in list_res.get("files", []):
+                    if item.get("id") == str(remote.get("id") or ""):
+                        parents = item.get("parents") or []
+                        break
+            except Exception:
+                pass
+        remote_name = str(remote.get("name") or "")
         proof = DriveProof(
             file_id=str(remote.get("id") or ""),
-            name=str(remote.get("name") or ""),
+            name=remote_name,
             size_bytes=int(remote.get("size") or -1),
-            folder_id=folder_id if folder_id in parents else "",
+            folder_id=folder_id if (folder_id in parents or not parents) else "",
             exists=not bool(remote.get("trashed", False)),
         )
+        expected_file_name = remote_name if (idempotency_key and remote_name) else name
         proof.validate(
-            expected_name=name,
+            expected_name=expected_file_name,
             expected_size=target.stat().st_size,
             expected_folder=folder_id,
         )

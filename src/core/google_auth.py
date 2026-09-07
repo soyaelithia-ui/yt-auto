@@ -256,6 +256,12 @@ def get_drive_credentials(
     if use_gcloud or os.environ.get("DRIVE_USE_GCLOUD", "0").strip() == "1":
         return _gcloud_credentials()
 
+    if token_path and Path(token_path).is_file():
+        try:
+            return load_authorized_user_credentials(token_path, scopes=DRIVE_SCOPES)
+        except Exception as exc:
+            logger.warning("No se pudo cargar token OAuth para Drive (%s): %s", token_path, exc)
+
     if sa_key_path and Path(sa_key_path).is_file():
         sa_path = Path(sa_key_path)
         try:
@@ -272,9 +278,6 @@ def get_drive_credentials(
         except Exception as exc:
             raise AuthenticationError(f"Error al leer clave de Drive ({sa_key_path}): {exc}") from exc
         raise AuthenticationError("DRIVE_KEY_PATH no es ni service account ni token OAuth válido")
-
-    if token_path and Path(token_path).is_file():
-        return load_authorized_user_credentials(token_path, scopes=DRIVE_SCOPES)
 
     # Fallback to default channel tokens if available
     for ch_token in [YOUTUBE_TOKEN_PATH, resolve_channel2_token_path()]:

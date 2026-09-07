@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 from src.branding import get_channel_branding
@@ -46,10 +47,12 @@ def _backup_drive(
 
     def verified_upload(file_path: str, **kwargs: Any) -> Any:
         """Adapt the review-core upload contract to the Drive client contract."""
+        token_path = str(getattr(settings, "youtube_token_path", "") or "")
         return upload_fn(
             file_path,
             folder_id=str(kwargs["folder_id"]),
             sa_key_path=str(getattr(SETTINGS, "drive_key_path", "")),
+            token_path=token_path if token_path and Path(token_path).is_file() else None,
             display_name=kwargs.get("display_name"),
             idempotency_key=kwargs.get("idempotency_key"),
         )

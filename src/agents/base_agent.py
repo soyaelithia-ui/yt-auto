@@ -73,7 +73,9 @@ def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
     for name in ("antigravity-oauth-token", "settings.json"):
         src = secrets_dir / name
         dst = bot_appdata / name
-        if not src.is_file() or dst.exists() or _is_external_interactive_cli(src.parent):
+        if not src.is_file() or _is_external_interactive_cli(src.parent):
+            continue
+        if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
             continue
         shutil.copy2(src, dst)
         try:
@@ -372,6 +374,9 @@ class AgyStreamClient:
                 self._process = None
 
 
+_GLOBAL_EXECUTION_LOCK = threading.Lock()
+
+
 class ProgrammaticAgent:
     """Runs tasks through the Antigravity local harness (Pro quota / native SDK)."""
 
@@ -531,13 +536,14 @@ class ProgrammaticAgent:
 
     def run(self, task: str = DEFAULT_TASK, task_result_path: Optional[Union[Path, str]] = None) -> Path:
         """Execute the agent task synchronously."""
-        if task_result_path is not None:
-            prev, self.task_result_path = self.task_result_path, Path(task_result_path)
-            try:
-                return asyncio.run(self._run_async(task))
-            finally:
-                self.task_result_path = prev
-        return asyncio.run(self._run_async(task))
+        with _GLOBAL_EXECUTION_LOCK:
+            if task_result_path is not None:
+                prev, self.task_result_path = self.task_result_path, Path(task_result_path)
+                try:
+                    return asyncio.run(self._run_async(task))
+                finally:
+                    self.task_result_path = prev
+            return asyncio.run(self._run_async(task))
 
     @staticmethod
     def consume(path: Union[str, Path, None] = None) -> dict[str, Any]:

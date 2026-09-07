@@ -995,7 +995,7 @@ class QueueRepository:
             if conn.execute(
                 "SELECT 1 FROM leases WHERE channel = ?", (channel_key,)
             ).fetchone() or conn.execute(
-                "SELECT 1 FROM lane_leases WHERE channel = ?", (channel_key,)
+                "SELECT 1 FROM lane_leases WHERE job_id = ?", (requested_id,)
             ).fetchone():
                 conn.rollback()
                 return None
@@ -2471,7 +2471,27 @@ class QueueRepository:
                 (lane_key, channel_key, *resumable_states, current),
             ).fetchall()
             chosen = None
+            review_store = None
+            try:
+                from review.db import ReviewStateStore
+                review_store = ReviewStateStore()
+            except Exception:
+                pass
+
             for row in rows:
+                sid = str(row["story_id"])
+                if review_store is not None:
+                    try:
+                        job = review_store.get_latest_job(sid)
+                        if job and job.status in {
+                            "PENDING_REVIEW",
+                            "WAITING_HUMAN_VERIFICATION",
+                            "APPROVED",
+                            "PUBLISHED",
+                        }:
+                            continue
+                    except Exception:
+                        pass
                 video = resumable_video_for_story(str(row["candidate_run_id"]), db_path=self.db_path)
                 if video is not None:
                     chosen = (row, video)

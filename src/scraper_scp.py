@@ -595,7 +595,9 @@ async def async_fetch_top_scp_from_crom(
         return []
 
     articles: List[Dict[str, Any]] = []
-    edges = data.get("data", {}).get("articles", {}).get("edges", [])
+    data_section = data.get("data") if isinstance(data, dict) else None
+    articles_section = data_section.get("articles") if isinstance(data_section, dict) else None
+    edges = articles_section.get("edges", []) if isinstance(articles_section, dict) else []
     if not isinstance(edges, list):
         return []
 

@@ -243,9 +243,13 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
 
         try:
             from src.core.catalog import LoopCatalogRepository
+            from src.media.loop_engine import CATEGORY_ALIASES
 
             repo = LoopCatalogRepository()
-            loop_rec = repo.resolve_for_theme(theme=norm_arch or "atmospheric_landscape", is_vertical=is_vertical)
+            raw_theme = str(norm_arch or "dark_ambient").strip().lower().replace("-", "_").replace(" ", "_")
+            cat = CATEGORY_ALIASES.get(raw_theme, raw_theme) or "dark_ambient"
+            orient = "vertical" if is_vertical else "horizontal"
+            loop_rec = repo.get_best_loop(category=cat, orientation=orient)
             if loop_rec and loop_rec.file_path and Path(loop_rec.file_path).is_file():
                 return Path(loop_rec.file_path)
         except Exception as exc:

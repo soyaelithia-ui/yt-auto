@@ -36,6 +36,7 @@ def test_prepare_env_does_not_symlink_or_read_host_antigravity(tmp_path, monkeyp
 
     bot_home = tmp_path / "bot_home"
     monkeypatch.setenv("BOT_HOME", str(bot_home))
+    monkeypatch.setenv("SECRETS_DIR", str(tmp_path / "empty_secrets"))
     isolated = bot_home / ".gemini" / "antigravity-cli"
 
     env = AgyStreamClient(app_data_dir=isolated)._prepare_env()

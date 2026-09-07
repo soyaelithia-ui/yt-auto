@@ -209,17 +209,35 @@ class ReviewStateStore:
     def get_pending_jobs(self) -> List[ReviewJob]:
         with get_db_connection(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT * FROM review_jobs WHERE status = ?",
-                (ReviewStatus.PENDING_REVIEW.value,),
+                "SELECT * FROM review_jobs WHERE status IN (?, ?)",
+                (ReviewStatus.PENDING_REVIEW.value, ReviewStatus.APPROVED.value),
             ).fetchall()
             return [ReviewJob.from_row(r) for r in rows]
 
-    def get_stale_pending_jobs(self, max_age_seconds: int = 21600) -> List[ReviewJob]:
-        """Pending jobs whose created_at is older than max_age_seconds."""
+    def get_stale_pending_jobs(
+        self,
+        max_age_seconds: int = 21600,
+        approved_retry_cooldown_seconds: int = 0,
+    ) -> List[ReviewJob]:
+        """Pending jobs whose created_at is older than max_age_seconds.
+
+        If approved_retry_cooldown_seconds > 0 and a job is in APPROVED status,
+        it will be excluded if its reviewed_at was updated less than
+        approved_retry_cooldown_seconds ago (cooldown after failed publish attempt).
+        """
         pending = self.get_pending_jobs()
-        cutoff = datetime.now(timezone.utc).timestamp() - max_age_seconds
+        now_ts = datetime.now(timezone.utc).timestamp()
+        cutoff = now_ts - max_age_seconds
         stale: List[ReviewJob] = []
         for job in pending:
+            if approved_retry_cooldown_seconds > 0 and job.status == ReviewStatus.APPROVED.value:
+                if job.reviewed_at:
+                    try:
+                        reviewed = datetime.fromisoformat(job.reviewed_at)
+                        if (now_ts - reviewed.timestamp()) < approved_retry_cooldown_seconds:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
             try:
                 created = datetime.fromisoformat(job.created_at)
             except (TypeError, ValueError):

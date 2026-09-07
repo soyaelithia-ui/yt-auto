@@ -16,7 +16,7 @@
       "template": "shorts_creepypasta",
       "voice_rate": "+0%",
       "voice_profile": "scp_documentary_es",
-      "cadence": { "min_gap_seconds": 300 },
+      "cadence": { "min_gap_seconds": 3600 },
       "sources": {
         "kind": "reddit",
         "subreddits": ["SCP", "SCPDeclassified", "nosleep"],
@@ -82,7 +82,7 @@
       "template": "aita",
       "voice_rate": "+6%",
       "voice_profile": "aelithia_reddit",
-      "cadence": { "min_gap_seconds": 1800 },
+      "cadence": { "min_gap_seconds": 3600 },
       "sources": {
         "kind": "reddit",
         "subreddits": [
