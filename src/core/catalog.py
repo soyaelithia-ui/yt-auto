@@ -345,6 +345,7 @@ class LoopCatalogRepository:
         logger.info("Registered loop '%s' (cat=%s, orient=%s, tech=%s)", loop.loop_id, loop.category, loop.orientation, loop.technology)
         return True
 
+
     def sync_catalog_from_assets(
         self,
         assets_dir: Optional[Path | str] = None,
