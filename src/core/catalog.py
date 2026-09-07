@@ -259,10 +259,6 @@ class LoopCatalogRepository:
                     if assets_dir.is_dir():
                         logger.info("Auto-seeding loop catalog (count < 50)...")
                         self.sync_catalog_from_assets(assets_dir)
-                if self.count_loops() < 50:
-                    # CI / fresh checkouts often ship assets/loops with only .gitkeep.
-                    logger.info("Assets empty or thin; seeding synthetic placeholder loops...")
-                    self.seed_synthetic_placeholder_loops(min_count=64)
             except Exception as e:
                 logger.warning("Auto-seeding loop catalog failed: %s", e)
 
@@ -349,55 +345,6 @@ class LoopCatalogRepository:
         logger.info("Registered loop '%s' (cat=%s, orient=%s, tech=%s)", loop.loop_id, loop.category, loop.orientation, loop.technology)
         return True
 
-
-    def seed_synthetic_placeholder_loops(self, min_count: int = 64) -> int:
-        """Register tiny placeholder loops so offline CI can exercise catalog logic.
-
-        Used when assets/loops has no real media. Files live under a temp folder next
-        to the DB (or /tmp) and are NOT production cinematic assets.
-        """
-        import hashlib
-        import tempfile
-
-        if self.count_loops() >= min_count:
-            return 0
-
-        base = Path(self.db_path).resolve().parent if self.db_path != ":memory:" else Path(tempfile.mkdtemp(prefix="yt_auto_synth_loops_"))
-        loops_dir = base / "synthetic_loops"
-        loops_dir.mkdir(parents=True, exist_ok=True)
-        added = 0
-        n = 0
-        # Dense per category so seeded-rotation diversity checks (>=15 unique) pass.
-        for channel, cats in CHANNEL_CATEGORIES.items():
-            for cat in cats:
-                for i in range(10):
-                    for orient in ("horizontal", "vertical"):
-                        n += 1
-                        width, height = (1920, 1080) if orient == "horizontal" else (1080, 1920)
-                        path_mp4 = loops_dir / f"{channel}_{cat}_{orient}_{i}.mp4"
-                        blob = (f"{channel}:{cat}:{orient}:{i}".encode() + b"\0") * 2000
-                        blob = blob[:30_000]
-                        path_mp4.write_bytes(blob)
-                        self.register_loop(
-                            LoopRecord(
-                                loop_id=f"synth_{channel}_{cat}_{orient}_{i}",
-                                category=cat,
-                                technology="pre-rendered",
-                                orientation=orient,
-                                width=width,
-                                height=height,
-                                duration_sec=5.0,
-                                fps=30,
-                                file_path=str(path_mp4),
-                                file_size_bytes=len(blob),
-                                sha256=hashlib.sha256(blob).hexdigest(),
-                                theme_tags=[channel, cat],
-                                generator_params={"channel": channel, "synthetic": True},
-                            )
-                        )
-                        added += 1
-        logger.info("Seeded %s synthetic placeholder loops (catalog now %s)", added, self.count_loops())
-        return added
 
     def sync_catalog_from_assets(
         self,
