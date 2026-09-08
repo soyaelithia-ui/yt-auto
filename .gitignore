@@ -76,6 +76,7 @@ tmp/
 .claude/
 .copilot/
 .cursor/
+.gemini
 .gemini/
 .grok/
 .hermes/
@@ -109,4 +110,3 @@ core.*
 
 # Staged Antigravity CLI ELF for Docker image builds (never commit)
 /build/
-
