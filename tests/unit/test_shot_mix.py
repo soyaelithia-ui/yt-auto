@@ -29,28 +29,33 @@ def test_designed_never_outnumbers_settled():
         assert roles.count(SETTLED) >= roles.count(DESIGNED)
 
 
-def test_catalog_shots_reuse_settled_background():
-    from src.agents.shot_mix import DESIGNED, SETTLED, assign_roles
+def test_catalog_shots_vertical_rotates_backgrounds():
     from src.pipeline import _catalog_shots_from_manifest
 
     class Engine:
         def __init__(self) -> None:
             self.n = 0
+            self.exclude = []
 
-        def resolve_loop_video(self, category, allow_fallback=True, orientation="vertical", seed=None):
+        def resolve_loop_video(
+            self,
+            category,
+            allow_fallback=True,
+            orientation="vertical",
+            seed=None,
+            exclude_loop_ids=None,
+        ):
+            self.exclude.append(list(exclude_loop_ids or []))
             self.n += 1
             return f"/tmp/loop_{self.n}.mp4"
 
+    engine = Engine()
     manifest = {"scenes": [{"duration_sec": 8, "category": "x"} for _ in range(4)]}
-    paths, durs, _cat = _catalog_shots_from_manifest(manifest, Engine(), "vertical")
+    paths, durs, _cat = _catalog_shots_from_manifest(manifest, engine, "vertical")
     assert durs == [8.0, 8.0, 8.0, 8.0]
-    roles = assign_roles(4)
-    settled_paths = {paths[i] for i, r in enumerate(roles) if r == SETTLED}
-    designed_paths = {paths[i] for i, r in enumerate(roles) if r == DESIGNED}
-    assert len(settled_paths) == 1
-    assert roles.count(SETTLED) >= roles.count(DESIGNED)
-    if designed_paths:
-        assert settled_paths.isdisjoint(designed_paths)
+    assert len(set(paths)) == 4
+    assert engine.exclude[0] == []
+    assert engine.exclude[1] == ["/tmp/loop_1.mp4"]
 
 
 def test_designed_filter_is_not_the_settled_grade():

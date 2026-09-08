@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import hashlib
 import math
@@ -185,14 +186,11 @@ def _catalog_shots_from_manifest(
 ) -> tuple[list[str], list[float], str]:
     """Turn a scene-planner manifest into loop paths + durations (no pixel burn).
 
-    Live director mix: majority of shots reuse one settled background (already
-    decided, not negotiated). A minority is designed in the moment. Does not
-    bake or grow a loop catalog.
-    For horizontal/longform videos, rotates backgrounds across scenes with channel
-    thematic coherence.
+    Rotate loop files across shots. Shorts used to sticky-reuse one "settled"
+    master and 3/4 cuts looked identical. Does not bake or grow a loop catalog.
     """
     import inspect
-    from src.agents.shot_mix import DESIGNED, SETTLED, assign_roles
+    from src.agents.shot_mix import assign_roles
 
     scenes = manifest.get("scenes") or []
     usable: list[dict[str, Any]] = []
@@ -218,10 +216,6 @@ def _catalog_shots_from_manifest(
     roles = assign_roles(len(usable))
     paths: list[str] = []
     durs: list[float] = []
-    settled_path: str | None = None
-    settled_elapsed = 0.0
-    total_dur = sum(float(item["duration"]) for item in usable)
-    max_settled_dur = (total_dur * 0.24) if (len(usable) > 4 or (len(usable) == 4 and total_dur > 40.0)) else 90.0
     asset_durations: dict[str, float] = {}
     is_horizontal = str(orientation).strip().lower() in ("horizontal", "16:9", "longform")
 
@@ -229,22 +223,8 @@ def _catalog_shots_from_manifest(
         dur = float(item["duration"])
         durs.append(dur)
         item["scene"]["director_role"] = role
-        settled_elapsed += dur
 
-        # Vertical/shorts: reuse settled under duration caps.
-        # Horizontal/longform: always rotate for thematic variety (PR #69).
-        if (
-            not is_horizontal
-            and role != DESIGNED
-            and settled_path is not None
-            and (asset_durations.get(settled_path, 0.0) + dur <= max_settled_dur)
-            and (len(usable) <= 4 or settled_elapsed <= max_settled_dur)
-        ):
-            paths.append(settled_path)
-            asset_durations[settled_path] = asset_durations.get(settled_path, 0.0) + dur
-            continue
-
-        exclude = [p for p, d in asset_durations.items() if (d + dur) > max_settled_dur]
+        exclude = list(asset_durations.keys())
         resolve_kwargs: dict[str, Any] = {
             "allow_fallback": True,
             "orientation": orientation,
@@ -282,11 +262,6 @@ def _catalog_shots_from_manifest(
             if alt_path != path:
                 path = alt_path
 
-        # Keep the first settled background sticky for later SETTLED roles (vertical).
-        # Designed / horizontal rotations still get fresh paths via resolve above.
-        if settled_path is None:
-            settled_path = path
-            settled_elapsed = 0.0
         asset_durations[path] = asset_durations.get(path, 0.0) + dur
         paths.append(path)
     return paths, durs, last_cat
@@ -1204,13 +1179,22 @@ def run_pipeline_once(
 
                     scene_bg_list = []
                     scenes_plan = []
+                    _resolve_sig = inspect.signature(loop_engine.resolve_loop_video)
                     for s_idx in range(shot_count):
+                        _shot_kwargs = {
+                            "allow_fallback": True,
+                            "orientation": lane.orientation,
+                            "seed": s_idx * 101,
+                            "channel": channel_name,
+                            "exclude_loop_ids": list(scene_bg_list),
+                        }
+                        if "channel" not in _resolve_sig.parameters:
+                            _shot_kwargs.pop("channel", None)
+                        if "exclude_loop_ids" not in _resolve_sig.parameters:
+                            _shot_kwargs.pop("exclude_loop_ids", None)
                         shot_path = loop_engine.resolve_loop_video(
                             target_category,
-                            allow_fallback=True,
-                            orientation=lane.orientation,
-                            seed=s_idx * 101,
-                            channel=channel_name,
+                            **_shot_kwargs,
                         )
                         scene_bg_list.append(str(shot_path))
                         scenes_plan.append({
