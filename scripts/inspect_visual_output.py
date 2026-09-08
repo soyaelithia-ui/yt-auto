@@ -63,7 +63,11 @@ def inspect_story(
     out_dir = output_dir or (REPO_ROOT / "output" / "visual_inspection" / channel / topic.replace(" ", "_").lower())
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    is_horizontal = "longform" in lane or "16:9" in lane
+    is_horizontal = (
+        "long" in lane.lower()
+        or "16:9" in lane.lower()
+        or "horizontal" in lane.lower()
+    )
     orientation = "horizontal" if is_horizontal else "vertical"
 
     print(f"\n======================================================================")
@@ -79,43 +83,43 @@ def inspect_story(
     print(f"\n🔍 [1. Motif Detection]")
     print(f"  Detected Motifs: {motifs if motifs else '(none - fallback to lane default)'}")
 
-    # 2. Loop Video Asset Resolution
+    # 2. Multi-Scene Loop Video Asset Resolution
     loop_engine = LoopVideoEngine()
-    target_category = "horror" if channel == "moku" else "drama"
-    resolved_path = loop_engine.resolve_loop_video(
-        category=target_category,
-        channel=channel,
-        motifs=motifs,
-        topic=topic,
-        orientation=orientation,
-    )
+    target_category = "horror" if channel == "moku" else ("scifi" if channel == "scifi" else "drama")
+    
+    shot_count = 4
+    resolved_scenes = []
+    for s_idx in range(shot_count):
+        sp = loop_engine.resolve_loop_video(
+            category=target_category,
+            channel=channel,
+            motifs=motifs,
+            topic=topic,
+            orientation=orientation,
+            seed=s_idx * 101,
+            exclude_loop_ids=resolved_scenes,
+        )
+        resolved_scenes.append(str(sp))
 
-    asset_sha = compute_file_sha256(resolved_path) if resolved_path.is_file() else "N/A"
-    print(f"\n🎥 [2. Video Resolution]")
-    print(f"  Resolved File:   {resolved_path.name}")
-    print(f"  Full Path:       {resolved_path}")
-    print(f"  SHA-256 Digest:  {asset_sha}")
-    print(f"  File Size:       {resolved_path.stat().st_size if resolved_path.exists() else 0} bytes")
+    hero_scene = Path(resolved_scenes[0])
+    asset_sha = compute_file_sha256(hero_scene) if hero_scene.is_file() else "N/A"
+    print(f"\n🎥 [2. Multi-Scene Resolution]")
+    for idx, sc in enumerate(resolved_scenes):
+        print(f"  Scene {idx+1}: {Path(sc).name}")
+    print(f"  Hero Scene SHA-256: {asset_sha}")
 
     # 3. Extract Empirical Video Keyframes
     print(f"\n📸 [3. Frame Extraction (Zero-Blindness)]")
-    frame_timestamps = [1.0, 5.0, 10.0]
     extracted_frames = []
-    for ts in frame_timestamps:
-        frame_name = f"frame_{int(ts)}s.jpg"
+    for s_idx, sc_path in enumerate(resolved_scenes):
+        frame_name = f"scene_{s_idx+1}_frame.jpg"
         frame_path = out_dir / frame_name
-        if extract_frame(resolved_path, ts, frame_path):
+        if extract_frame(Path(sc_path), 2.0, frame_path):
             extracted_frames.append(frame_path)
-            print(f"  ✅ Extracted frame at t={ts}s: {frame_name} ({frame_path.stat().st_size} bytes)")
-        else:
-            print(f"  ⚠️ Could not extract frame at t={ts}s (video might be shorter than {ts}s)")
-
-    # If no frame at 10s, try 0s
-    if not extracted_frames:
-        frame_0 = out_dir / "frame_0s.jpg"
-        if extract_frame(resolved_path, 0.0, frame_0):
-            extracted_frames.append(frame_0)
-            print(f"  ✅ Extracted fallback frame at t=0s: {frame_0.name}")
+            print(f"  ✅ Extracted scene {s_idx+1} keyframe: {frame_name} ({frame_path.stat().st_size} bytes)")
+        elif extract_frame(Path(sc_path), 0.0, frame_path):
+            extracted_frames.append(frame_path)
+            print(f"  ✅ Extracted scene {s_idx+1} fallback frame: {frame_name}")
 
     # 4. Generate High-CTR Thumbnail
     print(f"\n🎨 [4. Thumbnail Composition (Portadas Exclusivas)]")
@@ -127,8 +131,26 @@ def inspect_story(
     # Use first extracted frame as visual base for 100% video-thumbnail coherence
     base_frame = extracted_frames[0] if extracted_frames else None
 
-    # Determine badge and hook text from topic
-    hook_text = "¿QUÉ ESCONDEN?" if "caramelos" in topic.lower() else "NUNCA DEBIERON ENTRAR"
+    # Determine channel-adaptive hook text
+    topic_low = topic.lower()
+    if channel == "moku":
+        if "caramelo" in topic_low or "feria" in topic_low:
+            hook_text = "¿QUÉ HABÍA EN LA FERIA?"
+        elif "cabaña" in topic_low or "bosque" in topic_low:
+            hook_text = "NUNCA DEBIERON ENTRAR"
+        elif "morgue" in topic_low:
+            hook_text = "¿QUÉ HABÍA EN LA CAMILLA?"
+        elif "faro" in topic_low or "mar" in topic_low:
+            hook_text = "EL FARO NUNCA SE APAGÓ"
+        else:
+            hook_text = "NO DEBIERON ENTRAR"
+    elif channel == "aelithia":
+        if "boda" in topic_low or "hermana" in topic_low or "esposo" in topic_low:
+            hook_text = "¿SOY LA MALA?"
+        else:
+            hook_text = "¿ESTUVE MAL?"
+    else:
+        hook_text = "¿QUÉ ENCONTRARON?"
 
     thumb_cfg = ThumbnailConfig(
         title=topic.upper(),
@@ -144,7 +166,7 @@ def inspect_story(
 
     thumb_res = thumb_engine.generate(
         config=thumb_cfg,
-        video_path=resolved_path,
+        video_path=hero_scene,
         base_image_path=base_frame,
     )
     print(f"  ✅ High-CTR Thumbnail Generated: {thumb_res.name} ({thumb_res.stat().st_size} bytes, {thumb_width}x{thumb_height})")
@@ -171,9 +193,10 @@ def inspect_story(
         "lane": lane,
         "orientation": orientation,
         "motifs": motifs,
-        "resolved_asset": str(resolved_path),
-        "asset_name": resolved_path.name,
+        "resolved_asset": str(hero_scene),
+        "asset_name": hero_scene.name,
         "sha256": asset_sha,
+        "resolved_scenes": resolved_scenes,
         "frames": [str(p) for p in extracted_frames],
         "thumbnail": str(thumb_res),
         "artifacts": copied_artifacts,
