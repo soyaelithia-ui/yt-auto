@@ -322,19 +322,31 @@ def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
 
 
 def test_visual_bank_scenery_assets_present():
-    """Scenery bank + template backdrops that used to be duplicated as scenery copies."""
+    """Title-card orphans live in quarantine; scenery stays clean; templates remain."""
     root = Path("assets/visual_bank")
+    quarantine = root / "_quarantine_title_cards"
     templates = Path("assets/thumbnails/templates")
-    expected = [
+    # Must NOT reappear under scenery/ (would freeze as video backgrounds)
+    for banned in (
         root / "aelithia" / "scenery" / "dna_secret.jpg",
         root / "moku" / "scenery" / "abyssal_creature.jpg",
         root / "moku" / "scenery" / "scp_3008_infinite.jpg",
         root / "moku" / "scenery" / "scp_containment.jpg",
-        # Canonical backdrops (deduped away from visual_bank/*/scenery/)
+    ):
+        assert not banned.is_file(), f"title card leaked back into scenery: {banned}"
+    quarantined = [
+        quarantine / "aelithia" / "dna_secret.jpg",
+        quarantine / "moku" / "abyssal_creature.jpg",
+        quarantine / "moku" / "scp_3008_infinite.jpg",
+        quarantine / "moku" / "scp_containment.jpg",
+    ]
+    for p in quarantined:
+        assert p.is_file() and p.stat().st_size > 1000
+    for p in (
         templates / "aita" / "master_backdrop.jpg",
         templates / "horror" / "master_backdrop.jpg",
-    ]
-    for p in expected:
+        templates / "scp" / "master_backdrop.jpg",
+    ):
         assert p.is_file() and p.stat().st_size > 1000
 
 

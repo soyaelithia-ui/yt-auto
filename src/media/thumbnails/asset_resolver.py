@@ -14,6 +14,34 @@ from src.media.thumbnails.grading import ChiaroscuroColorGrader
 
 logger = logging.getLogger("thematic_asset_resolver")
 
+# Finished title-card / baked-text folders — never use as video or thumb bases.
+_EXCLUDED_VISUAL_BANK_MARKERS = (
+    "_quarantine_title_cards",
+    "quarantine_title_cards",
+    "title_cards",
+    "prebaked",
+    "ambient_gifs",
+    "overlays",
+)
+
+
+def _is_clean_visual_candidate(path: Path) -> bool:
+    """Reject quarantined title cards and non-scenery visual_bank layers."""
+    parts = {p.lower() for p in Path(path).parts}
+    if any(m.lower() in parts for m in _EXCLUDED_VISUAL_BANK_MARKERS):
+        return False
+    return True
+
+
+def _list_scenery_candidates(scenery_dir: Path, exts: tuple[str, ...]) -> list[Path]:
+    if not scenery_dir.is_dir():
+        return []
+    out: list[Path] = []
+    for ext in exts:
+        out.extend(sorted(scenery_dir.glob(ext)))
+    return [p for p in out if p.is_file() and _is_clean_visual_candidate(p)]
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 TEMPLATES_DIR = REPO_ROOT / "assets" / "thumbnails" / "templates"
 VISUAL_BANK_DIR = REPO_ROOT / "assets" / "visual_bank"
@@ -160,18 +188,16 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                         except Exception as exc:
                             logger.warning("Failed loading channel template backdrop from %s: %s", candidates[0], exc)
 
-        # Also check assets/visual_bank/<channel>/scenery/
+        # Also check assets/visual_bank/<channel>/scenery/ (clean stills only)
         chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
         visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
-        if visual_scenery_dir.is_dir():
-            for ext in ("*.jpg", "*.jpeg", "*.png"):
-                candidates = sorted(visual_scenery_dir.glob(ext))
-                if candidates:
-                    try:
-                        img = Image.open(candidates[0]).convert("RGB")
-                        return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-                    except Exception as exc:
-                        logger.warning("Failed loading visual bank image from %s: %s", candidates[0], exc)
+        candidates = _list_scenery_candidates(visual_scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
+        if candidates:
+            try:
+                img = Image.open(candidates[0]).convert("RGB")
+                return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
+            except Exception as exc:
+                logger.warning("Failed loading visual bank image from %s: %s", candidates[0], exc)
 
         # Also check generic assets/background.jpg
         generic_bg = REPO_ROOT / "assets" / "background.jpg"
@@ -209,38 +235,19 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
         templates_dir = Path(cls.TEMPLATES_DIR)
 
-        # 1. Prioritize visual bank scenery for multi-scene rotational diversity
+        # 1. Clean visual-bank scenery only (never quarantine / overlays / GIFs).
+        # Prefer motion (.mp4) over stills so scenes are not frozen title cards.
         chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
         if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
             chan_prefix = "aelithia"
         scenery_dir = visual_bank_dir / chan_prefix / "scenery"
-        if scenery_dir.is_dir():
-            candidates = []
-            for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
-                candidates.extend(sorted(scenery_dir.glob(ext)))
-            if candidates:
-                return candidates[(idx - 1) % len(candidates)]
+        motion = _list_scenery_candidates(scenery_dir, ("*.mp4", "*.webm"))
+        stills = _list_scenery_candidates(scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
+        scenery_candidates = motion or stills
+        if scenery_candidates:
+            return scenery_candidates[(idx - 1) % len(scenery_candidates)]
 
-        # 2. Fallback to curated templates if visual bank has no scenery
-        target_keys: list[str] = []
-        if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
-            target_keys.append("scp")
-        elif any(k in norm_arch or k in norm_chan for k in ("aita", "drama", "confession", "aelithia")):
-            target_keys.append("aita")
-        elif any(k in norm_arch or k in norm_chan for k in ("horror", "vhs", "analog")):
-            target_keys.append("horror")
-        elif norm_arch:
-            target_keys.append(norm_arch)
-
-        for key in target_keys:
-            t_dir = templates_dir / key
-            if t_dir.is_dir():
-                candidates: list[Path] = []
-                for ext in ("*.jpg", "*.jpeg", "*.png", "*.mp4"):
-                    candidates.extend(sorted(t_dir.glob(ext)))
-                if candidates:
-                    return candidates[(idx - 1) % len(candidates)]
-
+        # 2. Motion loops before static thumbnail templates (avoids frozen-cover videos).
         try:
             from src.core.catalog import LoopCatalogRepository
             from src.media.loop_engine import CATEGORY_ALIASES
@@ -257,9 +264,29 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
 
         proc_dir = REPO_ROOT / "assets" / "loops" / "web_procedural"
         if proc_dir.is_dir():
-            proc_candidates = sorted(proc_dir.glob("**/*.mp4"))
+            proc_candidates = sorted(p for p in proc_dir.glob("**/*.mp4") if p.is_file())
             if proc_candidates:
                 return proc_candidates[(idx - 1) % len(proc_candidates)]
+
+        # 3. Curated template stills (thumbnail backdrops) — last resort for video scenes
+        target_keys: list[str] = []
+        if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
+            target_keys.append("scp")
+        elif any(k in norm_arch or k in norm_chan for k in ("aita", "drama", "confession", "aelithia")):
+            target_keys.append("aita")
+        elif any(k in norm_arch or k in norm_chan for k in ("horror", "vhs", "analog")):
+            target_keys.append("horror")
+        elif norm_arch:
+            target_keys.append(norm_arch)
+
+        for key in target_keys:
+            t_dir = templates_dir / key
+            if t_dir.is_dir():
+                candidates: list[Path] = []
+                for ext in ("*.mp4", "*.webm", "*.jpg", "*.jpeg", "*.png"):
+                    candidates.extend(sorted(t_dir.glob(ext)))
+                if candidates:
+                    return candidates[(idx - 1) % len(candidates)]
 
         bg = REPO_ROOT / "assets" / "background.jpg"
         if bg.is_file():
@@ -333,14 +360,12 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                     if candidates:
                         return candidates[0]
 
-        # 3. Check visual bank scenery
+        # 3. Clean visual bank scenery only (never pre-baked title cards)
         chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
         visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
-        if visual_scenery_dir.is_dir():
-            for ext in ("*.jpg", "*.jpeg", "*.png"):
-                candidates = sorted(visual_scenery_dir.glob(ext))
-                if candidates:
-                    return candidates[0]
+        candidates = _list_scenery_candidates(visual_scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
+        if candidates:
+            return candidates[0]
 
         generic_bg = REPO_ROOT / "assets" / "background.jpg"
         if generic_bg.is_file():
