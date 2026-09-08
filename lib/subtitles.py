@@ -416,12 +416,32 @@ def _ass_dialogues(
             t0 = start + span * (i / max(1, len(lines)))
             t1 = start + span * (min(i + 2, len(lines)) / max(1, len(lines)))
             split_events.append((t0, t1, r"\N".join(chunk)))
-    return _repair_dangling_events(split_events)
+    repaired = _repair_dangling_events(split_events)
+    if repaired:
+        trimmed = _drop_trailing_dangling(repaired[-1][2])
+        if trimmed:
+            repaired[-1] = (repaired[-1][0], repaired[-1][1], trimmed)
+        elif len(repaired) > 1:
+            repaired.pop()
+    return repaired
+
+
+def _drop_trailing_dangling(text: str) -> str:
+    """Strip a trailing dangling preposition from the last karaoke token."""
+    parts = text.split(" ")
+    while parts:
+        last_vis = _strip_ass_tags(parts[-1]).replace("\\N", " ").strip()
+        token = last_vis.split()[-1] if last_vis.split() else ""
+        if token and _dangling_base(token):
+            parts.pop()
+            continue
+        break
+    return " ".join(parts).strip()
 
 
 def _line_ends_dangling(text: str) -> bool:
     """True if a rendered cue line ends on a dangling word/preposition."""
-    tokens = _strip_ass_tags(text).split()
+    tokens = _strip_ass_tags(text).replace("\\N", " ").replace("\n", " ").split()
     return bool(tokens) and _dangling_base(tokens[-1])
 
 
@@ -604,7 +624,7 @@ def validate_subtitle_grammar_and_syntax(path: str | os.PathLike) -> bool:
     for plain in _subtitle_cue_texts(p.read_text(encoding="utf-8")):
         if not plain:
             continue
-        tokens = plain.split()
+        tokens = plain.replace("\\N", " ").replace("\n", " ").split()
         if tokens:
             last_tok = tokens[-1]
             has_terminal = bool(re.search(r"[.!?…\"\']+$", last_tok))
