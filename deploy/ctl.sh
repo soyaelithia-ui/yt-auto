@@ -58,7 +58,7 @@ stop_one() {
     echo "[$svc] not running"
   fi
   if [ "$svc" = "sched" ]; then
-    pkill -f "\.venv/bin/python .*main\.py daemon" 2>/dev/null || true
+    pkill -f "python[0-9.]* .*main\.py daemon" 2>/dev/null || true
   fi
   tmux kill-session -t "$sess" 2>/dev/null || true
 }

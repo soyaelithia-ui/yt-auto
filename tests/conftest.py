@@ -34,6 +34,8 @@ def offline_provider_guard(monkeypatch, request):
     monkeypatch.setenv("MOCK_YOUTUBE_UPLOAD", "1")
     test_review_db = str(Path(request.config.rootdir) / ".pytest_cache" / f"test_review_{os.getpid()}.db")
     monkeypatch.setenv("VIDEO_REVIEW_DB_PATH", test_review_db)
+    test_agents_dir = str(Path(request.config.rootdir) / ".pytest_cache" / f"test_agents_{os.getpid()}")
+    monkeypatch.setenv("ANTIGRAVITY_AGENTS_APP_DATA_DIR", test_agents_dir)
     original_run = subprocess.run
     original_popen = subprocess.Popen
     original_connect = socket.socket.connect
@@ -75,5 +77,16 @@ def pytest_sessionfinish(session, exitstatus):
     try:
         from src.cleaner import clean_test_artifacts
         clean_test_artifacts(min_age_seconds=0, dry_run=False)
+    except Exception:
+        pass
+    try:
+        import shutil
+        for item in Path(session.config.rootdir).glob(".bot_home*"):
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+        output_dir = Path(session.config.rootdir) / "output"
+        if output_dir.is_dir():
+            for item in output_dir.glob("*.json"):
+                item.unlink(missing_ok=True)
     except Exception:
         pass

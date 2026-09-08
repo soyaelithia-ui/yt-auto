@@ -47,7 +47,11 @@ def test_programmatic_agent_run_success(mock_cli, tmp_path):
     }
     res_file = tmp_path / "custom_result.json"
 
-    agent = ProgrammaticAgent(task_result_path=res_file, instance_id="test_worker")
+    agent = ProgrammaticAgent(
+        task_result_path=res_file,
+        instance_id="test_worker",
+        app_data_dir=tmp_path / "worker_appdata",
+    )
     out_path = agent.run("Verificar compuertas")
 
     assert out_path.exists()
@@ -205,6 +209,7 @@ def test_native_sdk_chat_async_mock(tmp_path):
         task_result_path=tmp_path / "sdk_result.json",
         use_sdk=True,
         instance_id="sdk_test",
+        app_data_dir=tmp_path / "sdk_appdata",
     )
     with patch.object(agent, "_can_use_sdk", return_value=True), \
          patch.object(agent, "_chat_async") as mock_sdk:

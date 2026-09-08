@@ -8,9 +8,18 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-_projects_dir = str(Path(__file__).resolve().parent.parent)
+_project_dir = Path(__file__).resolve().parent
+_projects_dir = str(_project_dir.parent)
 if _projects_dir not in sys.path:
     sys.path.insert(0, _projects_dir)
+
+_venv_dir = _project_dir / ".venv"
+_venv_python = _venv_dir / "bin" / "python3"
+if not _venv_python.is_file():
+    _venv_python = _venv_dir / "bin" / "python"
+if _venv_python.is_file() and Path(sys.prefix).resolve() != _venv_dir.resolve() and not os.environ.get("_YTAUTO_VENV_ACTIVE"):
+    os.environ["_YTAUTO_VENV_ACTIVE"] = "1"
+    os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
 
 
 def _preparse_profile(argv: list[str]) -> None:

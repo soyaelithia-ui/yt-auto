@@ -4,6 +4,7 @@ src/media/thumbnails/asset_resolver.py - Deterministic 3-Tier Thematic Asset Res
 from __future__ import annotations
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -169,17 +170,19 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                 climax_t = extractor.resolve_climax_timestamp(
                     manifest_path=Path(manifest_path) if manifest_path else None
                 )
-                tmp_dir = v_p.parent / "thumb_candidates"
-                cand_frames = extractor.extract_candidate_frames(
-                    video_path=v_p,
-                    center_timestamp=climax_t,
-                    output_dir=tmp_dir,
-                    count=3,
-                )
-                best_frame = extractor.select_best_frame(cand_frames)
-                if best_frame and best_frame.is_file():
-                    raw_frame = Image.open(best_frame).convert("RGB")
-                    return ImageOps.fit(raw_frame, (w, h), method=Image.Resampling.LANCZOS)
+                with tempfile.TemporaryDirectory(prefix="thumb_cands_") as tmp_dir_str:
+                    tmp_dir = Path(tmp_dir_str)
+                    cand_frames = extractor.extract_candidate_frames(
+                        video_path=v_p,
+                        center_timestamp=climax_t,
+                        output_dir=tmp_dir,
+                        count=3,
+                    )
+                    best_frame = extractor.select_best_frame(cand_frames)
+                    if best_frame and best_frame.is_file():
+                        with Image.open(best_frame) as raw_frame:
+                            raw_rgb = raw_frame.convert("RGB")
+                            return ImageOps.fit(raw_rgb, (w, h), method=Image.Resampling.LANCZOS)
             except Exception as exc:
                 logger.warning("Tier 3 video climax extraction failed: %s", exc)
 
