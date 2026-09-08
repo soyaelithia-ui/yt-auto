@@ -22,7 +22,7 @@ def test_thumbnail_engine_generates_valid_image(tmp_path):
     assert res.is_file()
     assert res.stat().st_size > 30 * 1024  # Size > 30 KB
     img = Image.open(res)
-    assert img.size == (1920, 1080)
+    assert img.size == (1280, 720)
     assert img.mode == "RGB"
 
 

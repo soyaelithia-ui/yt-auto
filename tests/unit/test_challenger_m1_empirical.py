@@ -25,6 +25,17 @@ from src.core.catalog import (
 )
 from src.media.loop_engine import CATEGORY_ALIASES, LoopVideoEngine
 
+_LOOPS_ROOT = (BASE_DIR / "assets" / "loops").resolve()
+
+
+def _asset_rel_parts(path: Path) -> list[str]:
+    """Path parts under assets/loops so /home/moku is not a false channel leak."""
+    resolved = Path(path).resolve()
+    try:
+        return [p.lower() for p in resolved.relative_to(_LOOPS_ROOT).parts]
+    except ValueError:
+        return [p.lower() for p in resolved.parts if p.lower() != "moku"]
+
 
 @pytest.fixture(scope="module")
 def isolated_catalog(tmp_path_factory) -> LoopCatalogRepository:
@@ -229,7 +240,7 @@ class TestChannelConfinement:
                 seed=i + 200,
             )
             assert "aelithia" not in path_moku.stem.lower()
-            assert "aelithia" not in str(path_moku).lower()
+            assert "aelithia" not in _asset_rel_parts(path_moku)
 
             path_aelithia = isolated_engine.resolve_loop_video(
                 category="drama",
@@ -238,7 +249,7 @@ class TestChannelConfinement:
                 seed=i + 300,
             )
             assert "moku" not in path_aelithia.stem.lower()
-            assert "moku" not in str(path_aelithia).lower()
+            assert "moku" not in _asset_rel_parts(path_aelithia)
 
 
 class TestMultiSceneExclusion:

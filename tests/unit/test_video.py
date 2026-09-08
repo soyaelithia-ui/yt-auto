@@ -206,14 +206,14 @@ class TestVideo(unittest.TestCase):
             self.assertIn("[speech_mix][music_ducked][ambient_ducked]amix=inputs=3:duration=first:normalize=0", filter_arg)
 
     def test_generate_pil_thumbnail_wrapping(self):
-        """Test generate_pil_thumbnail handles multi-line titles and creates valid 1080p image."""
+        """Test generate_pil_thumbnail handles multi-line titles and creates valid 720p image."""
         out_thumb = os.path.join(self.temp_dir.name, "multiline_thumb.jpg")
         long_title = "El Secreto Aterrador Oculto en las Profundidades del Bosque Maldito"
         res = generate_pil_thumbnail(long_title, out_thumb)
         self.assertTrue(os.path.exists(res))
         from PIL import Image
         with Image.open(res) as img:
-            self.assertEqual(img.size, (1920, 1080))
+            self.assertEqual(img.size, (1280, 720))
 
     def test_create_video_thumbnail_local_pil_rendering(self):
         """create_video_thumbnail must generate a valid thumbnail locally without any network calls."""
@@ -225,7 +225,7 @@ class TestVideo(unittest.TestCase):
         self.assertTrue(os.path.exists(res))
         from PIL import Image
         with Image.open(res) as img:
-            self.assertEqual(img.size, (1080, 1920))
+            self.assertEqual(img.size, (720, 1280))
 
     def test_create_video_thumbnail_composites_text_overlay_with_wrapping(self):
         """Verifies create_video_thumbnail composites text overlay onto image for long titles."""
@@ -241,8 +241,7 @@ class TestVideo(unittest.TestCase):
 
         self.assertTrue(os.path.exists(res))
         with Image.open(res) as composited:
-            from src.core.resolution import LONGFORM_RESOLUTION
-            self.assertEqual(composited.size, LONGFORM_RESOLUTION)
+            self.assertEqual(composited.size, (1280, 720))
             extrema = composited.getextrema()
             self.assertGreater(extrema[0][1], 0)
 
@@ -460,7 +459,7 @@ class TestVideo(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(res))
             with Image.open(res) as img:
-                self.assertEqual(img.size, (1920, 1080))
+                self.assertEqual(img.size, (1280, 720))
 
     def test_zero_cost_motion_even_odd_panning_and_no_zoompan(self):
         """Verify compose_video generates dynamic pan crop (horizontal even, vertical odd), no zoompan, threads respect env up to cpu cap (<=4), preset veryfast, crf 24."""

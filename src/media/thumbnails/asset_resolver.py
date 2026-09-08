@@ -82,6 +82,17 @@ class _ThematicAssetResolverMeta(type):
     def TEMPLATES_DIR(cls, val: Path) -> None:
         cls._custom_templates_dir = Path(val)
 
+    @property
+    def REPO_ROOT(cls) -> Path:
+        if "_custom_repo_root" in cls.__dict__:
+            return cls.__dict__["_custom_repo_root"]
+        import src.media.thumbnails.asset_resolver as mod
+        return mod.REPO_ROOT
+
+    @REPO_ROOT.setter
+    def REPO_ROOT(cls, val: Path) -> None:
+        cls._custom_repo_root = Path(val)
+
 
 class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
     """
@@ -244,6 +255,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         idx = max(1, int(scene_idx))
         visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
         templates_dir = Path(cls.TEMPLATES_DIR)
+        root = Path(cls.REPO_ROOT).resolve()
 
         # 1. Clean visual-bank motion scenery first (never quarantine / overlays / GIFs).
         chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
@@ -266,12 +278,18 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
             cat = CATEGORY_ALIASES.get(raw_theme, raw_theme) or "dark_ambient"
             orient = "vertical" if is_vertical else "horizontal"
             loop_rec = repo.get_best_loop(category=cat, orientation=orient, seed=idx)
-            if loop_rec and loop_rec.file_path and Path(loop_rec.file_path).is_file():
-                return Path(loop_rec.file_path)
+            if loop_rec and loop_rec.file_path:
+                lp = Path(loop_rec.file_path)
+                if lp.is_file():
+                    try:
+                        if lp.resolve().is_relative_to(root):
+                            return lp
+                    except (OSError, ValueError):
+                        pass
         except Exception as exc:
             logger.debug("LoopCatalogRepository resolution failed: %s", exc)
 
-        proc_dir = REPO_ROOT / "assets" / "loops" / "web_procedural"
+        proc_dir = root / "assets" / "loops" / "web_procedural"
         if proc_dir.is_dir():
             proc_candidates = sorted(p for p in proc_dir.glob("**/*.mp4") if p.is_file())
             if proc_candidates:
@@ -301,7 +319,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                 if candidates:
                     return candidates[(idx - 1) % len(candidates)]
 
-        bg = REPO_ROOT / "assets" / "background.jpg"
+        bg = root / "assets" / "background.jpg"
         if bg.is_file():
             return bg
 

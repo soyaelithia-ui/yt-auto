@@ -1,16 +1,17 @@
+# GitHub-hosted runners on this private repo are billing-blocked
+# (jobs never start). The real gate is local: ./scripts/test.sh
+# or `python main.py test`. Manual dispatch only — no auto red X.
 name: tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

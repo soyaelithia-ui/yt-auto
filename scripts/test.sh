@@ -1,39 +1,35 @@
 #!/usr/bin/env bash
-# scripts/test.sh - Unified Canonical Test Runner for yt-auto
-# Executes the full repository integrity audit and core functional validation.
+# Local CI gate for yt-auto. This is the source of truth — GitHub Actions
+# on ubuntu-latest is billing-blocked and must not be treated as a check.
+# Mirrors .github/workflows/tests.yml plus the repo integrity audit.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "🧪 ======================================================================"
-echo "🧪 [TEST RUNNER] Ejecutando verificación integral de yt-auto"
-echo "🧪 ======================================================================"
+if [ -x "$REPO_ROOT/.venv/bin/pytest" ]; then
+  PYTEST_CMD="$REPO_ROOT/.venv/bin/pytest"
+elif command -v pytest >/dev/null 2>&1; then
+  PYTEST_CMD="$(command -v pytest)"
+else
+  echo "error: no pytest (repo .venv or PATH)" >&2
+  exit 1
+fi
 
-# 1. Ejecutar auditoría estricta de invariantes y gobernanza
+export YT_PROFILE="${YT_PROFILE:-test}"
+
+echo "== integrity =="
 "$SCRIPT_DIR/verify_integrity.sh"
 
-# 2. Localizar el ejecutable de pytest canónico
-PYTEST_CMD=""
-if [ -x "$REPO_ROOT/.venv/bin/pytest" ]; then
-    PYTEST_CMD="$REPO_ROOT/.venv/bin/pytest"
-elif command -v pytest > /dev/null 2>&1; then
-    PYTEST_CMD="pytest"
-fi
+echo "== live RSS gate =="
+"$PYTEST_CMD" tests/unit/test_live_rss_gate.py -q --timeout=120
 
-if [ -z "$PYTEST_CMD" ]; then
-    echo "❌ ERROR: No se encontró el entorno virtual con pytest."
-    exit 1
-fi
+echo "== D2 timing gate =="
+"$PYTEST_CMD" tests/unit/test_d2_timing_gate.py -q --timeout=120
 
-echo ""
-echo "⏳ [SUITE FUNCIONAL] Ejecutando validación de calidad y subtítulos..."
-"$PYTEST_CMD" tests/unit/test_subtitles_ass.py -q
-"$PYTEST_CMD" tests/test_e2e_validation.py -k longform -q
+echo "== offline suite (not live) =="
+export YT_LIVE_RSS_PEAK_MB="${YT_LIVE_RSS_PEAK_MB:-768}"
+"$PYTEST_CMD" -m "not live" -q --timeout=600
 
-echo ""
-echo "======================================================================"
-echo "🎉 [100% HEALTHY] Todas las pruebas e invariantes pasaron exitosamente."
-echo "======================================================================"
-exit 0
+echo "local CI gate passed"
