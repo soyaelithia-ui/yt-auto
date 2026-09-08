@@ -219,6 +219,22 @@ def _catalog_shots_from_manifest(
     asset_durations: dict[str, float] = {}
     is_horizontal = str(orientation).strip().lower() in ("horizontal", "16:9", "longform")
 
+    story_meta = manifest.get("story") if isinstance(manifest.get("story"), dict) else {}
+    topic = str(
+        manifest.get("title")
+        or manifest.get("topic")
+        or story_meta.get("title")
+        or story_meta.get("attribution")
+        or manifest.get("hook_text")
+        or ""
+    )
+    scene_text = " ".join(str(sc.get("description") or sc.get("narration") or "") for sc in scenes)
+    try:
+        from src.core.scenic_detector import extract_story_motifs
+        story_motifs = extract_story_motifs(topic, scene_text)
+    except Exception:
+        story_motifs = []
+
     for idx, (item, role) in enumerate(zip(usable, roles)):
         dur = float(item["duration"])
         durs.append(dur)
@@ -234,6 +250,10 @@ def _catalog_shots_from_manifest(
         sig = inspect.signature(loop_engine.resolve_loop_video)
         if "channel" in sig.parameters:
             resolve_kwargs["channel"] = channel
+        if "motifs" in sig.parameters and story_motifs:
+            resolve_kwargs["motifs"] = story_motifs
+        if "topic" in sig.parameters and topic:
+            resolve_kwargs["topic"] = topic
         if "exclude_loop_ids" not in sig.parameters:
             resolve_kwargs.pop("exclude_loop_ids", None)
 
@@ -242,6 +262,8 @@ def _catalog_shots_from_manifest(
         except TypeError:
             resolve_kwargs.pop("exclude_loop_ids", None)
             resolve_kwargs.pop("channel", None)
+            resolve_kwargs.pop("motifs", None)
+            resolve_kwargs.pop("topic", None)
             path = str(loop_engine.resolve_loop_video(item["category"], **resolve_kwargs))
 
         # Avoid accidental back-to-back duplicates for designed/horizontal shots.
@@ -464,14 +486,11 @@ def run_pipeline_once(
             "Supported engine modes: 'director', 'multiscene', 'hybrid', 'procedural', or 'loop'."
         )
 
-    # Product path: Subtitles reactivated for vertical shorts, skipped by default for non-shorts
-    subtitles_active = True
-    if enable_subtitles is False:
-        subtitles_active = False
-    elif enable_subtitles is True:
+    # Product path: Subtitles deactivated permanently for all formats (clean cinematic video surface).
+    # Text belongs exclusively on thumbnails (portadas).
+    subtitles_active = False
+    if enable_subtitles is True:
         subtitles_active = True
-    elif not (getattr(lane, "is_short", False) or lane.orientation == "vertical" or getattr(lane, "content_type", "") == "short"):
-        subtitles_active = False
 
     from src.core.guard import memory_checkpoint
     from src.observability import set_run_context
@@ -1158,11 +1177,26 @@ def run_pipeline_once(
                         or getattr(lane, "story_type", None)
                         or ("tactical_chamber" if channel_name == "moku" else "cozy_hearth")
                     )
+                    from src.core.scenic_detector import extract_story_motifs
+                    story_topic_text = str(title or story.get("title", "") or "")
+                    story_script_text = str(script or story.get("raw_content", "") or "")
+                    story_motifs = extract_story_motifs(story_topic_text, story_script_text)
+
                     total_audio_sec = float(audio["duration_sec"])
+                    _resolve_sig = inspect.signature(loop_engine.resolve_loop_video)
+                    _init_kwargs: dict[str, Any] = {
+                        "allow_fallback": True,
+                        "orientation": lane.orientation,
+                        "channel": channel_name,
+                        "motifs": story_motifs,
+                        "topic": story_topic_text,
+                    }
+                    for k in list(_init_kwargs.keys()):
+                        if k not in _resolve_sig.parameters:
+                            _init_kwargs.pop(k, None)
                     resolved_loop_path = loop_engine.resolve_loop_video(
                         target_category,
-                        allow_fallback=True,
-                        orientation=lane.orientation,
+                        **_init_kwargs,
                     )
 
                     # Dynamic multi-camera shot progression for loop videos
@@ -1174,17 +1208,22 @@ def run_pipeline_once(
 
                     scene_bg_list = []
                     scenes_plan = []
-                    _resolve_sig = inspect.signature(loop_engine.resolve_loop_video)
                     for s_idx in range(shot_count):
                         _shot_kwargs = {
                             "allow_fallback": True,
                             "orientation": lane.orientation,
                             "seed": s_idx * 101,
                             "channel": channel_name,
+                            "motifs": story_motifs,
+                            "topic": story_topic_text,
                             "exclude_loop_ids": list(scene_bg_list),
                         }
                         if "channel" not in _resolve_sig.parameters:
                             _shot_kwargs.pop("channel", None)
+                        if "motifs" not in _resolve_sig.parameters:
+                            _shot_kwargs.pop("motifs", None)
+                        if "topic" not in _resolve_sig.parameters:
+                            _shot_kwargs.pop("topic", None)
                         if "exclude_loop_ids" not in _resolve_sig.parameters:
                             _shot_kwargs.pop("exclude_loop_ids", None)
                         shot_path = loop_engine.resolve_loop_video(
@@ -1358,18 +1397,47 @@ def run_pipeline_once(
             # AI cover-prompt + SceneImageAgent path is removed: the video is the
             # artifact; the cover derives from the resolved template + channel
             # style with no remote calls.
-            thumb_source = None
-            try:
-                vp = json.loads(visual_plan_path.read_text(encoding="utf-8"))
-                scenes = vp.get("scenes") if isinstance(vp, dict) else None
-                if isinstance(scenes, list):
-                    for sc in scenes:
-                        src = (sc or {}).get("source") if isinstance(sc, dict) else None
-                        if src and Path(src).is_file():
-                            thumb_source = str(src)
-                            break
-            except Exception:
-                thumb_source = None
+            from src.core.scenic_detector import extract_story_motifs
+            motifs_for_thumb = extract_story_motifs(spanish_title or title or "")
+            thumb_hook = getattr(lane, "hook_text", None) or (story.get("hook_text") if isinstance(story, dict) else None)
+            if not thumb_hook and motifs_for_thumb:
+                motif_hooks = {
+                    "carnival": "¿QUÉ HABÍA EN LA FERIA?",
+                    "morgue": "¿QUÉ HABÍA EN LA CAMILLA?",
+                    "asylum": "¿QUÉ HABÍA EN EL PASILLO?",
+                    "cabin": "¿QUÉ HABÍA EN LA CABAÑA?",
+                    "cemetery": "¿QUÉ HABÍA EN LA TUMBA?",
+                    "diner": "¿QUÉ PASÓ A LAS 3 AM?",
+                    "bakery": "¿QUÉ HABÍA EN EL HORNO?",
+                    "mar": "¿QUÉ HABÍA EN EL FARO?",
+                }
+                thumb_hook = motif_hooks.get(motifs_for_thumb[0])
+
+            # Extract high-tension climax frame directly from final video for 100% video-to-thumbnail coherence
+            climax_frame_path = None
+            if video_path.is_file() and video_path.stat().st_size > 0:
+                try:
+                    from src.media.thumbnails.extractor import ClimaxFrameExtractor
+                    extractor = ClimaxFrameExtractor()
+                    climax_ts = extractor.resolve_climax_timestamp(
+                        manifest_path=scene_manifest_path if scene_manifest_path.is_file() else None,
+                        fallback_sec=4.0,
+                        motif_keywords=motifs_for_thumb,
+                    )
+                    cand_dir = work_dir / "thumb_candidates"
+                    cand_dir.mkdir(parents=True, exist_ok=True)
+                    cands = extractor.extract_candidate_frames(
+                        video_path=video_path,
+                        center_timestamp=climax_ts,
+                        output_dir=cand_dir,
+                        count=3,
+                    )
+                    best_cand = extractor.select_best_frame(cands)
+                    if best_cand and best_cand.is_file():
+                        climax_frame_path = str(best_cand)
+                except Exception as ext_err:
+                    logger.warning("Could not extract video climax frame for thumbnail: %s", ext_err)
+
             create_video_thumbnail(
                 spanish_title,
                 channel_name,
@@ -1378,8 +1446,10 @@ def run_pipeline_once(
                 archetype=target_category,
                 strict_official_sdk=False,
                 video_mode="longform" if is_long_lane else "short",
-                video_path=thumb_source or str(resolved_loop_path or video_path),
+                video_path=str(video_path),
+                bg_image_path=climax_frame_path,
                 manifest_path=str(scene_manifest_path),
+                hook_text=thumb_hook,
             )
             metadata_path.write_text(
                 json.dumps(

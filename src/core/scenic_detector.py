@@ -296,3 +296,54 @@ def detect_subtitle_style(format_mode: str, niche: str = "") -> SubtitleAnimatio
         return "karaoke_glow"
 
     return "cinematic_fade"
+
+
+STORY_MOTIF_KEYWORDS: Dict[str, Tuple[str, ...]] = {
+    "carnival": ("caramelo", "caramelos", "dulce", "dulces", "golosina", "golosinas", "feria", "circo", "carnival", "payaso", "ferris"),
+    "morgue": ("morgue", "autopsia", "cadaver", "cadáver", "forense", "médico", "medico"),
+    "asylum": ("manicomio", "asilo", "psiquiátrico", "psiquiatrico", "sanatorio", "ward"),
+    "mar": ("mar", "océano", "oceano", "costa", "playa", "faro", "naufragio", "barco", "pescador", "isla", "olas", "marítimo", "maritimo"),
+    "cabin": ("cabaña", "cabana", "casa en el bosque", "caserío", "mansión", "mansion", "ático", "atico"),
+    "cemetery": ("cementerio", "tumba", "tumbas", "cripta", "panteón", "panteon", "lápida", "lapida"),
+    "dark_forest": ("bosque", "árboles", "arboles", "selva", "jungla", "pantano", "wilderness", "pines"),
+    "highway": ("carretera", "autopista", "camino", "ruta", "highway", "headlights"),
+    "diner": ("diner", "cafetería", "cafeteria", "restaurante", "bar", "comedor"),
+    "subway": ("subway", "metro", "túnel", "tunel", "vías", "vias", "vagón", "vagon", "estación subterránea"),
+    "backrooms": ("backrooms", "oficina abandonada", "alfombra amarilla", "fluorescente"),
+    "bunker": ("búnker", "bunker", "laboratorio", "contención", "contencion", "scranton", "instalación", "instalacion"),
+    "lake": ("lago", "laguna", "estanque", "hielo", "congelado", "inundado", "inundación", "sótano inundado"),
+    "space": ("espacio", "universo", "galaxia", "estrella", "planeta", "órbita", "orbita", "nebulosa", "agujero negro", "interestelar"),
+    "bakery": ("panadería", "panaderia", "pan", "horno", "repostería", "reposteria"),
+}
+
+
+def extract_story_motifs(topic: str, script: str = "") -> List[str]:
+    """
+    Extracts physical narrative motifs from the story title and script content.
+    Decouples stories from generic channel labels by identifying specific visual subjects
+    (e.g., 'caramelos' -> carnival/candy, 'faro' -> mar/ocean, 'cabana' -> cabin/forest).
+    Returns a ranked list of detected motif keywords.
+    """
+    topic_clean = str(topic or "").lower()
+    script_clean = str(script or "").lower()
+    full_text = f"{topic_clean} {script_clean}"
+
+    detected_scores: Dict[str, int] = {}
+
+    for motif, keywords in STORY_MOTIF_KEYWORDS.items():
+        score = 0
+        for kw in keywords:
+            if _matches_kw(kw, topic_clean):
+                score += 5  # Strong preference for title motifs
+            elif _matches_kw(kw, full_text):
+                score += 1
+        if score > 0:
+            detected_scores[motif] = score
+
+    if not detected_scores:
+        return []
+
+    # Sort descending by score
+    sorted_motifs = sorted(detected_scores.keys(), key=lambda m: detected_scores[m], reverse=True)
+    return sorted_motifs
+

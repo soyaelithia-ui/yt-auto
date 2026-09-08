@@ -546,11 +546,13 @@ class LoopCatalogRepository:
         seed: Any = None,
         exclude_loop_ids: Optional[Sequence[str]] = None,
         channel: Optional[str] = None,
+        motifs: Optional[Sequence[str]] = None,
+        **kwargs: Any,
     ) -> Optional[LoopRecord]:
         """
-        Retrieves the optimal video loop matching category, orientation, and channel constraints.
-        Applies 3-tier fallback, PR CHANNEL_THEMES isolation, exclude filters, path-dedup
-        seeded rotation (multi-scene), and skips missing/synthetic media.
+        Retrieves the optimal video loop matching category, orientation, motifs, and channel constraints.
+        Applies semantic motif ranking, 3-tier fallback, PR CHANNEL_THEMES isolation, exclude filters,
+        path-dedup, seeded rotation (multi-scene), and skips missing/synthetic media.
         """
         orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
         cat_clean = category.strip().lower().replace("-", "_").replace(" ", "_") if category else "dark_ambient"
@@ -628,6 +630,21 @@ class LoopCatalogRepository:
                     valid_recs.append(rec)
             return valid_recs
 
+        # --- Tier 0: Semantic Story Motifs Match ---
+        clean_motifs = [str(m).strip().lower() for m in (motifs or []) if str(m).strip()]
+        motif_hits: List[LoopRecord] = []
+        if clean_motifs:
+            motif_clauses = " OR ".join(["theme_tags LIKE ?" for _ in clean_motifs] + ["file_path LIKE ?" for _ in clean_motifs] + ["category LIKE ?" for _ in clean_motifs])
+            sql_motifs = f"""
+            SELECT * FROM video_loops
+            WHERE orientation = ? AND ({motif_clauses})
+            ORDER BY usage_count ASC, last_used_at ASC, id ASC
+            """
+            params = [orient_clean] + [f'%"{m}"%' for m in clean_motifs] + [f'%{m}%' for m in clean_motifs] + [f'%{m}%' for m in clean_motifs]
+            with self._get_connection() as conn:
+                cur = conn.execute(sql_motifs, params)
+                motif_hits = _filter_and_validate(cur.fetchall())
+
         # --- Tier 1: Exact category match ---
         sql_exact = """
         SELECT * FROM video_loops
@@ -637,6 +654,13 @@ class LoopCatalogRepository:
         with self._get_connection() as conn:
             cur = conn.execute(sql_exact, (cat_clean, orient_clean))
             candidates = _filter_and_validate(cur.fetchall())
+
+        if motif_hits:
+            seen_motif_ids = {c.loop_id for c in candidates}
+            for mh in motif_hits:
+                if mh.loop_id not in seen_motif_ids:
+                    candidates.append(mh)
+                    seen_motif_ids.add(mh.loop_id)
 
         # --- Tier 2: Same-channel compatible fallback / multi-scene expansion ---
         need_channel_pool = (
@@ -691,17 +715,28 @@ class LoopCatalogRepository:
         if preferred:
             candidates = preferred
 
-        # Tag ranking with category priority
-        if requested_tags:
-            tag_set = {t.lower().strip() for t in requested_tags if t}
-
-            def tag_score(rec: LoopRecord) -> Tuple[int, int, int, str]:
-                cat_prio = 0 if rec.category.strip().lower() == cat_clean else 1
+        # Motif & tag ranking with category priority
+        def candidate_sort_key(rec: LoopRecord) -> Tuple[int, int, int, int, str]:
+            m_score = 0
+            if clean_motifs:
                 rec_tags = {t.lower().strip() for t in rec.theme_tags}
-                match_count = len(tag_set.intersection(rec_tags))
-                return (cat_prio, -match_count, rec.usage_count, rec.last_used_at or "")
+                stem_tokens = set(re.split(r"[_\W]+", Path(rec.file_path).stem.lower()))
+                for m in clean_motifs:
+                    if m in rec_tags:
+                        m_score += 4
+                    if m in stem_tokens or m == rec.category.lower():
+                        m_score += 3
+                    elif any(m in t for t in rec_tags):
+                        m_score += 1
+            tag_matches = 0
+            if requested_tags:
+                tag_set = {t.lower().strip() for t in requested_tags if t}
+                rec_tags = {t.lower().strip() for t in rec.theme_tags}
+                tag_matches = len(tag_set.intersection(rec_tags))
+            cat_prio = 0 if rec.category.strip().lower() == cat_clean else 1
+            return (-m_score, cat_prio, -tag_matches, rec.usage_count, rec.last_used_at or "")
 
-            candidates.sort(key=tag_score)
+        candidates.sort(key=candidate_sort_key)
 
         # Deduplicate by physical filename for multi-scene seeded rotation (PR)
         seen_paths: set[str] = set()
@@ -714,14 +749,27 @@ class LoopCatalogRepository:
         if not distinct_records:
             distinct_records = candidates
 
-        matching_cat_records = [r for r in distinct_records if r.category.strip().lower() == cat_clean]
-        if len(matching_cat_records) > 1:
-            candidate_pool = matching_cat_records
-        elif seed is not None and len(distinct_records) > 1:
-            # PR multi-scene: rotate across channel pool when category has a single hit
-            candidate_pool = distinct_records
+        # When story motifs are present and matched, candidate pool prioritizes them
+        matching_motif_records = [
+            r for r in distinct_records
+            if clean_motifs and any(
+                m in {t.lower().strip() for t in r.theme_tags}
+                or m in set(re.split(r"[_\W]+", Path(r.file_path).stem.lower()))
+                or m in r.category.lower()
+                for m in clean_motifs
+            )
+        ]
+        if matching_motif_records:
+            candidate_pool = matching_motif_records
         else:
-            candidate_pool = matching_cat_records or distinct_records
+            matching_cat_records = [r for r in distinct_records if r.category.strip().lower() == cat_clean]
+            if len(matching_cat_records) > 1:
+                candidate_pool = matching_cat_records
+            elif seed is not None and len(distinct_records) > 1:
+                # PR multi-scene: rotate across channel pool when category has a single hit
+                candidate_pool = distinct_records
+            else:
+                candidate_pool = matching_cat_records or distinct_records
 
         # Main: lowest usage_count strictly precedes seed randomization
         min_usage = min(r.usage_count for r in candidate_pool)

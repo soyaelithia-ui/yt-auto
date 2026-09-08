@@ -30,8 +30,9 @@ class ClimaxFrameExtractor:
         manifest_path: Optional[Path] = None,
         manifest_data: Optional[Dict[str, Any]] = None,
         fallback_sec: float = 4.0,
+        motif_keywords: Optional[List[str]] = None,
     ) -> float:
-        """Finds the timestamp of highest tension in the manifest."""
+        """Finds the timestamp of highest tension / thematic importance in the manifest."""
         data = manifest_data
         if not data and manifest_path and manifest_path.is_file():
             try:
@@ -44,7 +45,7 @@ class ClimaxFrameExtractor:
             return fallback_sec
 
         scenes = data["scenes"]
-        # Find scene with maximum tension (prioritizing scenes past the 35% mark of the video)
+        # Find scene with maximum tension, giving strong priority to scenes matching story motifs
         best_scene = scenes[0]
         max_score = -1.0
 
@@ -52,6 +53,14 @@ class ClimaxFrameExtractor:
             tension = int(sc.get("tension_level", 1))
             start_sec = float(sc.get("start_sec", 0.0))
             score = tension * 10.0 + (start_sec * 0.1)
+
+            img_p = str(sc.get("image_path") or sc.get("clip_path") or "").lower()
+            if motif_keywords:
+                for kw in motif_keywords:
+                    if kw and str(kw).lower() in img_p:
+                        score += 100.0
+                        break
+
             if score > max_score:
                 max_score = score
                 best_scene = sc

@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
-from src.core.catalog import LoopCatalogRepository, resolve_loop_file_path
+from src.core.catalog import CHANNEL_THEMES, LoopCatalogRepository, resolve_loop_file_path
 from src.log import get_logger
 from src.media.subtitles_ass import (
     escape_ffmpeg_filter_path,
@@ -325,9 +325,13 @@ class LoopVideoEngine(BaseVideoCompositor):
             sha256=None,
         )
 
-    def _find_scenery_still(self, seed: Any = None) -> Path | None:
+    def _find_scenery_still(self, seed: Any = None, channel: str | None = None) -> Path | None:
         """Clean scenery still fallback (never overlays / grey lavfi)."""
         still_dirs: list[Path] = []
+        if channel:
+            chan_scenery = BASE_DIR / "assets" / "visual_bank" / channel.lower().strip() / "scenery"
+            if chan_scenery.is_dir():
+                still_dirs.append(chan_scenery)
         if self.default_fallback_dir.is_dir():
             still_dirs.append(self.default_fallback_dir)
         using_prod_loops = self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve()
@@ -337,7 +341,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 try:
                     for chan in sorted(p for p in vb.iterdir() if p.is_dir() and not p.name.startswith("_")):
                         scenery = chan / "scenery"
-                        if scenery.is_dir():
+                        if scenery.is_dir() and scenery not in still_dirs:
                             still_dirs.append(scenery)
                 except OSError:
                     pass
@@ -570,26 +574,32 @@ class LoopVideoEngine(BaseVideoCompositor):
         seed: Any,
         orientation: str | None = None,
         exclude_loop_ids: Sequence[str] | None = None,
+        channel: str | None = None,
     ) -> Path | None:
-        """Lazy cross-category fallback: stop at first usable video (bounded)."""
+        """Lazy cross-category fallback: stop at first usable video (bounded and channel-constrained)."""
         ignored_names = {
             "procedural", "vertical", "horizontal", norm_cat,
             *self.SYNTHETIC_MONOCHROME_CATEGORIES
         }
-        candidates: list[str] = [c for c in self.THEMATIC_CATEGORIES if c not in ignored_names]
-        try:
-            if root.is_dir():
-                for entry in sorted(root.iterdir()):
-                    if (
-                        entry.is_dir()
-                        and entry.name not in ignored_names
-                        and entry.name not in candidates
-                    ):
-                        candidates.append(entry.name)
-                        if len(candidates) >= 32:
-                            break
-        except OSError:
-            pass
+        eff_channel = (channel or "").lower().strip()
+        if eff_channel and eff_channel in CHANNEL_THEMES:
+            # Strictly restrict cross-category candidates to channel's defined themes
+            candidates: list[str] = [c for c in CHANNEL_THEMES[eff_channel] if c not in ignored_names]
+        else:
+            candidates: list[str] = [c for c in self.THEMATIC_CATEGORIES if c not in ignored_names]
+            try:
+                if root.is_dir():
+                    for entry in sorted(root.iterdir()):
+                        if (
+                            entry.is_dir()
+                            and entry.name not in ignored_names
+                            and entry.name not in candidates
+                        ):
+                            candidates.append(entry.name)
+                            if len(candidates) >= 32:
+                                break
+            except OSError:
+                pass
 
         orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical" if orientation else None
 
@@ -628,11 +638,13 @@ class LoopVideoEngine(BaseVideoCompositor):
         orientation: str | None = None,
         exclude_loop_ids: Sequence[str] | None = None,
         channel: str | None = None,
+        motifs: Sequence[str] | None = None,
+        topic: str | None = None,
         **kwargs: Any,
     ) -> Path:
         """
         Resolves a loop/background asset with live-first priority:
-        1) catalog get_best_loop (live select) with seed, exclude_loop_ids, channel, and monochrome guards
+        1) catalog get_best_loop (live select) with seed, exclude_loop_ids, channel, motifs, and monochrome guards
         2) exact category filesystem hit (searching recursive atomic/ folders)
         3) on-demand synthesize_on_demand (live create)
         4) filesystem / backgrounds fallback (avoiding synthetic monochrome latching)
@@ -642,6 +654,13 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         norm_cat = self.normalize_category(category)
         self._live_rss_checkpoint("8_loop_scene_live_select")
+
+        if not motifs and topic:
+            try:
+                from src.core.scenic_detector import extract_story_motifs
+                motifs = extract_story_motifs(topic)
+            except Exception:
+                pass
 
         # 0. Query SQLite loop catalog repository first (live select)
         can_query_catalog = self.catalog is not None and asset_root is None and (
@@ -658,6 +677,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                         seed=seed,
                         exclude_loop_ids=exclude_list,
                         channel=channel,
+                        motifs=motifs,
                     )
                 except TypeError:
                     best_loop = self.catalog.get_best_loop(
@@ -775,11 +795,19 @@ class LoopVideoEngine(BaseVideoCompositor):
             seed,
             orientation=orientation,
             exclude_loop_ids=exclude_loop_ids,
+            channel=channel,
         )
         if other is not None and not self._is_unusable_plane0(other):
             return other
 
-        if root.is_dir():
+        # If channel is specified, prioritize channel-isolated scenery still
+        if channel:
+            chan_still = self._find_scenery_still(seed=seed, channel=channel)
+            if chan_still is not None:
+                logger.info("Using channel scenery still as plane-0: %s", chan_still.name)
+                return chan_still
+
+        if root.is_dir() and not channel:
             root_hit = self._pick_media_file(
                 root,
                 self.SUPPORTED_VIDEO_EXTENSIONS,
@@ -792,7 +820,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 logger.info("Found fallback loop video in root loops directory: %s", root_hit.name)
                 return root_hit
 
-        if self.default_fallback_dir.is_dir():
+        if self.default_fallback_dir.is_dir() and not channel:
             fb_vid = self._pick_media_file(
                 self.default_fallback_dir,
                 self.SUPPORTED_VIDEO_EXTENSIONS,
@@ -813,7 +841,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 logger.info("Found fallback background image: %s", fb_img.name)
                 return fb_img
 
-        still = self._find_scenery_still(seed=seed)
+        still = self._find_scenery_still(seed=seed, channel=channel)
         if still is not None:
             logger.info("Using multi-crop scenery still as plane-0: %s", still.name)
             return still
@@ -1525,7 +1553,6 @@ class LoopVideoEngine(BaseVideoCompositor):
                     concat_list_path = out_path.parent / "loop_concat_list.txt"
                     if can_stream_copy_scenes:
                         total_target = float(duration_sec or 60.0)
-                        acc_dur = 0.0
                         num_scenes = len(valid_scenes)
                         target_beat = total_target / num_scenes if num_scenes > 0 else 12.0
                         if target_beat > 15.0:
@@ -1535,42 +1562,53 @@ class LoopVideoEngine(BaseVideoCompositor):
                         else:
                             default_beat = target_beat
 
-                        scene_durations = [
+                        base_durs = [
                             dur if (dur is not None and dur > 0) else default_beat
                             for _, dur in valid_scenes
                         ]
+                        scene_clips = [v for v, _ in valid_scenes]
+                        clip_durs = [
+                            clip_durations.get(str(v), 6.04)
+                            for v in scene_clips
+                        ]
+
+                        # In stream-copy mode (-c:v copy), each atomic loop file in ffconcat is streamed
+                        # in its entirety (packet-level copy until EOF of the clip).
+                        # Partial remainders cannot be trimmed without re-encoding, so each scene is
+                        # allocated an integer number of full clip repetitions proportional to its beat:
+                        scene_reps = [
+                            max(1, int(round(bd / max(0.5, cd))))
+                            for bd, cd in zip(base_durs, clip_durs)
+                        ]
+
+                        # Ensure total duration covers total_target (so video stream covers full audio)
+                        curr_total_dur = sum(r * cd for r, cd in zip(scene_reps, clip_durs))
+                        while curr_total_dur < total_target:
+                            deficits = [
+                                (base_durs[i] - scene_reps[i] * clip_durs[i], i)
+                                for i in range(num_scenes)
+                            ]
+                            deficits.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                            chosen_idx = deficits[0][1]
+                            scene_reps[chosen_idx] += 1
+                            curr_total_dur += clip_durs[chosen_idx]
 
                         scene_idx = 0
                         with open(concat_list_path, "w", encoding="utf-8") as f:
                             f.write("ffconcat version 1.0\n")
-                            while acc_dur < total_target:
-                                current_video, explicit_dur = valid_scenes[scene_idx % num_scenes]
-                                base_dur = (
-                                    explicit_dur
-                                    if (explicit_dur is not None and explicit_dur > 0)
-                                    else scene_durations[scene_idx % num_scenes]
-                                )
-
-                                max_clip_dur = clip_durations.get(str(current_video), 60.0)
-                                shot_dur = min(base_dur, max_clip_dur)
-
-                                remaining = total_target - acc_dur
-                                if shot_dur > remaining:
-                                    shot_dur = remaining
-
-                                shot_dur = max(0.5, shot_dur)
-
-                                f.write(f"file '{current_video}'\n")
-                                f.write(f"duration {shot_dur:.3f}\n")
-
-                                acc_dur += shot_dur
-                                scene_idx += 1
+                            for s_idx in range(num_scenes):
+                                current_video = scene_clips[s_idx]
+                                reps = scene_reps[s_idx]
+                                for _ in range(reps):
+                                    f.write(f"file '{current_video}'\n")
+                                    scene_idx += 1
 
                         logger.info(
-                            "Multi-scene stream-copy concat list generated with %d entries from %d distinct clips (acc_dur=%.1fs, target=%.1fs)",
+                            "Multi-scene stream-copy concat list generated with %d entries from %d distinct clips (reps=%s, total_dur=%.1fs, target=%.1fs)",
                             scene_idx,
                             len(set(valid_scene_videos)),
-                            acc_dur,
+                            scene_reps,
+                            curr_total_dur,
                             total_target,
                         )
                     else:
