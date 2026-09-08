@@ -14,7 +14,7 @@ when geometry matches. Real FFmpeg xfade is opt-in (DIRECTOR_XFADE=1) because it
 the timeline.
 
 Legacy multi-pass (per-scene encode → concat stream-copy → master) remains for hybrid scenes
-or when DIRECTOR_SINGLE_PASS=0. Master still applies EBU R128 audio (-14 LUFS, -1.5 dBTP)
+or when DIRECTOR_SINGLE_PASS=0. Master still applies EBU R128 audio (-16 LUFS, -1.5 dBTP)
 with sidechain ducking and optional libass ASS burn.
 Conforms to BaseVideoCompositor interface.
 """
@@ -269,7 +269,12 @@ class MultiSceneCompositor(BaseVideoCompositor):
                 assembly_plan = getattr(self, "_last_assembly_plan", assembly_plan)
 
             # 3. Master audio mixing (narration + BGM + sidechain ducking + EBU R128)
-            narration_audio = Path(manifest.audio_tracks.narration_path).resolve() if manifest.audio_tracks.narration_path else None
+            narration_audio = (
+                Path(manifest.audio_tracks.narration_path).resolve()
+                if manifest.audio_tracks.narration_path
+                and Path(manifest.audio_tracks.narration_path).is_file()
+                else None
+            )
             music_audio = Path(manifest.audio_tracks.music_path).resolve() if manifest.audio_tracks.music_path and Path(manifest.audio_tracks.music_path).is_file() else None
 
             # 4. Fast Master Assembly with FFmpeg — libass ASS burn when available
@@ -606,40 +611,42 @@ class MultiSceneCompositor(BaseVideoCompositor):
                 vf_chain += f",subtitles=filename={escape_ffmpeg_filter_path(subtitle_path)}"
             vf_chain += ",format=yuv420p"
 
-        # Audio handling
+        # Audio handling (sample rate unified to 44100; loudnorm I=-16 per Experto YT)
+        has_audio_map = False
         if narration_audio and narration_audio.is_file():
+            has_audio_map = True
             cmd.extend(["-i", str(narration_audio)])
             if music_audio and music_audio.is_file():
                 cmd.extend(["-stream_loop", "-1", "-i", str(music_audio)])
                 if video_copy:
                     filter_complex = (
-                        f"[1:a]aresample=48000,asplit=2[speech_sc][speech_mix];"
-                        f"[2:a]aresample=48000,lowpass=f=12000,volume={music_volume:.4f}[music_in];"
+                        f"[1:a]aresample=44100,asplit=2[speech_sc][speech_mix];"
+                        f"[2:a]aresample=44100,lowpass=f=12000,volume={music_volume:.4f}[music_in];"
                         f"[music_in][speech_sc]sidechaincompress=threshold=0.035:ratio=8.0:attack=20.0:release=350.0:makeup=1[music_ducked];"
                         f"[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed];"
-                        f"[amixed]loudnorm=I=-14.0:TP=-1.5:LRA=11.0,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                        f"[amixed]loudnorm=I=-16.0:TP=-1.5:LRA=11.0,aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
                     )
                     cmd.extend(["-filter_complex", filter_complex, "-map", "0:v:0", "-map", "[aout]"])
                 else:
                     filter_complex = (
                         f"[0:v]{vf_chain}[vout];"
-                        f"[1:a]aresample=48000,asplit=2[speech_sc][speech_mix];"
-                        f"[2:a]aresample=48000,lowpass=f=12000,volume={music_volume:.4f}[music_in];"
+                        f"[1:a]aresample=44100,asplit=2[speech_sc][speech_mix];"
+                        f"[2:a]aresample=44100,lowpass=f=12000,volume={music_volume:.4f}[music_in];"
                         f"[music_in][speech_sc]sidechaincompress=threshold=0.035:ratio=8.0:attack=20.0:release=350.0:makeup=1[music_ducked];"
                         f"[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed];"
-                        f"[amixed]loudnorm=I=-14.0:TP=-1.5:LRA=11.0,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                        f"[amixed]loudnorm=I=-16.0:TP=-1.5:LRA=11.0,aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
                     )
                     cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"])
             else:
                 if video_copy:
                     filter_complex = (
-                        f"[1:a]loudnorm=I=-14.0:TP=-1.5:LRA=11.0,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                        f"[1:a]loudnorm=I=-16.0:TP=-1.5:LRA=11.0,aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
                     )
                     cmd.extend(["-filter_complex", filter_complex, "-map", "0:v:0", "-map", "[aout]"])
                 else:
                     filter_complex = (
                         f"[0:v]{vf_chain}[vout];"
-                        f"[1:a]loudnorm=I=-14.0:TP=-1.5:LRA=11.0,aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aout]"
+                        f"[1:a]loudnorm=I=-16.0:TP=-1.5:LRA=11.0,aresample=44100,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
                     )
                     cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"])
         else:
@@ -661,11 +668,14 @@ class MultiSceneCompositor(BaseVideoCompositor):
                 "-color_trc", "bt709",
             ])
 
+        if has_audio_map:
+            cmd.extend([
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-ar", "44100",
+                "-ac", "2",
+            ])
         cmd.extend([
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-ar", "48000",
-            "-ac", "2",
             "-threads", str(default_ffmpeg_threads()),
             "-movflags", "+faststart",
             str(output_mp4),

@@ -224,7 +224,7 @@ class TemplateRegistry:
                 saturation=1.2,
                 enable_vignette=True,
                 vignette_expr="PI/3",
-                scene_duration_sec=10.0
+                scene_duration_sec=12.0
             ),
             thumbnail=ThumbnailStyle(
                 layout_type="cyberpunk",
@@ -308,7 +308,7 @@ class TemplateRegistry:
                 saturation=0.85,
                 enable_vignette=True,
                 vignette_expr="PI/3.5",
-                scene_duration_sec=10.0
+                scene_duration_sec=12.0
             ),
             thumbnail=ThumbnailStyle(
                 layout_type="neon_horror",

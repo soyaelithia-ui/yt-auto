@@ -205,3 +205,31 @@ class TestTemplateAndAssetManager:
 
         assert os.path.exists(out_thumb)
         assert os.path.getsize(out_thumb) > 1000
+
+
+    def test_bitacora_advertencia_filename_excluded(self, tmp_path):
+        from src.asset_manager import is_eligible_background_asset
+
+        assets = tmp_path / "assets"
+        scenery = assets / "visual_bank" / "moku" / "scenery"
+        scenery.mkdir(parents=True)
+        bad = scenery / "BITÁCORA_perdida.jpg"
+        bad2 = scenery / "ADVERTENCIA_tape.png"
+        good = scenery / "fog_clean.jpg"
+        bad.write_bytes(b"x")
+        bad2.write_bytes(b"x")
+        good.write_bytes(b"x")
+
+        assert not is_eligible_background_asset(str(bad))
+        assert not is_eligible_background_asset(str(bad2))
+        assert is_eligible_background_asset(str(good))
+
+        mgr = AssetManager(root_dir=str(assets))
+        all_bgs = [p for paths in mgr._index["backgrounds"].values() for p in paths]
+        assert str(good) in all_bgs
+        assert str(bad) not in all_bgs
+        assert str(bad2) not in all_bgs
+        names = [Path(p).name.lower() for p in all_bgs]
+        assert not any("bitácora" in n or "bitacora" in n for n in names)
+        assert not any("advertencia" in n for n in names)
+

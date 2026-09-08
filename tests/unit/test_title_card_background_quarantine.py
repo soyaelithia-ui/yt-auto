@@ -128,3 +128,117 @@ def test_resolve_scene_uses_clean_scenery_motion_first(tmp_path, monkeypatch):
         channel_id="moku", archetype="horror", scene_idx=1
     )
     assert resolved == motion
+
+
+def test_bitacora_advertencia_paths_never_eligible():
+    from src.asset_manager import is_eligible_background_asset
+
+    bad = [
+        "/assets/visual_bank/moku/scenery/BITÁCORA_perdida.jpg",
+        "/assets/visual_bank/moku/scenery/bitacora_faro.png",
+        "/tmp/ADVERTENCIA_tape04.jpg",
+        "assets/visual_bank/moku/scenery/advertencia_ui.jpg",
+    ]
+    for p in bad:
+        assert not is_eligible_background_asset(p), p
+        assert not _is_clean_visual_candidate(Path(p)), p
+
+
+def test_empty_scenery_falls_through_to_motion_loop(tmp_path, monkeypatch):
+    """Empty scenery must never freeze on a baked title card / static thumbnail."""
+    bank = tmp_path / "visual_bank"
+    scenery = bank / "moku" / "scenery"
+    quarantine = bank / "_quarantine_title_cards" / "moku"
+    scenery.mkdir(parents=True)
+    quarantine.mkdir(parents=True)
+    (quarantine / "abyssal_creature.jpg").write_bytes(b"title")
+
+    templates = tmp_path / "templates" / "scp"
+    templates.mkdir(parents=True)
+    (templates / "master_backdrop.jpg").write_bytes(b"template")
+
+    loops_dir = tmp_path / "assets" / "loops" / "web_procedural" / "dark_ambient"
+    loops_dir.mkdir(parents=True)
+    loop = loops_dir / "loop.mp4"
+    loop.write_bytes(b"fake_mp4")
+
+    monkeypatch.setattr("src.media.thumbnails.asset_resolver.VISUAL_BANK_DIR", bank)
+    monkeypatch.setattr("src.media.thumbnails.asset_resolver.TEMPLATES_DIR", tmp_path / "templates")
+    import src.media.thumbnails.asset_resolver as ar
+    monkeypatch.setattr(ar, "REPO_ROOT", tmp_path)
+
+    class FakeRepo:
+        def get_best_loop(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "src.core.catalog.LoopCatalogRepository",
+        lambda *a, **k: FakeRepo(),
+        raising=False,
+    )
+
+    resolved = ThematicAssetResolver.resolve_scene_asset_path(
+        channel_id="moku-scp", archetype="scp", scene_idx=1, is_vertical=True
+    )
+    assert resolved == loop
+    assert "_quarantine_title_cards" not in str(resolved)
+    assert "master_backdrop" not in str(resolved)
+
+
+def test_stills_only_scenery_prefers_loop_catalog(tmp_path, monkeypatch):
+    """If scenery has only stills, prefer catalog/procedural loop before returning a still."""
+    bank = tmp_path / "visual_bank"
+    scenery = bank / "moku" / "scenery"
+    scenery.mkdir(parents=True)
+    still = scenery / "fog.jpg"
+    still.write_bytes(b"still")
+
+    loops_dir = tmp_path / "assets" / "loops" / "web_procedural" / "atmospheric_landscape"
+    loops_dir.mkdir(parents=True)
+    loop = loops_dir / "loop.mp4"
+    loop.write_bytes(b"fake_mp4")
+
+    monkeypatch.setattr("src.media.thumbnails.asset_resolver.VISUAL_BANK_DIR", bank)
+    monkeypatch.setattr("src.media.thumbnails.asset_resolver.TEMPLATES_DIR", tmp_path / "templates")
+    (tmp_path / "templates").mkdir()
+    import src.media.thumbnails.asset_resolver as ar
+    monkeypatch.setattr(ar, "REPO_ROOT", tmp_path)
+
+    class FakeRepo:
+        def get_best_loop(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "src.core.catalog.LoopCatalogRepository",
+        lambda *a, **k: FakeRepo(),
+        raising=False,
+    )
+
+    resolved = ThematicAssetResolver.resolve_scene_asset_path(
+        channel_id="moku", archetype="horror", scene_idx=1
+    )
+    assert resolved == loop
+    assert resolved != still
+
+
+def test_overlays_and_gifs_excluded_from_clean_candidates(tmp_path):
+    bank = tmp_path / "visual_bank" / "moku"
+    overlays = bank / "overlays"
+    gifs = bank / "ambient_gifs"
+    scenery = bank / "scenery"
+    overlays.mkdir(parents=True)
+    gifs.mkdir(parents=True)
+    scenery.mkdir(parents=True)
+    ov = overlays / "vignette.png"
+    gf = gifs / "fog.gif"
+    st = scenery / "clean.jpg"
+    ov.write_bytes(b"ov")
+    gf.write_bytes(b"GIF")
+    st.write_bytes(b"ok")
+
+    assert not _is_clean_visual_candidate(ov)
+    assert not _is_clean_visual_candidate(gf)
+    assert _is_clean_visual_candidate(st)
+    assert not is_eligible_background_asset(str(ov))
+    assert not is_eligible_background_asset(str(gf))
+    assert is_eligible_background_asset(str(st))

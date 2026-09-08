@@ -23,6 +23,11 @@ from src.media.hybrid_engine import (
     force_pillow_hybrid_frames_enabled,
     force_pillow_particles_enabled,
     build_ken_burns_zoompan_filter,
+    canonical_ken_burns_params,
+    KEN_BURNS_MIN_DURATION_SEC,
+    KEN_BURNS_ZOOM_START,
+    KEN_BURNS_ZOOM_END,
+    KEN_BURNS_FPS,
     resolve_hybrid_overlay_asset,
 )
 from src.media.proc_engine import (
@@ -76,6 +81,11 @@ __all__ = [
     "force_pillow_hybrid_frames_enabled",
     "force_pillow_particles_enabled",
     "build_ken_burns_zoompan_filter",
+    "canonical_ken_burns_params",
+    "KEN_BURNS_MIN_DURATION_SEC",
+    "KEN_BURNS_ZOOM_START",
+    "KEN_BURNS_ZOOM_END",
+    "KEN_BURNS_FPS",
     "resolve_hybrid_overlay_asset",
     "ProceduralVideoEngine",
     "ProceduralVideoError",

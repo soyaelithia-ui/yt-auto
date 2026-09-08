@@ -24,11 +24,21 @@ _EXCLUDED_VISUAL_BANK_MARKERS = (
     "overlays",
 )
 
+# Baked Spanish title-card chrome tokens (BITÁCORA / ADVERTENCIA) — never as bg.
+_EXCLUDED_NAME_TOKENS = (
+    "bitácora",
+    "bitacora",
+    "advertencia",
+)
+
 
 def _is_clean_visual_candidate(path: Path) -> bool:
     """Reject quarantined title cards and non-scenery visual_bank layers."""
     parts = {p.lower() for p in Path(path).parts}
     if any(m.lower() in parts for m in _EXCLUDED_VISUAL_BANK_MARKERS):
+        return False
+    hay = f"{Path(path).stem.lower()} {Path(path).name.lower()}"
+    if any(tok in hay for tok in _EXCLUDED_NAME_TOKENS):
         return False
     return True
 
@@ -235,19 +245,18 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
         templates_dir = Path(cls.TEMPLATES_DIR)
 
-        # 1. Clean visual-bank scenery only (never quarantine / overlays / GIFs).
-        # Prefer motion (.mp4) over stills so scenes are not frozen title cards.
+        # 1. Clean visual-bank motion scenery first (never quarantine / overlays / GIFs).
         chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
         if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
             chan_prefix = "aelithia"
         scenery_dir = visual_bank_dir / chan_prefix / "scenery"
         motion = _list_scenery_candidates(scenery_dir, ("*.mp4", "*.webm"))
         stills = _list_scenery_candidates(scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
-        scenery_candidates = motion or stills
-        if scenery_candidates:
-            return scenery_candidates[(idx - 1) % len(scenery_candidates)]
+        if motion:
+            return motion[(idx - 1) % len(motion)]
 
-        # 2. Motion loops before static thumbnail templates (avoids frozen-cover videos).
+        # 2. Prefer catalog / procedural loops over scenery stills for video scenes
+        # (empty scenery OR stills-only → motion loop; never baked title card as bg).
         try:
             from src.core.catalog import LoopCatalogRepository
             from src.media.loop_engine import CATEGORY_ALIASES
@@ -268,7 +277,11 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
             if proc_candidates:
                 return proc_candidates[(idx - 1) % len(proc_candidates)]
 
-        # 3. Curated template stills (thumbnail backdrops) — last resort for video scenes
+        # 3. Clean scenery stills only after loops exhausted (Ken Burns applied at render).
+        if stills:
+            return stills[(idx - 1) % len(stills)]
+
+        # 4. Curated template stills (thumbnail backdrops) — last resort for video scenes
         target_keys: list[str] = []
         if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
             target_keys.append("scp")

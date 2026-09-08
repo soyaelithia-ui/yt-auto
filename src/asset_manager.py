@@ -23,13 +23,30 @@ _BACKGROUND_EXCLUDED_DIR_MARKERS = (
     "overlays",
 )
 
+# Filename / path tokens for baked Spanish title-card chrome (never index as bg).
+_BACKGROUND_EXCLUDED_NAME_TOKENS = (
+    "bitácora",
+    "bitacora",
+    "advertencia",
+)
+
 _BACKGROUND_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".mp4", ".webm")  # no .gif
+_BACKGROUND_MOTION_EXTS = (".mp4", ".webm")
 
 
 def _path_has_excluded_background_marker(file_path: str) -> bool:
     """True if path sits under a folder that is not eligible as video background."""
     parts = {p.lower() for p in Path(file_path).parts}
     return any(marker.lower() in parts for marker in _BACKGROUND_EXCLUDED_DIR_MARKERS)
+
+
+def _path_has_excluded_name_token(file_path: str) -> bool:
+    """True if filename stem contains baked title-card tokens (BITÁCORA / ADVERTENCIA)."""
+    # Basename only — full paths may include unrelated parent dirs (e.g. pytest node names).
+    stem = Path(file_path).stem.lower()
+    name = Path(file_path).name.lower()
+    hay = f"{stem} {name}"
+    return any(tok in hay for tok in _BACKGROUND_EXCLUDED_NAME_TOKENS)
 
 
 def is_eligible_background_asset(file_path: str) -> bool:
@@ -41,7 +58,15 @@ def is_eligible_background_asset(file_path: str) -> bool:
         return False
     if _path_has_excluded_background_marker(file_path):
         return False
+    if _path_has_excluded_name_token(file_path):
+        return False
     return True
+
+
+def _prefer_motion_background(pool: List[str]) -> List[str]:
+    """Prefer motion loops over stills when selecting video backgrounds."""
+    motion = [p for p in pool if os.path.splitext(p)[1].lower() in _BACKGROUND_MOTION_EXTS]
+    return motion or pool
 
 
 LIBRARY_DIR = os.path.join(BASE_DIR, "assets", "library")
@@ -191,6 +216,7 @@ class AssetManager:
             or self._index["backgrounds"].get("horror")
         )
         pool = [p for p in (raw_pool or []) if is_eligible_background_asset(p)]
+        pool = _prefer_motion_background(pool)
 
         if pool:
             return random.choice(pool)
@@ -222,6 +248,7 @@ class AssetManager:
             or []
         )
         pool = [p for p in raw_pool if is_eligible_background_asset(p)]
+        pool = _prefer_motion_background(pool)
 
         # Deduplicate pool while preserving order
         unique_pool = list(dict.fromkeys(pool))
