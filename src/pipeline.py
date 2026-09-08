@@ -660,12 +660,7 @@ def run_pipeline_once(
             words_max = None if is_long_lane else lane.words_max
             curate_provider = (
                 "C"
-                if (
-                    is_test_environment()
-                    or story_id.startswith("auto-")
-                    or str(story.get("source_url", "")).startswith("https://local.automation/")
-                    or os.environ.get("FAST_CURATE") == "1"
-                )
+                if is_test_environment() or os.environ.get("FAST_CURATE") == "1"
                 else "A"
             )
             script = _dispatch_curate_script(

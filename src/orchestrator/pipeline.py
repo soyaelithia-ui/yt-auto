@@ -109,8 +109,9 @@ class PipelineOrchestrator:
         import unicodedata
 
         clean_slug = unicodedata.normalize("NFKD", topic.lower()).encode("ascii", "ignore").decode("ascii")
-        slug = re.sub(r"[^a-zA-Z0-9_-]", "_", clean_slug)[:32]
-        story_to_claim = f"auto-{channel}-{slug}"
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "_", clean_slug)[:24]
+        import time
+        story_to_claim = f"auto-{channel}-{slug}-{int(time.time()) % 100000:05d}"
 
         lane = resolve_lane_for_run(channel, lane_id)
         is_long = lane.orientation == "horizontal"

@@ -354,35 +354,36 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         if scp_m:
             scp_id = scp_m.group(1).upper()
 
-        title_font_size = int(w * (0.128 if is_vertical else 0.060))
-        max_title_w = int(safe_zone.width * (0.92 if is_vertical else 0.92))
+        title_font_size = int(w * (0.118 if is_vertical else 0.060))
+        title_x = safe_zone.left
+        max_title_w = int(safe_zone.width * 0.92)
         if is_vertical:
-            max_title_w = min(max_title_w, max(64, w - safe_zone.left - 140))
-        estimated_lines = 2 if len(clean_title) > 12 else 1
-        estimated_text_h = int(estimated_lines * title_font_size * (1.02 if is_vertical else 1.12))
+            max_title_w = min(int(w * 0.84), max(64, w - 260))
+            title_x = (w - max_title_w) // 2
+        estimated_lines = 2 if len(clean_title) > 16 else 1
+        estimated_text_h = int(estimated_lines * title_font_size * (1.08 if is_vertical else 1.12))
 
         if is_vertical:
-            # Shorts UI: keep type above 72% and kill high-contrast in the bottom/right gutters.
-            draw.rectangle([(0, safe_zone.bottom), (w, h)], fill=(0, 0, 0, 200))
-            draw.rectangle([(w - 120, int(h * 0.25)), (w, h)], fill=(0, 0, 0, 90))
-            title_y = max(safe_zone.top, min(safe_zone.bottom, h - 460) - estimated_text_h)
-            scrim_top = max(safe_zone.top, title_y - int(h * 0.02))
-            draw.rectangle(
-                [(0, scrim_top), (w - 120, min(safe_zone.bottom, title_y + estimated_text_h + 8))],
-                fill=(0, 0, 0, 110),
-            )
+            ui_bot = min(450, max(1, int(round(h * 450 / 1920))))
+            ui_rail = min(120, max(1, int(round(w * 120 / 1080))))
+            title_y = max(safe_zone.top, min(safe_zone.bottom, h - ui_bot - 10) - estimated_text_h)
+            scrim_top = max(safe_zone.top, title_y - int(h * 0.025))
+            scrim_bot = min(safe_zone.bottom, h - ui_bot, title_y + estimated_text_h + int(h * 0.02))
+            draw.rectangle([(0, h - ui_bot), (w, h)], fill=(0, 0, 0, 160))
+            draw.rectangle([(w - ui_rail, int(h * 0.25)), (w, h)], fill=(0, 0, 0, 90))
+            draw.rectangle([(0, scrim_top), (w - ui_rail, scrim_bot)], fill=(0, 0, 0, 90))
             if scp_id:
                 fnt_id = DynamicTypographyEngine.resolve_font(
-                    "Montserrat-Black.ttf", int(h * 0.055)
+                    "Montserrat-Black.ttf", int(h * 0.064)
                 )
                 id_bbox = draw.textbbox((0, 0), scp_id, font=fnt_id)
                 id_w = id_bbox[2] - id_bbox[0]
                 draw.text(
-                    (safe_zone.left + max(0, (safe_zone.width - id_w) // 2), safe_zone.top),
+                    ((w - id_w) // 2, safe_zone.top),
                     scp_id,
                     font=fnt_id,
                     fill=(255, 255, 255, 255),
-                    stroke_width=4,
+                    stroke_width=5,
                     stroke_fill=(0, 0, 0, 255),
                 )
         elif text_box_style in ("minimal", "outline") or not draw_badge:
@@ -430,7 +431,7 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         final_img = DynamicTypographyEngine.draw_text_with_effects(
             canvas=img_with_overlay,
             text=clean_title,
-            pos_x=safe_zone.left,
+            pos_x=title_x,
             pos_y=title_y,
             max_width=max_title_w,
             font_name="Montserrat-Black.ttf",

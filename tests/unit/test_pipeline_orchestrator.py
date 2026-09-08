@@ -110,7 +110,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
         self.assertIn("auto-moku", result.story_id)
         mock_run_pipeline.assert_called_once()
         call_kwargs = mock_run_pipeline.call_args.kwargs
-        self.assertEqual(call_kwargs["story_id"], "auto-moku-el_misterio_del_faro")
+        self.assertTrue(str(call_kwargs["story_id"]).startswith("auto-moku-el_misterio_del_faro"))
         self.assertEqual(call_kwargs["lane_id"], "moku-horror-long")
 
     @patch("src.orchestrator.pipeline.run_pipeline_once")
@@ -246,12 +246,11 @@ class TestPipelineOrchestrator(unittest.TestCase):
         )
 
         self.assertEqual(result.status, "SUCCESS")
-        # The story was reset to PENDING and its stale lease cleared, so the
-        # queue is claimable again (lease deletion no longer happens blindly).
-        from src.core.domain import CanonicalChannel
-        claim = repo.claim(CanonicalChannel.MOKU, owner="post-topic-check")
-        self.assertIsNotNone(claim)
-        self.assertEqual(claim["story_id"], "auto-moku-faro")
+        # A new unique auto- story is enqueued; the old leased row is left alone.
+        call_kwargs = mock_run_pipeline.call_args.kwargs
+        new_id = str(call_kwargs["story_id"])
+        self.assertTrue(new_id.startswith("auto-moku-faro"))
+        self.assertNotEqual(new_id, "auto-moku-faro")
 
     @patch("src.orchestrator.pipeline.run_pipeline_once")
     def test_run_telegram_canary_missing_video(self, mock_run_pipeline):
