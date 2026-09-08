@@ -10,17 +10,17 @@ The system MUST execute all narrative curation, translation, and SEO metadata ge
 - **And** the story state MUST transition to `RETRYABLE_FAILED` with an exponential backoff cooling period.
 
 ## Requirement: Anti-Filler Pure Procedural Visuals
-All background visuals in production renders MUST be generated through FFmpeg procedural loops (lavfi/catalog). Static stock photographs and generic filler images are strictly prohibited (`DISCARDED_GENERIC_FILLER`). WebGL, Three.js, and HTML5 Canvas MUST NOT be the production background stack. Emblems, agency badges, and institutional marks MUST be projected as vector overlays or dynamic HUD elements respecting visual margins.
+Production video backgrounds MUST come from FFmpeg procedural/catalog loops or curated **clean** scenery (no baked title/warning/CRT/UI text). Generic stock filler and pre-baked title cards are prohibited (`DISCARDED_GENERIC_FILLER`). WebGL, Three.js, and HTML5 Canvas MUST NOT be the production background stack. Emblems and agency marks MUST be vector overlays / dynamic HUD (thumbnail composition path for text chrome). Authoritative classification: `docs/visual-assets-policy.md`.
 
 ### Scenario: Visual Quality Audit
 - **Given** a generated scene manifest `SceneManifestV2`
 - **When** the `ImageAuditorAgent` inspects visual assets
-- **Then** static stock photos MUST be rejected
-- **And** FFmpeg procedural loops or official vector insignia overlays MUST be approved
+- **Then** generic stock photos and baked title cards MUST be rejected
+- **And** FFmpeg loops, clean scenery, or official vector insignia overlays MUST be approved
 - **And** WebGL, Three.js, or HTML5 Canvas MUST NOT be required for approval.
 
 ### Scenario: Generic filler still discarded (Edge Case)
-- **Given** a scene whose only background candidate is a static stock photograph
+- **Given** a scene whose only background candidate is a static stock photograph or quarantined title card
 - **When** the `ImageAuditorAgent` inspects visual assets
 - **Then** the asset MUST be classified `DISCARDED_GENERIC_FILLER`
 - **And** the pipeline MUST NOT approve WebGL, Three.js, or Canvas as a substitute production background.

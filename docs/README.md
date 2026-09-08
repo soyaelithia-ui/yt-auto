@@ -33,12 +33,13 @@
 | [TROUBLESHOOTING](TROUBLESHOOTING.md) | Matriz de diagnóstico rápido de errores, causas raíz, rotación de cookies y procedimientos de mitigación. |
 | [REFERENCIAS_Y_VERSIONES](REFERENCIAS_Y_VERSIONES.md) | Versiones fijadas de binarios, dependencias de Python/Node y referencias primarias oficiales. |
 | [POLITICA_CATALOGO_CI](POLITICA_CATALOGO_CI.md) | Política CI vs prod del catálogo: seed sintético solo en tests; sin inventar media en producción; `visual_bank` cruzado con disco. |
+| [visual-assets-policy](visual-assets-policy.md) | Scenery/loops limpios vs title cards; quarantine; guards `is_eligible_background_asset` + tests. |
 
 ---
 
 ## 3. Consulta Rápida por Rol
 
-- **Desarrollo y Pipeline**: [ARQUITECTURA.md](ARQUITECTURA.md) · [FLUJO_VIDEOS.md](FLUJO_VIDEOS.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md) · [INTEGRACIONES_Y_SERVICIOS.md](INTEGRACIONES_Y_SERVICIOS.md).
+- **Desarrollo y Pipeline**: [ARQUITECTURA.md](ARQUITECTURA.md) · [FLUJO_VIDEOS.md](FLUJO_VIDEOS.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md) · [visual-assets-policy.md](visual-assets-policy.md) · [INTEGRACIONES_Y_SERVICIOS.md](INTEGRACIONES_Y_SERVICIOS.md).
 - **Operación y SysAdmin**: [OPERACION.md](OPERACION.md) · [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) · [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 - **Inteligencia Artificial**: [AGENTES_IA_Y_POLITICA.md](AGENTES_IA_Y_POLITICA.md).
 - **Auditoría y Dependencias**: [REFERENCIAS_Y_VERSIONES.md](REFERENCIAS_Y_VERSIONES.md).

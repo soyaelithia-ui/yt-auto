@@ -1,7 +1,7 @@
 # Pipeline Visual Multi-Canal, Calidad y Rendimiento
 
 > **Estado:** OFICIAL / PRODUCCIÓN  
-> **Última actualización:** 2026-08  
+> **Última actualización:** 2026-09  
 
 Especificaciones de renderizado audiovisual, perfiles por canal y directivas de calidad para `yt-auto`.
 
@@ -45,5 +45,6 @@ flowchart TD
 
 - **Generación Local con Plantillas (`src/thumbnail.py`)**: Renderizado vectorial/PIL directo con branding del canal (`assets/branding/`). Cero llamadas externas a modelos generativos de imagen.
 - **Formato y Dimensiones**: `1080x1920` (Shorts) y `1280x720` / `1920x1080` (Longform) con contraste optimizado y tipografía legible (`Montserrat-Black.ttf`).
+- **Texto / badges / HUD**: solo en el path de miniaturas sobre bases limpias en `assets/thumbnails/templates/` — no reutilizar title cards pre-horneadas como fondo de video.
 
-`visual_bank` / catálogo: [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).
+Clasificación scenery vs title cards: [visual-assets-policy.md](visual-assets-policy.md). Catálogo CI vs prod: [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).
