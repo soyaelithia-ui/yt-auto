@@ -236,16 +236,22 @@ def test_typography_multiline_safe_splitting():
     # Long text over 30 chars with question/exclamation marks
     long_title = "¿POR QUÉ NADIE QUIERE DECIR LA VERDAD SOBRE ESTO?"
     lines = DynamicTypographyEngine.split_title_to_safe_lines(long_title, max_chars_per_line=20)
-    assert 2 <= len(lines) <= 3
+    assert len(lines) <= 2
+    orig_words = long_title.split()
     for line in lines:
-        assert len(line) <= 25
+        for word in line.replace("…", "").split():
+            assert word in orig_words
+    assert " ".join(lines).split() == orig_words
 
     # Very long title over 60 chars
     extra_long = "¿POR QUÉ NADIE QUIERE DECIR LA VERDAD SOBRE EL EXPERIMENTO SECRETO?"
     lines_extra = DynamicTypographyEngine.split_title_to_safe_lines(extra_long, max_chars_per_line=20)
-    assert 2 <= len(lines_extra) <= 3
+    assert len(lines_extra) <= 2
+    extra_words = extra_long.split()
     for line in lines_extra:
-        assert len(line) <= 25
+        for word in line.replace("…", "").split():
+            assert word in extra_words
+    assert " ".join(lines_extra).split() == extra_words
 
 
 def test_thematic_asset_resolver_hierarchy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

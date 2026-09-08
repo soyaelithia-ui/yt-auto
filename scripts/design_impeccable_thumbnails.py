@@ -64,7 +64,7 @@ def create_scp_impeccable_thumbnail(base_path: str, output_path: str) -> str:
     graded_rgb = apply_analog_horror_grade(
         base,
         target_size=(w, h),
-        with_osd=True,
+        with_osd=False,
         osd_kwargs={
             "cam_label": "CAM 04 [SECTOR-19 VAULT]",
             "date_label": "1994-10-31",
@@ -291,7 +291,7 @@ def create_horror_impeccable_thumbnail(base_path: str, output_path: str) -> str:
     graded_rgb = apply_analog_horror_grade(
         base,
         target_size=(w, h),
-        with_osd=True,
+        with_osd=False,
         osd_kwargs={
             "cam_label": "CAM 04 [SUB-LEVEL B]",
             "date_label": "1994-10-31",

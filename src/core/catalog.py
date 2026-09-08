@@ -552,15 +552,15 @@ class LoopCatalogRepository:
             valid_recs: List[LoopRecord] = []
             for r in rows:
                 rec = self._row_to_record(r)
-                # Purge/deprioritize synthetic monochrome loops
+                # Never select grey lavfi / synthetic monochrome as plane-0.
                 is_synthetic_mono = (
                     rec.loop_id in SYNTHETIC_MONOCHROME_LOOP_IDS
                     or rec.category in ("maritime_lighthouse", "arctic_desolation")
+                    or rec.technology == "synthetic_monochrome"
                     or (rec.technology == "ffmpeg_lavfi" and rec.sha256 == "procedural")
                 )
                 if is_synthetic_mono:
-                    if cat_clean not in ("maritime_lighthouse", "arctic_desolation"):
-                        continue
+                    continue
 
                 # Channel isolation: reject foreign channel
                 if _is_foreign_channel(rec):
@@ -619,6 +619,14 @@ class LoopCatalogRepository:
 
         if not candidates:
             return None
+
+        preferred = [
+            c
+            for c in candidates
+            if (c.technology or "").strip().lower() not in ("ffmpeg_lavfi", "synthetic_monochrome")
+        ]
+        if preferred:
+            candidates = preferred
 
         # --- Ranking and Selection ---
         if requested_tags:

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "updated_at": "2026-09-08T04:05:00Z",
+  "updated_at": "2026-09-08T05:06:21Z",
   "description": "Catálogo de Metadatos del Banco Local de Recursos Visuales para YTShort. scenery/ must hold clean backdrops only; finished title cards live under _quarantine_title_cards/ and are excluded from the background index.",
   "channels": {
     "moku": {
@@ -13,7 +13,80 @@
         1360
       ],
       "categories": {
-        "scenery": [],
+        "scenery": [
+          {
+            "id": "moku_abandoned_morgue_01",
+            "file": "moku_abandoned_morgue_01.jpg",
+            "path": "assets/visual_bank/moku/scenery/moku_abandoned_morgue_01.jpg",
+            "resolution": [
+              1280,
+              720
+            ],
+            "format": "jpg",
+            "tags": [
+              "morgue",
+              "abandoned",
+              "hospital",
+              "horror",
+              "indoor"
+            ],
+            "description": "Morgue abandonada con mesas de examen y luz fluorescente fría, sin HUD ni texto de miniatura."
+          },
+          {
+            "id": "moku_foggy_highway_3am_01",
+            "file": "moku_foggy_highway_3am_01.jpg",
+            "path": "assets/visual_bank/moku/scenery/moku_foggy_highway_3am_01.jpg",
+            "resolution": [
+              1280,
+              720
+            ],
+            "format": "jpg",
+            "tags": [
+              "highway",
+              "fog",
+              "night",
+              "forest",
+              "isolation"
+            ],
+            "description": "Carretera forestal de madrugada envuelta en niebla, con faros lejanos y sin overlays."
+          },
+          {
+            "id": "moku_asylum_corridor_01",
+            "file": "moku_asylum_corridor_01.jpg",
+            "path": "assets/visual_bank/moku/scenery/moku_asylum_corridor_01.jpg",
+            "resolution": [
+              1920,
+              1080
+            ],
+            "format": "jpg",
+            "tags": [
+              "castle",
+              "fog",
+              "approach",
+              "gothic",
+              "outdoor"
+            ],
+            "description": "Acceso empedrado a un recinto gótico entre niebla, fondo limpio de terror."
+          },
+          {
+            "id": "moku_backrooms_yellow_carpet_01",
+            "file": "moku_backrooms_yellow_carpet_01.jpg",
+            "path": "assets/visual_bank/moku/scenery/moku_backrooms_yellow_carpet_01.jpg",
+            "resolution": [
+              1280,
+              720
+            ],
+            "format": "jpg",
+            "tags": [
+              "backrooms",
+              "corridor",
+              "yellow",
+              "liminal",
+              "indoor"
+            ],
+            "description": "Pasillo liminal de alfombra amarilla y fluorescentes, sin cromados OSD."
+          }
+        ],
         "ambient_gifs": [
           {
             "id": "moku_ambient_fog",
@@ -160,7 +233,80 @@
         1360
       ],
       "categories": {
-        "scenery": [],
+        "scenery": [
+          {
+            "id": "aelithia_rainy_cafe_window_01",
+            "file": "aelithia_rainy_cafe_window_01.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aelithia_rainy_cafe_window_01.jpg",
+            "resolution": [
+              1280,
+              720
+            ],
+            "format": "jpg",
+            "tags": [
+              "cafe",
+              "rain",
+              "window",
+              "night",
+              "cozy"
+            ],
+            "description": "Interior de café lluvioso junto al ventanal, atmósfera cotidiana para relatos AITA."
+          },
+          {
+            "id": "aelithia_city_apartment_night_01",
+            "file": "aelithia_city_apartment_night_01.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aelithia_city_apartment_night_01.jpg",
+            "resolution": [
+              1280,
+              720
+            ],
+            "format": "jpg",
+            "tags": [
+              "apartment",
+              "night",
+              "rain",
+              "city",
+              "interior"
+            ],
+            "description": "Apartamento urbano de noche con ventanales mojados y lámpara cálida, sin UI de Reddit."
+          },
+          {
+            "id": "aelithia_rain_window_bokeh_01",
+            "file": "aelithia_rain_window_bokeh_01.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aelithia_rain_window_bokeh_01.jpg",
+            "resolution": [
+              1920,
+              1080
+            ],
+            "format": "jpg",
+            "tags": [
+              "rain",
+              "window",
+              "bokeh",
+              "droplets",
+              "abstract"
+            ],
+            "description": "Gotas de lluvia sobre cristal con luces bokeh, fondo limpio sin tipografía."
+          },
+          {
+            "id": "aelithia_cozy_lamp_interior_01",
+            "file": "aelithia_cozy_lamp_interior_01.jpg",
+            "path": "assets/visual_bank/aelithia/scenery/aelithia_cozy_lamp_interior_01.jpg",
+            "resolution": [
+              1920,
+              1080
+            ],
+            "format": "jpg",
+            "tags": [
+              "interior",
+              "bright",
+              "plants",
+              "table",
+              "calm"
+            ],
+            "description": "Rincón interior claro con mesa, tetera y plantas, escena cotidiana sin texto horneado."
+          }
+        ],
         "ambient_gifs": [
           {
             "id": "aelithia_ambient_soft_bokeh",

@@ -41,11 +41,12 @@ class AspectLayoutManager:
             )
         else:
             # 1920x1080 / 1280x720 Horizontal Longform
+            # Floor 6% inset on all sides; keep stricter YT timestamp clearance on right/bottom.
             return SafeZone(
-                top=int(height * 0.08),      # Top 8% margin
-                bottom=int(height * 0.85),   # Bottom 15% margin (avoiding timeline & timestamp badge)
-                left=int(width * 0.05),      # Left 5% margin
-                right=int(width * 0.81),     # Right 19% margin (avoiding timestamp badge)
+                top=int(height * 0.08),
+                bottom=int(height * 0.85),
+                left=int(width * 0.06),
+                right=int(width * 0.81),
             )
 
     @staticmethod

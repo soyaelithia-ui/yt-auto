@@ -50,7 +50,59 @@ __all__ = [
     "LoopVideoError",
     "LoopVideoAssetError",
     "LoopCompositionError",
+    "is_grey_procedural_plane",
+    "is_overlay_not_plane0",
+    "GREY_PLANE_TECHNOLOGIES",
 ]
+
+GREY_PLANE_TECHNOLOGIES = frozenset({"ffmpeg_lavfi", "synthetic_monochrome"})
+_OVERLAY_DIR_MARKERS = frozenset({"overlays", "ambient_gifs"})
+_OVERLAY_NAME_TOKENS = ("tv_static", "film_grain", "vignette")
+_GREY_NAME_TOKENS = ("monochrome", "grey", "gray")
+
+
+def is_overlay_not_plane0(path: str | Path | None) -> bool:
+    """True when an asset is an overlay/effect layer, never a principal background."""
+    if not path:
+        return False
+    p = Path(path)
+    parts = {part.lower() for part in p.parts}
+    if parts & _OVERLAY_DIR_MARKERS:
+        return True
+    name = p.name.lower()
+    return any(tok in name for tok in _OVERLAY_NAME_TOKENS)
+
+
+def is_grey_procedural_plane(
+    *,
+    technology: str | None = None,
+    category: str | None = None,
+    loop_id: str | None = None,
+    path: str | Path | None = None,
+    sha256: str | None = None,
+) -> bool:
+    """True when a candidate would be a grey lavfi / synthetic-monochrome plane-0."""
+    tech = (technology or "").strip().lower()
+    if tech == "synthetic_monochrome":
+        return True
+    if tech == "ffmpeg_lavfi" and (sha256 or "").strip().lower() == "procedural":
+        return True
+    cat = (category or "").strip().lower()
+    if cat in LoopVideoEngine.SYNTHETIC_MONOCHROME_CATEGORIES:
+        return True
+    lid = (loop_id or "").strip()
+    if lid in LoopVideoEngine.SYNTHETIC_MONOCHROME_IDS:
+        return True
+    if not path:
+        return False
+    p = Path(path)
+    if p.name in LoopVideoEngine.SYNTHETIC_MONOCHROME_FILES:
+        return True
+    parts = {part.lower() for part in p.parts}
+    if parts & set(LoopVideoEngine.SYNTHETIC_MONOCHROME_CATEGORIES):
+        return True
+    stem = p.stem.lower()
+    return any(tok in stem for tok in _GREY_NAME_TOKENS)
 
 
 class LoopVideoError(CompositorError):
@@ -240,6 +292,58 @@ class LoopVideoEngine(BaseVideoCompositor):
         self._custom_catalog = catalog is not None
         self.catalog = catalog or LoopCatalogRepository(db_path=db_path)
 
+    def _is_unusable_plane0(
+        self,
+        path: Path | None,
+        *,
+        technology: str | None = None,
+        category: str | None = None,
+        loop_id: str | None = None,
+    ) -> bool:
+        """Grey lavfi / overlay assets cannot be the principal visual plane."""
+        if path is None:
+            return True
+        if is_overlay_not_plane0(path):
+            return True
+        return is_grey_procedural_plane(
+            technology=technology,
+            category=category,
+            loop_id=loop_id,
+            path=path,
+            sha256=None,
+        )
+
+    def _find_scenery_still(self, seed: Any = None) -> Path | None:
+        """Clean scenery still fallback (never overlays / grey lavfi)."""
+        still_dirs: list[Path] = []
+        if self.default_fallback_dir.is_dir():
+            still_dirs.append(self.default_fallback_dir)
+        using_prod_loops = self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve()
+        if using_prod_loops:
+            vb = BASE_DIR / "assets" / "visual_bank"
+            if vb.is_dir():
+                try:
+                    for chan in sorted(p for p in vb.iterdir() if p.is_dir() and not p.name.startswith("_")):
+                        scenery = chan / "scenery"
+                        if scenery.is_dir():
+                            still_dirs.append(scenery)
+                except OSError:
+                    pass
+        for d in still_dirs:
+            picked = self._pick_media_file(
+                d,
+                self.SUPPORTED_IMAGE_EXTENSIONS,
+                seed=seed,
+                max_scan=32,
+                recursive=True,
+            )
+            if picked is not None and not self._is_unusable_plane0(picked):
+                return picked
+        img = self.default_fallback_image
+        if img.is_file() and img.stat().st_size > 0 and not self._is_unusable_plane0(img):
+            return img
+        return None
+
     def normalize_category(self, category: str | None) -> str:
         """
         Normalizes category string into canonical snake_case format
@@ -379,6 +483,8 @@ class LoopVideoEngine(BaseVideoCompositor):
         for f in self._iter_media_files(directory, extensions, max_scan=max_scan, recursive=recursive):
             if exclude_set and (f.stem in exclude_stems or f.name in exclude_set or str(f) in exclude_set):
                 continue
+            if is_overlay_not_plane0(f) or is_grey_procedural_plane(path=f):
+                continue
             if name_substrs:
                 if any(s in f.name for s in name_substrs):
                     collected.append(f)
@@ -392,6 +498,8 @@ class LoopVideoEngine(BaseVideoCompositor):
             # Fall back to any valid file if name filter matched nothing (for example atomic clips)
             for f in self._iter_media_files(directory, extensions, max_scan=max_scan, recursive=recursive):
                 if exclude_set and (f.stem in exclude_stems or f.name in exclude_set or str(f) in exclude_set):
+                    continue
+                if is_overlay_not_plane0(f) or is_grey_procedural_plane(path=f):
                     continue
                 collected.append(f)
                 if seed is None:
@@ -493,7 +601,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                     exclude_loop_ids=exclude_loop_ids,
                 )
                 if picked is not None:
-                    if picked.name in self.SYNTHETIC_MONOCHROME_FILES:
+                    if self._is_unusable_plane0(picked, category=cat_name):
                         continue
                     logger.info("Found fallback loop video in category '%s': %s", cat_name, picked.name)
                     return picked
@@ -543,16 +651,21 @@ class LoopVideoEngine(BaseVideoCompositor):
                     )
 
                 if best_loop and Path(best_loop.file_path).is_file() and Path(best_loop.file_path).stat().st_size > 0:
-                    in_mono = (
-                        best_loop.loop_id in self.SYNTHETIC_MONOCHROME_IDS
-                        or getattr(best_loop, "technology", None) in ("ffmpeg_lavfi", "synthetic_monochrome")
-                        or getattr(best_loop, "category", None) in self.SYNTHETIC_MONOCHROME_CATEGORIES
-                    )
-                    requested_mono = norm_cat in self.SYNTHETIC_MONOCHROME_CATEGORIES
-
-                    if in_mono and not requested_mono:
+                    hit = Path(best_loop.file_path)
+                    if self._is_unusable_plane0(
+                        hit,
+                        technology=getattr(best_loop, "technology", None),
+                        category=getattr(best_loop, "category", None),
+                        loop_id=getattr(best_loop, "loop_id", None),
+                    ) or is_grey_procedural_plane(
+                        technology=getattr(best_loop, "technology", None),
+                        category=getattr(best_loop, "category", None),
+                        loop_id=getattr(best_loop, "loop_id", None),
+                        path=hit,
+                        sha256=getattr(best_loop, "sha256", None),
+                    ):
                         logger.info(
-                            "Skipping synthetic monochrome catalog loop '%s' for requested category '%s'",
+                            "Skipping grey/overlay catalog loop '%s' for requested category '%s'",
                             best_loop.loop_id,
                             norm_cat,
                         )
@@ -560,7 +673,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                         self.catalog.record_loop_usage(best_loop.loop_id)
                         logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, best_loop.file_path)
                         self._live_rss_checkpoint("8_loop_scene_live_select_hit")
-                        return Path(best_loop.file_path)
+                        return hit
             except Exception as e:
                 logger.warning("Could not query SQLite loop catalog: %s", e)
 
@@ -583,7 +696,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                     exclude_loop_ids=exclude_loop_ids,
                 )
                 if picked is not None:
-                    if picked.name in self.SYNTHETIC_MONOCHROME_FILES and norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
+                    if self._is_unusable_plane0(picked, category=norm_cat):
                         continue
                     return picked
 
@@ -597,7 +710,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 exclude_loop_ids=exclude_loop_ids,
             )
             if picked is not None:
-                if picked.name in self.SYNTHETIC_MONOCHROME_FILES and norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
+                if self._is_unusable_plane0(picked, category=norm_cat):
                     continue
                 return picked
 
@@ -607,25 +720,14 @@ class LoopVideoEngine(BaseVideoCompositor):
                 f"No video loops found in category '{norm_cat}' at {cat_dir}"
             )
 
-        # 2. Live create BEFORE filesystem/background fallback
-        is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
-        synth_path = self._try_live_synthesize(
-            norm_cat,
-            orientation,
-            seed,
-            enabled=is_default_root,
-        )
-        if synth_path is not None:
-            return synth_path
-
         logger.info(
-            "Category '%s' is empty or missing in %s (live synth unavailable/failed). "
-            "Initiating graceful background fallback search.",
+            "Category '%s' is empty or missing in %s. "
+            "Searching color loops, then scenery stills (never grey lavfi as plane-0).",
             norm_cat,
             root,
         )
 
-        # 3. Filesystem / background fallback (avoiding synthetic monochrome latching)
+        # 2. Filesystem / background fallback (avoiding synthetic monochrome latching)
         other = self._find_fallback_in_other_categories(
             root,
             norm_cat,
@@ -633,7 +735,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             orientation=orientation,
             exclude_loop_ids=exclude_loop_ids,
         )
-        if other is not None:
+        if other is not None and not self._is_unusable_plane0(other):
             return other
 
         if root.is_dir():
@@ -645,7 +747,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 recursive=False,
                 exclude_loop_ids=exclude_loop_ids,
             )
-            if root_hit is not None and root_hit.name not in self.SYNTHETIC_MONOCHROME_FILES:
+            if root_hit is not None and not self._is_unusable_plane0(root_hit):
                 logger.info("Found fallback loop video in root loops directory: %s", root_hit.name)
                 return root_hit
 
@@ -657,7 +759,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 recursive=True,
                 exclude_loop_ids=exclude_loop_ids,
             )
-            if fb_vid is not None:
+            if fb_vid is not None and not self._is_unusable_plane0(fb_vid):
                 logger.info("Found fallback video in backgrounds directory: %s", fb_vid.name)
                 return fb_vid
             fb_img = self._pick_media_file(
@@ -666,13 +768,31 @@ class LoopVideoEngine(BaseVideoCompositor):
                 max_scan=32,
                 recursive=True,
             )
-            if fb_img is not None:
+            if fb_img is not None and not self._is_unusable_plane0(fb_img):
                 logger.info("Found fallback background image: %s", fb_img.name)
                 return fb_img
 
+        still = self._find_scenery_still(seed=seed)
+        if still is not None:
+            logger.info("Using multi-crop scenery still as plane-0: %s", still.name)
+            return still
+
+        # 3. Color live-synth only after cinematic loops/stills are exhausted.
+        is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
+        if norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
+            synth_path = self._try_live_synthesize(
+                norm_cat,
+                orientation,
+                seed,
+                enabled=is_default_root,
+            )
+            if synth_path is not None and not self._is_unusable_plane0(synth_path, category=norm_cat):
+                return synth_path
+
         if self.default_fallback_image.is_file() and self.default_fallback_image.stat().st_size > 0:
-            logger.info("Using default fallback image: %s", self.default_fallback_image.name)
-            return self.default_fallback_image
+            if not self._is_unusable_plane0(self.default_fallback_image):
+                logger.info("Using default fallback image: %s", self.default_fallback_image.name)
+                return self.default_fallback_image
 
         from src.config import is_test_environment
         if is_test_environment() and root == (BASE_DIR / "assets" / "loops").resolve():
@@ -684,10 +804,12 @@ class LoopVideoEngine(BaseVideoCompositor):
                     Image.new("RGB", (720, 1280), "black").save(test_fallback)
                 except Exception:
                     test_fallback.write_bytes(b"TEST_IMAGE")
-            return test_fallback
+            if not self._is_unusable_plane0(test_fallback):
+                return test_fallback
 
         raise LoopVideoAssetError(
-            f"No loop video or fallback asset found for category '{norm_cat}' in {root} or fallback directories."
+            f"No loop video or fallback asset found for category '{norm_cat}' in {root} or fallback directories "
+            "(grey procedural loops cannot be plane-0)."
         )
 
     def resolve_background(

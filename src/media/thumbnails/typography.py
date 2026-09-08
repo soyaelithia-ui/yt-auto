@@ -29,14 +29,15 @@ def _parse_color(color: Union[str, Tuple[int, ...]]) -> Tuple[int, int, int]:
 class DynamicTypographyEngine:
     """
     Renders high-impact YouTube thumbnail hook titles:
-    - 4-Pass 3D Typography:
-        Pass 1: Ambient Diffuse Glow
-        Pass 2: Directional 3D Drop Shadow
-        Pass 3: Crisp Exterior Stroke
-        Pass 4: Foreground Vibrant Core Fill
-    - Dynamic safe-line splitting for high-CTR dramatic titles.
-    - Angled tilt (-3.5° to +4°) for urgent visual energy.
+    - Optional ambient glow (off by default for CTR layouts)
+    - Directional 3D drop shadow, crisp exterior stroke, core fill
+    - Word-bounded wrap into at most 2 lines with shrink-to-fit
     """
+
+    MAX_TITLE_LINES = 2
+    ELLIPSIS = "…"
+    BASE_MIN_FONT_PX = 28
+    BASE_MIN_FONT_HEIGHT = 1080
 
     @classmethod
     def resolve_font(cls, font_name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -60,53 +61,118 @@ class DynamicTypographyEngine:
             return ImageFont.load_default()
 
     @classmethod
-    def split_title_to_safe_lines(cls, text: str, max_chars_per_line: int = 22) -> List[str]:
-        """
-        Splits text into 2-3 safe lines, preserving words and dramatic punctuation.
-        """
-        text = text.strip()
-        words = text.split()
+    def min_title_font_size(cls, canvas_height: int) -> int:
+        """~28px at 1080p, scaled with canvas height."""
+        h = max(1, int(canvas_height or cls.BASE_MIN_FONT_HEIGHT))
+        return max(12, int(round(cls.BASE_MIN_FONT_PX * h / cls.BASE_MIN_FONT_HEIGHT)))
+
+    @classmethod
+    def split_title_to_safe_lines(
+        cls,
+        text: str,
+        max_chars_per_line: int = 22,
+        max_lines: int = MAX_TITLE_LINES,
+    ) -> List[str]:
+        """Split on word boundaries into at most two lines. Never cuts mid-word."""
+        normalized = " ".join((text or "").split())
+        words = normalized.split()
         if not words:
-            return [text]
+            return [normalized]
 
-        if len(text) <= max_chars_per_line and len(words) <= 3:
-            return [text]
+        if len(normalized) <= max_chars_per_line:
+            return [normalized]
 
+        max_lines = max(1, int(max_lines))
         lines: List[str] = []
-        current_line: List[str] = []
+        current: List[str] = []
         current_len = 0
 
-        for word in words:
-            w_len = len(word)
-            if current_line and (current_len + 1 + w_len) > max_chars_per_line:
-                lines.append(" ".join(current_line))
-                current_line = [word]
-                current_len = w_len
+        for idx, word in enumerate(words):
+            extra = len(word) if not current else 1 + len(word)
+            overflows = bool(current) and (current_len + extra) > max_chars_per_line
+            if overflows:
+                if len(lines) + 1 >= max_lines:
+                    current.extend(words[idx:])
+                    lines.append(" ".join(current))
+                    return lines
+                lines.append(" ".join(current))
+                current = [word]
+                current_len = len(word)
             else:
-                current_len = w_len if not current_line else (current_len + 1 + w_len)
-                current_line.append(word)
+                current.append(word)
+                current_len += extra
 
-        if current_line:
-            lines.append(" ".join(current_line))
+        if current:
+            lines.append(" ".join(current))
+        return lines[:max_lines]
 
-        if len(lines) > 3:
-            rem_words = [w for l in lines[2:] for w in l.split()]
-            l3_words = []
-            cur = 0
-            for w in rem_words:
-                needed = len(w) if not l3_words else (cur + 1 + len(w))
-                if not l3_words or needed <= max_chars_per_line:
-                    l3_words.append(w)
-                    cur = len(w) if len(l3_words) == 1 else (cur + 1 + len(w))
-                else:
+    @classmethod
+    def _text_width(cls, draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
+        if not text:
+            return 0
+        box = draw.textbbox((0, 0), text, font=font)
+        return box[2] - box[0]
+
+    @classmethod
+    def _wrap_words_to_width(
+        cls,
+        words: List[str],
+        font: ImageFont.ImageFont,
+        max_width: int,
+        draw: ImageDraw.ImageDraw,
+        max_lines: int = MAX_TITLE_LINES,
+        ellipsis: bool = False,
+    ) -> List[str]:
+        if not words:
+            return [""]
+
+        def fits(ws: List[str], extra: str = "") -> bool:
+            if not ws:
+                return True
+            return cls._text_width(draw, " ".join(ws) + extra, font) <= max_width
+
+        if fits(words):
+            return [" ".join(words)]
+
+        lines: List[List[str]] = []
+        remaining = list(words)
+        max_lines = max(1, int(max_lines))
+
+        for line_idx in range(max_lines):
+            last = line_idx == max_lines - 1
+            if last:
+                if ellipsis and remaining:
+                    acc: List[str] = []
+                    leftover = remaining
+                    for w in leftover:
+                        trial = acc + [w]
+                        if acc and not fits(trial, cls.ELLIPSIS):
+                            break
+                        acc.append(w)
+                    if len(acc) < len(leftover):
+                        if acc:
+                            return [" ".join(x) for x in lines] + [" ".join(acc) + cls.ELLIPSIS]
+                        # Single overflowing word: never mid-word cut.
+                        return [" ".join(x) for x in lines] + [leftover[0] + cls.ELLIPSIS]
+                    return [" ".join(x) for x in lines] + [" ".join(acc)]
+                if remaining:
+                    lines.append(remaining)
+                break
+
+            acc = []
+            while remaining:
+                trial = acc + [remaining[0]]
+                if acc and not fits(trial):
                     break
-            if len(l3_words) < len(rem_words):
-                l3 = " ".join(l3_words).rstrip(".,:;!?") + "..."
+                acc.append(remaining.pop(0))
+                if len(acc) == 1 and not fits(acc):
+                    break
+            if acc:
+                lines.append(acc)
             else:
-                l3 = " ".join(l3_words)
-            lines = [lines[0], lines[1], l3]
+                break
 
-        return lines
+        return [" ".join(x) for x in lines if x]
 
     @classmethod
     def draw_text_with_effects(
@@ -123,8 +189,8 @@ class DynamicTypographyEngine:
         stroke_width: int = 12,
         shadow_offset: Tuple[int, int] = (8, 12),
         shadow_blur: int = 4,
-        glow_color: Optional[Union[str, Tuple[int, ...]]] = "#FF003B",
-        glow_radius: int = 8,
+        glow_color: Optional[Union[str, Tuple[int, ...]]] = None,
+        glow_radius: int = 0,
         tilt_angle: float = 0.0,
         line_spacing_mult: float = 1.15,
         align: str = "center",
@@ -143,34 +209,49 @@ class DynamicTypographyEngine:
             font_size = int(w * (0.09 if is_vertical else 0.075))
             font_size = max(48, min(120, font_size))
 
-        # Break text into lines
-        if "\n" in text:
-            lines = [l.strip() for l in text.split("\n") if l.strip()]
-        else:
-            threshold_len = 16 if is_vertical else 26
-            max_chars = 15 if is_vertical else 20
-            if len(text) > threshold_len:
-                lines = cls.split_title_to_safe_lines(text, max_chars_per_line=max_chars)
-            else:
-                lines = [text.strip()]
+        words = " ".join((text or "").replace("\n", " ").split()).split()
+        if not words:
+            words = [(text or "").strip() or ""]
 
-        if not lines:
-            lines = [text]
-
-        # Auto-scale font_size down if any line width exceeds max_width
         dummy_img = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
         dummy_draw = ImageDraw.Draw(dummy_img)
-        while font_size > 24:
-            fnt = cls.resolve_font(font_name, font_size)
-            max_lw = max(
-                dummy_draw.textbbox((0, 0), line, font=fnt)[2] - dummy_draw.textbbox((0, 0), line, font=fnt)[0]
-                for line in lines
-            )
-            if max_lw <= max_width:
-                break
-            font_size = max(20, int(font_size * 0.92))
+        min_font = cls.min_title_font_size(h)
+        size = max(min_font, int(font_size))
+        lines: List[str] = []
+        fnt = cls.resolve_font(font_name, size)
 
+        while True:
+            fnt = cls.resolve_font(font_name, size)
+            lines = cls._wrap_words_to_width(
+                words,
+                fnt,
+                max_width,
+                dummy_draw,
+                max_lines=cls.MAX_TITLE_LINES,
+                ellipsis=False,
+            )
+            overflows = any(cls._text_width(dummy_draw, line, fnt) > max_width for line in lines)
+            if not overflows:
+                break
+            if size <= min_font:
+                lines = cls._wrap_words_to_width(
+                    words,
+                    fnt,
+                    max_width,
+                    dummy_draw,
+                    max_lines=cls.MAX_TITLE_LINES,
+                    ellipsis=True,
+                )
+                break
+            nxt = max(min_font, int(size * 0.92))
+            if nxt >= size:
+                nxt = size - 1
+            size = nxt
+
+        font_size = size
         fnt = cls.resolve_font(font_name, font_size)
+        if not lines:
+            lines = [" ".join(words)]
 
         pad = 250
         temp_w = int(max_width + pad * 2)
@@ -290,14 +371,7 @@ class DynamicTypographyEngine:
         """
         Renders hook title using 4-pass draw_text_with_effects.
         """
-        # Clean text into 2-4 punchy words if very long
-        words = text.strip().upper().replace("\n", " ").split()
-        if len(words) > 5:
-            words = words[:4]
-            hook_text = " ".join(words)
-        else:
-            hook_text = text.strip().upper()
-
+        hook_text = " ".join((text or "").strip().upper().replace("\n", " ").split())
         return cls.draw_text_with_effects(
             canvas=canvas,
             text=hook_text,
@@ -311,7 +385,7 @@ class DynamicTypographyEngine:
             stroke_width=12,
             shadow_offset=(8, 12),
             shadow_blur=4,
-            glow_color=accent_color,
-            glow_radius=8,
+            glow_color=None,
+            glow_radius=0,
             tilt_angle=tilt_angle,
         )

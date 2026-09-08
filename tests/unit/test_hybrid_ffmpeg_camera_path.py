@@ -249,6 +249,29 @@ def test_resolve_hybrid_overlay_asset_prefers_typed_png(tmp_path: Path, monkeypa
     assert resolve_hybrid_overlay_asset("particles", "none").name == "particles.png"
 
 
+def test_resolve_hybrid_overlay_asset_atmospheric_kinds(tmp_path: Path, monkeypatch):
+    from src.media.hybrid_engine import (
+        ATMOSPHERIC_OVERLAY_OPACITY,
+        ATMOSPHERIC_OVERLAY_OPACITY_MAX,
+        ATMOSPHERIC_OVERLAY_OPACITY_MIN,
+        clamp_atmospheric_overlay_opacity,
+        resolve_hybrid_overlay_asset,
+    )
+
+    overlays = tmp_path / "assets" / "overlays"
+    overlays.mkdir(parents=True)
+    (overlays / "film_grain.png").write_bytes(b"g")
+    (overlays / "dark_vignette.png").write_bytes(b"v")
+    (overlays / "tv_static.gif").write_bytes(b"s")
+    monkeypatch.chdir(tmp_path)
+    assert resolve_hybrid_overlay_asset("film_grain").name == "film_grain.png"
+    assert resolve_hybrid_overlay_asset("vignette").name == "dark_vignette.png"
+    assert resolve_hybrid_overlay_asset("tv_static").name == "tv_static.gif"
+    op = clamp_atmospheric_overlay_opacity()
+    assert ATMOSPHERIC_OVERLAY_OPACITY_MIN <= op <= ATMOSPHERIC_OVERLAY_OPACITY_MAX
+    assert op == ATMOSPHERIC_OVERLAY_OPACITY
+
+
 def _particle_scene(scene_id: str = "sc_particles") -> SceneConfig:
     return SceneConfig(
         scene_index=1,

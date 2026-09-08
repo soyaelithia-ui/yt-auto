@@ -143,6 +143,28 @@ def _escape_drawtext(text: str) -> str:
     return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "").replace("%", "\\%")
 
 
+def mid_video_title_drawtext_enabled() -> bool:
+    """Episode-title / BITÁCORA / ADVERTENCIA // TAPE burn-in is off by default."""
+    return os.environ.get("MID_VIDEO_TITLE_DRAWTEXT", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+_EPISODE_TITLE_DRAWTEXT_RE = re.compile(
+    r"bit[aá]cora|advertencia\s*//|advertencia|tape\s*-?\s*\d+",
+    re.IGNORECASE,
+)
+
+
+def _is_mid_video_episode_title(text: str) -> bool:
+    if not text:
+        return False
+    return bool(_EPISODE_TITLE_DRAWTEXT_RE.search(text))
+
+
 def resolve_hud_accent_color(accent_color_hex: str = "", lane_id: str = "", story_type: str = "") -> str:
     """Prefer explicit accent; else ChannelProfileRegistry by lane_id; else default.
 
@@ -199,6 +221,10 @@ def _drawtext(
     y: str | int,
 ) -> str:
     """Consistent drawtext with shared stroke for readability on busy footage."""
+    if not text:
+        return ""
+    if not mid_video_title_drawtext_enabled() and _is_mid_video_episode_title(text):
+        return ""
     return (
         f"drawtext=text='{text}':fontcolor={fontcolor}:fontsize={fontsize}:"
         f"x={x}:y={y}:box=0:borderw={HUD_BORDERW}:bordercolor={HUD_BORDERCOLOR}"
@@ -293,9 +319,12 @@ def build_niche_hud_filter(
         lane_id=hud_cfg.lane_id,
         story_type=hud_cfg.story_type,
     )
-    site_esc = _escape_drawtext(hud_cfg.hud_site)
-    badge_esc = _escape_drawtext(hud_cfg.hud_badge)
-    telemetry_esc = _escape_drawtext(hud_cfg.telemetry_label)
+    site_raw = "" if _is_mid_video_episode_title(hud_cfg.hud_site) and not mid_video_title_drawtext_enabled() else (hud_cfg.hud_site or "")
+    badge_raw = "" if _is_mid_video_episode_title(hud_cfg.hud_badge) and not mid_video_title_drawtext_enabled() else (hud_cfg.hud_badge or "")
+    tel_raw = "" if _is_mid_video_episode_title(hud_cfg.telemetry_label) and not mid_video_title_drawtext_enabled() else (hud_cfg.telemetry_label or "")
+    site_esc = _escape_drawtext(site_raw)
+    badge_esc = _escape_drawtext(badge_raw)
+    telemetry_esc = _escape_drawtext(tel_raw)
     if not (site_esc or badge_esc or telemetry_esc):
         return ""
     layout = _normalize_hud_layout(layout_raw)
@@ -385,7 +414,7 @@ def build_niche_hud_filter(
                 )
             )
 
-    return ",".join(filters)
+    return ",".join(f for f in filters if f)
 
 
 class MultiActVideoRenderer:

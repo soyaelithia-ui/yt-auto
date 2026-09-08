@@ -10,7 +10,7 @@ The system MUST execute all narrative curation, translation, and SEO metadata ge
 - **And** the story state MUST transition to `RETRYABLE_FAILED` with an exponential backoff cooling period.
 
 ## Requirement: Anti-Filler Pure Procedural Visuals
-Production video backgrounds MUST come from FFmpeg procedural/catalog loops or curated **clean** scenery (no baked title/warning/CRT/UI text). Generic stock filler and pre-baked title cards are prohibited (`DISCARDED_GENERIC_FILLER`). WebGL, Three.js, and HTML5 Canvas MUST NOT be the production background stack. Emblems and agency marks MUST be vector overlays / dynamic HUD (thumbnail composition path for text chrome). Authoritative classification: `docs/visual-assets-policy.md`.
+Production video backgrounds MUST come from FFmpeg procedural loops (lavfi/catalog) or curated **clean** scenery (no baked title/warning/CRT/UI text). Generic stock filler and pre-baked title cards are prohibited (`DISCARDED_GENERIC_FILLER`). WebGL, Three.js, and HTML5 Canvas MUST NOT be the production background stack. Emblems and agency marks MUST be vector overlays / dynamic HUD (thumbnail composition path for text chrome). Authoritative classification: `docs/visual-assets-policy.md`.
 
 ### Scenario: Visual Quality Audit
 - **Given** a generated scene manifest `SceneManifestV2`

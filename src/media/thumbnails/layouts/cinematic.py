@@ -4,6 +4,7 @@ src/media/thumbnails/layouts/cinematic.py - General Cinematic Editorial Layout (
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, Optional, Union
 from PIL import Image, ImageDraw, ImageEnhance, ImageColor
 
@@ -12,6 +13,133 @@ from src.media.thumbnails.layouts.base import BaseThumbnailLayout, LayoutRegistr
 from src.media.thumbnails.typography import DynamicTypographyEngine
 
 logger = logging.getLogger("cinematic_layout")
+
+_UNSET = object()
+CTR_TITLE_FILL = "#F5F0E6"
+GENERIC_HOOK_TITLE = "HISTORIA EXCLUSIVA"
+INVALID_BADGE_LABELS = frozenset({
+    "",
+    "NONE",
+    "NULL",
+    "N/A",
+    "NA",
+    "HISTORIA EXCLUSIVA",
+})
+AITA_VERDICTS = frozenset({"YTA", "NTA", "ESH", "INFO"})
+SCP_CLASSES = frozenset({"SAFE", "EUCLID", "KETER"})
+AITA_NICHES = frozenset({"aita", "reddit", "aelithia"})
+SCP_NICHES = frozenset({"scp"})
+HORROR_NICHES = frozenset({"horror", "analog", "vhs", "moku"})
+_NONE_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])NONE(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+def _contains_none_token(value: Any) -> bool:
+    if value is None:
+        return True
+    return bool(_NONE_TOKEN_RE.search(str(value)))
+
+
+def detect_thumbnail_niche(
+    channel_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    archetype: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Resolve aita / scp / horror / other from ids and metadata."""
+    meta = metadata or {}
+    blob = " ".join(
+        str(x or "")
+        for x in (
+            channel_id,
+            lane_id,
+            archetype,
+            meta.get("channel_id"),
+            meta.get("lane_id"),
+            meta.get("archetype"),
+            meta.get("template"),
+            meta.get("niche"),
+        )
+    ).lower()
+    if any(key in blob for key in ("aita", "reddit", "aelithia")):
+        return "aita"
+    if "scp" in blob:
+        return "scp"
+    if any(key in blob for key in ("horror", "analog", "vhs")) or "moku" in blob:
+        return "horror"
+    return "other"
+
+
+def _normalize_badge_text(category: Any) -> Optional[str]:
+    if category is None:
+        return None
+    label = str(category).strip().upper()
+    if label in INVALID_BADGE_LABELS:
+        return None
+    if _contains_none_token(label):
+        return None
+    return label
+
+
+def badge_label(
+    category: Any,
+    niche: Optional[str] = None,
+    *,
+    channel_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    archetype: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    tape_id: Any = _UNSET,
+) -> Optional[str]:
+    """Return a drawable badge string, or None to omit the badge entirely."""
+    meta = dict(metadata or {})
+    niche_key = (
+        niche
+        or detect_thumbnail_niche(
+            channel_id=channel_id or meta.get("channel_id"),
+            lane_id=lane_id or meta.get("lane_id"),
+            archetype=archetype or meta.get("archetype"),
+            metadata=meta,
+        )
+    ).strip().lower()
+
+    if tape_id is _UNSET and "tape_id" in meta:
+        tape_id = meta.get("tape_id")
+
+    if niche_key in HORROR_NICHES:
+        if tape_id is _UNSET or tape_id is None:
+            return None
+        tape = str(tape_id).strip()
+        if not tape or _contains_none_token(tape):
+            return None
+        return f"ADVERTENCIA · {tape.upper()}"
+
+    label = _normalize_badge_text(category)
+    if label is None:
+        return None
+    if niche_key in AITA_NICHES:
+        return label if label in AITA_VERDICTS else None
+    if niche_key in SCP_NICHES:
+        return label if label in SCP_CLASSES else None
+    return label
+
+
+def _is_cream_or_white(col: Any) -> bool:
+    if not col or not isinstance(col, str):
+        return False
+    try:
+        r, g, b = ImageColor.getrgb(col.strip())[:3]
+    except Exception:
+        return False
+    mx, mn = max(r, g, b), min(r, g, b)
+    if mx < 220 or mn < 170:
+        return False
+    return (mx - mn) <= 80
+
+
+def resolve_ctr_fill_color(primary: Any) -> str:
+    if _is_cream_or_white(primary):
+        return str(primary).strip()
+    return CTR_TITLE_FILL
 
 
 @LayoutRegistry.register_default
@@ -164,33 +292,46 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         except Exception:
             accent_rgb = (255, 0, 59)
 
-        # 3. Clean and sanitize title (Graceful handling of atypical strings)
+        # 3. Clean title. Empty hook stays generic; never promote category/NONE into a badge.
         clean_title = (title or "").strip()
         if not clean_title:
-            clean_title = str(meta.get("title_raw", meta.get("category", "HISTORIA EXCLUSIVA"))).strip()
-            if not clean_title:
-                clean_title = "HISTORIA EXCLUSIVA"
+            raw = meta.get("title_raw")
+            raw_s = str(raw).strip() if raw is not None else ""
+            clean_title = raw_s if raw_s else GENERIC_HOOK_TITLE
 
-        category = str(meta.get("category", meta.get("archetype", "HISTORIA EXCLUSIVA"))).upper().strip()
-        if not category:
-            category = "HISTORIA EXCLUSIVA"
+        niche = detect_thumbnail_niche(
+            channel_id=channel_id,
+            lane_id=meta.get("lane_id") or lane_id,
+            archetype=meta.get("archetype"),
+            metadata=meta,
+        )
+        tape_kwargs = {"tape_id": meta["tape_id"]} if "tape_id" in meta else {}
+        label = badge_label(
+            meta.get("category"),
+            niche=niche,
+            channel_id=channel_id,
+            lane_id=meta.get("lane_id") or lane_id,
+            archetype=meta.get("archetype"),
+            metadata=meta,
+            **tape_kwargs,
+        )
 
-        text_box_style = str(meta.get("text_box_style", "badge")).lower()
+        text_box_style = str(meta.get("text_box_style") or "badge").lower()
         overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # 4. Badges and Text Box Styling
+        # 4. Optional badge only. text_box_style "badge" still omits the pill when label is None.
         badge_h = int(h * (0.035 if is_vertical else 0.045))
         badge_y = safe_zone.top + int(h * (0.015 if is_vertical else 0.02))
+        draw_badge = bool(label) and text_box_style in ("badge", "boxed", "banner", "default", "editorial")
 
-        fnt_badge = DynamicTypographyEngine.resolve_font(
-            "LiberationSans-Bold.ttf",
-            int(h * (0.020 if is_vertical else 0.024))
-        )
-
-        badge_w = int(safe_zone.width * (0.60 if is_vertical else 0.35))
-        if text_box_style in ("badge", "boxed", "banner", "default", "editorial"):
-            badge_text = f"• {category} •"
+        if draw_badge:
+            fnt_badge = DynamicTypographyEngine.resolve_font(
+                "LiberationSans-Bold.ttf",
+                int(h * (0.020 if is_vertical else 0.024))
+            )
+            badge_w = int(safe_zone.width * (0.60 if is_vertical else 0.35))
+            badge_text = f"• {label} •"
             draw.rounded_rectangle(
                 [(safe_zone.left, badge_y), (safe_zone.left + badge_w, badge_y + badge_h)],
                 radius=8,
@@ -207,8 +348,8 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
                 fill=(*accent_rgb, 240),
             )
 
-        # 5. Position 3D Typography Hook Title strictly within safe zones
-        if text_box_style in ("minimal", "outline"):
+        # 5. Position typography hook title strictly within safe zones
+        if text_box_style in ("minimal", "outline") or not draw_badge:
             title_y = safe_zone.top + int(h * (0.03 if is_vertical else 0.05))
         else:
             title_y = badge_y + badge_h + int(h * (0.04 if is_vertical else 0.06))
@@ -216,12 +357,7 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         title_font_size = int(w * (0.080 if is_vertical else 0.060))
         max_title_w = int(safe_zone.width * 0.92)
 
-        # Estimate lines and height to ensure bounding inside safe zones
-        estimated_lines = 1
-        if len(clean_title) > 35:
-            estimated_lines = 3
-        elif len(clean_title) > 18:
-            estimated_lines = 2
+        estimated_lines = 2 if len(clean_title) > 18 else 1
         estimated_text_h = int(estimated_lines * title_font_size * 1.15)
 
         # Guard against safe-zone bottom collision
@@ -260,8 +396,8 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
 
         img_with_overlay = Image.alpha_composite(draw_img, overlay).convert("RGB")
 
-        # 6. Render 3D Typography
-        tilt = float(meta.get("tilt_angle", -3.0))
+        # 6. CTR type: cream fill, black stroke, no neon glow, no tilt clip
+        fill_col = resolve_ctr_fill_color(meta.get("primary_color") or primary_col)
         final_img = DynamicTypographyEngine.draw_text_with_effects(
             canvas=img_with_overlay,
             text=clean_title,
@@ -270,14 +406,14 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
             max_width=max_title_w,
             font_name="Montserrat-Black.ttf",
             font_size=title_font_size,
-            fill_color=primary_col,
+            fill_color=fill_col,
             stroke_color="#000000",
             stroke_width=12 if not is_vertical else 10,
             shadow_offset=(8, 12) if not is_vertical else (6, 10),
             shadow_blur=4,
-            glow_color=accent_col,
-            glow_radius=8,
-            tilt_angle=tilt,
+            glow_color=None,
+            glow_radius=0,
+            tilt_angle=0.0,
             align="center",
         )
         return final_img

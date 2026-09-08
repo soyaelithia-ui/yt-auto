@@ -1,7 +1,7 @@
 """
 src/media/multi_scene_compositor.py - Master Multi-Scene Dynamic Video Compositor.
 
-Orchestrates multi-scene rendering (45-90s pacing for longform, 8-15s for shorts),
+Orchestrates multi-scene rendering (8-15s pacing for longform and shorts),
 delegating scene segments to either the Hybrid Cinematic AI Engine or the Pure Procedural Engine.
 
 Default assembly (DIRECTOR_SINGLE_PASS=1): when every scene is procedural and catalog loops
@@ -355,7 +355,19 @@ class MultiSceneCompositor(BaseVideoCompositor):
         )
         matching = eng.catalog.get_best_loop(category=category, orientation=orientation)
         if matching and Path(matching.file_path).is_file():
-            return Path(matching.file_path).resolve()
+            from src.media.loop_engine import is_grey_procedural_plane, is_overlay_not_plane0
+
+            hit = Path(matching.file_path).resolve()
+            if is_overlay_not_plane0(hit) or is_grey_procedural_plane(
+                technology=getattr(matching, "technology", None),
+                category=getattr(matching, "category", None),
+                loop_id=getattr(matching, "loop_id", None),
+                path=hit,
+                sha256=getattr(matching, "sha256", None),
+            ):
+                logger.info("Skipping grey/overlay loop as plane-0: %s", hit)
+            else:
+                return hit
         # Fall back to any existing synthesized loop path used by proc_engine naming.
         seed = getattr(cfg, "seed", 42) if cfg else 42
         synth = (

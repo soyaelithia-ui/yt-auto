@@ -99,7 +99,7 @@ def design_scp_short_thumbnail(base_path: str, output_path: str) -> str:
     graded = apply_analog_horror_grade(
         base,
         target_size=(w, h),
-        with_osd=True,
+        with_osd=False,
         osd_kwargs={
             "cam_label": "CAM 04 [SECTOR-19 VAULT]",
             "date_label": "1994-10-31",
@@ -295,7 +295,7 @@ def design_horror_thumbnail(base_path: str, output_path: str) -> str:
     graded = apply_analog_horror_grade(
         base,
         target_size=(w, h),
-        with_osd=True,
+        with_osd=False,
         osd_kwargs={
             "cam_label": "CAM 04 [SUB-LEVEL B]",
             "date_label": "1994-10-31",

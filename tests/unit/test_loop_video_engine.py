@@ -121,8 +121,8 @@ class TestLoopCategoryResolution(unittest.TestCase):
 
 
 
-    def test_live_synth_attempted_before_background_fallback(self):
-        """Empty catalog/category: live synth is attempted before background fallback."""
+    def test_scenery_still_preferred_over_live_synth_when_present(self):
+        """Non-grey stills beat lavfi synth so plane-0 is never grey procedural."""
         fb_img = self.fb_dir / "horror_forest.jpg"
         fb_img.write_bytes(b"FALLBACK_IMAGE")
         synth_vid = self.root_path / "live_synth.mp4"
@@ -135,9 +135,22 @@ class TestLoopCategoryResolution(unittest.TestCase):
         )
         with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
             resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
+        mock_synth.assert_not_called()
+        self.assertEqual(resolved, fb_img)
+
+    def test_live_synth_used_when_no_loop_or_still_exists(self):
+        """Color live-synth is last resort after cinematic loops/stills are exhausted."""
+        synth_vid = self.root_path / "live_synth.mp4"
+        synth_vid.write_bytes(b"SYNTH_VIDEO")
+        engine = LoopVideoEngine(
+            loops_root_dir=self.loops_dir,
+            default_fallback_dir=self.fb_dir,
+            default_fallback_image=self.root_path / "missing.jpg",
+        )
+        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
+            resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
         mock_synth.assert_called_once()
         self.assertEqual(resolved, synth_vid)
-        self.assertNotEqual(resolved, fb_img)
 
     def test_allow_fallback_false_skips_synth_and_background(self):
         """allow_fallback=False fails closed: no live synth inventing assets, no backgrounds."""
@@ -528,6 +541,59 @@ class TestLoopCategoryAliasingAndSelection(unittest.TestCase):
         resolved = self.engine.resolve_loop_video("unknown_niche_theme", allow_fallback=True, orientation="horizontal")
         self.assertNotEqual(resolved, f_mono)
         self.assertEqual(resolved, f_cine)
+
+    def test_real_category_never_selects_grey_plane0_when_color_exists(self):
+        """Plane-0 for a real category is never ffmpeg_lavfi/synthetic_monochrome if a cinematic candidate exists."""
+        from src.media.loop_engine import GREY_PLANE_TECHNOLOGIES, is_grey_procedural_plane
+
+        f_cine = self._create_dummy_video("horizontal/horror/atomic/bunker.mp4")
+        f_grey = self._create_dummy_video(
+            "procedural/maritime_lighthouse/loop_maritime_lighthouse_horizontal_544374.mp4"
+        )
+        self.catalog.register_loop(LoopRecord(
+            loop_id="loop_maritime_lighthouse_h_544374",
+            category="maritime_lighthouse",
+            technology="ffmpeg_lavfi",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=str(f_grey),
+            file_size_bytes=30_000,
+            sha256="procedural",
+        ))
+        self.catalog.register_loop(LoopRecord(
+            loop_id="horror_bunker",
+            category="horror",
+            technology="pre-rendered",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=6.0,
+            fps=30,
+            file_path=str(f_cine),
+            file_size_bytes=30_000,
+            sha256="sha_cine",
+        ))
+
+        rec = self.catalog.get_best_loop("horror", orientation="horizontal")
+        self.assertIsNotNone(rec)
+        self.assertNotIn(rec.technology, GREY_PLANE_TECHNOLOGIES)
+        self.assertFalse(
+            is_grey_procedural_plane(
+                technology=rec.technology,
+                category=rec.category,
+                loop_id=rec.loop_id,
+                path=rec.file_path,
+                sha256=rec.sha256,
+            )
+        )
+
+        resolved = self.engine.resolve_loop_video("horror", orientation="horizontal")
+        self.assertEqual(resolved, f_cine)
+        self.assertNotEqual(resolved, f_grey)
+        self.assertFalse(is_grey_procedural_plane(path=resolved))
 
 
 if __name__ == "__main__":

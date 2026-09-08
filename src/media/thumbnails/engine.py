@@ -205,7 +205,10 @@ class ThumbnailEngine:
             "accent_color": accent,
             "tilt_angle": config.tilt_angle,
             "title_raw": config.title,
-            "text_box_style": config.text_box_style or (config.metadata.get("text_box_style") if config.metadata else "badge"),
+            # metadata without text_box_style must not inject None ("none" disables the badge).
+            "text_box_style": config.text_box_style
+            or (config.metadata.get("text_box_style") if config.metadata else None)
+            or "badge",
             "subject_contrast": config.subject_contrast or (config.metadata.get("subject_contrast") if config.metadata else None),
             "resolved_asset_path": str(resolved_asset_path) if resolved_asset_path else None,
             "asset_path": str(resolved_asset_path) if resolved_asset_path else None,
@@ -239,15 +242,12 @@ class ThumbnailEngine:
 
     @staticmethod
     def _extract_hook_text(title: str) -> str:
-        """Extracts 2-4 punchy, high-impact uppercase words from the title."""
-        if not title:
+        """Normalize the hook title; wrapping/shrink happens in typography (never a 4-word cut)."""
+        if not title or not str(title).strip():
             return "HISTORIA EXCLUSIVA"
         t = str(title).replace("[REGISTRO CLASIFICADO]", "").replace("[CONFESIÓN]", "").replace("|", ":")
         parts = [p.strip() for p in t.split(":") if p.strip()]
-        candidate = parts[0] if parts else title
-        words = candidate.split()
-        if not words:
+        candidate = parts[0] if parts else str(title)
+        if not candidate.split():
             return "HISTORIA EXCLUSIVA"
-        if len(words) > 4:
-            return " ".join(words[:4]).upper()
         return candidate.upper()

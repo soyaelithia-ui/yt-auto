@@ -79,7 +79,7 @@ class ChiaroscuroColorGrader:
         target_w: int,
         target_h: int,
         *,
-        with_osd: bool = True,
+        with_osd: bool = False,
         osd_kwargs: Dict | None = None,
         seed: int = 42,
     ) -> Image.Image:
