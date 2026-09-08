@@ -905,7 +905,7 @@ def create_video_thumbnail(
             width=target_w,
             height=target_h,
             tilt_angle=float(kwargs["tilt_angle"]) if "tilt_angle" in kwargs else -3.5,
-            blur_radius=float(kwargs["blur_radius"]) if "blur_radius" in kwargs else 3.5,
+            blur_radius=float(kwargs["blur_radius"]) if "blur_radius" in kwargs else 0.0,
             contrast_boost=float(kwargs["contrast_boost"]) if "contrast_boost" in kwargs else 1.35,
             primary_color=kwargs.get("primary_color"),
             accent_color=kwargs.get("accent_color"),

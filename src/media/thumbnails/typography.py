@@ -262,11 +262,39 @@ class DynamicTypographyEngine:
         fill_rgb = _parse_color(fill_color)
         stroke_rgb = _parse_color(stroke_color)
 
-        # Measure lines
         line_widths = [
             dummy_draw.textbbox((0, 0), line, font=fnt)[2] - dummy_draw.textbbox((0, 0), line, font=fnt)[0]
             for line in lines
         ]
+
+        glow_rgb = _parse_color(glow_color) if glow_color else None
+        fill_rgb = _parse_color(fill_color)
+        stroke_rgb = _parse_color(stroke_color)
+        line_h = int(font_size * line_spacing_mult)
+
+        if (not glow_rgb or glow_radius <= 0) and shadow_blur <= 0 and abs(tilt_angle) <= 0.1:
+            canvas_rgba = canvas.convert("RGBA")
+            draw = ImageDraw.Draw(canvas_rgba)
+            cur_y = pos_y
+            for idx, line in enumerate(lines):
+                lw = line_widths[idx]
+                cur_x = pos_x + (max_width - lw) // 2 if align == "center" else pos_x
+                if stroke_width > 0:
+                    draw.text(
+                        (cur_x, cur_y),
+                        line,
+                        font=fnt,
+                        fill=(*stroke_rgb, 255),
+                        stroke_width=stroke_width,
+                        stroke_fill=(*stroke_rgb, 255),
+                    )
+                draw.text((cur_x, cur_y), line, font=fnt, fill=(*fill_rgb, 255))
+                cur_y += line_h
+            return canvas_rgba.convert("RGB")
+
+        pad = 250
+        temp_w = int(max_width + pad * 2)
+        temp_h = int(len(lines) * line_h + pad * 2)
 
         # Layer 1: Ambient Diffuse Glow
         glow_layer = Image.new("RGBA", (temp_w, temp_h), (0, 0, 0, 0))

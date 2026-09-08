@@ -4,7 +4,7 @@ src/media/thumbnails/engine.py - Master Professional Thumbnail Engine for yt-aut
 from __future__ import annotations
 
 import logging
-import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -13,12 +13,9 @@ from PIL import Image
 
 from src.core.channel_profile import ChannelProfile, ChannelProfileRegistry
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
-from src.media.thumbnails.extractor import ClimaxFrameExtractor
 from src.media.thumbnails.grading import ChiaroscuroColorGrader
 from src.media.thumbnails.layout import AspectLayoutManager
 from src.media.thumbnails.layouts.base import LayoutRegistry
-from src.media.thumbnails.subject_extractor import RimLightCompositor, AdaptiveSubjectCompositor
-from src.media.thumbnails.typography import DynamicTypographyEngine
 
 logger = logging.getLogger("thumbnail_engine")
 
@@ -43,7 +40,7 @@ class ThumbnailConfig:
     width: int = THUMB_LONGFORM_SIZE[0]
     height: int = THUMB_LONGFORM_SIZE[1]
     tilt_angle: float = -3.5
-    blur_radius: float = 3.5
+    blur_radius: float = 0.0
     contrast_boost: float = 1.35
     primary_color: Optional[str] = None
     accent_color: Optional[str] = None
@@ -65,10 +62,7 @@ class ThumbnailEngine:
     """
 
     def __init__(self) -> None:
-        self.extractor = ClimaxFrameExtractor()
         self.grader = ChiaroscuroColorGrader()
-        self.subject_comp = RimLightCompositor()
-        self.typography = DynamicTypographyEngine()
 
     @staticmethod
     def create_atmospheric_noise_background(
@@ -181,21 +175,8 @@ class ThumbnailEngine:
             accent_color_hex=accent,
         )
 
-        # 3. Enhance Focal Subject with Depth & Subtle Rim Light Glow
-        subject_composited = AdaptiveSubjectCompositor.composite_thematic_subject(
-            base_img=graded_bg,
-            channel_id=eff_channel,
-            archetype=eff_archetype,
-            accent_color_hex=accent,
-            intensity=0.90,
-        )
-        rim_lit = self.subject_comp.apply_rim_light_to_frame(
-            base_img=subject_composited,
-            accent_color_hex=accent,
-            intensity=0.6,
-        )
+        # Layout only. Rim-light + subject compositor were a green bar and Gaussian cost.
 
-        # 4. Dispatch to Niche Layout Engine Passing lane_id, title, resolved_asset_path
         layout = LayoutRegistry.get_layout(
             channel_id=eff_channel,
             archetype=config.archetype,
@@ -228,7 +209,7 @@ class ThumbnailEngine:
 
         try:
             final_thumb = layout.apply_layout(
-                canvas=rim_lit,
+                canvas=graded_bg,
                 title=hook_text,
                 channel_id=eff_channel,
                 safe_zone=safe_zone,
@@ -238,7 +219,7 @@ class ThumbnailEngine:
             )
         except TypeError:
             final_thumb = layout.apply_layout(
-                canvas=rim_lit,
+                canvas=graded_bg,
                 title=hook_text,
                 channel_id=eff_channel,
                 safe_zone=safe_zone,
@@ -250,14 +231,28 @@ class ThumbnailEngine:
         logger.info("High-CTR Thumbnail successfully generated at: %s (%dx%d)", out_path, w, h)
         return out_path
 
+    _BRACKET_RE = re.compile(r"\[[^\]]*\]")
+    _SCP_RE = re.compile(r"(SCP-\d+)\s*:?\s*(.*)", re.IGNORECASE)
+
     @staticmethod
     def _extract_hook_text(title: str) -> str:
-        """Normalize the hook title; wrapping/shrink happens in typography (never a 4-word cut)."""
+        """Hook is the phrase, not the ID. SCP-173: la estatua... → LA ESTATUA..."""
         if not title or not str(title).strip():
             return "HISTORIA EXCLUSIVA"
-        t = str(title).replace("[REGISTRO CLASIFICADO]", "").replace("[CONFESIÓN]", "").replace("|", ":")
-        parts = [p.strip() for p in t.split(":") if p.strip()]
-        candidate = parts[0] if parts else str(title)
-        if not candidate.split():
-            return "HISTORIA EXCLUSIVA"
-        return candidate.upper()
+        t = ThumbnailEngine._BRACKET_RE.sub(" ", str(title))
+        if "|" in t:
+            t = t.split("|")[0]
+        t = " ".join(t.replace("\n", " ").split())
+        m = ThumbnailEngine._SCP_RE.search(t)
+        if m:
+            rest = (m.group(2) or "").strip(" .:-")
+            if rest:
+                return rest.split(".")[0].strip().upper()
+            return m.group(1).upper()
+        if ":" in t:
+            left, right = t.split(":", 1)
+            right = right.strip()
+            if right:
+                return right.split(".")[0].strip().upper()
+            t = left.strip()
+        return (t or "HISTORIA EXCLUSIVA").upper()

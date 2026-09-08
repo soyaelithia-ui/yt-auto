@@ -23,7 +23,7 @@ def _osd_requested(metadata: Dict[str, Any]) -> bool:
     return False
 
 
-@LayoutRegistry.register("analog", "horror", "vhs", "moku-horror-long", "moku-horror", "moku-long", "moku")
+@LayoutRegistry.register("analog", "horror", "vhs", "moku-horror-long", "moku-horror", "moku-long")
 class AnalogHorrorVhsLayout(BaseThumbnailLayout):
     """
     Analog horror layout with a clean CTR type stack:
@@ -89,8 +89,9 @@ class AnalogHorrorVhsLayout(BaseThumbnailLayout):
                 fill=(255, 50, 50, 255),
             )
 
-        for sy in range(0, h, 4):
-            draw.line([(0, sy), (w, sy)], fill=(0, 0, 0, 45), width=1)
+        if osd_on:
+            for sy in range(0, h, 4):
+                draw.line([(0, sy), (w, sy)], fill=(0, 0, 0, 45), width=1)
 
         img_with_vhs = Image.alpha_composite(draw_img, overlay).convert("RGB")
 

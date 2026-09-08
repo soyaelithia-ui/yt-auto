@@ -3,11 +3,9 @@ src/media/thumbnails/grading.py - Chiaroscuro Grading, Rec.709 S-Curve, Depth Bl
 """
 from __future__ import annotations
 
-import math
 from typing import Dict, Tuple
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 
 
 class ChiaroscuroColorGrader:
@@ -31,46 +29,13 @@ class ChiaroscuroColorGrader:
         if img.size != (target_w, target_h):
             img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
-        # 1. Apply Gaussian Depth Blur to separate background from foreground text/subject
-        if blur_radius > 0:
-            bg_blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-            # Blend sharp and blurred (keeping 40% sharp details)
-            img = Image.blend(img, bg_blurred, 0.65)
-
-        # 2. Contrast S-Curve boost
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(contrast_boost)
-
-        # 3. Saturation tuning
-        sat_enhancer = ImageEnhance.Color(img)
-        img = sat_enhancer.enhance(1.15)
-
-        # 4. Chiaroscuro Optical Vignette & Scrim Gradient
-        overlay = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-
-        # Dark scrim at bottom/edges to guarantee maximum text readability
-        for y in range(int(target_h * 0.45), target_h):
-            fac = (y - int(target_h * 0.45)) / (target_h * 0.55)
-            alpha = int(220 * math.pow(fac, 1.6))
-            draw.line([(0, y), (target_w, y)], fill=(2, 4, 8, alpha))
-
-        # Radial vignette mask
-        arr = np.zeros((target_h, target_w), dtype=np.float32)
-        cx, cy = target_w * 0.5, target_h * 0.5
-        y_coords, x_coords = np.ogrid[:target_h, :target_w]
-        dist = np.sqrt(((x_coords - cx) / target_w) ** 2 + ((y_coords - cy) / target_h) ** 2)
-        vig_mask = np.clip((dist - 0.25) * 2.2 * vignette_strength, 0.0, 0.85)
-        vig_alpha = (vig_mask * 255).astype(np.uint8)
-
-        vig_img = Image.fromarray(vig_alpha, "L")
-        dark_plate = Image.new("RGBA", (target_w, target_h), (1, 3, 6, 255))
-        overlay.paste(dark_plate, (0, 0), vig_img)
-
-        # Composite overlay
-        img_rgba = img.convert("RGBA")
-        graded = Image.alpha_composite(img_rgba, overlay).convert("RGB")
-        return graded
+        if blur_radius and blur_radius > 0.4:
+            img = img.filter(ImageFilter.GaussianBlur(radius=min(float(blur_radius), 1.2)))
+        img = ImageEnhance.Contrast(img).enhance(contrast_boost)
+        img = ImageEnhance.Brightness(img).enhance(0.72)
+        dark = Image.new("RGB", (target_w, target_h), (6, 8, 10))
+        mix = min(0.38, max(0.14, float(vignette_strength or 0.45) * 0.45))
+        return Image.blend(img, dark, mix)
 
 
     @staticmethod

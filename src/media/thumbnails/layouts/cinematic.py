@@ -348,20 +348,49 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
                 fill=(*accent_rgb, 240),
             )
 
-        # 5. Position typography hook title strictly within safe zones
-        if text_box_style in ("minimal", "outline") or not draw_badge:
-            title_y = safe_zone.top + int(h * (0.03 if is_vertical else 0.05))
+        scp_id = None
+        raw_title = str(meta.get("title_raw") or title or "")
+        scp_m = re.search(r"(SCP-\d+)", raw_title, re.IGNORECASE)
+        if scp_m:
+            scp_id = scp_m.group(1).upper()
+
+        title_font_size = int(w * (0.128 if is_vertical else 0.060))
+        max_title_w = int(safe_zone.width * (0.92 if is_vertical else 0.92))
+        if is_vertical:
+            max_title_w = min(max_title_w, max(64, w - safe_zone.left - 140))
+        estimated_lines = 2 if len(clean_title) > 12 else 1
+        estimated_text_h = int(estimated_lines * title_font_size * (1.02 if is_vertical else 1.12))
+
+        if is_vertical:
+            # Shorts UI: keep type above 72% and kill high-contrast in the bottom/right gutters.
+            draw.rectangle([(0, safe_zone.bottom), (w, h)], fill=(0, 0, 0, 200))
+            draw.rectangle([(w - 120, int(h * 0.25)), (w, h)], fill=(0, 0, 0, 90))
+            title_y = max(safe_zone.top, min(safe_zone.bottom, h - 460) - estimated_text_h)
+            scrim_top = max(safe_zone.top, title_y - int(h * 0.02))
+            draw.rectangle(
+                [(0, scrim_top), (w - 120, min(safe_zone.bottom, title_y + estimated_text_h + 8))],
+                fill=(0, 0, 0, 110),
+            )
+            if scp_id:
+                fnt_id = DynamicTypographyEngine.resolve_font(
+                    "Montserrat-Black.ttf", int(h * 0.055)
+                )
+                id_bbox = draw.textbbox((0, 0), scp_id, font=fnt_id)
+                id_w = id_bbox[2] - id_bbox[0]
+                draw.text(
+                    (safe_zone.left + max(0, (safe_zone.width - id_w) // 2), safe_zone.top),
+                    scp_id,
+                    font=fnt_id,
+                    fill=(255, 255, 255, 255),
+                    stroke_width=4,
+                    stroke_fill=(0, 0, 0, 255),
+                )
+        elif text_box_style in ("minimal", "outline") or not draw_badge:
+            title_y = safe_zone.top + int(h * 0.05)
         else:
-            title_y = badge_y + badge_h + int(h * (0.04 if is_vertical else 0.06))
+            title_y = badge_y + badge_h + int(h * 0.06)
 
-        title_font_size = int(w * (0.080 if is_vertical else 0.060))
-        max_title_w = int(safe_zone.width * 0.92)
-
-        estimated_lines = 2 if len(clean_title) > 18 else 1
-        estimated_text_h = int(estimated_lines * title_font_size * 1.15)
-
-        # Guard against safe-zone bottom collision
-        if title_y + estimated_text_h > safe_zone.bottom:
+        if not is_vertical and title_y + estimated_text_h > safe_zone.bottom:
             excess = (title_y + estimated_text_h) - safe_zone.bottom
             title_y = max(safe_zone.top + badge_h + 10, title_y - excess)
 
@@ -397,7 +426,7 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         img_with_overlay = Image.alpha_composite(draw_img, overlay).convert("RGB")
 
         # 6. CTR type: cream fill, black stroke, no neon glow, no tilt clip
-        fill_col = resolve_ctr_fill_color(meta.get("primary_color") or primary_col)
+        fill_col = "#FFFFFF" if is_vertical else resolve_ctr_fill_color(meta.get("primary_color") or primary_col)
         final_img = DynamicTypographyEngine.draw_text_with_effects(
             canvas=img_with_overlay,
             text=clean_title,
@@ -408,12 +437,13 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
             font_size=title_font_size,
             fill_color=fill_col,
             stroke_color="#000000",
-            stroke_width=12 if not is_vertical else 10,
-            shadow_offset=(8, 12) if not is_vertical else (6, 10),
-            shadow_blur=4,
+            stroke_width=8 if is_vertical else 5,
+            shadow_offset=(0, 0) if is_vertical else (3, 4),
+            shadow_blur=0,
             glow_color=None,
             glow_radius=0,
             tilt_angle=0.0,
             align="center",
+            line_spacing_mult=1.02 if is_vertical else 1.15,
         )
         return final_img
