@@ -257,8 +257,8 @@ class TestYouTubeUploader(unittest.TestCase):
 
     @patch("src.youtube.uploader.upload_video_via_playwright")
     def test_channel_cookies_resolution_when_unspecified(self, mock_pw):
-        """Test that upload_video automatically resolves channel2 cookies when channel='soy_el_malo'."""
-        from src.config import COOKIES_CHANNEL2_PATH
+        """Test that upload_video automatically resolves Aelithia cookies when channel='soy_el_malo'."""
+        from src.config import COOKIES_AELITHIA_PATH
         mock_pw.return_value = {"status": "SUCCESS", "method": "PLAYWRIGHT", "video_id": "yt_pw_chan2"}
         res = upload_video(
             self.dummy_video,
@@ -270,7 +270,7 @@ class TestYouTubeUploader(unittest.TestCase):
         self.assertEqual(res["status"], "SUCCESS")
         mock_pw.assert_called_once_with(
             self.dummy_video, "Soy El Malo Title", "Soy El Malo Desc", ["creepypasta", "nosleep", "horror"],
-            cookies_path=COOKIES_CHANNEL2_PATH, dry_run=False, thumbnail_path=None
+            cookies_path=COOKIES_AELITHIA_PATH, dry_run=False, thumbnail_path=None
         )
 
     def test_resolve_google_credentials_reads_exact_sa_key_path(self):

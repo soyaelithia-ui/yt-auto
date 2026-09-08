@@ -7,8 +7,7 @@ import subprocess
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from src.config import (
-    DECRYPTED_COOKIES_PATH,
-    COOKIES_CHANNEL2_PATH,
+    COOKIES_MOKU_PATH,
     YOUTUBE_TOKEN_PATH,
     TOKEN_CHANNEL2_PATH,
     GOOGLE_CLIENT_ID,
@@ -542,7 +541,7 @@ def upload_video_via_playwright_ts(
     title: str,
     description: str,
     tags: List[str] = None,
-    cookies_path: str = DECRYPTED_COOKIES_PATH,
+    cookies_path: str = COOKIES_MOKU_PATH,
     dry_run: bool = False,
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,
@@ -601,13 +600,13 @@ def upload_video_via_playwright(
     title: str,
     description: str,
     tags: List[str] = None,
-    cookies_path: str = DECRYPTED_COOKIES_PATH,
+    cookies_path: str = COOKIES_MOKU_PATH,
     dry_run: bool = False,
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Strategy B: Automation upload via Playwright using decrypted cookies.
+    Strategy B: Automation upload via Playwright using channel session cookies.
     Tries native TypeScript Playwright uploader first, falls back to Python sync_playwright if needed.
     """
     if cookies_path and not Path(cookies_path).is_file():

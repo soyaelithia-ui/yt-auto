@@ -88,8 +88,8 @@ class TestTier4AdversarialRecovery(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             upload_to_drive(dummy_file, "folder_id", sa_key_path=missing_key_path)
 
-    def test_adversarial_missing_decrypted_cookies_file(self):
-        """Tier 4: Test missing decrypted cookies file raises FileNotFoundError."""
+    def test_adversarial_missing_cookies_file(self):
+        """Tier 4: Test missing channel cookies file raises FileNotFoundError."""
         dummy_file = os.path.join(self.temp_dir.name, "dummy.mp4")
         with open(dummy_file, "wb") as f:
             f.write(b"DATA")
