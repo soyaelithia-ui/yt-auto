@@ -337,7 +337,7 @@ class TestAdversarialFilterGraphMatrix(unittest.TestCase):
         filt = cmd[cmd.index("-filter_complex") + 1]
         self.assertNotIn("sidechaincompress", filt)
         self.assertNotIn("amix", filt)
-        self.assertIn("[1:a]aresample=44100,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", filt)
+        self.assertIn("[1:a]aresample=44100,loudnorm=I=-16.0:TP=-1.5:LRA=11.0", filt)
         self.assertNotIn("subtitles=", filt)
         self.assertNotIn("ass=", filt)
 
@@ -358,7 +358,7 @@ class TestAdversarialFilterGraphMatrix(unittest.TestCase):
         self.assertIn("sidechaincompress=threshold=0.04:ratio=10.0:attack=20.0:release=350.0:makeup=1", filt)
         self.assertIn("volume=0.1500", filt)
         self.assertIn("[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed]", filt)
-        self.assertIn("[amixed]loudnorm=I=-14.0:TP=-1.5:LRA=11.0", filt)
+        self.assertIn("[amixed]loudnorm=I=-16.0:TP=-1.5:LRA=11.0", filt)
 
     def test_graph_matrix_with_bgm_and_ass_subtitles(self):
         """Case 3: With BGM, ASS Subtitles enabled."""

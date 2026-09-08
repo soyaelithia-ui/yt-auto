@@ -18,6 +18,11 @@ import os
 from pathlib import Path
 from typing import Optional, Union
 
+# YouTube/EBU speech target used by compositor, loop, TTS master, and unified encoder.
+LOUDNORM_I = -16.0
+LOUDNORM_TP = -1.5
+LOUDNORM_LRA = 11.0
+
 
 def default_render_crf(fallback: int = 19) -> int:
     """Return RENDER_CRF clamped to x264's valid range (0–51)."""

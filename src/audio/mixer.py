@@ -146,7 +146,7 @@ class CosmicAudioMixer:
         - Voice splits into control and mix
         - Drone is compressed when voice is active (ducked by -18dB)
         - SFX mixed in with adelay alignment
-        - Mastered with broadcast EBU R128 loudnorm=I=-14:TP=-1.5:LRA=11
+        - Mastered with broadcast EBU R128 loudnorm=I=-16:TP=-1.5:LRA=11
         """
         filter_complex = (
             "[0:a]volume=1.0,asplit=2[v_ctrl][v_mix];"
@@ -154,7 +154,7 @@ class CosmicAudioMixer:
             "[drone_in][v_ctrl]sidechaincompress=threshold=0.08:ratio=5:attack=15:release=350[drone_ducked];"
             "[2:a]volume=0.85[sfx_in];"
             "[drone_ducked][v_mix][sfx_in]amix=inputs=3:duration=longest:dropout_transition=2[mixed];"
-            "[mixed]loudnorm=I=-14:TP=-1.5:LRA=11[aout]"
+            "[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
         )
 
         cmd = [

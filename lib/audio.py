@@ -360,12 +360,12 @@ def insert_dramatic_pauses_to_audio(
 def normalize_narration_lufs(
     input_path: str | os.PathLike | None = None,
     output_path: str | os.PathLike | None = None,
-    target_lufs: float = -14.0,
+    target_lufs: float = -16.0,
     max_tp: float = -1.5,
     apply_lowpass: bool = True,
     lowpass_freq: float = 12000.0,
 ) -> str:
-    """EBU R128 loudness normalization (loudnorm: I=-14.0, TP=-1.5, LRA=11) with optional lowpass."""
+    """EBU R128 loudness normalization (loudnorm: I=-16.0, TP=-1.5, LRA=11) with optional lowpass."""
     if not _looks_like_real_input(input_path):
         return str(input_path) if input_path else ""
     out_target = str(output_path or input_path)
@@ -437,7 +437,7 @@ def build_sidechain_ducking_filter_graph(
     ducking_release_ms: float = 350.0,
     lowpass_freq: Optional[float] = 12000.0,
     master_loudness: bool = False,
-    target_lufs: float = -14.0,
+    target_lufs: float = -16.0,
     max_tp: float = -1.5,
     lra: float = 11.0,
 ) -> str:
@@ -530,7 +530,7 @@ def master_audio_track(
     narration_path: str | os.PathLike | None = None,
     music_path: str | os.PathLike | None = None,
     output_path: str | os.PathLike | None = None,
-    target_lufs: float = -14.0,
+    target_lufs: float = -16.0,
     ducking_db: float = DEFAULT_DUCKING_DB,
     music_volume: float = DEFAULT_BACKGROUND_AUDIO_VOLUME,
     lowpass_freq: float = 12000.0,

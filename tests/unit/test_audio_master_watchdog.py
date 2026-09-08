@@ -54,22 +54,22 @@ class TestSidechainDuckingFiltergraph:
 # ============================================================================
 
 class TestEBUR128LoudnessMastering:
-    """Tests EBU R128 mastering targets: I = -14.0 +/- 0.5 LUFS, TP <= -1.5 dBTP, LRA <= 11.0 LU."""
+    """Tests EBU R128 mastering targets: I = -16.0 +/- 0.5 LUFS, TP <= -1.5 dBTP, LRA <= 11.0 LU."""
 
     def test_ebu_r128_target_parameters(self) -> None:
         """Validates EBU R128 loudnorm target constants."""
-        target_i = -14.0
+        target_i = -16.0
         target_tp = -1.5
         target_lra = 11.0
 
-        assert -14.5 <= target_i <= -13.5
+        assert -16.5 <= target_i <= -15.5
         assert target_tp <= -1.5
         assert target_lra <= 11.0
 
     def test_loudnorm_filter_string_construction(self) -> None:
         """Constructs and validates FFmpeg loudnorm filter specification."""
-        filter_str = f"loudnorm=I={-14.0}:TP={-1.5}:LRA={11.0}"
-        assert "I=-14" in filter_str
+        filter_str = f"loudnorm=I={-16.0}:TP={-1.5}:LRA={11.0}"
+        assert "I=-16" in filter_str
         assert "TP=-1.5" in filter_str
         assert "LRA=11" in filter_str
 

@@ -925,7 +925,7 @@ def validate_word_boundaries(
 
 
 def master_voice_audio(audio_path: str | os.PathLike) -> str:
-    """Master voice audio: 120 Hz EQ cut + EBU R128 loudnorm (I=-14 LUFS).
+    """Master voice audio: 120 Hz EQ cut + EBU R128 loudnorm (I=-16 LUFS).
 
     Se omite cuando YT_FOLD_MASTERING=1 (la masterización corre en línea
     dentro del filter_complex de build_audio_chain).
@@ -935,7 +935,7 @@ def master_voice_audio(audio_path: str | os.PathLike) -> str:
     cmd = [
         "ffmpeg", "-y",
         "-i", path,
-        "-af", "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-14:TP=-1.5:LRA=11",
+        "-af", "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-16:TP=-1.5:LRA=11",
         "-ar", "48000", "-ac", "2",
         tmp_out,
     ]

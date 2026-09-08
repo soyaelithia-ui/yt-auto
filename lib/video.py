@@ -196,7 +196,7 @@ def _is_mastering_folded() -> bool:
 
 # EQ cut + loudnorm applied inline on the narration branch when mastering is
 # folded into the mux (identical chain to lib.tts.master_voice_audio).
-_MASTERING_PREFIX = "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-14:TP=-1.5:LRA=11,"
+_MASTERING_PREFIX = "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-16:TP=-1.5:LRA=11,"
 
 
 def _compute_T_trans(img_durations: list[float]) -> float:
@@ -539,7 +539,7 @@ def build_audio_chain(
     """Filter graph for narration + music/ambient with sidechain ducking.
 
     Con YT_FOLD_MASTERING=1 (default) la narración se masteriza en línea
-    (EQ 120 Hz + loudnorm -14 LUFS), eliminando la pasada separada de
+    (EQ 120 Hz + loudnorm -16 LUFS), eliminando la pasada separada de
     lib.tts.master_voice_audio.
     """
     has_music = bool(kwargs.get("music_path"))

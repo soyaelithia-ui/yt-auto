@@ -95,7 +95,7 @@ def test_encoder_command_construction_complete_graph(tmp_path: Path):
     assert "volume=0.80" in cmd_str
     assert "volume=0.60" in cmd_str
     assert "amix=inputs=4" in cmd_str
-    assert "loudnorm=I=-14:TP=-1.5:LRA=11" in cmd_str
+    assert "loudnorm=I=-16:TP=-1.5:LRA=11" in cmd_str
 
     # Container / output checks
     assert "-c:a aac" in cmd_str

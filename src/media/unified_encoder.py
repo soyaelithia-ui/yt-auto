@@ -129,10 +129,10 @@ class UnifiedEncoder:
                 filter_chains.append(
                     f"{inputs_str}amix=inputs={len(audio_mix_inputs)}:duration=first:dropout_transition=2[amix_raw]"
                 )
-                filter_chains.append("[amix_raw]loudnorm=I=-14:TP=-1.5:LRA=11[a]")
+                filter_chains.append("[amix_raw]loudnorm=I=-16:TP=-1.5:LRA=11[a]")
             else:
                 single_in = audio_mix_inputs[0]
-                filter_chains.append(f"{single_in}loudnorm=I=-14:TP=-1.5:LRA=11[a]")
+                filter_chains.append(f"{single_in}loudnorm=I=-16:TP=-1.5:LRA=11[a]")
 
         cmd.extend(["-filter_complex", ";".join(filter_chains)])
         cmd.extend(["-map", "[v]"])

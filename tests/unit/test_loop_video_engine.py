@@ -273,13 +273,13 @@ class TestLoopAudioSidechainDucking(unittest.TestCase):
             ducking_attack_ms=20.0,
             ducking_release_ms=350.0,
             master_loudness=True,
-            target_lufs=-14.0,
+            target_lufs=-16.0,
         )
 
         self.assertIn("asplit=2[speech_sc][speech_mix]", af)
         self.assertIn("sidechaincompress=threshold=0.035:ratio=8.0:attack=20.0:release=350.0:makeup=1[music_ducked]", af)
         self.assertIn("[speech_mix][music_ducked]amix=inputs=2:duration=first:normalize=0[amixed]", af)
-        self.assertIn("loudnorm=I=-14.0:TP=-1.5:LRA=11.0", af)
+        self.assertIn("loudnorm=I=-16.0:TP=-1.5:LRA=11.0", af)
         self.assertIn("aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]", af)
 
     def test_audio_filter_without_music(self):
@@ -287,12 +287,12 @@ class TestLoopAudioSidechainDucking(unittest.TestCase):
         af = self.engine.build_audio_filter(
             has_music=False,
             master_loudness=True,
-            target_lufs=-14.0,
+            target_lufs=-16.0,
         )
 
         self.assertNotIn("sidechaincompress", af)
         self.assertNotIn("amix", af)
-        self.assertIn("[1:a]aresample=44100,loudnorm=I=-14.0:TP=-1.5:LRA=11.0", af)
+        self.assertIn("[1:a]aresample=44100,loudnorm=I=-16.0:TP=-1.5:LRA=11.0", af)
         self.assertIn("[aout]", af)
 
 

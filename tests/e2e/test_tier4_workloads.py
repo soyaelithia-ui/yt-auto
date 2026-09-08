@@ -60,7 +60,7 @@ def test_workload_full_60s_youtube_short(tmp_path: Path):
         f"[0:v]ass={ass_path}[v_sub];"
         "[2:a][1:a]sidechaincompress=threshold=0.1:ratio=4:attack=20:release=250[ducked_drone];"
         "[1:a][ducked_drone][3:a]amix=inputs=3:duration=first[a_mixed];"
-        "[a_mixed]loudnorm=I=-14:TP=-1.5:LRA=11[a_out]",
+        "[a_mixed]loudnorm=I=-16:TP=-1.5:LRA=11[a_out]",
         "-map", "[v_sub]",
         "-map", "[a_out]",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p",
@@ -119,7 +119,7 @@ def test_workload_emergency_audio_ducking_stress_test(tmp_path: Path):
         "-filter_complex",
         "[2:a][1:a]sidechaincompress=threshold=0.05:ratio=8:attack=10:release=150[ducked];"
         "[1:a][ducked]amix=inputs=2:duration=first[mixed];"
-        "[mixed]loudnorm=I=-14:TP=-1.5:LRA=11[a_out]",
+        "[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[a_out]",
         "-map", "0:v",
         "-map", "[a_out]",
         "-c:v", "libx264", "-pix_fmt", "yuv420p",

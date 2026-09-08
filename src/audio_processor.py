@@ -36,7 +36,7 @@ class AudioProcessor:
         target_lufs: float = -14.0
     ) -> str:
         """
-        Normalizes audio narration to -14.0 LUFS integrated loudness (+/- 1.5 LUFS) and -1.5 dBTP true peak using FFmpeg loudnorm
+        Normalizes audio narration to -16.0 LUFS integrated loudness (+/- 1.5 LUFS) and -1.5 dBTP true peak using FFmpeg loudnorm
         and applies highpass (80Hz) and lowpass (12000Hz) filtering.
         """
         return normalize_narration_lufs(

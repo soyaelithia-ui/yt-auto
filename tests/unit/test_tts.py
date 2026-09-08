@@ -138,7 +138,7 @@ class TestTTS(unittest.TestCase):
         af_idx = cmd.index("-af")
         filter_str = cmd[af_idx + 1]
         self.assertIn("equalizer=f=120", filter_str)
-        self.assertIn("loudnorm=I=-14", filter_str)
+        self.assertIn("loudnorm=I=-16", filter_str)
 
     def test_tts_cache_key_incorporates_pitch_and_rate(self):
         """Test _tts_cache_key produces distinct SHA-256 digests when pitch or rate changes."""
