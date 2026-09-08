@@ -30,7 +30,7 @@ def test_extract_and_record_scene_manifest(tmp_path):
             },
             {
                 "scene_index": 1,
-                "image_path": "/assets/visual_bank/moku/scenery/horror_forest.jpg",
+                "image_path": "/assets/visual_bank/moku/scenery/abyssal_creature.jpg",
                 "asset_source": "local_bank",
                 "framing_type": "MEDIUM_SUBJECT",
                 "prompt": "abandoned cabin",

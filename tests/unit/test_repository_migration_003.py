@@ -43,7 +43,7 @@ def test_record_and_get_scene_assets(tmp_path):
             "scene_index": 0,
             "shot_index": 1,
             "asset_source": "local_bank",
-            "source_url_or_path": "/assets/visual_bank/moku/scenery/horror_forest.jpg",
+            "source_url_or_path": "/assets/visual_bank/moku/scenery/abyssal_creature.jpg",
             "framing_type": "CLOSEUP_TENSION",
             "prompt_used": "shadowy figure in woods",
             "dhash": "1807f6e5d4c3b2a1",
