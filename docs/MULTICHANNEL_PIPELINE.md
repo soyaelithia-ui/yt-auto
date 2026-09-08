@@ -45,3 +45,5 @@ flowchart TD
 
 - **Generación Local con Plantillas (`src/thumbnail.py`)**: Renderizado vectorial/PIL directo con branding del canal (`assets/branding/`). Cero llamadas externas a modelos generativos de imagen.
 - **Formato y Dimensiones**: `1080x1920` (Shorts) y `1280x720` / `1920x1080` (Longform) con contraste optimizado y tipografía legible (`Montserrat-Black.ttf`).
+
+`visual_bank` / catálogo: [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).

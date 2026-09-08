@@ -137,3 +137,5 @@ sudo systemctl edit yt-review-bot.service
 # WorkingDirectory=/opt/yt-auto
 # ExecStart=/opt/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
 ```
+
+Catálogo CI vs prod (seed test / sin inventar media): [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).

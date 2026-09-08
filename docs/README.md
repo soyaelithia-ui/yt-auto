@@ -32,12 +32,13 @@
 | [AGENTES_IA_Y_POLITICA](AGENTES_IA_Y_POLITICA.md) | Política AI-First y fail-closed, arnés `agy` / SDK, modelos canónicos `gemini-3.8-flash-high` / `gemini-3.7-flash` y agentes por rol. |
 | [TROUBLESHOOTING](TROUBLESHOOTING.md) | Matriz de diagnóstico rápido de errores, causas raíz, rotación de cookies y procedimientos de mitigación. |
 | [REFERENCIAS_Y_VERSIONES](REFERENCIAS_Y_VERSIONES.md) | Versiones fijadas de binarios, dependencias de Python/Node y referencias primarias oficiales. |
+| [POLITICA_CATALOGO_CI](POLITICA_CATALOGO_CI.md) | Política CI vs prod del catálogo: seed sintético solo en tests; sin inventar media en producción; `visual_bank` cruzado con disco. |
 
 ---
 
 ## 3. Consulta Rápida por Rol
 
-- **Desarrollo y Pipeline**: [ARQUITECTURA.md](ARQUITECTURA.md) · [FLUJO_VIDEOS.md](FLUJO_VIDEOS.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [INTEGRACIONES_Y_SERVICIOS.md](INTEGRACIONES_Y_SERVICIOS.md).
+- **Desarrollo y Pipeline**: [ARQUITECTURA.md](ARQUITECTURA.md) · [FLUJO_VIDEOS.md](FLUJO_VIDEOS.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md) · [INTEGRACIONES_Y_SERVICIOS.md](INTEGRACIONES_Y_SERVICIOS.md).
 - **Operación y SysAdmin**: [OPERACION.md](OPERACION.md) · [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) · [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 - **Inteligencia Artificial**: [AGENTES_IA_Y_POLITICA.md](AGENTES_IA_Y_POLITICA.md).
 - **Auditoría y Dependencias**: [REFERENCIAS_Y_VERSIONES.md](REFERENCIAS_Y_VERSIONES.md).
