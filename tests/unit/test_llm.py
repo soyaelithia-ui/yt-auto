@@ -151,6 +151,28 @@ class TestLLMScriptCuration(unittest.TestCase):
         self.assertIn("Test", res["script"])
         self.assertIsNotNone(res.get("description"))
 
+    def test_curate_script_uses_queued_narrative_when_ab_down(self):
+        narrative = (
+            "Si ves su cara ya estás muerto. El chico tímido persigue al observador "
+            "a través de continentes enteros sin importar el blindaje de acero. "
+            "Derribará instalaciones subterráneas enteras a velocidades sobrehumanas "
+            "hasta eliminar a su objetivo sin dejar escapatoria posible."
+        )
+        self.assertGreaterEqual(len(narrative.split()), 40)
+        with patch("src.config.is_test_environment", return_value=False), \
+             patch("src.llm._curate_with_agent", return_value=None), \
+             patch("src.llm._curate_with_gemini", return_value=None):
+            script = curate_script(
+                narrative,
+                title="SCP-096: no lo mires a la cara",
+                provider=None,
+                channel="moku",
+                min_words=40,
+            )
+        self.assertIn("observador a través", script)
+        self.assertNotIn("Edit:", script)
+        self.assertFalse(script.startswith("Título:"))
+
 
 if __name__ == "__main__":
     unittest.main()
