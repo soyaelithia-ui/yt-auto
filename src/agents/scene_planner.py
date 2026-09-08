@@ -564,7 +564,7 @@ class ScenePlannerCompositorAgent:
                         "camera_motion": {
                             "type": motion_type,
                             "start_zoom": 1.0,
-                            "end_zoom": round(1.05 + 0.03 * tension, 3),
+                            "end_zoom": round(1.10 + 0.02 * max(0, tension - 1), 3),
                             "pan_direction": pan_dir,
                             "easing": "cubic_bezier",
                             "parallax_intensity": round(0.12 + 0.09 * tension, 2),
@@ -670,7 +670,7 @@ class ScenePlannerCompositorAgent:
                     "type": motion_type,
                     "pan_direction": pan_dir,
                     "start_zoom": 1.0,
-                    "end_zoom": round(1.05 + 0.03 * tension, 3),
+                    "end_zoom": round(1.10 + 0.02 * max(0, tension - 1), 3),
                 }
                 scene_entry["image_path"] = str(resolved_asset)
                 scene_entry["asset_path"] = str(resolved_asset)

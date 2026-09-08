@@ -2,6 +2,7 @@
 Unit tests for TemplateRegistry, VideoTemplate, SubtitleStyle, and AssetManager.
 """
 import os
+from pathlib import Path
 import pytest
 from src.templates import (
     VideoTemplate,
@@ -100,6 +101,84 @@ class TestTemplateAndAssetManager:
         track = mgr.get_music(category="horror")
         assert track == str(mus1)
 
+
+    def test_gifs_and_overlays_excluded_from_background_index(self, tmp_path):
+        assets = tmp_path / "assets"
+        scenery = assets / "visual_bank" / "moku" / "scenery"
+        gifs = assets / "visual_bank" / "moku" / "ambient_gifs"
+        overlays = assets / "visual_bank" / "moku" / "overlays"
+        scenery.mkdir(parents=True)
+        gifs.mkdir(parents=True)
+        overlays.mkdir(parents=True)
+
+        gif = gifs / "creepy_fog.gif"
+        gif.write_bytes(b"GIF89a_fake")
+        overlay = overlays / "vignette.png"
+        overlay.write_bytes(b"fake_png")
+        jpg = scenery / "fog_still.jpg"
+        jpg.write_bytes(b"fake_jpg")
+        mp4 = scenery / "pan.mp4"
+        mp4.write_bytes(b"fake_mp4")
+
+        mgr = AssetManager(root_dir=str(assets))
+
+        all_bgs = []
+        for paths in mgr._index["backgrounds"].values():
+            all_bgs.extend(paths)
+
+        assert str(jpg) in all_bgs
+        assert str(mp4) in all_bgs
+        assert not any(p.lower().endswith(".gif") for p in all_bgs)
+        assert str(overlay) not in all_bgs
+
+        def _parts(path: str):
+            return {part.lower() for part in Path(path).parts}
+
+        assert not any("ambient_gifs" in _parts(p) for p in all_bgs)
+        assert not any("overlays" in _parts(p) for p in all_bgs)
+        assert not any("_quarantine_title_cards" in _parts(p) for p in all_bgs)
+
+        for _ in range(20):
+            bg = mgr.get_background(category="moku", style="creepypasta")
+            assert not bg.lower().endswith(".gif"), bg
+            assert "overlays" not in _parts(bg)
+            assert "ambient_gifs" not in _parts(bg)
+
+        seq = mgr.get_background_sequence(category="moku", style="creepypasta", count=5)
+        assert seq
+        assert not any(p.lower().endswith(".gif") for p in seq)
+
+    def test_title_cards_excluded_from_background_index(self, tmp_path):
+        """Quarantined baked-text covers must never re-enter the background pool."""
+        from src.asset_manager import is_eligible_background_asset
+
+        assets = tmp_path / "assets"
+        scenery = assets / "visual_bank" / "moku" / "scenery"
+        quarantine = assets / "visual_bank" / "_quarantine_title_cards" / "moku"
+        scenery.mkdir(parents=True)
+        quarantine.mkdir(parents=True)
+
+        clean = scenery / "fog_clean.jpg"
+        clean.write_bytes(b"clean_scenery")
+        title_card = quarantine / "abyssal_creature.jpg"
+        title_card.write_bytes(b"baked_title_card")
+
+        assert is_eligible_background_asset(str(clean))
+        assert not is_eligible_background_asset(str(title_card))
+        assert not is_eligible_background_asset(str(quarantine / "x.gif"))
+
+        mgr = AssetManager(root_dir=str(assets))
+        all_bgs = [p for paths in mgr._index["backgrounds"].values() for p in paths]
+        assert str(clean) in all_bgs
+        assert str(title_card) not in all_bgs
+        assert not any("_quarantine_title_cards" in p for p in all_bgs)
+
+        for _ in range(15):
+            bg = mgr.get_background(category="moku", style="creepypasta")
+            assert "_quarantine_title_cards" not in bg
+            assert bg == str(clean)
+
+
     def test_create_ass_subtitles_with_template(self, tmp_path):
         out_ass = str(tmp_path / "test_subs.ass")
         words = [
@@ -126,3 +205,31 @@ class TestTemplateAndAssetManager:
 
         assert os.path.exists(out_thumb)
         assert os.path.getsize(out_thumb) > 1000
+
+
+    def test_bitacora_advertencia_filename_excluded(self, tmp_path):
+        from src.asset_manager import is_eligible_background_asset
+
+        assets = tmp_path / "assets"
+        scenery = assets / "visual_bank" / "moku" / "scenery"
+        scenery.mkdir(parents=True)
+        bad = scenery / "BITÁCORA_perdida.jpg"
+        bad2 = scenery / "ADVERTENCIA_tape.png"
+        good = scenery / "fog_clean.jpg"
+        bad.write_bytes(b"x")
+        bad2.write_bytes(b"x")
+        good.write_bytes(b"x")
+
+        assert not is_eligible_background_asset(str(bad))
+        assert not is_eligible_background_asset(str(bad2))
+        assert is_eligible_background_asset(str(good))
+
+        mgr = AssetManager(root_dir=str(assets))
+        all_bgs = [p for paths in mgr._index["backgrounds"].values() for p in paths]
+        assert str(good) in all_bgs
+        assert str(bad) not in all_bgs
+        assert str(bad2) not in all_bgs
+        names = [Path(p).name.lower() for p in all_bgs]
+        assert not any("bitácora" in n or "bitacora" in n for n in names)
+        assert not any("advertencia" in n for n in names)
+

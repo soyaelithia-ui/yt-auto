@@ -11,6 +11,64 @@ from src.log import get_logger
 
 logger = get_logger("asset_manager")
 
+# Path segments that must never enter the video background pool.
+# Finished title cards / baked-text covers are quarantined here; overlays and
+# ambient GIFs are motion/UI layers, not full-frame scenery.
+_BACKGROUND_EXCLUDED_DIR_MARKERS = (
+    "_quarantine_title_cards",
+    "quarantine_title_cards",
+    "title_cards",
+    "prebaked",
+    "ambient_gifs",
+    "overlays",
+)
+
+# Filename / path tokens for baked Spanish title-card chrome (never index as bg).
+_BACKGROUND_EXCLUDED_NAME_TOKENS = (
+    "bitácora",
+    "bitacora",
+    "advertencia",
+)
+
+_BACKGROUND_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".mp4", ".webm")  # no .gif
+_BACKGROUND_MOTION_EXTS = (".mp4", ".webm")
+
+
+def _path_has_excluded_background_marker(file_path: str) -> bool:
+    """True if path sits under a folder that is not eligible as video background."""
+    parts = {p.lower() for p in Path(file_path).parts}
+    return any(marker.lower() in parts for marker in _BACKGROUND_EXCLUDED_DIR_MARKERS)
+
+
+def _path_has_excluded_name_token(file_path: str) -> bool:
+    """True if filename stem contains baked title-card tokens (BITÁCORA / ADVERTENCIA)."""
+    # Basename only — full paths may include unrelated parent dirs (e.g. pytest node names).
+    stem = Path(file_path).stem.lower()
+    name = Path(file_path).name.lower()
+    hay = f"{stem} {name}"
+    return any(tok in hay for tok in _BACKGROUND_EXCLUDED_NAME_TOKENS)
+
+
+def is_eligible_background_asset(file_path: str) -> bool:
+    """Return True if file may be indexed / selected as a video background."""
+    if not file_path:
+        return False
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in _BACKGROUND_IMAGE_EXTS:
+        return False
+    if _path_has_excluded_background_marker(file_path):
+        return False
+    if _path_has_excluded_name_token(file_path):
+        return False
+    return True
+
+
+def _prefer_motion_background(pool: List[str]) -> List[str]:
+    """Prefer motion loops over stills when selecting video backgrounds."""
+    motion = [p for p in pool if os.path.splitext(p)[1].lower() in _BACKGROUND_MOTION_EXTS]
+    return motion or pool
+
+
 LIBRARY_DIR = os.path.join(BASE_DIR, "assets", "library")
 
 
@@ -33,8 +91,9 @@ class AssetManager:
 
         def _add_media(category: str, file_path: str):
             ext = os.path.splitext(file_path)[1].lower()
-            if ext in (".jpg", ".jpeg", ".png", ".gif", ".mp4", ".webm"):
-                self._index["backgrounds"].setdefault(category, []).append(file_path)
+            if ext in _BACKGROUND_IMAGE_EXTS:
+                if is_eligible_background_asset(file_path):
+                    self._index["backgrounds"].setdefault(category, []).append(file_path)
             elif ext in (".mp3", ".wav", ".ogg", ".m4a", ".flac"):
                 fp_lower = file_path.lower()
                 if "ambient" in fp_lower:
@@ -150,8 +209,15 @@ class AssetManager:
         cat_key = category.lower()
         style_key = style.lower()
 
-        pool = self._index["backgrounds"].get(cat_key) or self._index["backgrounds"].get(style_key) or self._index["backgrounds"].get("default") or self._index["backgrounds"].get("horror")
-        
+        raw_pool = (
+            self._index["backgrounds"].get(cat_key)
+            or self._index["backgrounds"].get(style_key)
+            or self._index["backgrounds"].get("default")
+            or self._index["backgrounds"].get("horror")
+        )
+        pool = [p for p in (raw_pool or []) if is_eligible_background_asset(p)]
+        pool = _prefer_motion_background(pool)
+
         if pool:
             return random.choice(pool)
 
@@ -174,7 +240,15 @@ class AssetManager:
         cat_key = category.lower()
         style_key = style.lower()
 
-        pool = self._index["backgrounds"].get(cat_key) or self._index["backgrounds"].get(style_key) or self._index["backgrounds"].get("default") or self._index["backgrounds"].get("horror") or []
+        raw_pool = (
+            self._index["backgrounds"].get(cat_key)
+            or self._index["backgrounds"].get(style_key)
+            or self._index["backgrounds"].get("default")
+            or self._index["backgrounds"].get("horror")
+            or []
+        )
+        pool = [p for p in raw_pool if is_eligible_background_asset(p)]
+        pool = _prefer_motion_background(pool)
 
         # Deduplicate pool while preserving order
         unique_pool = list(dict.fromkeys(pool))

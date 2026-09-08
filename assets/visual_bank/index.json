@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "updated_at": "2026-09-07T23:46:30Z",
-  "description": "Catálogo de Metadatos del Banco Local de Recursos Visuales para YTShort",
+  "updated_at": "2026-09-08T04:05:00Z",
+  "description": "Catálogo de Metadatos del Banco Local de Recursos Visuales para YTShort. scenery/ must hold clean backdrops only; finished title cards live under _quarantine_title_cards/ and are excluded from the background index.",
   "channels": {
     "moku": {
       "name": "Moku - Historias de Terror",
@@ -13,60 +13,7 @@
         1360
       ],
       "categories": {
-        "scenery": [
-          {
-            "id": "moku_scenery_abyssal_creature",
-            "file": "abyssal_creature.jpg",
-            "path": "assets/visual_bank/moku/scenery/abyssal_creature.jpg",
-            "resolution": [
-              768,
-              1360
-            ],
-            "format": "jpeg",
-            "tags": [
-              "abyssal",
-              "creature",
-              "deep",
-              "horror"
-            ],
-            "description": "Criatura abisal en entorno oscuro profundo."
-          },
-          {
-            "id": "moku_scenery_scp_3008_infinite",
-            "file": "scp_3008_infinite.jpg",
-            "path": "assets/visual_bank/moku/scenery/scp_3008_infinite.jpg",
-            "resolution": [
-              768,
-              1360
-            ],
-            "format": "jpeg",
-            "tags": [
-              "scp",
-              "3008",
-              "infinite",
-              "ikea",
-              "anomaly"
-            ],
-            "description": "Espacio infinito estilo SCP-3008."
-          },
-          {
-            "id": "moku_scenery_scp_containment",
-            "file": "scp_containment.jpg",
-            "path": "assets/visual_bank/moku/scenery/scp_containment.jpg",
-            "resolution": [
-              768,
-              1360
-            ],
-            "format": "jpeg",
-            "tags": [
-              "scp",
-              "containment",
-              "facility",
-              "anomaly"
-            ],
-            "description": "Instalación de contención SCP."
-          }
-        ],
+        "scenery": [],
         "ambient_gifs": [
           {
             "id": "moku_ambient_fog",
@@ -213,25 +160,7 @@
         1360
       ],
       "categories": {
-        "scenery": [
-          {
-            "id": "aelithia_scenery_dna_secret",
-            "file": "dna_secret.jpg",
-            "path": "assets/visual_bank/aelithia/scenery/dna_secret.jpg",
-            "resolution": [
-              768,
-              1360
-            ],
-            "format": "jpeg",
-            "tags": [
-              "dna",
-              "secret",
-              "reveal",
-              "drama"
-            ],
-            "description": "Escena de secreto / revelación ADN."
-          }
-        ],
+        "scenery": [],
         "ambient_gifs": [
           {
             "id": "aelithia_ambient_soft_bokeh",

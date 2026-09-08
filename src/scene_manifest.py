@@ -87,7 +87,7 @@ class CameraMotionConfig(BaseModel):
         "static",
     ] = "ken_burns_3d"
     start_zoom: float = 1.0
-    end_zoom: float = 1.08
+    end_zoom: float = 1.10  # canonical Ken Burns zoom 1.00 → 1.10
     pan_direction: Literal[
         "center_to_top",
         "center_to_bottom",

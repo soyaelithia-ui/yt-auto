@@ -55,10 +55,11 @@ Gestionada en `src/core/repository.py` y `src/db.py`:
 ## 4. Catálogo de Assets Offline
 
 1. **Catálogo de Loops Atmosféricos**: `assets/loops/{cosmic_horror,dark_ambient,dark_forest,monsters,space_abyss}/`.
-2. **Banco Temático de Canal**: `assets/visual_bank/{moku,aelithia}/{scenery,ambient_gifs,overlays}`.
-3. **Identidad Visual y Marcas de Agua**: `assets/branding/`.
-4. **Música y Efectos**: `assets/music/` por género narrativo (terror, drama, suspenso).
-5. **Tipografías**: `assets/fonts/Montserrat-Black.ttf` para renderizado ASS y portadas.
+2. **Banco Temático de Canal**: `assets/visual_bank/{moku,aelithia}/{scenery,ambient_gifs,overlays}` — `scenery` = fondos limpios (sin texto horneado); title cards mal clasificados → `_quarantine_title_cards/`. Política: [visual-assets-policy.md](visual-assets-policy.md).
+3. **Plantillas de miniatura**: `assets/thumbnails/templates/` (bases limpias; texto/HUD solo en composición).
+4. **Identidad Visual y Marcas de Agua**: `assets/branding/`.
+5. **Música y Efectos**: `assets/music/` por género narrativo (terror, drama, suspenso).
+6. **Tipografías**: `assets/fonts/Montserrat-Black.ttf` para renderizado ASS y portadas.
 
 ---
 

@@ -1,7 +1,7 @@
 # Agentes Nativos de IA, Modelos y Política AI-First
 
 > **Estado:** OFICIAL / PRODUCCIÓN  
-> **Última actualización:** 2026-08  
+> **Última actualización:** 2026-09  
 
 Directivas de inteligencia artificial generativa, arquitectura de agentes en `src/agents/` y políticas de failover.
 
@@ -54,24 +54,24 @@ src/agents/
 3. **`ArtDirectorMoodAgent` (`art_director.py`)**:
    - Define el tratamiento estético cinemático, matrices de color y comportamientos de cámara procedural.
 4. **`ScenePlannerCompositorAgent` (`scene_planner.py`)**:
-   - Ensambla el manifiesto canónico `SceneManifestV2` integrando capas de Three.js, audio y subtítulos ASS.
+   - Ensambla el manifiesto canónico `SceneManifestV2` (arquetipos FFmpeg/híbrido, overlays, pacing, audio y subtítulos ASS). Los agentes emiten JSON; el motor de media decide píxeles.
 5. **`VisualAudioQAAuditorAgent` (`qa_auditor.py`)**:
    - Aplica filtros de control de calidad EBU R128, correlación estéreo, moov atom y ratios de negro antes de la publicación.
 6. **`ImageAuditorAgent` (`image_auditor.py`)**:
-   - **Política Anti-Filler**: 100% de fondos y sujetos animados deben ser generados proceduralmente (código WebGL/Canvas). Prohíbe terminantemente fotos de stock estáticas (`DISCARDED_GENERIC_FILLER`).
-   - Autoriza exclusivamente logotipos de marca o emblemas institucionales oficiales (`APPROVED_REFERENCE`) para proyección en insignias overlay no invasivas (SVG o Canvas).
+   - **Política Anti-Filler**: fondos de video = loops/catálogo FFmpeg o scenery limpio (Ken Burns `zoompan`); **no** hot path WebGPU/WebGL/Canvas. Prohíbe stock genérico y title cards pre-horneadas (`DISCARDED_GENERIC_FILLER`). Ver [visual-assets-policy.md](visual-assets-policy.md).
+   - Autoriza exclusivamente logotipos de marca o emblemas institucionales oficiales (`APPROVED_REFERENCE`) como overlays vectoriales no invasivos (SVG / `resvg-py`).
 7. **`SeoOptimizerAgent` (`seo_optimizer.py`)**:
    - Fórmulas algorítmicas de retención: 3 títulos virales para A/B testing, descripción con marcas de tiempo formateadas, tags optimizados, hashtags virales, comentario fijado para disparar interacción comunitaria y blueprints de miniaturas.
 
 ---
 
-## 4. Política Anti-Filler y Pureza Procedural
+## 4. Política Anti-Filler (alineada al SSOT FFmpeg)
 
 > [!IMPORTANT]
-> **Directiva Estricta de Calidad Visual**:
-> - Todo el contenido animado de fondo debe originarse en motores procedurales WebGL/Canvas (código puro).
-> - Se prohíbe el uso de imágenes fijas de stock para 'rellenar' el video.
-> - Si se requiere presentar entidades reales o marcas oficiales (ej. Fundación SCP, NASA, MIT, OpenAI), deben proyectarse como **badges vectoriales o emblemas en canvas** respetando márgenes seguros y opacidad calibrada.
+> **Directiva de Calidad Visual** (no contradice [ARQUITECTURA.md](ARQUITECTURA.md)):
+> - Fondos de video: loops/catálogo FFmpeg o scenery limpio — **no** WebGL/Three.js/Canvas ni WebGPU en el hot path.
+> - Prohibido rellenar con stock genérico o title cards con texto/HUD horneado. Clasificación: [visual-assets-policy.md](visual-assets-policy.md).
+> - Marcas oficiales (SCP, NASA, etc.): badges/emblemas vectoriales (SVG), no scrapes de UI.
 
 ---
 

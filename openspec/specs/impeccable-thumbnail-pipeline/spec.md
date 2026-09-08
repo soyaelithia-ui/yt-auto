@@ -42,7 +42,7 @@ The asset resolver MUST resolve base imagery through a 3-tier hierarchy: (1) exp
 #### Scenario: Curated local asset resolution (Happy Path)
 - **GIVEN** no explicit `base_image_path` and an active lane `moku-scp-shorts`
 - **WHEN** the asset resolver locates background imagery
-- **THEN** it MUST select an authentic high-resolution backdrop from `assets/thumbnails/templates/scp/` or `assets/visual_bank/`.
+- **THEN** it MUST select a clean high-resolution backdrop from `assets/thumbnails/templates/` (preferred) or `assets/visual_bank/{channel}/scenery/` only — never `_quarantine_title_cards/`, overlays, ambient GIFs, or pre-baked title cards (see `docs/visual-assets-policy.md`).
 
 #### Scenario: Video climax fallback without primitive silhouettes (Edge Case)
 - **GIVEN** an empty asset bank and an active video file

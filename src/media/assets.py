@@ -91,9 +91,18 @@ def check_local_templates(
         if not s_dir.exists() or not s_dir.is_dir():
             continue
 
+        # Skip quarantined title cards / non-scenery layers if search walks into them
+        _skip_markers = {
+            "_quarantine_title_cards", "quarantine_title_cards",
+            "title_cards", "prebaked", "ambient_gifs", "overlays",
+        }
+        _skip_name_tokens = ("bitácora", "bitacora", "advertencia")
         candidates = sorted([
             p for p in s_dir.glob("*")
-            if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".mp4"} and p.is_file()
+            if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".mp4"}
+            and p.is_file()
+            and not any(m in {part.lower() for part in p.parts} for m in _skip_markers)
+            and not any(tok in f"{p.stem.lower()} {p.name.lower()}" for tok in _skip_name_tokens)
         ])
 
         if not candidates:

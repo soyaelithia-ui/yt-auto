@@ -57,6 +57,11 @@ __all__ = [
     "force_pillow_hybrid_frames_enabled",
     "force_pillow_particles_enabled",
     "build_ken_burns_zoompan_filter",
+    "canonical_ken_burns_params",
+    "KEN_BURNS_MIN_DURATION_SEC",
+    "KEN_BURNS_ZOOM_START",
+    "KEN_BURNS_ZOOM_END",
+    "KEN_BURNS_FPS",
     "resolve_hybrid_overlay_asset",
 ]
 
@@ -174,6 +179,43 @@ def build_ken_burns_zoompan_filter(
         f"zoompan=z='{z}':x='{x}':y='{y}':"
         f"d={int(total_frames)}:s={int(width)}x{int(height)}:fps={int(fps)}"
     )
+
+
+# Canonical Ken Burns for still backgrounds (not applied to motion loops).
+# Acceptance: zoom 1.00→1.10, duration ≥12 s, 30 fps when using defaults / still path.
+KEN_BURNS_ZOOM_START = 1.00
+KEN_BURNS_ZOOM_END = 1.10
+KEN_BURNS_MIN_DURATION_SEC = 12.0
+KEN_BURNS_FPS = 30
+
+
+def canonical_ken_burns_params(
+    *,
+    duration_sec: float | None = None,
+    fps: int | None = None,
+    zoom_start: float | None = None,
+    zoom_end: float | None = None,
+    enforce_min_duration: bool = False,
+) -> tuple[float, int, int, float, float]:
+    """Return (duration, fps, total_frames, zoom_start, zoom_end) for still Ken Burns.
+
+    Defaults match acceptance (1.00→1.10 @ 30 fps, ≥12 s). Scene renders keep the
+    caller duration unless ``enforce_min_duration`` is set (acceptance / smoke).
+    """
+    base_dur = float(duration_sec) if duration_sec is not None else float(KEN_BURNS_MIN_DURATION_SEC)
+    if enforce_min_duration:
+        dur = max(float(KEN_BURNS_MIN_DURATION_SEC), base_dur)
+    else:
+        dur = max(0.5, base_dur)
+    use_fps = int(fps) if fps and int(fps) > 0 else int(KEN_BURNS_FPS)
+    z0 = float(KEN_BURNS_ZOOM_START if zoom_start is None else zoom_start)
+    z1 = float(KEN_BURNS_ZOOM_END if zoom_end is None else zoom_end)
+    if z0 <= 0:
+        z0 = float(KEN_BURNS_ZOOM_START)
+    if z1 <= z0:
+        z1 = float(KEN_BURNS_ZOOM_END)
+    total_frames = max(1, int(round(dur * use_fps)))
+    return dur, use_fps, total_frames, z0, z1
 
 
 class HybridVideoEngine(BaseVideoCompositor):
@@ -297,8 +339,6 @@ class HybridVideoEngine(BaseVideoCompositor):
         out_path = Path(output_mp4).resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        duration = max(0.5, float(scene.duration_sec))
-        total_frames = int(round(duration * fps))
         cfg = scene.hybrid_ai_config or HybridAIConfig()
         camera = cfg.camera_motion or CameraMotionConfig()
         lighting = cfg.lighting or LightingConfig()
@@ -307,8 +347,16 @@ class HybridVideoEngine(BaseVideoCompositor):
 
         bg_image = self._resolve_background_image(cfg.background_image_path, width, height)
 
+        # Still background path uses Ken Burns (loops are assembled elsewhere — do not KB loops).
+        # Canonical defaults: zoom 1.00→1.10; keep scene duration for narration sync.
         zoom_start = float(camera.start_zoom)
         zoom_end = float(camera.end_zoom) + (0.02 * (tension - 1))
+        if zoom_start <= 0:
+            zoom_start = float(KEN_BURNS_ZOOM_START)
+        if zoom_end <= zoom_start:
+            zoom_end = float(KEN_BURNS_ZOOM_END)
+        duration = max(0.5, float(scene.duration_sec))
+        total_frames = int(round(duration * fps))
         pan_dir = camera.pan_direction
 
         if crf is None:
