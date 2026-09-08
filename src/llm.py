@@ -644,6 +644,15 @@ def curate_script(
 
     from src.core.domain import AIProviderChainExhausted
 
+    # Topic runs already stored a lane narrative in content. Use it when A/B
+    # are down so we do not fall back to curator C's 173 regex dump.
+    if not is_test_environment() and main_content and len(str(main_content).split()) >= 40:
+        logger.warning(
+            "AI chain exhausted (%s); using queued narrative content",
+            "; ".join(chain_errors),
+        )
+        return _trim_script_to_max_words(str(main_content).strip(), max_words)
+
     raise AIProviderChainExhausted(
         "Cadena de proveedores de IA agotada para curación de guion: "
         + "; ".join(chain_errors)
