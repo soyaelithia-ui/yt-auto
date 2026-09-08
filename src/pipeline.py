@@ -1363,6 +1363,18 @@ def run_pipeline_once(
             # AI cover-prompt + SceneImageAgent path is removed: the video is the
             # artifact; the cover derives from the resolved template + channel
             # style with no remote calls.
+            thumb_source = None
+            try:
+                vp = json.loads(visual_plan_path.read_text(encoding="utf-8"))
+                scenes = vp.get("scenes") if isinstance(vp, dict) else None
+                if isinstance(scenes, list):
+                    for sc in scenes:
+                        src = (sc or {}).get("source") if isinstance(sc, dict) else None
+                        if src and Path(src).is_file():
+                            thumb_source = str(src)
+                            break
+            except Exception:
+                thumb_source = None
             create_video_thumbnail(
                 spanish_title,
                 channel_name,
@@ -1371,7 +1383,7 @@ def run_pipeline_once(
                 archetype=target_category,
                 strict_official_sdk=False,
                 video_mode="longform" if is_long_lane else "short",
-                video_path=str(video_path),
+                video_path=thumb_source or str(resolved_loop_path or video_path),
                 manifest_path=str(scene_manifest_path),
             )
             metadata_path.write_text(

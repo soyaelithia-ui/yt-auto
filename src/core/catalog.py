@@ -555,6 +555,15 @@ class LoopCatalogRepository:
         orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
         cat_clean = category.strip().lower().replace("-", "_").replace(" ", "_") if category else "dark_ambient"
         exclude_set = {str(e).strip() for e in (exclude_loop_ids or []) if e}
+        for raw in list(exclude_set):
+            p_ex = Path(raw)
+            try:
+                if p_ex.is_file():
+                    st = p_ex.stat()
+                    exclude_set.add(f"ino:{st.st_dev}:{st.st_ino}")
+                    exclude_set.add(p_ex.name)
+            except OSError:
+                exclude_set.add(p_ex.name)
 
         # Deduce channel from explicit arg, requested_tags, or category (PR #69)
         eff_channel = channel.lower().strip() if channel else None
@@ -612,6 +621,9 @@ class LoopCatalogRepository:
                     continue
                 p = resolve_loop_file_path(rec.file_path)
                 if p.is_file() and p.stat().st_size >= 25_000:
+                    st = p.stat()
+                    if f"ino:{st.st_dev}:{st.st_ino}" in exclude_set:
+                        continue
                     rec.file_path = str(p)
                     valid_recs.append(rec)
             return valid_recs

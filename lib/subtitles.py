@@ -32,7 +32,7 @@ _TEMPLATE_NAME_DEFAULTS = {
         "margin_l": 60,
         "margin_r": 60,
         "margin_v": 250,
-        "alignment": 5,
+        "alignment": 2,
         "border_style": 1,
         "outline": 5,
         "shadow": 4,
@@ -44,7 +44,7 @@ _TEMPLATE_NAME_DEFAULTS = {
         "margin_l": 60,
         "margin_r": 60,
         "margin_v": 250,
-        "alignment": 5,
+        "alignment": 2,
         "border_style": 1,
         "outline": 5,
         "shadow": 4,
@@ -252,7 +252,7 @@ def _ass_style_spec(template, font_name, play_w: int, play_h: int, **kwargs) -> 
         "border_style": 1,
         "outline": 4,
         "shadow": 3,
-        "alignment": 5,
+        "alignment": 2,
         "margin_l": 40,
         "margin_r": 40,
         "margin_v": 230,
@@ -405,7 +405,17 @@ def _ass_dialogues(
                 current_len += part_len + 1
         if current:
             lines.append(current)
-        split_events.append((start, end, r"\N".join(lines)))
+        # Never dump a paragraph as one centered cue.
+        if len(lines) <= 2:
+            split_events.append((start, end, r"\N".join(lines)))
+            continue
+        span = max(0.01, end - start)
+        n = (len(lines) + 1) // 2
+        for i in range(0, len(lines), 2):
+            chunk = lines[i:i + 2]
+            t0 = start + span * (i / max(1, len(lines)))
+            t1 = start + span * (min(i + 2, len(lines)) / max(1, len(lines)))
+            split_events.append((t0, t1, r"\N".join(chunk)))
     return _repair_dangling_events(split_events)
 
 
@@ -425,7 +435,8 @@ def _repair_dangling_events(
         for start, end, text in events:
             if merged and _line_ends_dangling(merged[-1][2]):
                 pieces = text.split(" ")
-                if pieces and _strip_ass_tags(pieces[0]):
+                combined_len = len(_strip_ass_tags(merged[-1][2])) + 1 + len(_strip_ass_tags(pieces[0] if pieces else ""))
+                if pieces and _strip_ass_tags(pieces[0]) and combined_len <= 52:
                     merged[-1] = (
                         merged[-1][0],
                         merged[-1][1],
