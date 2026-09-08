@@ -22,6 +22,16 @@ from src.media.thumbnails.typography import DynamicTypographyEngine
 
 logger = logging.getLogger("thumbnail_engine")
 
+THUMB_LONGFORM_SIZE = (1280, 720)
+THUMB_SHORT_SIZE = (720, 1280)
+
+
+def default_thumbnail_canvas(*, vertical: bool = False, full_hd: bool = False) -> tuple[int, int]:
+    """Default thumb canvas: 1280×720 / 720×1280. Full HD only when explicitly requested."""
+    if full_hd:
+        return (1080, 1920) if vertical else (1920, 1080)
+    return THUMB_SHORT_SIZE if vertical else THUMB_LONGFORM_SIZE
+
 
 @dataclass
 class ThumbnailConfig:
@@ -30,8 +40,8 @@ class ThumbnailConfig:
     lane_id: Optional[str] = None
     hook_text: Optional[str] = None
     output_path: Optional[Union[str, Path]] = None
-    width: int = 1920
-    height: int = 1080
+    width: int = THUMB_LONGFORM_SIZE[0]
+    height: int = THUMB_LONGFORM_SIZE[1]
     tilt_angle: float = -3.5
     blur_radius: float = 3.5
     contrast_boost: float = 1.35

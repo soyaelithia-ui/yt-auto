@@ -674,6 +674,8 @@ class ScenePlannerCompositorAgent:
                 }
                 scene_entry["image_path"] = str(resolved_asset)
                 scene_entry["asset_path"] = str(resolved_asset)
+                if hybrid_config:
+                    hybrid_config["background_image_path"] = str(resolved_asset)
 
                 scenes_data.append(scene_entry)
                 current_time += sub_dur

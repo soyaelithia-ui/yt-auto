@@ -263,10 +263,11 @@ def test_resolve_hybrid_overlay_asset_atmospheric_kinds(tmp_path: Path, monkeypa
     (overlays / "film_grain.png").write_bytes(b"g")
     (overlays / "dark_vignette.png").write_bytes(b"v")
     (overlays / "tv_static.gif").write_bytes(b"s")
+    (overlays / "tv_static.png").write_bytes(b"p")
     monkeypatch.chdir(tmp_path)
     assert resolve_hybrid_overlay_asset("film_grain").name == "film_grain.png"
     assert resolve_hybrid_overlay_asset("vignette").name == "dark_vignette.png"
-    assert resolve_hybrid_overlay_asset("tv_static").name == "tv_static.gif"
+    assert resolve_hybrid_overlay_asset("tv_static").name == "tv_static.png"
     op = clamp_atmospheric_overlay_opacity()
     assert ATMOSPHERIC_OVERLAY_OPACITY_MIN <= op <= ATMOSPHERIC_OVERLAY_OPACITY_MAX
     assert op == ATMOSPHERIC_OVERLAY_OPACITY
@@ -437,3 +438,59 @@ def test_force_pillow_particles_still_uses_imagedraw(tmp_path: Path, monkeypatch
     assert "rawvideo" not in seen["cmds"][0]
     assert any(str(x).endswith("particles.png") for x in seen["cmds"][0])
     assert any(str(x).endswith("god_rays.png") for x in seen["cmds"][0])
+
+
+def test_resolve_hybrid_overlay_skips_gif(tmp_path: Path, monkeypatch):
+    from src.media.hybrid_engine import resolve_hybrid_overlay_asset
+
+    overlays = tmp_path / "assets" / "overlays"
+    overlays.mkdir(parents=True)
+    (overlays / "tv_static.gif").write_bytes(b"s")
+    monkeypatch.chdir(tmp_path)
+    assert resolve_hybrid_overlay_asset("tv_static") is None
+
+
+def test_motion_loop_stream_copy_skips_zoompan(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
+    loop = tmp_path / "catalog_loop.mp4"
+    loop.write_bytes(b"\0" * 800)
+    engine = HybridVideoEngine()
+    sc = SceneConfig(
+        scene_index=1,
+        scene_id="sc_loop_copy",
+        start_sec=0.0,
+        duration_sec=24.0,
+        tension_level=2,
+        engine_type="hybrid_cinematic_ai",
+        image_path=str(loop),
+        hybrid_ai_config=HybridAIConfig(
+            background_image_path=str(loop),
+            camera_motion=CameraMotionConfig(pan_direction="center_to_top"),
+        ),
+    )
+    out_mp4 = tmp_path / "loop_planes.mp4"
+    seen: dict[str, list] = {"cmds": []}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmds"].append(list(cmd))
+        target = Path(cmd[-1])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"\0" * 600)
+        return MagicMock(returncode=0)
+
+    with patch("src.media.hybrid_engine.loop_matches_target_geometry", return_value=True):
+        with patch("src.media.hybrid_engine.run_ffmpeg", side_effect=fake_run):
+            engine.render_scene_segment(
+                scene=sc,
+                width=320,
+                height=180,
+                fps=30,
+                output_mp4=out_mp4,
+                crf=28,
+            )
+
+    assert seen["cmds"]
+    joined = " ".join(str(x) for x in seen["cmds"][0])
+    assert "zoompan=" not in joined
+    assert "-c:v" in seen["cmds"][0] and "copy" in seen["cmds"][0]
+    assert not any("libx264" in c for c in seen["cmds"])

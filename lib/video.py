@@ -640,8 +640,8 @@ def generate_pil_thumbnail(
     title: str,
     output_path: str,
     bg_image_path: str | None = None,
-    width: int = 1920,
-    height: int = 1080,
+    width: int = 1280,
+    height: int = 720,
     style: str | None = None,
     template: str | None = None,
     style_preset: Any | None = None,
@@ -836,7 +836,21 @@ def create_video_thumbnail(
         "video_mode",
         "short" if style == "short" or kwargs.get("video_mode") == "short" else "longform",
     )
-    target_w, target_h = SHORT_RES if v_mode == "short" else LONGFORM_RES
+    from src.media.thumbnails.engine import default_thumbnail_canvas
+
+    if kwargs.get("width") and kwargs.get("height"):
+        target_w, target_h = int(kwargs["width"]), int(kwargs["height"])
+    else:
+        full_hd = os.environ.get("YT_THUMB_FULLHD", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        target_w, target_h = default_thumbnail_canvas(
+            vertical=(v_mode == "short"),
+            full_hd=full_hd,
+        )
 
     bg_image_path = (
         kwargs.get("bg_image_path")

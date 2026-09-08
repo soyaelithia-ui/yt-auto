@@ -12,9 +12,11 @@ from src.media.hybrid_engine import (
     KEN_BURNS_SPLIT_THRESHOLD_SEC,
     KEN_BURNS_ZOOM_END,
     KEN_BURNS_ZOOM_START,
+    MAX_REENCODE_SHOTS_PER_MIN,
     HybridVideoEngine,
     build_ken_burns_zoompan_filter,
     canonical_ken_burns_params,
+    max_reencoded_shots,
     plan_ken_burns_still_segments,
 )
 from src.scene_manifest import CameraMotionConfig, HybridAIConfig, SceneConfig
@@ -85,6 +87,15 @@ def test_45s_still_scene_splits_into_ken_burns_segments():
     assert len(set(pans)) >= 2
 
 
+def test_reencode_cap_per_minute_bounds_still_segments():
+    assert max_reencoded_shots(45.0) == MAX_REENCODE_SHOTS_PER_MIN
+    assert max_reencoded_shots(60.0) == MAX_REENCODE_SHOTS_PER_MIN
+    assert max_reencoded_shots(120.0) == MAX_REENCODE_SHOTS_PER_MIN * 2
+    segs = plan_ken_burns_still_segments(180.0, fps=30)
+    assert len(segs) <= max_reencoded_shots(180.0)
+    assert all(d <= KEN_BURNS_SPLIT_THRESHOLD_SEC for d, _f, _p in segs)
+
+
 def test_45s_still_render_emits_multiple_zoompan_segments(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
     engine = HybridVideoEngine()
@@ -120,14 +131,9 @@ def test_45s_still_render_emits_multiple_zoompan_segments(tmp_path: Path, monkey
         )
 
     zoompan_cmds = [c for c in seen["cmds"] if any("zoompan=" in str(x) for x in c)]
-    assert len(zoompan_cmds) >= 3
-    for cmd in zoompan_cmds:
-        joined = " ".join(str(x) for x in cmd)
-        assert "zoompan=" in joined
-        d_tok = [part for part in joined.replace("'", " ").split(":") if part.startswith("d=")]
-        assert d_tok, joined
-        frames = int(d_tok[0].split("=", 1)[1].split()[0])
-        dur = frames / 30.0
-        assert dur <= KEN_BURNS_SEGMENT_MAX_SEC + 1e-6
-        assert dur <= 20.0
-    assert any("-f" in c and "concat" in c for c in seen["cmds"])
+    assert len(zoompan_cmds) == 1
+    joined = " ".join(str(x) for x in zoompan_cmds[0])
+    assert joined.count("zoompan=") >= 3
+    assert "concat=n=" in joined
+    libx264_cmds = [c for c in seen["cmds"] if "libx264" in c]
+    assert len(libx264_cmds) == 1

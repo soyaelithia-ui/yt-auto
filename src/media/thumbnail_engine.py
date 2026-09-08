@@ -29,7 +29,7 @@ SYSTEM_FONT_CANDIDATES = [
 
 
 class ResilientThumbnailEngine:
-    """Engine for producing 1080p high-impact YouTube thumbnails."""
+    """Engine for producing 720p high-impact YouTube thumbnails (1080p opt-in)."""
 
     def __init__(self, custom_font_paths: Optional[List[str]] = None) -> None:
         self.font_candidates = (custom_font_paths or []) + SYSTEM_FONT_CANDIDATES
@@ -70,10 +70,10 @@ class ResilientThumbnailEngine:
         accent_color: Tuple[int, int, int] = (0, 255, 180),
         subtitle_color: Tuple[int, int, int] = (255, 255, 255),
         badge_color: Tuple[int, int, int] = (190, 25, 35),
-        width: int = 1920,
-        height: int = 1080,
+        width: int = 1280,
+        height: int = 720,
     ) -> Path:
-        """Generates a 1920x1080 high-contrast cinematic thumbnail."""
+        """Generates a 1280x720 high-contrast cinematic thumbnail (720p default)."""
         out_p = Path(output_path).resolve()
         out_p.parent.mkdir(parents=True, exist_ok=True)
 

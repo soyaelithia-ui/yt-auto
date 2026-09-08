@@ -46,6 +46,7 @@ from src.media.encode_defaults import (
     default_ffmpeg_threads,
     default_render_crf,
     default_render_preset,
+    loop_matches_target_geometry,
 )
 
 logger = get_logger("hybrid_video_engine")
@@ -59,12 +60,16 @@ __all__ = [
     "build_ken_burns_zoompan_filter",
     "canonical_ken_burns_params",
     "plan_ken_burns_still_segments",
+    "max_reencoded_shots",
+    "is_motion_loop_path",
+    "resolve_hybrid_motion_loop",
     "KEN_BURNS_MIN_DURATION_SEC",
     "KEN_BURNS_ZOOM_START",
     "KEN_BURNS_ZOOM_END",
     "KEN_BURNS_FPS",
     "KEN_BURNS_SEGMENT_MAX_SEC",
     "KEN_BURNS_SPLIT_THRESHOLD_SEC",
+    "MAX_REENCODE_SHOTS_PER_MIN",
     "ATMOSPHERIC_OVERLAY_OPACITY",
     "clamp_atmospheric_overlay_opacity",
     "resolve_hybrid_overlay_asset",
@@ -116,8 +121,13 @@ def force_pillow_particles_enabled(extra: Optional[Dict[str, Any]] = None) -> bo
     return False
 
 
+MOTION_LOOP_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
+ANIMATED_OVERLAY_SUFFIXES = {".gif", ".webp", ".mp4", ".webm", ".mov"}
+MAX_REENCODE_SHOTS_PER_MIN = 4
+
+
 def _hybrid_overlay_search_roots(kind_norm: str) -> List[Path]:
-    """CWD + repo assets/overlays, plus visual_bank overlays (and GIFs for tv_static)."""
+    """CWD + repo assets/overlays, plus visual_bank overlays (PNG only)."""
     from src.config import BASE_DIR
 
     roots: List[Path] = [Path("assets/overlays")]
@@ -132,8 +142,7 @@ def _hybrid_overlay_search_roots(kind_norm: str) -> List[Path]:
             channels = []
         for chan in channels:
             roots.append(chan / "overlays")
-            if kind_norm in ("tv_static", "tv-static", "static"):
-                roots.append(chan / "ambient_gifs")
+            # Never scan ambient_gifs: full-frame GIF decode is banned on the hot path.
     seen: set[str] = set()
     out: List[Path] = []
     for root in roots:
@@ -149,13 +158,13 @@ def resolve_hybrid_overlay_asset(
     kind: str,
     particle_type: Optional[str] = None,
 ) -> Optional[Path]:
-    """Return a pre-made overlay PNG/GIF (never a principal-plane background).
+    """Return a pre-made static overlay PNG (never a principal-plane background).
 
     Conventions:
     - particles: ``assets/overlays/particles_<type>.png`` then ``particles.png``
     - god_rays: ``assets/overlays/god_rays.png``
     - film_grain / vignette / tv_static: ``assets/overlays`` then
-      ``assets/visual_bank/*/overlays`` (tv_static may be a GIF under ambient_gifs)
+      ``assets/visual_bank/*/overlays`` (PNG only; GIFs are skipped)
     """
     kind_norm = (kind or "").strip().lower()
     candidates: List[Path] = []
@@ -178,16 +187,13 @@ def resolve_hybrid_overlay_asset(
                 ]
             )
         elif kind_norm in ("tv_static", "tv-static", "static"):
-            candidates.extend(
-                [
-                    root / "tv_static.png",
-                    root / "tv_static.gif",
-                ]
-            )
+            candidates.append(root / "tv_static.png")
         else:
             return None
     for cand in candidates:
         try:
+            if cand.suffix.lower() in ANIMATED_OVERLAY_SUFFIXES:
+                continue
             if cand.is_file() and cand.stat().st_size > 0:
                 return cand.resolve()
         except OSError:
@@ -313,6 +319,11 @@ def plan_ken_burns_still_segments(
         n -= 1
     while dur / n > KEN_BURNS_SPLIT_THRESHOLD_SEC:
         n += 1
+    cap = max_reencoded_shots(dur)
+    if n > cap:
+        n = cap
+        while dur / n > KEN_BURNS_SPLIT_THRESHOLD_SEC:
+            n += 1
 
     base = round(dur / n, 3)
     durs = [base] * (n - 1)
@@ -330,6 +341,71 @@ def clamp_atmospheric_overlay_opacity(opacity: float | None = None) -> float:
     """Keep film_grain / vignette / tv_static in the 15–35% overlay band."""
     val = ATMOSPHERIC_OVERLAY_OPACITY if opacity is None else float(opacity)
     return max(ATMOSPHERIC_OVERLAY_OPACITY_MIN, min(ATMOSPHERIC_OVERLAY_OPACITY_MAX, val))
+
+
+def max_reencoded_shots(
+    duration_sec: float,
+    per_minute: int = MAX_REENCODE_SHOTS_PER_MIN,
+) -> int:
+    """Cap libx264 Ken Burns encodes per minute of output (still path only)."""
+    dur = max(0.0, float(duration_sec))
+    minutes = 1 if dur <= 0 else int(math.ceil(dur / 60.0))
+    return max(1, int(per_minute) * minutes)
+
+
+def is_motion_loop_path(path: Union[Path, str, None]) -> bool:
+    """True when ``path`` is a non-empty motion video (never a still)."""
+    if not path:
+        return False
+    p = Path(path)
+    try:
+        return (
+            p.is_file()
+            and p.suffix.lower() in MOTION_LOOP_SUFFIXES
+            and p.stat().st_size > 0
+        )
+    except OSError:
+        return False
+
+
+def resolve_hybrid_motion_loop(
+    scene: SceneConfig,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Optional[Path]:
+    """Pick a catalog/scenery motion loop for stream-copy planes (skip grey/overlays)."""
+    extra = extra or {}
+    cfg = scene.hybrid_ai_config or HybridAIConfig()
+    candidates: List[Any] = [
+        extra.get("video_loop_path"),
+        extra.get("loop_path"),
+        extra.get("background_video_path"),
+        cfg.background_image_path,
+        scene.image_path,
+        scene.asset_path,
+    ]
+    extra_loops = extra.get("loop_paths")
+    if isinstance(extra_loops, (list, tuple)):
+        candidates.extend(extra_loops)
+    seen: set[str] = set()
+    for raw in candidates:
+        if not raw:
+            continue
+        p = Path(str(raw))
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not is_motion_loop_path(p):
+            continue
+        try:
+            from src.media.loop_engine import is_grey_procedural_plane, is_overlay_not_plane0
+
+            if is_overlay_not_plane0(p) or is_grey_procedural_plane(path=p):
+                continue
+        except Exception:
+            pass
+        return p.resolve()
+    return None
 
 
 class HybridVideoEngine(BaseVideoCompositor):
@@ -459,8 +535,6 @@ class HybridVideoEngine(BaseVideoCompositor):
         particles = cfg.particles or ParticleConfig()
         tension = max(1, min(5, scene.tension_level))
 
-        bg_image = self._resolve_background_image(cfg.background_image_path, width, height)
-
         # Still background path uses Ken Burns (loops are assembled elsewhere — do not KB loops).
         # Canonical defaults: zoom 1.00→1.10; keep scene duration for narration sync.
         zoom_start = float(camera.start_zoom)
@@ -483,8 +557,23 @@ class HybridVideoEngine(BaseVideoCompositor):
         )
         use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
         use_pillow_frames = force_pillow_hybrid_frames_enabled(extra_kwargs) or use_pillow_bridge
+        motion_loop = None if use_pillow_frames else resolve_hybrid_motion_loop(scene, extra_kwargs)
+        still_bg = cfg.background_image_path or scene.image_path or scene.asset_path
 
-        if use_pillow_frames:
+        if motion_loop is not None:
+            self._render_scene_loop_hard_cuts(
+                loop_path=motion_loop,
+                duration=duration,
+                fps=fps,
+                width=width,
+                height=height,
+                out_path=out_path,
+                crf=crf,
+                preset=preset,
+                threads_val=threads_val,
+            )
+        elif use_pillow_frames:
+            bg_image = self._resolve_background_image(still_bg, width, height)
             self._render_scene_pillow_rawvideo(
                 scene=scene,
                 bg_image=bg_image,
@@ -508,6 +597,7 @@ class HybridVideoEngine(BaseVideoCompositor):
                 use_pillow_bridge=use_pillow_bridge,
             )
         else:
+            bg_image = self._resolve_background_image(still_bg, width, height)
             self._render_scene_ffmpeg_camera(
                 scene=scene,
                 bg_image=bg_image,
@@ -615,79 +705,126 @@ class HybridVideoEngine(BaseVideoCompositor):
         threads_val: str,
         extra_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Ken Burns + FX via FFmpeg filter_complex (no Python rawvideo frame loop).
+        """Ken Burns + FX via one FFmpeg filter_complex (no Python rawvideo frame loop).
 
-        Still backgrounds longer than 20s are split into 12–15s zoompan subclips
-        with distinct pans and concat-demuxer hard cuts. Catalog loops are not
-        Ken-Burned (assembled on the loop/director path).
+        Still backgrounds longer than 20s are split into 12–15s zoompan segments
+        with distinct pans, concatenated in a single graph. Catalog loops are not
+        Ken-Burned (stream-copy hard cuts on the loop path).
         """
         use_pillow_overlays = force_pillow_particles_enabled(extra_kwargs)
         segments = plan_ken_burns_still_segments(duration, fps=fps, pan_direction=str(pan_dir))
+        if not segments:
+            segments = [(duration, total_frames, pan_dir)]
         with tempfile.TemporaryDirectory(prefix="hybrid_ff_") as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             bg_path = tmp_dir / "bg.png"
             bg_image.save(bg_path, format="PNG")
-
-            if len(segments) <= 1:
-                seg_dur, seg_frames, seg_pan = (
-                    segments[0] if segments else (duration, total_frames, pan_dir)
-                )
-                self._encode_still_ken_burns_clip(
-                    scene=scene,
-                    bg_path=bg_path,
-                    tmp_dir=tmp_dir,
-                    width=width,
-                    height=height,
-                    fps=fps,
-                    duration=seg_dur,
-                    total_frames=seg_frames,
-                    zoom_start=zoom_start,
-                    zoom_end=zoom_end,
-                    pan_dir=seg_pan,
-                    lighting=lighting,
-                    particles=particles,
-                    tension=tension,
-                    out_path=out_path,
-                    crf=crf,
-                    preset=preset,
-                    threads_val=threads_val,
-                    use_pillow_overlays=use_pillow_overlays,
-                )
-                return
-
-            clips: List[Path] = []
-            for i, (seg_dur, seg_frames, seg_pan) in enumerate(segments):
-                clip = tmp_dir / f"kb_seg_{i:03d}.mp4"
-                self._encode_still_ken_burns_clip(
-                    scene=scene,
-                    bg_path=bg_path,
-                    tmp_dir=tmp_dir,
-                    width=width,
-                    height=height,
-                    fps=fps,
-                    duration=seg_dur,
-                    total_frames=seg_frames,
-                    zoom_start=float(KEN_BURNS_ZOOM_START),
-                    zoom_end=float(KEN_BURNS_ZOOM_END),
-                    pan_dir=seg_pan,
-                    lighting=lighting,
-                    particles=particles,
-                    tension=tension,
-                    out_path=clip,
-                    crf=crf,
-                    preset=preset,
-                    threads_val=threads_val,
-                    use_pillow_overlays=use_pillow_overlays,
-                )
-                clips.append(clip)
-            self._concat_hard_cut_clips(
-                clips=clips,
-                out_path=out_path,
+            self._encode_still_ken_burns_clip(
+                scene=scene,
+                bg_path=bg_path,
                 tmp_dir=tmp_dir,
+                width=width,
+                height=height,
+                fps=fps,
+                segments=segments,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                lighting=lighting,
+                particles=particles,
+                tension=tension,
+                out_path=out_path,
                 crf=crf,
                 preset=preset,
                 threads_val=threads_val,
+                use_pillow_overlays=use_pillow_overlays,
             )
+
+    def _render_scene_loop_hard_cuts(
+        self,
+        *,
+        loop_path: Path,
+        duration: float,
+        fps: int,
+        width: int,
+        height: int,
+        out_path: Path,
+        crf: int,
+        preset: str,
+        threads_val: str,
+    ) -> None:
+        """Hard-cut/trim catalog loops with stream-copy when geometry matches."""
+        segments = plan_ken_burns_still_segments(duration, fps=fps)
+        if loop_matches_target_geometry(loop_path, width, height):
+            logger.info(
+                "Hybrid loop stream-copy trim loop=%s dur=%.3f planes=%d",
+                loop_path.name,
+                duration,
+                len(segments),
+            )
+            with tempfile.TemporaryDirectory(prefix="hybrid_loop_") as tmp_dir_str:
+                tmp_dir = Path(tmp_dir_str)
+                concat_list = tmp_dir / "loop_planes.txt"
+                loop_abs = str(loop_path.resolve()).replace("'", r"'\''")
+                with open(concat_list, "w", encoding="utf-8") as fh:
+                    for _seg_dur, _frames, _pan in segments:
+                        fh.write(f"file '{loop_abs}'\n")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list),
+                    "-t", f"{float(duration):.3f}",
+                    "-c:v", "copy",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+                try:
+                    run_ffmpeg(cmd)
+                    return
+                except FFmpegError as exc:
+                    logger.warning("Loop concat copy failed (%s); stream-loop copy", exc)
+            run_ffmpeg(
+                [
+                    "ffmpeg", "-y",
+                    "-stream_loop", "-1",
+                    "-i", str(loop_path),
+                    "-t", f"{float(duration):.3f}",
+                    "-c:v", "copy",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+            )
+            return
+        logger.info(
+            "Hybrid loop re-encode (geometry mismatch) loop=%s %dx%d",
+            loop_path.name,
+            width,
+            height,
+        )
+        run_ffmpeg(
+            [
+                "ffmpeg", "-y",
+                "-stream_loop", "-1",
+                "-i", str(loop_path),
+                "-t", f"{float(duration):.3f}",
+                "-vf", (
+                    f"scale={int(width)}:{int(height)}:force_original_aspect_ratio=increase,"
+                    f"crop={int(width)}:{int(height)},fps={int(fps)},format=yuv420p"
+                ),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-colorspace", "bt709",
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-crf", str(crf),
+                "-preset", preset,
+                "-threads", threads_val,
+                "-an",
+                "-movflags", "+faststart",
+                str(out_path),
+            ]
+        )
 
     def _encode_still_ken_burns_clip(
         self,
@@ -698,11 +835,9 @@ class HybridVideoEngine(BaseVideoCompositor):
         width: int,
         height: int,
         fps: int,
-        duration: float,
-        total_frames: int,
+        segments: List[Tuple[float, int, str]],
         zoom_start: float,
         zoom_end: float,
-        pan_dir: str,
         lighting: LightingConfig,
         particles: ParticleConfig,
         tension: int,
@@ -712,22 +847,45 @@ class HybridVideoEngine(BaseVideoCompositor):
         threads_val: str,
         use_pillow_overlays: bool,
     ) -> None:
-        """One zoompan encode (duration already capped to ≤20s by the planner)."""
+        """One zoompan (or split+concat zoompans) encode; overlays after concat."""
+        if not segments:
+            raise HybridVideoError("Ken Burns still encode produced no segments")
+        duration = sum(float(s[0]) for s in segments)
+        total_frames = sum(int(s[1]) for s in segments)
         inputs: List[str] = ["-loop", "1", "-i", str(bg_path)]
         filter_parts: List[str] = []
         overlay_idx = 1
 
-        zoompan = build_ken_burns_zoompan_filter(
-            width=width,
-            height=height,
-            fps=fps,
-            total_frames=total_frames,
-            zoom_start=zoom_start,
-            zoom_end=zoom_end,
-            pan_direction=str(pan_dir),
-        )
-        # Keep RGBA until overlays finish so alpha composites stay correct.
-        filter_parts.append(f"[0:v]{zoompan},format=rgba[base]")
+        if len(segments) == 1:
+            _seg_dur, seg_frames, seg_pan = segments[0]
+            zoompan = build_ken_burns_zoompan_filter(
+                width=width,
+                height=height,
+                fps=fps,
+                total_frames=seg_frames,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                pan_direction=str(seg_pan),
+            )
+            filter_parts.append(f"[0:v]{zoompan},format=rgba[base]")
+        else:
+            n = len(segments)
+            split_labs = "".join(f"[i{i}]" for i in range(n))
+            filter_parts.append(f"[0:v]split={n}{split_labs}")
+            concat_in = ""
+            for i, (_seg_dur, seg_frames, seg_pan) in enumerate(segments):
+                zoompan = build_ken_burns_zoompan_filter(
+                    width=width,
+                    height=height,
+                    fps=fps,
+                    total_frames=seg_frames,
+                    zoom_start=float(KEN_BURNS_ZOOM_START),
+                    zoom_end=float(KEN_BURNS_ZOOM_END),
+                    pan_direction=str(seg_pan),
+                )
+                filter_parts.append(f"[i{i}]{zoompan},format=rgba[s{i}]")
+                concat_in += f"[s{i}]"
+            filter_parts.append(f"{concat_in}concat=n={n}:v=1:a=0[base]")
         current = "base"
 
         if lighting.volumetric_rays:
@@ -768,6 +926,7 @@ class HybridVideoEngine(BaseVideoCompositor):
             height=height,
             tension=tension,
             lighting=lighting,
+            duration=duration,
         )
 
         if lighting.flicker_frequency > 0.0:
@@ -808,11 +967,11 @@ class HybridVideoEngine(BaseVideoCompositor):
             str(out_path),
         ]
         logger.info(
-            "Hybrid FFmpeg camera path scene=%s frames=%d filter_len=%d pan=%s",
+            "Hybrid FFmpeg camera path scene=%s frames=%d filter_len=%d planes=%d",
             scene.scene_id,
             total_frames,
             len(filter_complex),
-            pan_dir,
+            len(segments),
         )
         run_ffmpeg(ffmpeg_cmd)
 
@@ -1020,10 +1179,9 @@ class HybridVideoEngine(BaseVideoCompositor):
     ) -> Tuple[str, int]:
         """Attach a static RGBA PNG (or looping GIF) as the next overlay input."""
         suffix = overlay_path.suffix.lower()
-        if suffix in {".gif", ".webp", ".mp4", ".webm", ".mov"}:
-            inputs.extend(["-stream_loop", "-1", "-i", str(overlay_path)])
-        else:
-            inputs.extend(["-loop", "1", "-i", str(overlay_path)])
+        if suffix in ANIMATED_OVERLAY_SUFFIXES:
+            return current, overlay_idx
+        inputs.extend(["-loop", "1", "-i", str(overlay_path)])
         prep = f"[{overlay_idx}:v]format=rgba"
         if width and height:
             prep += f",scale={int(width)}:{int(height)}"
@@ -1046,6 +1204,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         height: int,
         tension: int,
         lighting: LightingConfig,
+        duration: float = 1.0,
     ) -> Tuple[str, int]:
         """film_grain / vignette / tv_static as 15–35% overlays, never plane-0."""
         opacity = clamp_atmospheric_overlay_opacity()
@@ -1090,6 +1249,16 @@ class HybridVideoEngine(BaseVideoCompositor):
                     width=width,
                     height=height,
                 )
+            else:
+                lavfi = self._build_ffmpeg_tv_static_lavfi(width, height, duration, opacity)
+                current, overlay_idx = self._attach_lavfi_overlay_input(
+                    inputs=inputs,
+                    filter_parts=filter_parts,
+                    current=current,
+                    overlay_idx=overlay_idx,
+                    lavfi=lavfi,
+                    label="static",
+                )
         return current, overlay_idx
 
     def _attach_lavfi_overlay_input(
@@ -1110,6 +1279,18 @@ class HybridVideoEngine(BaseVideoCompositor):
             f"[{current}][{label}]overlay=0:0:format=auto:shortest=1[{out}]"
         )
         return out, overlay_idx + 1
+
+    def _build_ffmpeg_tv_static_lavfi(
+        self, width: int, height: int, duration: float, opacity: float
+    ) -> str:
+        """Light geq/noise static — never a full-frame GIF decode."""
+        aa = clamp_atmospheric_overlay_opacity(opacity)
+        alls = 18
+        return (
+            f"color=c=black@0.0:s={int(width)}x{int(height)}:d={max(0.2, float(duration)):.3f},"
+            f"format=rgba,noise=alls={alls}:allf=t+u,format=rgba,"
+            f"colorchannelmixer=rr=0.9:gg=0.9:bb=0.95:aa={aa:.3f}"
+        )
 
     def _build_ffmpeg_god_rays_lavfi(
         self, width: int, height: int, duration: float, lighting: LightingConfig
@@ -1297,7 +1478,7 @@ class HybridVideoEngine(BaseVideoCompositor):
 
     def _resolve_background_image(self, bg_path: Optional[str], target_w: int, target_h: int) -> Image.Image:
         """Loads and prepares high-resolution base background image."""
-        if bg_path and Path(bg_path).is_file():
+        if bg_path and Path(bg_path).is_file() and Path(bg_path).suffix.lower() not in MOTION_LOOP_SUFFIXES:
             try:
                 img = Image.open(bg_path).convert("RGB")
                 # Ensure it covers target dimensions with margin for zoompan
