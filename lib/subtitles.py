@@ -454,19 +454,13 @@ def _repair_dangling_events(
         merged: list[tuple[float, float, str]] = []
         for start, end, text in events:
             if merged and _line_ends_dangling(merged[-1][2]):
-                pieces = text.split(" ")
-                combined_len = len(_strip_ass_tags(merged[-1][2])) + 1 + len(_strip_ass_tags(pieces[0] if pieces else ""))
-                if pieces and _strip_ass_tags(pieces[0]) and combined_len <= 52:
-                    merged[-1] = (
-                        merged[-1][0],
-                        merged[-1][1],
-                        merged[-1][2] + " " + pieces[0],
-                    )
-                    remainder = " ".join(pieces[1:]).strip()
-                    if remainder:
-                        merged.append((start, end, remainder))
+                prev_parts = merged[-1][2].split(" ")
+                stolen = prev_parts[-1]
+                head = " ".join(prev_parts[:-1]).strip()
+                if head and stolen:
+                    merged[-1] = (merged[-1][0], merged[-1][1], head)
+                    text = stolen + " " + text
                     fixed = True
-                    continue
             merged.append((start, end, text))
         events = merged
         if not fixed:
