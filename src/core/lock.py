@@ -54,6 +54,8 @@ class ChannelLock:
     Uses kernel-managed fcntl.flock to guarantee OS-level multi-process mutual exclusion.
     """
 
+    DEFAULT_TIMEOUT: float = 30.0
+
     def __init__(
         self,
         channel_name: str = "global",
@@ -63,7 +65,7 @@ class ChannelLock:
         poll_interval: float = 0.5,
     ) -> None:
         self.channel_name = channel_name if channel_name else "global"
-        self.timeout = timeout
+        self.timeout = self.DEFAULT_TIMEOUT if timeout is None else float(timeout)
         self.poll_interval = max(0.05, float(poll_interval))
         self._file_handle: Optional[Any] = None
         self._acquired: bool = False
@@ -93,7 +95,12 @@ class ChannelLock:
     def path(self) -> str:
         return self.lock_file
 
-    def acquire(self, timeout: Optional[float] = None, poll_interval: Optional[float] = None) -> bool:
+    def acquire(
+        self,
+        timeout: Optional[float] = None,
+        poll_interval: Optional[float] = None,
+        reentrant: bool = False,
+    ) -> bool:
         """
         Acquires exclusive lock on channel lock file.
         If timeout is provided, retries acquisition every poll_interval seconds until acquired or timeout expires.
@@ -102,13 +109,18 @@ class ChannelLock:
         if self._acquired and self._file_handle is not None:
             return True
 
-        # Reentrancy check: if this channel is already locked in this process by acquire_lock
-        held_lock = _active_locks.get(self.channel_name)
-        if held_lock is not None and held_lock._acquired and held_lock._file_handle is not None:
-            self._file_handle = held_lock._file_handle
-            self._acquired = True
-            self._is_reentrant = True
-            return True
+        if reentrant:
+            held_lock = _active_locks.get(self.channel_name)
+            if (
+                held_lock is not None
+                and held_lock._acquired
+                and held_lock._file_handle is not None
+                and os.path.abspath(held_lock.path) == os.path.abspath(self.path)
+            ):
+                self._file_handle = held_lock._file_handle
+                self._acquired = True
+                self._is_reentrant = True
+                return True
 
         effective_timeout = timeout if timeout is not None else self.timeout
         effective_poll = poll_interval if poll_interval is not None else self.poll_interval
@@ -187,11 +199,28 @@ class ChannelLock:
         self._acquired = False
 
     def __enter__(self) -> ChannelLock:
-        self.acquire(timeout=self.timeout, poll_interval=self.poll_interval)
+        held_lock = _active_locks.get(self.channel_name)
+        if (
+            held_lock is not None
+            and held_lock._acquired
+            and held_lock._file_handle is not None
+            and os.path.abspath(held_lock.path) == os.path.abspath(self.path)
+        ):
+            self._file_handle = held_lock._file_handle
+            self._acquired = True
+            self._is_reentrant = True
+            return self
+
+        self.acquire(timeout=self.timeout, poll_interval=self.poll_interval, reentrant=True)
+        _active_locks[self.channel_name] = self
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self.release()
+        try:
+            self.release()
+        finally:
+            if not self._is_reentrant and _active_locks.get(self.channel_name) is self:
+                _active_locks.pop(self.channel_name, None)
 
 
 _active_locks: dict[str, ChannelLock] = {}
@@ -214,7 +243,7 @@ def acquire_lock(
         timeout=timeout,
     )
     try:
-        lock.acquire()
+        lock.acquire(reentrant=True)
         _active_locks[_legacy_active_channel] = lock
     except ChannelLockError as exc:
         print(str(exc))

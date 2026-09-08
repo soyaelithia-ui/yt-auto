@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 class CanonicalChannel(str, Enum):
     MOKU = "moku"
     AELITHIA = "aelithia"
+    SCIFI = "scifi"
 
 
 CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
@@ -31,6 +32,9 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
     "aita": CanonicalChannel.AELITHIA,
     "aita_drama": CanonicalChannel.AELITHIA,
     "aita-drama": CanonicalChannel.AELITHIA,
+    "scifi": CanonicalChannel.SCIFI,
+    "singularidad_scifi": CanonicalChannel.SCIFI,
+    "singularidad-scifi": CanonicalChannel.SCIFI,
 }
 
 LEGACY_ALIASES: Final[frozenset[str]] = frozenset({"terror", "soy_el_malo", "scp_shorts", "moku_terror", "aita_drama"})
@@ -40,7 +44,10 @@ def canonical_channel(value: str | CanonicalChannel) -> CanonicalChannel | str:
     """Resolve input aliases but never guess an absent or unknown channel."""
     if isinstance(value, CanonicalChannel):
         return value
-    normalized = str(value or "").strip().lower()
+    raw_str = str(value or "").strip()
+    if any(char in raw_str for char in (";", "&", "|", "`", "$", ">", "<", "\n", "\r")):
+        raise ValueError(f"Canal inválido o sospechoso: {value!r}")
+    normalized = raw_str.lower()
     if not normalized:
         raise ValueError(f"Canal desconocido o ausente: {value!r}")
     if normalized in CHANNEL_ALIASES:

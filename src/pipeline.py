@@ -181,14 +181,18 @@ def _catalog_shots_from_manifest(
     manifest: dict[str, Any],
     loop_engine: Any,
     orientation: str,
+    channel: str | None = None,
 ) -> tuple[list[str], list[float], str]:
     """Turn a scene-planner manifest into loop paths + durations (no pixel burn).
 
     Live director mix: majority of shots reuse one settled background (already
     decided, not negotiated). A minority is designed in the moment. Does not
     bake or grow a loop catalog.
+    For horizontal/longform videos, rotates backgrounds across scenes with channel
+    thematic coherence.
     """
-    from src.agents.shot_mix import DESIGNED, assign_roles
+    import inspect
+    from src.agents.shot_mix import DESIGNED, SETTLED, assign_roles
 
     scenes = manifest.get("scenes") or []
     usable: list[dict[str, Any]] = []
@@ -219,14 +223,19 @@ def _catalog_shots_from_manifest(
     total_dur = sum(float(item["duration"]) for item in usable)
     max_settled_dur = (total_dur * 0.24) if (len(usable) > 4 or (len(usable) == 4 and total_dur > 40.0)) else 90.0
     asset_durations: dict[str, float] = {}
+    is_horizontal = str(orientation).strip().lower() in ("horizontal", "16:9", "longform")
 
     for idx, (item, role) in enumerate(zip(usable, roles)):
         dur = float(item["duration"])
         durs.append(dur)
         item["scene"]["director_role"] = role
         settled_elapsed += dur
+
+        # Vertical/shorts: reuse settled under duration caps.
+        # Horizontal/longform: always rotate for thematic variety (PR #69).
         if (
-            role != DESIGNED
+            not is_horizontal
+            and role != DESIGNED
             and settled_path is not None
             and (asset_durations.get(settled_path, 0.0) + dur <= max_settled_dur)
             and (len(usable) <= 4 or settled_elapsed <= max_settled_dur)
@@ -234,28 +243,50 @@ def _catalog_shots_from_manifest(
             paths.append(settled_path)
             asset_durations[settled_path] = asset_durations.get(settled_path, 0.0) + dur
             continue
+
         exclude = [p for p, d in asset_durations.items() if (d + dur) > max_settled_dur]
+        resolve_kwargs: dict[str, Any] = {
+            "allow_fallback": True,
+            "orientation": orientation,
+            "seed": idx * 79 + 17 if not is_horizontal else idx,
+            "exclude_loop_ids": exclude,
+        }
+        sig = inspect.signature(loop_engine.resolve_loop_video)
+        if "channel" in sig.parameters:
+            resolve_kwargs["channel"] = channel
+        if "exclude_loop_ids" not in sig.parameters:
+            resolve_kwargs.pop("exclude_loop_ids", None)
+
         try:
-            path = str(
-                loop_engine.resolve_loop_video(
-                    item["category"],
-                    allow_fallback=True,
-                    orientation=orientation,
-                    seed=idx * 79 + 17,
-                    exclude_loop_ids=exclude,
-                )
-            )
+            path = str(loop_engine.resolve_loop_video(item["category"], **resolve_kwargs))
         except TypeError:
-            path = str(
-                loop_engine.resolve_loop_video(
-                    item["category"],
-                    allow_fallback=True,
-                    orientation=orientation,
-                    seed=idx * 79 + 17,
-                )
-            )
-        settled_path = path
-        settled_elapsed = 0.0
+            resolve_kwargs.pop("exclude_loop_ids", None)
+            resolve_kwargs.pop("channel", None)
+            path = str(loop_engine.resolve_loop_video(item["category"], **resolve_kwargs))
+
+        # Avoid accidental back-to-back duplicates for designed/horizontal shots.
+        if paths and path == paths[-1]:
+            resolve_kwargs["seed"] = resolve_kwargs.get("seed", idx) + 1
+            try:
+                alt_path = str(loop_engine.resolve_loop_video(item["category"], **resolve_kwargs))
+            except TypeError:
+                alt_path = path
+            if alt_path == path and channel:
+                try:
+                    alt_kwargs = dict(resolve_kwargs)
+                    if "channel" in sig.parameters:
+                        alt_kwargs["channel"] = channel
+                    alt_path = str(loop_engine.resolve_loop_video(channel, **alt_kwargs))
+                except TypeError:
+                    pass
+            if alt_path != path:
+                path = alt_path
+
+        # Keep the first settled background sticky for later SETTLED roles (vertical).
+        # Designed / horizontal rotations still get fresh paths via resolve above.
+        if settled_path is None:
+            settled_path = path
+            settled_elapsed = 0.0
         asset_durations[path] = asset_durations.get(path, 0.0) + dur
         paths.append(path)
     return paths, durs, last_cat
@@ -652,12 +683,22 @@ def run_pipeline_once(
 
             words_min = 160 if not is_long_lane else max(LONG_MIN_WORDS, lane.words_min)
             words_max = None if is_long_lane else lane.words_max
+            curate_provider = (
+                "C"
+                if (
+                    is_test_environment()
+                    or story_id.startswith("auto-")
+                    or str(story.get("source_url", "")).startswith("https://local.automation/")
+                    or os.environ.get("FAST_CURATE") == "1"
+                )
+                else "A"
+            )
             script = _dispatch_curate_script(
                 content,
                 title,
                 additional_stories=[] if not is_long_lane or directed else additional,
                 min_words=words_min,
-                provider="C" if is_test_environment() else "A",
+                provider=curate_provider,
                 channel=channel_name,
                 strict_single_story=directed or not is_long_lane,
                 max_words=words_max,
@@ -988,7 +1029,7 @@ def run_pipeline_once(
                 compositor_metrics = multi_compositor.render(
                     manifest_path=scene_manifest_path,
                     output_video_path=video_path,
-                    # Low-CPU defaults (compose RENDER_PRESET=veryfast, CRF 21).
+                    # Low-CPU defaults (compose RENDER_PRESET=veryfast, CRF 19).
                     # Avoid preset=slow on the hot path — huge CPU/RAM for little YT gain.
                     crf=default_render_crf(),
                     preset=default_render_preset(),
@@ -1014,6 +1055,7 @@ def run_pipeline_once(
                 from src.core.scenic_detector import detect_adaptive_theme
                 loop_engine = LoopVideoEngine()
                 planned = False
+                manifest_payload: dict[str, Any] = {}
                 try:
                     from src.agents.script_curator import CinematicScriptCuratorAgent
                     from src.agents.art_director import ArtDirectorMoodAgent
@@ -1064,7 +1106,10 @@ def run_pipeline_once(
                         encoding="utf-8",
                     )
                     scene_bg_list, shot_durations, target_category = _catalog_shots_from_manifest(
-                        manifest_payload, loop_engine, lane.orientation
+                        manifest_payload,
+                        loop_engine,
+                        lane.orientation,
+                        channel=channel_name,
                     )
                     if scene_bg_list and shot_durations:
                         resolved_loop_path = scene_bg_list[0]
@@ -1165,6 +1210,7 @@ def run_pipeline_once(
                             allow_fallback=True,
                             orientation=lane.orientation,
                             seed=s_idx * 101,
+                            channel=channel_name,
                         )
                         scene_bg_list.append(str(shot_path))
                         scenes_plan.append({
@@ -1258,12 +1304,25 @@ def run_pipeline_once(
                         for sc in (manifest_payload.get("scenes") or [])
                         if isinstance(sc, dict)
                     ],
+                    channel=channel_name,
                 )
-                visual_integrity_report = {
-                    "passed": True,
-                    "bypassed": True,
+                quality_metrics = (
+                    compositor_metrics.get("quality_metrics")
+                    if isinstance(compositor_metrics, dict)
+                    else {}
+                ) or {}
+                # Seed only real stamped metrics. Never mark bypassed/passed here —
+                # validate_prepublication must still run black/luminance probes when
+                # the bank entry lacks them (keeps look honest).
+                visual_integrity_report: dict[str, Any] = {
                     "engine": "loop",
                 }
+                if quality_metrics and isinstance(quality_metrics, dict):
+                    if "longest_black_seconds" in quality_metrics:
+                        visual_integrity_report["longest_black_seconds"] = quality_metrics["longest_black_seconds"]
+                        visual_integrity_report["black_segments"] = quality_metrics.get("black_segments", [])
+                    if quality_metrics.get("perceptual_luminance") is not None:
+                        visual_integrity_report["perceptual_luminance"] = quality_metrics["perceptual_luminance"]
                 repository.record_artifact(
                     run_id,
                     "video",

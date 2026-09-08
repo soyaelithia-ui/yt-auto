@@ -139,3 +139,43 @@ class TestLongformResolutionCurrent:
         assert any(
             "resolución de video distinta de 1920x1080" in issue for issue in report.issues
         )
+
+
+class TestPrecomputedVisualQualityMetrics:
+    """Verifies that precomputed blackdetect and luminance metrics in precomputed_visual
+    are respected without calling detect_long_black_frames or analyze_perceptual_luminance."""
+
+    def test_precomputed_visual_bypasses_expensive_analysis(self, monkeypatch, tmp_path):
+        _mock_probe_helpers(monkeypatch, width=1920, height=1080, duration_sec=600.0)
+
+        # Make detect_long_black_frames and analyze_perceptual_luminance fail if called
+        def _fail_black(_):
+            raise AssertionError("detect_long_black_frames should not be called")
+
+        def _fail_lum(_):
+            raise AssertionError("analyze_perceptual_luminance should not be called")
+
+        monkeypatch.setattr("src.core.quality.detect_long_black_frames", _fail_black)
+        monkeypatch.setattr("src.core.quality.analyze_perceptual_luminance", _fail_lum)
+
+        kwargs = _build_gate_inputs(tmp_path, 600.0, ass_playres=(1920, 1080), scene_duration=20.0, scene_count=30)
+        from src.core.quality import luminance_params_fingerprint, LUMINANCE_SAMPLE_FPS
+        precomputed = {
+            "passed": True,
+            "bypassed": True,
+            "engine": "loop",
+            "longest_black_seconds": 0.0,
+            "black_segments": [],
+            "perceptual_luminance": {
+                "avg_luminance": 75.0,
+                "dark_ratio": 0.0,
+                "passed": True,
+                "luminance_params": luminance_params_fingerprint(LUMINANCE_SAMPLE_FPS),
+            },
+        }
+        report = validate_prepublication(**kwargs, video_mode="longform", precomputed_visual=precomputed)
+        assert report.passed, report.issues
+        assert report.facts.get("black_source") == "precomputed_visual"
+        assert report.facts.get("luminance_source") == "precomputed_visual"
+        assert report.facts.get("longest_black_seconds") == 0.0
+

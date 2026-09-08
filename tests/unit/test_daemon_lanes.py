@@ -59,7 +59,7 @@ class TestStartDaemonLanes:
         # No stories at all: every pick is LANE_EMPTY.
         monkeypatch.setattr("src.pipeline.run_pipeline_once", lambda **kw: {"status": "X"})
         results = daemon_module.start_daemon_lanes(
-            interval_seconds=1, max_picks=3, db_path=db_path, max_ticks=1
+            interval_seconds=1, max_picks=6, db_path=db_path, max_ticks=1
         )
         assert results and all(r.get("status") == "LANE_EMPTY" for r in results)
         repo = QueueRepository(db_path)
@@ -228,3 +228,102 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
         generate_only=True,
     )
     assert res["status"] in {"RENDERED", "SUCCESS"}
+
+
+class TestDaemonSingletonLockBypass:
+    def test_singleton_lock_bypass_ctl_concurrent_invocation(self):
+        import os
+        import shutil
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        if not shutil.which("tmux"):
+            pytest.skip("tmux is not installed")
+
+        ctl_script = Path(__file__).resolve().parent.parent.parent / "deploy" / "ctl.sh"
+        assert ctl_script.is_file()
+
+        env = dict(os.environ)
+        env["PYTHON_BIN"] = sys.executable
+
+        # Stop any previous instance
+        subprocess.run(["bash", str(ctl_script), "stop", "sched"], capture_output=True, env=env)
+
+        try:
+            # First invocation starts or detects sched
+            proc1 = subprocess.run(
+                ["bash", str(ctl_script), "start", "sched"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            assert proc1.returncode == 0, f"proc1 failed: stdout={proc1.stdout}, stderr={proc1.stderr}"
+            assert "STARTED" in proc1.stdout or "already running" in proc1.stdout
+
+            # Concurrent invocation of start sched exits 0 with already running message
+            proc = subprocess.run(
+                ["bash", str(ctl_script), "start", "sched"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            assert proc.returncode == 0, f"proc2 failed: stdout={proc.stdout}, stderr={proc.stderr}"
+            assert "already running" in proc.stdout or "STARTED" in proc.stdout
+            assert "skip" in proc.stdout or "tmux:" in proc.stdout
+
+            # Status query while service is running must succeed and show RUNNING
+            proc_status = subprocess.run(
+                ["bash", str(ctl_script), "status"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            assert proc_status.returncode == 0, f"status failed: stdout={proc_status.stdout}, stderr={proc_status.stderr}"
+            assert "sched" in proc_status.stdout
+            assert "RUNNING" in proc_status.stdout
+        finally:
+            subprocess.run(["bash", str(ctl_script), "stop", "sched"], capture_output=True, env=env)
+
+        # Status query when stopped must succeed and show STOPPED
+        proc_stopped_status = subprocess.run(
+            ["bash", str(ctl_script), "status"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert proc_stopped_status.returncode == 0
+        assert "STOPPED" in proc_stopped_status.stdout
+
+    def test_acquire_singleton_returns_owner_pid_on_collision(self, tmp_path, monkeypatch):
+        import os
+        import sys
+        import subprocess
+        import deploy.tmux_scheduler as ts
+
+        lock_path = tmp_path / "test_tmux_scheduler.lock"
+        pid_path = tmp_path / "test_tmux_scheduler.pid"
+        monkeypatch.setattr(ts, "LOCK_FILE", lock_path)
+        monkeypatch.setattr(ts, "PID_FILE", pid_path)
+
+        # Primary owner acquires lock
+        owner_result = ts.acquire_singleton()
+        assert owner_result is None
+        assert pid_path.read_text().strip() == str(os.getpid())
+
+        # Secondary invocation in another process attempts to acquire same lock
+        code = f"""
+import sys, os
+from pathlib import Path
+import deploy.tmux_scheduler as ts
+ts.LOCK_FILE = Path('{lock_path}')
+ts.PID_FILE = Path('{pid_path}')
+res = ts.acquire_singleton()
+assert res == {os.getpid()}, f'Expected {os.getpid()}, got {{res}}'
+"""
+        subproc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        assert subproc.returncode == 0, subproc.stderr

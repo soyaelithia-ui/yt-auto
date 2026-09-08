@@ -1,0 +1,98 @@
+{
+  "version": "1.1.0",
+  "updated_at": "2026-09-06T20:19:08Z",
+  "master_loops_count": 9,
+  "master_loops": [
+    {
+      "filename": "moku_containment_facility_master_60s.mp4",
+      "title": "Moku Horror: Instalaciones Subterráneas y Confinamiento",
+      "category": "horror",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/horror/moku_containment_facility_master_60s.mp4"
+    },
+    {
+      "filename": "moku_dark_wilderness_master_60s.mp4",
+      "title": "Moku Horror: Bosque Abisal y Exteriores Malditos",
+      "category": "dark_forest",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/dark_forest/moku_dark_wilderness_master_60s.mp4"
+    },
+    {
+      "filename": "moku_vertical_shorts_master_60s.mp4",
+      "title": "Moku Horror: Shorts Vertical Master Loop 60s",
+      "category": "horror",
+      "orientation": "vertical",
+      "duration_sec": 60.458333,
+      "width": 1080,
+      "height": 1920,
+      "file_path": "assets/loops/vertical/horror/moku_vertical_shorts_master_60s.mp4"
+    },
+    {
+      "filename": "aelithia_cozy_interiors_master_60s.mp4",
+      "title": "Aelithia Drama: Interiores Cálidos y Rincones Acogedores",
+      "category": "drama",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/drama/aelithia_cozy_interiors_master_60s.mp4"
+    },
+    {
+      "filename": "aelithia_nocturne_city_master_60s.mp4",
+      "title": "Aelithia Drama: Ciudad Nocturna y Melancolía Urbana",
+      "category": "drama",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/drama/aelithia_nocturne_city_master_60s.mp4"
+    },
+    {
+      "filename": "aelithia_vertical_shorts_master_60s.mp4",
+      "title": "Aelithia Drama: Shorts Vertical Master Loop 60s",
+      "category": "drama",
+      "orientation": "vertical",
+      "duration_sec": 60.458333,
+      "width": 1080,
+      "height": 1920,
+      "file_path": "assets/loops/vertical/drama/aelithia_vertical_shorts_master_60s.mp4"
+    },
+    {
+      "filename": "scifi_deep_space_and_cyber_master_60s.mp4",
+      "title": "Singularidad Sci-Fi: Cosmos Profundo y Nebulosas",
+      "category": "scifi",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/scifi/scifi_deep_space_and_cyber_master_60s.mp4"
+    },
+    {
+      "filename": "scifi_cyber_infrastructure_master_60s.mp4",
+      "title": "Singularidad Sci-Fi: Infraestructura Cibernética e Hiperespacio",
+      "category": "scifi",
+      "orientation": "horizontal",
+      "duration_sec": 60.458333,
+      "width": 1920,
+      "height": 1080,
+      "file_path": "assets/loops/horizontal/scifi/scifi_cyber_infrastructure_master_60s.mp4"
+    },
+    {
+      "filename": "scifi_vertical_shorts_master_60s.mp4",
+      "title": "Singularidad Sci-Fi: Shorts Vertical Master Loop 60s",
+      "category": "scifi",
+      "orientation": "vertical",
+      "duration_sec": 60.458333,
+      "width": 1080,
+      "height": 1920,
+      "file_path": "assets/loops/vertical/scifi/scifi_vertical_shorts_master_60s.mp4"
+    }
+  ],
+  "total_atomic_clips": 55
+}

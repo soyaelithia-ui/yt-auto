@@ -14,7 +14,7 @@ services:
       FFMPEG_THREADS: "4"
       # R9: align effective encode quality with .env.example (CRF 21) while
       # keeping the veryfast preset; stream compose stderr to disk (R5).
-      RENDER_CRF: "21"
+      RENDER_CRF: "19"
       RENDER_PRESET: "veryfast"
       YT_COMPOSE_STREAM_STDERR: "1"
       BOT_HOME: /home/appuser

@@ -22,7 +22,11 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
-PY = str(PROJECT / ".venv" / "bin" / "python")
+PY = os.environ.get("PYTHON_BIN") or (
+    str(PROJECT / ".venv" / "bin" / "python")
+    if (PROJECT / ".venv" / "bin" / "python").exists()
+    else sys.executable
+)
 LOG_DIR = PROJECT / "logs"
 MAX_LOG_BYTES = 50 * 1024 * 1024
 PID_FILE = PROJECT / "logs" / "tmux_scheduler.pid"

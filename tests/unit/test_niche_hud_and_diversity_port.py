@@ -94,7 +94,7 @@ def test_multiact_hud_reencode_uses_encode_defaults(monkeypatch):
     assert "default_render_crf()" in src
     assert '"-crf", "19"' not in src
     assert default_render_preset() == "veryfast"
-    assert default_render_crf() == 21
+    assert default_render_crf() == 19
 
 
 def test_shorts_diversity_insufficient_scenes():
@@ -304,6 +304,18 @@ def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
         tmp_path / "templates",
     )
     (tmp_path / "templates").mkdir()
+    import src.media.thumbnails.asset_resolver as ar
+    monkeypatch.setattr(ar, "REPO_ROOT", tmp_path)
+
+    class FakeRepo:
+        def get_best_loop(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "src.core.catalog.LoopCatalogRepository",
+        lambda *a, **k: FakeRepo(),
+        raising=False,
+    )
 
     p1 = ThematicAssetResolver.resolve_scene_asset_path(
         channel_id="moku-scp", archetype="scp", scene_idx=1

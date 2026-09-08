@@ -141,3 +141,5 @@ Todas las composiciones FFmpeg y procesos de generación deben ejecutarse con m�
 - [ ] La suite de pruebas de regresión (`pytest tests/unit/`) pasa al 100% (0 fallos).
 - [ ] El demonio y el bot operan de manera ordenada en Tmux (`./deploy/ctl.sh status`).
 
+## PR #69 feature acceptance (verify_vps_github_status)
+- 6 lanes; stream-copy multi-scene loop composition; honest precomputed QA; CHANNEL_THEMES channel isolation.

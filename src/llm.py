@@ -695,11 +695,23 @@ def translate_title(
     if not title or not str(title).strip():
         return "Historia de Terror"
 
+    clean_t = clean_title(title)
+
+    # Prefer an injected client before the test-env Spanish short-circuit so
+    # duck-typed clients remain observable under YT_PROFILE=test.
     if client is not None:
         try:
             return client.translate_title(title=title)
         except Exception as exc:
             logger.warning("Custom client translate_title failed (%s); using local translation fallback", exc)
+
+    if is_spanish_text(clean_t):
+        return clean_t
+
+    from src.config import is_test_environment
+
+    if is_test_environment() or provider == "C":
+        return clean_t
 
     try:
         from src.agents.translator import TranslatorAgent
@@ -709,7 +721,7 @@ def translate_title(
     except Exception:
         pass
 
-    return clean_title(title)
+    return clean_t
 
 
 

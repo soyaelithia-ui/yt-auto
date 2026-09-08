@@ -114,6 +114,45 @@
           "duration_range": [600.0, 1800.0]
         }
       ]
+    },
+    "scifi_documentary_es": {
+      "description": "Perfil documental para expedientes de ciencia ficción y astrofísica en español",
+      "rotation_strategy": "stable_round_robin",
+      "lock_voice_per_run": true,
+      "approved_voices": [
+        {
+          "id": "es-ES-AlvaroNeural",
+          "provider": "edge-tts",
+          "language": "es-ES",
+          "variant": "analytical_documentary",
+          "speed": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "clinical",
+          "normalization": "scifi_standard",
+          "post_processing_chain": [
+            "loudness_norm_lufs_-14",
+            "sidechain_ducking"
+          ],
+          "duration_range": [60.0, 1800.0]
+        },
+        {
+          "id": "es-MX-JorgeNeural",
+          "provider": "edge-tts",
+          "language": "es-MX",
+          "variant": "deep_documentary",
+          "speed": "+0%",
+          "pitch": "+0Hz",
+          "volume": "+0%",
+          "pauses": "clinical",
+          "normalization": "scifi_standard",
+          "post_processing_chain": [
+            "loudness_norm_lufs_-14",
+            "sidechain_ducking"
+          ],
+          "duration_range": [60.0, 1800.0]
+        }
+      ]
     }
   }
 }

@@ -265,7 +265,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
             raw_theme = str(norm_arch or "dark_ambient").strip().lower().replace("-", "_").replace(" ", "_")
             cat = CATEGORY_ALIASES.get(raw_theme, raw_theme) or "dark_ambient"
             orient = "vertical" if is_vertical else "horizontal"
-            loop_rec = repo.get_best_loop(category=cat, orientation=orient)
+            loop_rec = repo.get_best_loop(category=cat, orientation=orient, seed=idx)
             if loop_rec and loop_rec.file_path and Path(loop_rec.file_path).is_file():
                 return Path(loop_rec.file_path)
         except Exception as exc:

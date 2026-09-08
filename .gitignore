@@ -97,6 +97,10 @@ dist/
 # AUD-05: music beds are versioned so fresh clones pass the QA gates.
 # Generated media stays ignored via the work/, output/ and data/ patterns.
 assets/scp_media/
+assets/background_scenes/**/*.jpg
+assets/background_scenes/staging/
+assets/background_scenes/.*_progress.json
+!assets/background_scenes/catalog.json
 *.mp4
 *.wav
 *.mp3

@@ -31,14 +31,18 @@ __all__ = [
     "compute_file_sha256",
     "resolve_loop_file_path",
     "CHANNEL_CATEGORIES",
+    "CHANNEL_THEMES",
     "SYNTHETIC_MONOCHROME_LOOP_IDS",
 ]
 
-CHANNEL_CATEGORIES: Dict[str, Tuple[str, ...]] = {
-    "moku": ("horror", "dark_forest", "cosmic_horror", "dark_ambient", "moku_horror", "tactical_chamber"),
-    "aelithia": ("drama", "cozy_ambient", "nostalgia", "aelithia_drama", "cozy_hearth"),
-    "scifi": ("scifi", "deep_space", "space_abyss", "synaptic_network", "singularidad_scifi"),
+CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
+    "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
+    "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
+    "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
 }
+
+# Back-compat alias used by main CI / tier-2 fallback callers
+CHANNEL_CATEGORIES: Dict[str, Tuple[str, ...]] = CHANNEL_THEMES
 
 SYNTHETIC_MONOCHROME_LOOP_IDS: Set[str] = {
     "loop_maritime_lighthouse_h_544374",
@@ -213,11 +217,21 @@ class LoopCatalogRepository:
     CREATE INDEX IF NOT EXISTS idx_video_loops_sha ON video_loops(sha256);
     """
 
+    CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
+        "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
+        "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
+        "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
+    }
+
+    DEFAULT_CATALOG_DB_PATH = str((BASE_DIR / "data" / "loop_catalog.db").resolve())
+
     def __init__(
         self,
-        db_path: str = DEFAULT_DB_PATH,
+        db_path: Optional[str] = None,
         auto_seed: Optional[bool] = None,
     ) -> None:
+        if db_path is None or db_path == DEFAULT_DB_PATH:
+            db_path = self.DEFAULT_CATALOG_DB_PATH if os.path.isfile(self.DEFAULT_CATALOG_DB_PATH) else DEFAULT_DB_PATH
         path_or_str = validate_db_path(db_path)
         self.db_path = ":memory:" if str(path_or_str) == ":memory:" else str(Path(path_or_str).expanduser().resolve())
         if auto_seed is not None:
@@ -529,24 +543,48 @@ class LoopCatalogRepository:
         category: str,
         orientation: str = "vertical",
         requested_tags: Optional[Sequence[str]] = None,
-        seed: Optional[int] = None,
+        seed: Any = None,
         exclude_loop_ids: Optional[Sequence[str]] = None,
         channel: Optional[str] = None,
     ) -> Optional[LoopRecord]:
         """
         Retrieves the optimal video loop matching category, orientation, and channel constraints.
-        Applies 3-tier fallback, deterministic seeded rotation, exclusion filtering, and
-        channel isolation.
+        Applies 3-tier fallback, PR CHANNEL_THEMES isolation, exclude filters, path-dedup
+        seeded rotation (multi-scene), and skips missing/synthetic media.
         """
         orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
         cat_clean = category.strip().lower().replace("-", "_").replace(" ", "_") if category else "dark_ambient"
         exclude_set = {str(e).strip() for e in (exclude_loop_ids or []) if e}
 
+        # Deduce channel from explicit arg, requested_tags, or category (PR #69)
+        eff_channel = channel.lower().strip() if channel else None
+        if not eff_channel and requested_tags:
+            for t in requested_tags:
+                t_low = t.lower().strip()
+                if t_low in self.CHANNEL_THEMES:
+                    eff_channel = t_low
+                    break
+        if not eff_channel:
+            for ch_name, themes in self.CHANNEL_THEMES.items():
+                if cat_clean in themes:
+                    eff_channel = ch_name
+                    break
+
         def _is_foreign_channel(rec: LoopRecord) -> bool:
-            if not channel:
+            if not eff_channel:
                 return False
             rec_ch = rec.channel
-            return bool(rec_ch and rec_ch.lower() != channel.lower())
+            if rec_ch and rec_ch.lower() != eff_channel.lower():
+                return True
+            if not rec_ch and eff_channel in self.CHANNEL_THEMES:
+                tags = {t.lower().strip() for t in rec.theme_tags}
+                other_channels = {c for c in self.CHANNEL_THEMES if c != eff_channel}
+                if any(oc in tags for oc in other_channels):
+                    return True
+                for oc, themes in self.CHANNEL_THEMES.items():
+                    if oc != eff_channel and rec.category in themes:
+                        return True
+            return False
 
         def _filter_and_validate(rows: List[sqlite3.Row]) -> List[LoopRecord]:
             valid_recs: List[LoopRecord] = []
@@ -565,8 +603,6 @@ class LoopCatalogRepository:
                 # Channel isolation: reject foreign channel
                 if _is_foreign_channel(rec):
                     continue
-
-                # Exclusion check (matches loop_id, file_path, or filename)
                 if (
                     rec.loop_id in exclude_set
                     or rec.file_path in exclude_set
@@ -574,8 +610,6 @@ class LoopCatalogRepository:
                     or str(resolve_loop_file_path(rec.file_path)) in exclude_set
                 ):
                     continue
-
-                # Validate file on disk (min 25KB)
                 p = resolve_loop_file_path(rec.file_path)
                 if p.is_file() and p.stat().st_size >= 25_000:
                     rec.file_path = str(p)
@@ -592,21 +626,38 @@ class LoopCatalogRepository:
             cur = conn.execute(sql_exact, (cat_clean, orient_clean))
             candidates = _filter_and_validate(cur.fetchall())
 
-        # --- Tier 2: Same-channel compatible fallback ---
-        if not candidates and channel and channel in CHANNEL_CATEGORIES:
-            compat_cats = [c for c in CHANNEL_CATEGORIES[channel] if c != cat_clean]
-            if compat_cats:
-                placeholders = ",".join("?" for _ in compat_cats)
-                sql_ch = f"""
-                SELECT * FROM video_loops
-                WHERE orientation = ? AND category IN ({placeholders})
-                ORDER BY usage_count ASC, last_used_at ASC, id ASC
-                """
-                with self._get_connection() as conn:
-                    cur = conn.execute(sql_ch, [orient_clean] + compat_cats)
-                    candidates = _filter_and_validate(cur.fetchall())
+        # --- Tier 2: Same-channel compatible fallback / multi-scene expansion ---
+        need_channel_pool = (
+            (not candidates and eff_channel and eff_channel in self.CHANNEL_THEMES)
+            or (
+                seed is not None
+                and eff_channel
+                and eff_channel in self.CHANNEL_THEMES
+                and len([c for c in candidates if c.category.strip().lower() == cat_clean]) <= 1
+            )
+        )
+        if need_channel_pool and eff_channel and eff_channel in self.CHANNEL_THEMES:
+            ch_cats = self.CHANNEL_THEMES[eff_channel]
+            placeholders = ",".join("?" for _ in ch_cats)
+            sql_ch = f"""
+            SELECT *, (CASE WHEN category = ? THEN 0 ELSE 1 END) AS cat_priority
+            FROM video_loops
+            WHERE orientation = ? AND (theme_tags LIKE ? OR category IN ({placeholders}))
+            ORDER BY cat_priority ASC, usage_count ASC, last_used_at ASC, id ASC
+            """
+            with self._get_connection() as conn:
+                cur = conn.execute(sql_ch, (cat_clean, orient_clean, f'%"{eff_channel}"%', *ch_cats))
+                channel_hits = _filter_and_validate(cur.fetchall())
+            if not candidates:
+                candidates = channel_hits
+            else:
+                seen_ids = {c.loop_id for c in candidates}
+                for rec in channel_hits:
+                    if rec.loop_id not in seen_ids:
+                        candidates.append(rec)
+                        seen_ids.add(rec.loop_id)
 
-        # --- Tier 3: Generic orientation fallback (preserving channel isolation) ---
+        # --- Tier 3: Generic orientation fallback (still channel-isolated via filter) ---
         if not candidates:
             sql_fb = """
             SELECT * FROM video_loops
@@ -628,31 +679,52 @@ class LoopCatalogRepository:
         if preferred:
             candidates = preferred
 
-        # --- Ranking and Selection ---
+        # Tag ranking with category priority
         if requested_tags:
             tag_set = {t.lower().strip() for t in requested_tags if t}
-            def tag_score(rec: LoopRecord) -> Tuple[int, int, str]:
+
+            def tag_score(rec: LoopRecord) -> Tuple[int, int, int, str]:
+                cat_prio = 0 if rec.category.strip().lower() == cat_clean else 1
                 rec_tags = {t.lower().strip() for t in rec.theme_tags}
                 match_count = len(tag_set.intersection(rec_tags))
-                return (-match_count, rec.usage_count, rec.last_used_at or "")
+                return (cat_prio, -match_count, rec.usage_count, rec.last_used_at or "")
 
             candidates.sort(key=tag_score)
-            best_match_count = len({t.lower().strip() for t in candidates[0].theme_tags}.intersection(tag_set))
-            top_group = [c for c in candidates if len({t.lower().strip() for t in c.theme_tags}.intersection(tag_set)) == best_match_count]
+
+        # Deduplicate by physical filename for multi-scene seeded rotation (PR)
+        seen_paths: set[str] = set()
+        distinct_records: list[LoopRecord] = []
+        for rec in candidates:
+            norm_name = Path(rec.file_path).name
+            if norm_name not in seen_paths:
+                seen_paths.add(norm_name)
+                distinct_records.append(rec)
+        if not distinct_records:
+            distinct_records = candidates
+
+        matching_cat_records = [r for r in distinct_records if r.category.strip().lower() == cat_clean]
+        if len(matching_cat_records) > 1:
+            candidate_pool = matching_cat_records
+        elif seed is not None and len(distinct_records) > 1:
+            # PR multi-scene: rotate across channel pool when category has a single hit
+            candidate_pool = distinct_records
         else:
-            top_group = candidates
+            candidate_pool = matching_cat_records or distinct_records
 
-        # Identify ties on minimum usage_count
-        min_usage = min(r.usage_count for r in top_group)
-        tied_candidates = [r for r in top_group if r.usage_count == min_usage]
+        # Main: lowest usage_count strictly precedes seed randomization
+        min_usage = min(r.usage_count for r in candidate_pool)
+        tied = [r for r in candidate_pool if r.usage_count == min_usage]
 
-        # Seed-based deterministic rotation vs strict LRU
-        if seed is not None:
-            tied_candidates.sort(key=lambda r: r.loop_id)
-            rng = random.Random(seed)
-            return rng.choice(tied_candidates)
+        if seed is not None and len(tied) > 1:
+            try:
+                idx = int(seed)
+                tied_sorted = sorted(tied, key=lambda r: r.loop_id)
+                # Prefer stable idx modulo for multi-scene (PR); works for equal-usage banks too
+                return tied_sorted[idx % len(tied_sorted)]
+            except (ValueError, TypeError):
+                return random.Random(seed).choice(sorted(tied, key=lambda r: r.loop_id))
 
-        return tied_candidates[0]
+        return tied[0]
 
     # Aliases
     get_loop_for_scene = get_best_loop

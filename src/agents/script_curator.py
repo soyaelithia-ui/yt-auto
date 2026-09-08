@@ -213,6 +213,180 @@ LANE_CURATION_CONFIGS = {
             },
         ],
     },
+    "aelithia-drama-shorts": {
+        "channel": "aelithia",
+        "target_format": "short",
+        "default_wpm": 165.0,
+        "target_scene_dur": 11.0,
+        "min_scene_dur": 8.0,
+        "max_scene_dur": 15.0,
+        "min_total_dur": 60.0,
+        "max_total_dur": 180.0,
+        "min_scenes": 4,
+        "max_scenes": 12,
+        "acts": [
+            {
+                "act_number": 1,
+                "act_title": "Acto I: Planteamiento del Conflicto Familiar",
+                "dramatic_role": "exposition_inception",
+                "tension_profile": [1, 2],
+                "moods": [
+                    "Cafetería con luz natural y rostros tensos",
+                    "Sala de estar moderna al anochecer con atmósfera cargada",
+                    "Cocina doméstica con miradas evasivas",
+                ],
+            },
+            {
+                "act_number": 2,
+                "act_title": "Acto II: La Exigencia Injusta y el Ultimátum",
+                "dramatic_role": "rising_action_dread",
+                "tension_profile": [3, 4],
+                "moods": [
+                    "Mesa de comedor con reproches directos",
+                    "Pasillo estrecho con tensión creciente",
+                    "Llamada telefónica acalorada en automóvil",
+                ],
+            },
+            {
+                "act_number": 3,
+                "act_title": "Acto III: La Decisión Firme y Ruptura",
+                "dramatic_role": "climax_confrontation",
+                "tension_profile": [5],
+                "moods": [
+                    "Confrontación decisiva frente a la familia reunida",
+                    "Portazo definitivo y silencio absoluto",
+                    "Mirada resuelta ante el espejo",
+                ],
+            },
+            {
+                "act_number": 4,
+                "act_title": "Acto IV: Reflexión Ética y Veredicto Comunitario",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [3, 2],
+                "moods": [
+                    "Apartamento en calma con luz matutina",
+                    "Ventanal con lluvia suave y paz recobrada",
+                    "Paseo solitario con serenidad interior",
+                ],
+            },
+        ],
+    },
+    "scifi-singularity-shorts": {
+        "channel": "scifi",
+        "target_format": "short",
+        "default_wpm": 160.0,
+        "target_scene_dur": 11.0,
+        "min_scene_dur": 8.0,
+        "max_scene_dur": 15.0,
+        "min_total_dur": 60.0,
+        "max_total_dur": 180.0,
+        "min_scenes": 4,
+        "max_scenes": 12,
+        "acts": [
+            {
+                "act_number": 1,
+                "act_title": "Acto I: Detección de la Anomalía Cósmica",
+                "dramatic_role": "exposition_inception",
+                "tension_profile": [1, 2],
+                "moods": [
+                    "Puente de mando estelar con monitores holográficos y telemetría",
+                    "Observatorio orbital sobre el horizonte de un planeta helado",
+                    "Antenas parabólicas de radioastronomía bajo cielo nocturno",
+                ],
+            },
+            {
+                "act_number": 2,
+                "act_title": "Acto II: Colapso de la Física Teórica",
+                "dramatic_role": "rising_action_dread",
+                "tension_profile": [3, 4],
+                "moods": [
+                    "Cámara de contención magnética con fluctuaciones del vacío",
+                    "Vórtice gravitacional deformando el espacio visible",
+                    "Consola de navegación alertando distorsión temporal extrema",
+                ],
+            },
+            {
+                "act_number": 3,
+                "act_title": "Acto III: Cruce del Horizonte de Sucesos",
+                "dramatic_role": "climax_confrontation",
+                "tension_profile": [5],
+                "moods": [
+                    "Horizonte de sucesos brillando con radiación de Hawking",
+                    "Disco de acreción gigantesco absorbiendo materia a velocidad lumínica",
+                    "Singularidad central con colapso dimensional",
+                ],
+            },
+            {
+                "act_number": 4,
+                "act_title": "Acto IV: Registro Estelar y Transmisión Final",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [3, 2],
+                "moods": [
+                    "Sonda espacial emitiendo último paquete de datos criptográficos",
+                    "Vasto espacio interestelar con estrellas titilando en la distancia",
+                    "Terminal de archivo de la misión con estatus confirmado",
+                ],
+            },
+        ],
+    },
+    "scifi-singularity-long": {
+        "channel": "scifi",
+        "target_format": "longform",
+        "default_wpm": 140.0,
+        "target_scene_dur": 90.0,
+        "min_scene_dur": 45.0,
+        "max_scene_dur": 150.0,
+        "min_total_dur": 600.0,
+        "max_total_dur": 1800.0,
+        "min_scenes": 5,
+        "max_scenes": 8,
+        "acts": [
+            {
+                "act_number": 1,
+                "act_title": "Acto I: Incepción Teórica y Enigma Cósmico",
+                "dramatic_role": "exposition_inception",
+                "tension_profile": [1, 2],
+                "moods": [
+                    "Complejo de radiotelescopios en el desierto bajo vía láctea brillante",
+                    "Sala de control de misión espacial con pantallas orbitales en tiempo real",
+                    "Laboratorio de astrofísica con simulaciones computacionales hiperdensas",
+                ],
+            },
+            {
+                "act_number": 2,
+                "act_title": "Acto II: La Paradoja Gravitacional y Alerta Instrumental",
+                "dramatic_role": "rising_action_dread",
+                "tension_profile": [2, 3, 4],
+                "moods": [
+                    "Sonda interestelar cruzando nebulosa oscura con estática de telemetría",
+                    "Cámara de interferometría cuántica registrando ondas gravitatorias",
+                    "Búnker de procesamiento de datos con alarmas térmicas silenciosas",
+                ],
+            },
+            {
+                "act_number": 3,
+                "act_title": "Acto III: Punto Crítico y Frontera Relativista",
+                "dramatic_role": "climax_confrontation",
+                "tension_profile": [4, 5, 5],
+                "moods": [
+                    "Frontera del agujero negro supermasivo con lente gravitacional extremo",
+                    "Chorros relativistas de plasma proyectándose a través de años luz",
+                    "Colapso de espacio-tiempo en simulación holográfica inmersiva",
+                ],
+            },
+            {
+                "act_number": 4,
+                "act_title": "Acto IV: Síntesis Astrofísica y Perspectiva Cósmica",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [3, 2],
+                "moods": [
+                    "Telescopio espacial flotando en el vacío con la Tierra en el fondo",
+                    "Archivo estelar archivando expediente de la singularidad",
+                    "Amanecer sobre observatorio de alta montaña",
+                ],
+            },
+        ],
+    },
 }
 
 
@@ -370,17 +544,37 @@ class CinematicScriptCuratorAgent:
 
     def _resolve_lane_config(self, channel_lane: str, target_format: str) -> Tuple[str, Dict[str, Any]]:
         """Resolves lane profile and configuration dictionary."""
-        lane_lower = channel_lane.lower()
-        fmt_lower = target_format.lower()
+        lane_str = str(channel_lane).strip()
+        lane_lower = lane_str.lower()
+        fmt_lower = str(target_format).strip().lower()
 
-        if "scp" in lane_lower or fmt_lower in ("short", "shorts", "vertical") or "shorts" in lane_lower:
-            return "moku-scp-shorts", LANE_CURATION_CONFIGS["moku-scp-shorts"]
-        elif "aita" in lane_lower or "drama" in lane_lower or "confession" in lane_lower:
+        # 1. Exact match check
+        if lane_str in LANE_CURATION_CONFIGS:
+            return lane_str, LANE_CURATION_CONFIGS[lane_str]
+        if lane_lower in LANE_CURATION_CONFIGS:
+            return lane_lower, LANE_CURATION_CONFIGS[lane_lower]
+
+        # 2. SciFi matching
+        if "scifi" in lane_lower or "singularity" in lane_lower or "singularidad" in lane_lower:
+            if fmt_lower in ("short", "shorts", "vertical") or "short" in lane_lower:
+                return "scifi-singularity-shorts", LANE_CURATION_CONFIGS["scifi-singularity-shorts"]
+            return "scifi-singularity-long", LANE_CURATION_CONFIGS["scifi-singularity-long"]
+
+        # 3. Aelithia / Drama matching
+        if "aelithia" in lane_lower or "aita" in lane_lower or "drama" in lane_lower or "confession" in lane_lower:
+            if fmt_lower in ("short", "shorts", "vertical") or "short" in lane_lower:
+                return "aelithia-drama-shorts", LANE_CURATION_CONFIGS["aelithia-drama-shorts"]
             return "aelithia-aita-long", LANE_CURATION_CONFIGS["aelithia-aita-long"]
-        elif "horror" in lane_lower or "creepy" in lane_lower or "cosmic" in lane_lower:
+
+        # 4. Moku / SCP / Horror matching
+        if "scp" in lane_lower:
+            return "moku-scp-shorts", LANE_CURATION_CONFIGS["moku-scp-shorts"]
+        if "horror" in lane_lower or "creepy" in lane_lower or "cosmic" in lane_lower:
+            if fmt_lower in ("short", "shorts", "vertical") or "short" in lane_lower:
+                return "moku-scp-shorts", LANE_CURATION_CONFIGS["moku-scp-shorts"]
             return "moku-horror-long", LANE_CURATION_CONFIGS["moku-horror-long"]
 
-        # Default fallback: longform horror or short based on target_format
+        # 5. Default fallback: longform horror or short based on target_format
         if fmt_lower in ("short", "shorts", "vertical"):
             return "moku-scp-shorts", LANE_CURATION_CONFIGS["moku-scp-shorts"]
         return "moku-horror-long", LANE_CURATION_CONFIGS["moku-horror-long"]

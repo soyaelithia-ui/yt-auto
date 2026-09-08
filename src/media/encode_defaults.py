@@ -1,14 +1,14 @@
 """Shared low-CPU FFmpeg encode defaults (SSOT with docker-compose / .env).
 
-Production compose pins RENDER_CRF=21 and RENDER_PRESET=veryfast. Media engines
+Production compose pins RENDER_CRF=19 and RENDER_PRESET=veryfast. Media engines
 historically hardcoded preset=fast/faster/slow and CRF 18/23, which either burned
 CPU (slow) or drifted from the documented quality target. Import these helpers
 instead of scattering literals.
 
 Policy (near-zero resource goal):
 - Horizontal beats / loop path: prefer ``-c:v copy`` (no video re-encode).
-- When re-encode is required: ``veryfast`` + CRF 21 (YouTube-safe; avoid
-  ultrafast on final delivers; avoid ``slow`` on the hot path).
+- When re-encode is required: ``veryfast`` + CRF 19 (YouTube-safe, sharper
+  finals than CRF 21; avoid ultrafast on delivers; avoid ``slow`` on hot path).
 - Pillow/rawvideo frame loops remain opt-in only (FORCE_PILLOW_*).
 """
 
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 
-def default_render_crf(fallback: int = 21) -> int:
+def default_render_crf(fallback: int = 19) -> int:
     """Return RENDER_CRF clamped to x264's valid range (0–51)."""
     raw = os.environ.get("RENDER_CRF", "").strip()
     try:

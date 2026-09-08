@@ -123,7 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--channel",
         type=str,
         default="all",
-        help="Canal objetivo ('moku', 'aelithia', 'all')",
+        help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')",
     )
     run_parser.add_argument(
         "-s",
@@ -192,7 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--channel",
         type=str,
         default="all",
-        help="Canal objetivo ('moku', 'aelithia', 'all')",
+        help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')",
     )
     daemon_parser.add_argument(
         "--lanes",
@@ -550,7 +550,7 @@ def build_parser() -> argparse.ArgumentParser:
             "--channel",
             type=str,
             default="moku",
-            help="Canal objetivo ('moku', 'aelithia', 'all')",
+            help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')",
         )
         profile_parser.add_argument(
             "-l",

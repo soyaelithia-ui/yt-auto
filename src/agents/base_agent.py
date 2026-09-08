@@ -145,7 +145,7 @@ def _resolve_default_app_data_dir(instance_id: str = "default") -> Path:
 DEFAULT_APP_DATA_DIR = _resolve_default_app_data_dir()
 AGENT_GENERATED_DIR = PROJECT_ROOT / "data" / "worksets" / "generated"
 CANONICAL_MODEL = os.environ.get("AGY_MODEL", os.environ.get("GEMINI_MODEL", "gemini-3.8-flash-high"))
-CLI_TIMEOUT_SECONDS = 300
+CLI_TIMEOUT_SECONDS = int(os.environ.get("AGY_TIMEOUT_SECONDS", "300"))
 
 SATURATION_PATTERNS = (
     "saturat",

@@ -32,9 +32,10 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS = 60
 DEFAULT_MEDIA_TIMEOUT_SECONDS = 1800                  # 30 minutes for large 2GB transfers
 
 # Review-proxy encode knobs: the proxy is a review-only artifact, so a low
-# fps and a thread cap keep the re-encode cheap and off the other cores.
+# fps, ultrafast preset, and optimal thread scaling keep transcode latency low.
 PROXY_FPS = int(os.environ.get("TELEGRAM_PROXY_FPS", "15"))
-PROXY_THREADS = int(os.environ.get("TELEGRAM_PROXY_THREADS", "2"))
+PROXY_THREADS = int(os.environ.get("TELEGRAM_PROXY_THREADS", "0"))
+PROXY_PRESET = os.environ.get("TELEGRAM_PROXY_PRESET", "ultrafast")
 
 
 def get_telegram_api_base_url() -> str:
@@ -231,10 +232,22 @@ def _build_review_proxy(video_path: str, max_bytes: int) -> Optional[str]:
                 )
                 return None
             video_bps = max(40_000, int(video_bps * 0.9))
+
+        if video_bps < 320_000:
+            scale_filter = f"fps={PROXY_FPS},scale=-2:'min(360,ih)'"
+        elif video_bps < 650_000:
+            scale_filter = f"fps={PROXY_FPS},scale=-2:'min(480,ih)'"
+        else:
+            scale_filter = f"fps={PROXY_FPS},scale=-2:'min(720,ih)'"
+
+        max_proxy_dur = float(os.environ.get("TELEGRAM_PROXY_MAX_DURATION", "0"))
+        dur_args = ["-t", str(max_proxy_dur)] if (max_proxy_dur > 0 and duration > max_proxy_dur) else []
+
         cmd = [
             "ffmpeg", "-y", "-i", str(src),
-            "-vf", f"fps={PROXY_FPS},scale=-2:'min(720,ih)'",
-            "-c:v", "libx264", "-preset", "veryfast", "-threads", str(PROXY_THREADS),
+            *dur_args,
+            "-vf", scale_filter,
+            "-c:v", "libx264", "-preset", PROXY_PRESET, "-threads", str(PROXY_THREADS),
             "-b:v", str(video_bps),
             "-maxrate", str(int(video_bps * 1.25)),
             "-bufsize", str(int(video_bps * 2)),

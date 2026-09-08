@@ -105,7 +105,11 @@ class PipelineOrchestrator:
         repo = QueueRepository(self.db_path)
         repo.initialize()
 
-        slug = sanitize_filename(topic.lower().replace(" ", "_"))[:32]
+        import re
+        import unicodedata
+
+        clean_slug = unicodedata.normalize("NFKD", topic.lower()).encode("ascii", "ignore").decode("ascii")
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "_", clean_slug)[:32]
         story_to_claim = f"auto-{channel}-{slug}"
 
         lane = resolve_lane_for_run(channel, lane_id)
@@ -130,6 +134,7 @@ class PipelineOrchestrator:
                     topic_content,
                     f"https://local.automation/{channel}/{story_to_claim}",
                     channel,
+                    lane_id=lane.id,
                 )
             else:
                 conn.execute(

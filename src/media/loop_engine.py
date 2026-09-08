@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError
-from src.core.catalog import LoopCatalogRepository
+from src.core.catalog import LoopCatalogRepository, resolve_loop_file_path
 from src.log import get_logger
 from src.media.subtitles_ass import (
     escape_ffmpeg_filter_path,
@@ -264,8 +264,9 @@ class LoopVideoEngine(BaseVideoCompositor):
         loops_root_dir: str | Path | None = None,
         default_fallback_dir: str | Path | None = None,
         default_fallback_image: str | Path | None = None,
-        db_path: str = DEFAULT_DB_PATH,
+        db_path: str | None = None,
         catalog: Optional[LoopCatalogRepository] = None,
+        enable_live_synth: bool = False,
     ) -> None:
         """
         Initializes the LoopVideoEngine with asset directories and loop catalog database.
@@ -288,9 +289,20 @@ class LoopVideoEngine(BaseVideoCompositor):
         else:
             self.default_fallback_image = (BASE_DIR / "assets" / "background.jpg").resolve()
 
-        self.db_path = db_path
+        catalog_default = (BASE_DIR / "data" / "loop_catalog.db").resolve()
+        if db_path is not None:
+            resolved_db = str(db_path)
+        elif catalog_default.is_file():
+            resolved_db = str(catalog_default)
+        else:
+            resolved_db = DEFAULT_DB_PATH
+
+        self.db_path = resolved_db
         self._custom_catalog = catalog is not None
-        self.catalog = catalog or LoopCatalogRepository(db_path=db_path)
+        self.catalog = catalog or LoopCatalogRepository(db_path=resolved_db)
+        self.enable_live_synth = enable_live_synth or (
+            os.environ.get("ENABLE_LIVE_LOOP_SYNTH", "0").lower() in ("1", "true", "yes")
+        )
 
     def _is_unusable_plane0(
         self,
@@ -625,6 +637,9 @@ class LoopVideoEngine(BaseVideoCompositor):
         3) on-demand synthesize_on_demand (live create)
         4) filesystem / backgrounds fallback (avoiding synthetic monochrome latching)
         """
+        if category and (".." in str(category) or "/" in str(category) or "\\" in str(category)):
+            raise LoopVideoAssetError(f"Path traversal detected in category parameter: {category}")
+
         norm_cat = self.normalize_category(category)
         self._live_rss_checkpoint("8_loop_scene_live_select")
 
@@ -634,13 +649,13 @@ class LoopVideoEngine(BaseVideoCompositor):
         )
         if can_query_catalog:
             try:
-                seed_int = seed if isinstance(seed, int) else None
                 exclude_list = list(exclude_loop_ids) if exclude_loop_ids else None
                 try:
                     best_loop = self.catalog.get_best_loop(
                         category=norm_cat,
                         orientation=orientation or "vertical",
-                        seed=seed_int,
+                        requested_tags=[channel] if channel else None,
+                        seed=seed,
                         exclude_loop_ids=exclude_list,
                         channel=channel,
                     )
@@ -650,30 +665,56 @@ class LoopVideoEngine(BaseVideoCompositor):
                         orientation=orientation or "vertical",
                     )
 
-                if best_loop and Path(best_loop.file_path).is_file() and Path(best_loop.file_path).stat().st_size > 0:
-                    hit = Path(best_loop.file_path)
-                    if self._is_unusable_plane0(
-                        hit,
-                        technology=getattr(best_loop, "technology", None),
-                        category=getattr(best_loop, "category", None),
-                        loop_id=getattr(best_loop, "loop_id", None),
-                    ) or is_grey_procedural_plane(
-                        technology=getattr(best_loop, "technology", None),
-                        category=getattr(best_loop, "category", None),
-                        loop_id=getattr(best_loop, "loop_id", None),
-                        path=hit,
-                        sha256=getattr(best_loop, "sha256", None),
-                    ):
-                        logger.info(
-                            "Skipping grey/overlay catalog loop '%s' for requested category '%s'",
-                            best_loop.loop_id,
-                            norm_cat,
+                if best_loop:
+                    loop_fp = Path(best_loop.file_path)
+                    if ".." in loop_fp.parts:
+                        raise LoopVideoAssetError(
+                            f"Path traversal detected in catalog loop asset: {best_loop.file_path}"
                         )
-                    else:
-                        self.catalog.record_loop_usage(best_loop.loop_id)
-                        logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, best_loop.file_path)
-                        self._live_rss_checkpoint("8_loop_scene_live_select_hit")
-                        return hit
+                    resolved_p = resolve_loop_file_path(best_loop.file_path).resolve()
+                    assets_root = (BASE_DIR / "assets").resolve()
+                    loops_root = self.loops_root_dir.resolve()
+                    is_safe = False
+                    try:
+                        resolved_p.relative_to(assets_root)
+                        is_safe = True
+                    except ValueError:
+                        try:
+                            resolved_p.relative_to(loops_root)
+                            is_safe = True
+                        except ValueError:
+                            is_safe = False
+
+                    if not is_safe:
+                        raise LoopVideoAssetError(
+                            f"Path traversal detected: loop asset {best_loop.file_path} is outside assets directory"
+                        )
+
+                    if resolved_p.is_file() and resolved_p.stat().st_size > 0:
+                        if self._is_unusable_plane0(
+                            resolved_p,
+                            technology=getattr(best_loop, "technology", None),
+                            category=getattr(best_loop, "category", None),
+                            loop_id=getattr(best_loop, "loop_id", None),
+                        ) or is_grey_procedural_plane(
+                            technology=getattr(best_loop, "technology", None),
+                            category=getattr(best_loop, "category", None),
+                            loop_id=getattr(best_loop, "loop_id", None),
+                            path=resolved_p,
+                            sha256=getattr(best_loop, "sha256", None),
+                        ):
+                            logger.info(
+                                "Skipping grey/overlay catalog loop '%s' for requested category '%s'",
+                                best_loop.loop_id,
+                                norm_cat,
+                            )
+                        else:
+                            self.catalog.record_loop_usage(best_loop.loop_id)
+                            logger.info("Resolved loop from SQLite catalog: %s (%s)", best_loop.loop_id, resolved_p)
+                            self._live_rss_checkpoint("8_loop_scene_live_select_hit")
+                            return resolved_p
+            except LoopVideoAssetError:
+                raise
             except Exception as e:
                 logger.warning("Could not query SQLite loop catalog: %s", e)
 
@@ -1288,10 +1329,26 @@ class LoopVideoEngine(BaseVideoCompositor):
                 "-map", "[aout]",
             ])
         else:
-            cmd.extend([
-                "-map", "0:v:0",
-                "-map", "1:a:0",
-            ])
+            # Always loudnorm narration-only delivers (YouTube-consistent LUFS)
+            # without paying a video re-encode (-c:v copy remains).
+            if kwargs.get("master_loudness", True):
+                target_lufs = kwargs.get("target_lufs", -14.0)
+                max_tp = kwargs.get("max_tp", -1.5)
+                lra = kwargs.get("lra", 11.0)
+                audio_filter = (
+                    f"[1:a]aresample=44100,loudnorm=I={target_lufs}:TP={max_tp}:LRA={lra},"
+                    f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[aout]"
+                )
+                cmd.extend([
+                    "-filter_complex", audio_filter,
+                    "-map", "0:v:0",
+                    "-map", "[aout]",
+                ])
+            else:
+                cmd.extend([
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                ])
         cmd.extend(sub_maps)
 
         cmd.extend([
@@ -1398,12 +1455,149 @@ class LoopVideoEngine(BaseVideoCompositor):
                 ):
                     is_stream_copy = False
                 else:
-                    loop_dur = max(1.0, float(loop_probe.duration or 15.0))
-                    reps = max(1, int(math.ceil(float(duration_sec or 60.0) / loop_dur)) + 1)
+                    scene_images = kwargs.get("scene_images")
+                    shot_durations = kwargs.get("shot_durations")
+                    valid_scenes: list[tuple[Path, float | None]] = []
+                    if scene_images and isinstance(scene_images, (list, tuple)):
+                        for idx, s_p in enumerate(scene_images):
+                            if s_p:
+                                p_obj = Path(s_p).resolve()
+                                if (
+                                    p_obj.is_file()
+                                    and p_obj.suffix.lower() in self.SUPPORTED_VIDEO_EXTENSIONS
+                                    and p_obj.stat().st_size > 0
+                                ):
+                                    dur_val = None
+                                    if (
+                                        shot_durations
+                                        and isinstance(shot_durations, (list, tuple))
+                                        and idx < len(shot_durations)
+                                        and shot_durations[idx] is not None
+                                    ):
+                                        try:
+                                            parsed_d = float(shot_durations[idx])
+                                            if parsed_d > 0:
+                                                dur_val = parsed_d
+                                        except (ValueError, TypeError):
+                                            dur_val = None
+                                    valid_scenes.append((p_obj, dur_val))
+
+                    valid_scene_videos = [item[0] for item in valid_scenes]
+                    if len(valid_scenes) > 1 and len(set(valid_scene_videos)) <= 1 and self.catalog is not None:
+                        try:
+                            channel_arg = kwargs.get("channel")
+                            alt_loop = self.catalog.get_best_loop(
+                                category=category,
+                                orientation=orientation if isinstance(orientation, str) else "horizontal",
+                                seed=1,
+                                channel=channel_arg,
+                            )
+                            if alt_loop and Path(alt_loop.file_path).resolve() != valid_scenes[0][0]:
+                                alt_p = Path(alt_loop.file_path).resolve()
+                                if alt_p.is_file() and alt_p.stat().st_size > 0:
+                                    valid_scenes = [
+                                        (alt_p if s_idx % 2 == 1 else orig_p, dur)
+                                        for s_idx, (orig_p, dur) in enumerate(valid_scenes)
+                                    ]
+                                    valid_scene_videos = [item[0] for item in valid_scenes]
+                        except Exception as rot_exc:
+                            logger.debug("Could not inject alternating scene loop: %s", rot_exc)
+
+                    can_stream_copy_scenes = False
+                    clip_durations: dict[str, float] = {}
+                    if len(valid_scene_videos) > 1:
+                        can_stream_copy_scenes = True
+                        for sv in set(valid_scene_videos):
+                            try:
+                                sp = probe_media(sv)
+                                if (
+                                    not sp.video_streams
+                                    or sp.video_streams[0].width != target_res[0]
+                                    or sp.video_streams[0].height != target_res[1]
+                                ):
+                                    can_stream_copy_scenes = False
+                                    break
+                                clip_durations[str(sv)] = max(1.0, float(sp.duration or 60.0))
+                            except Exception:
+                                can_stream_copy_scenes = False
+                                break
+
                     concat_list_path = out_path.parent / "loop_concat_list.txt"
-                    with open(concat_list_path, "w", encoding="utf-8") as f:
-                        for _ in range(reps):
-                            f.write(f"file '{v_path.resolve()}'\n")
+                    if can_stream_copy_scenes:
+                        total_target = float(duration_sec or 60.0)
+                        acc_dur = 0.0
+                        num_scenes = len(valid_scenes)
+                        target_beat = total_target / num_scenes if num_scenes > 0 else 12.0
+                        if target_beat > 15.0:
+                            default_beat = 12.0
+                        elif target_beat < 8.0:
+                            default_beat = max(5.0, target_beat)
+                        else:
+                            default_beat = target_beat
+
+                        scene_durations = [
+                            dur if (dur is not None and dur > 0) else default_beat
+                            for _, dur in valid_scenes
+                        ]
+
+                        scene_idx = 0
+                        with open(concat_list_path, "w", encoding="utf-8") as f:
+                            f.write("ffconcat version 1.0\n")
+                            while acc_dur < total_target:
+                                current_video, explicit_dur = valid_scenes[scene_idx % num_scenes]
+                                base_dur = (
+                                    explicit_dur
+                                    if (explicit_dur is not None and explicit_dur > 0)
+                                    else scene_durations[scene_idx % num_scenes]
+                                )
+
+                                max_clip_dur = clip_durations.get(str(current_video), 60.0)
+                                shot_dur = min(base_dur, max_clip_dur)
+
+                                remaining = total_target - acc_dur
+                                if shot_dur > remaining:
+                                    shot_dur = remaining
+
+                                shot_dur = max(0.5, shot_dur)
+
+                                f.write(f"file '{current_video}'\n")
+                                f.write(f"duration {shot_dur:.3f}\n")
+
+                                acc_dur += shot_dur
+                                scene_idx += 1
+
+                        logger.info(
+                            "Multi-scene stream-copy concat list generated with %d entries from %d distinct clips (acc_dur=%.1fs, target=%.1fs)",
+                            scene_idx,
+                            len(set(valid_scene_videos)),
+                            acc_dur,
+                            total_target,
+                        )
+                    else:
+                        loop_dur = max(1.0, float(loop_probe.duration or 15.0))
+                        reps = max(1, int(math.ceil(float(duration_sec or 60.0) / loop_dur)) + 1)
+                        rep_loops = [v_path.resolve()]
+                        if self.catalog is not None:
+                            try:
+                                channel_arg = kwargs.get("channel")
+                                alt_loop = self.catalog.get_best_loop(
+                                    category=category,
+                                    orientation=orientation if isinstance(orientation, str) else "horizontal",
+                                    seed=1,
+                                    channel=channel_arg,
+                                )
+                                if alt_loop and Path(alt_loop.file_path).resolve() != v_path.resolve():
+                                    alt_p = Path(alt_loop.file_path).resolve()
+                                    if alt_p.is_file() and alt_p.stat().st_size > 0:
+                                        rep_loops.append(alt_p)
+                            except Exception:
+                                pass
+
+                        with open(concat_list_path, "w", encoding="utf-8") as f:
+                            f.write("ffconcat version 1.0\n")
+                            for r_idx in range(reps):
+                                chosen_loop = rep_loops[r_idx % len(rep_loops)]
+                                f.write(f"file '{chosen_loop}'\n")
 
                     cmd_sc = self.build_stream_copy_composition_cmd(
                         concat_list_path=concat_list_path,
@@ -1430,6 +1624,8 @@ class LoopVideoEngine(BaseVideoCompositor):
                         timeout=timeout,
                     )
                     return str(out_path)
+            except FFmpegTimeoutError:
+                raise
             except Exception as exc:
                 logger.warning("Stream-Copy failed (%s); falling back to re-encoding filtergraph.", exc)
 
@@ -1469,6 +1665,8 @@ class LoopVideoEngine(BaseVideoCompositor):
                 logger.info("Executing Multi-Shot LoopVideoEngine composition command: %s", " ".join(cmd))
                 run_ffmpeg(cmd, timeout=timeout, check=True)
                 return str(out_path)
+            except FFmpegTimeoutError:
+                raise
             except Exception as m_exc:
                 logger.warning("Multi-shot composition encountered an issue (%s); falling back to single loop.", m_exc)
 
@@ -1496,8 +1694,8 @@ class LoopVideoEngine(BaseVideoCompositor):
         logger.info("Executing LoopVideoEngine composition command: %s", " ".join(cmd))
         try:
             run_ffmpeg(cmd, timeout=timeout, check=True)
-        except FFmpegTimeoutError as te:
-            raise LoopCompositionError(f"LoopVideoEngine render timed out after {timeout}s") from te
+        except FFmpegTimeoutError:
+            raise
         except FFmpegExecutionError as ee:
             from src.config import is_test_environment
             from unittest.mock import Mock
@@ -1516,6 +1714,35 @@ class LoopVideoEngine(BaseVideoCompositor):
             raise LoopCompositionError(f"Unexpected LoopVideoEngine failure: {exc}") from exc
 
         return str(out_path)
+
+    def get_loop_quality_metrics(self, loop_path: str | Path | None) -> dict[str, Any]:
+        """
+        Retrieves precomputed quality metrics (blackdetect, perceptual luminance)
+        for a loop asset, avoiding redundant full-length video re-analysis.
+        """
+        if not loop_path:
+            return {}
+        lp = Path(loop_path).resolve()
+        manifest_path = (BASE_DIR / "assets" / "loops" / "bank_manifest.json").resolve()
+        if manifest_path.is_file():
+            try:
+                manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                for entry in manifest_data.get("master_loops", []):
+                    entry_path = (BASE_DIR / entry.get("file_path", "")).resolve()
+                    if lp == entry_path or lp.name == entry.get("filename"):
+                        # Only surface metrics that were actually stamped on the
+                        # bank entry. Defaulting black to 0.0 falsely skipped
+                        # detect_long_black_frames in validate_prepublication.
+                        out: dict[str, Any] = {}
+                        if "longest_black_seconds" in entry:
+                            out["longest_black_seconds"] = float(entry["longest_black_seconds"])
+                            out["black_segments"] = list(entry.get("black_segments") or [])
+                        if entry.get("perceptual_luminance") is not None:
+                            out["perceptual_luminance"] = entry.get("perceptual_luminance")
+                        return out
+            except Exception as exc:
+                logger.debug("Could not read loop quality metrics from manifest: %s", exc)
+        return {}
 
     def render(
         self,
@@ -1704,6 +1931,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         )
 
         res_tuple = self.parse_resolution(orientation)
+        quality_metrics = self.get_loop_quality_metrics(video_loop_path or rendered_file)
         return {
             "compositor": "loop",
             "render_time_sec": elapsed,
@@ -1711,6 +1939,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             "output_path": str(out_p),
             "category": category,
             "resolution": f"{res_tuple[0]}x{res_tuple[1]}",
+            "quality_metrics": quality_metrics,
         }
 
     def assemble_multiscene_video(

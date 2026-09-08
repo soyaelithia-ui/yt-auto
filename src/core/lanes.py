@@ -30,7 +30,7 @@ ALLOWED_RESOLUTIONS: Final[dict[str, tuple[int, int]]] = {
 }
 ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset({"beats", "director"})
 ALLOWED_STORY_TYPES: Final[frozenset[str]] = frozenset(
-    {"scp", "horror", "reddit_aita", "reddit_generic"}
+    {"scp", "horror", "reddit_aita", "reddit_generic", "scifi"}
 )
 ALLOWED_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"reddit", "scp_wiki"})
 MIN_GAP_SECONDS = 60
@@ -125,7 +125,7 @@ class LaneProfile:
     """Immutable editorial contract for one production lane."""
 
     id: str
-    channel: CanonicalChannel
+    channel: CanonicalChannel | str
     story_type: str
     orientation: str
     duration_min_sec: int
@@ -196,7 +196,8 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
     if not lane_id:
         raise ValueError("Lane sin 'id'")
     channel_raw = _require(raw, "channel", lane_id)
-    channel_key = canonical_channel(str(channel_raw)).value
+    ch = canonical_channel(str(channel_raw))
+    channel_key = getattr(ch, "value", str(ch))
 
     orientation = str(_require(raw, "orientation", lane_id)).strip().lower()
     if orientation not in ALLOWED_RESOLUTIONS:
@@ -395,8 +396,13 @@ def get_lane(lane_id: str, *, path: str | os.PathLike[str] | None = None) -> Lan
 def lanes_for_channel(
     channel: str | CanonicalChannel, *, path: str | os.PathLike[str] | None = None
 ) -> tuple[LaneProfile, ...]:
-    channel_key = canonical_channel(channel).value
-    return tuple(lane for lane in load_lanes(path) if lane.channel.value == channel_key)
+    ch = canonical_channel(channel)
+    channel_key = getattr(ch, "value", str(ch))
+    return tuple(
+        lane
+        for lane in load_lanes(path)
+        if getattr(lane.channel, "value", str(lane.channel)) == channel_key
+    )
 
 
 def resolve_lane_for_run(
@@ -413,18 +419,21 @@ def resolve_lane_for_run(
     compatible exists (misconfiguration), never silently picks a wrong format.
     """
     channel_key = canonical_channel(channel)
+    channel_str = getattr(channel_key, "value", str(channel_key))
     available = lanes_for_channel(channel_key, path=path)
     if not available:
-        raise ValueError(f"Sin carriles configurados para el canal {channel_key.value!r}")
+        raise ValueError(f"Sin carriles configurados para el canal {channel_str!r}")
 
     wanted = str(lane_id or "").strip()
     if wanted:
+        if any(char in wanted for char in (";", "&", "|", "`", "$", ">", "<", "\n", "\r")):
+            raise ValueError(f"Identificador de carril inválido o sospechoso: {wanted!r}")
         for lane in available:
             if lane.id == wanted:
                 return lane
         raise ValueError(
             f"El carril {wanted!r} no existe o no pertenece al canal "
-            f"{channel_key.value!r}; válidos: {[lane.id for lane in available]}"
+            f"{channel_str!r}; válidos: {[lane.id for lane in available]}"
         )
 
     story_lane = ""
@@ -500,12 +509,14 @@ def resolve_voice_profile_for_lane(
 
     if isinstance(lane, LaneProfile):
         profile_name = lane.voice_profile
-        ch_key = lane.channel.value
+        ch_key = getattr(lane.channel, "value", str(lane.channel))
         if not profile_name:
             if lane.story_type == "scp":
                 profile_name = "scp_documentary_es"
-            elif lane.channel.value == "aelithia" or lane.story_type == "reddit_aita":
+            elif ch_key == "aelithia" or lane.story_type == "reddit_aita":
                 profile_name = "aelithia_reddit"
+            elif ch_key == "scifi" or lane.story_type == "scifi":
+                profile_name = "scifi_documentary_es"
             else:
                 profile_name = "moku_terror"
     elif isinstance(lane, str) and lane.strip():
@@ -521,15 +532,20 @@ def resolve_voice_profile_for_lane(
                 profile_name = "scp_documentary_es"
             elif "aelithia" in lane.lower() or "aita" in lane.lower():
                 profile_name = "aelithia_reddit"
+            elif "scifi" in lane.lower() or "singularity" in lane.lower():
+                profile_name = "scifi_documentary_es"
             else:
                 profile_name = "moku_terror"
 
     if not ch_key and channel is not None:
-        ch_key = canonical_channel(channel).value
+        ch = canonical_channel(channel)
+        ch_key = getattr(ch, "value", str(ch))
 
     if not profile_name:
         if ch_key == "aelithia":
             profile_name = "aelithia_reddit"
+        elif ch_key == "scifi":
+            profile_name = "scifi_documentary_es"
         else:
             profile_name = "moku_terror"
 

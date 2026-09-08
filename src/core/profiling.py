@@ -238,24 +238,28 @@ def _read_vm_rss_bytes() -> int:
 
 
 def _get_peak_rss_bytes() -> int:
-    """Return process + child peak RSS in bytes via /proc/self/status or getrusage."""
+    """Return process + child peak RSS in bytes via /proc/self/status VmHWM (or getrusage fallback)."""
+    self_peak = 0
     try:
         if os.path.exists("/proc/self/status"):
             with open("/proc/self/status", encoding="ascii") as handle:
                 for line in handle:
                     if line.startswith("VmHWM:"):
-                        return int(line.split()[1]) * 1024
+                        self_peak = int(line.split()[1]) * 1024
+                        break
     except Exception:
         pass
+
     try:
-        ru_self = resource.getrusage(resource.RUSAGE_SELF)
-        ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)
         multiplier = 1024 if os.name == "posix" and not (hasattr(os, "uname") and os.uname().sysname.lower().startswith("darwin")) else 1
-        self_peak = int(ru_self.ru_maxrss * multiplier)
+        if self_peak == 0:
+            ru_self = resource.getrusage(resource.RUSAGE_SELF)
+            self_peak = int(ru_self.ru_maxrss * multiplier)
+        ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)
         child_peak = int(ru_children.ru_maxrss * multiplier)
         return max(self_peak, child_peak)
     except Exception:
-        return 0
+        return self_peak
 
 
 def _get_cpu_times() -> tuple[float, float, float, float]:

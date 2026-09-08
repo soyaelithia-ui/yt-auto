@@ -109,6 +109,110 @@
         "mode": "auto",
         "theme": "drama"
       }
+    },
+    {
+      "id": "aelithia-drama-shorts",
+      "enabled": true,
+      "channel": "aelithia",
+      "story_type": "reddit_aita",
+      "orientation": "vertical",
+      "duration": { "min_sec": 60, "target_sec": 120, "max_sec": 180 },
+      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "template": "shorts_aita",
+      "voice_rate": "+6%",
+      "voice_profile": "aelithia_reddit",
+      "cadence": { "min_gap_seconds": 300 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": ["AmItheAsshole", "TrueOffMyChest", "relationship_advice", "Confession"],
+        "listing_categories": [["hot", "day"], ["top", "week"], ["new", "all"]],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": {
+        "mode": "off",
+        "keywords": ["aita", "wibta", "soy el malo", "familia", "boda", "herencia"]
+      },
+      "multistory_collection": false,
+      "visual_pipeline": "beats",
+      "qa_profile": "short",
+      "review_content_type": "short",
+      "padding_themes": ["cafeterías con luz natural", "departamentos modernos al atardecer", "salas de estar"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "drama"
+      }
+    },
+    {
+      "id": "scifi-singularity-shorts",
+      "enabled": true,
+      "channel": "scifi",
+      "story_type": "scifi",
+      "orientation": "vertical",
+      "duration": { "min_sec": 60, "target_sec": 120, "max_sec": 180 },
+      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "template": "shorts_scifi",
+      "voice_rate": "+0%",
+      "voice_profile": "scifi_documentary_es",
+      "cadence": { "min_gap_seconds": 300 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": ["scifi", "IsaacArthur", "space", "Futurology"],
+        "listing_categories": [["hot", "day"], ["top", "week"], ["new", "all"]],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": {
+        "mode": "off",
+        "keywords": ["singularidad", "agujero negro", "paradoja", "inteligencia artificial", "espacio", "fermi"]
+      },
+      "multistory_collection": false,
+      "visual_pipeline": "beats",
+      "qa_profile": "short",
+      "review_content_type": "short",
+      "padding_themes": ["puentes de mando de naves estelares", "horizontes de sucesos de agujeros negros", "estaciones espaciales en órbita"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "space_abyss"
+      }
+    },
+    {
+      "id": "scifi-singularity-long",
+      "enabled": true,
+      "channel": "scifi",
+      "story_type": "scifi",
+      "orientation": "horizontal",
+      "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
+      "words": { "min": 2600, "max": 4800, "recondense_max": 4500 },
+      "template": "scifi_documentary",
+      "voice_rate": "+0%",
+      "voice_profile": "scifi_documentary_es",
+      "cadence": { "min_gap_seconds": 1800 },
+      "sources": {
+        "kind": "reddit",
+        "subreddits": ["scifi", "IsaacArthur", "space", "astronomy", "Futurology"],
+        "limit_per_fetch": 25,
+        "queue_target_pending": 25
+      },
+      "topic_filter": {
+        "mode": "off",
+        "keywords": ["singularidad", "agujero negro", "paradoja", "inteligencia artificial", "espacio", "fermi"]
+      },
+      "multistory_collection": true,
+      "visual_pipeline": "beats",
+      "qa_profile": "longform",
+      "review_content_type": "long_video",
+      "padding_themes": ["nebulosas profundas", "discos de acreción", "antenas de radioastronomía al anochecer"],
+      "background_audio": {
+        "enabled": true,
+        "volume": 0.04,
+        "mode": "auto",
+        "theme": "space_abyss"
+      }
     }
   ]
 }

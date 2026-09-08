@@ -277,7 +277,7 @@ def test_compositor_single_pass_burns_niche_hud(tmp_path, monkeypatch):
     assert "concat=n=2" in fc
     assert fc_cmds[0][fc_cmds[0].index("-c:v") + 1] == "libx264"
     assert fc_cmds[0][fc_cmds[0].index("-preset") + 1] == default_render_preset() == "veryfast"
-    assert fc_cmds[0][fc_cmds[0].index("-crf") + 1] == str(default_render_crf()) == "21"
+    assert fc_cmds[0][fc_cmds[0].index("-crf") + 1] == str(default_render_crf()) == "19"
     # Not N per-scene copy trims / not N encodes
     assert not any("-c:v" in c and c[c.index("-c:v") + 1] == "copy" and "-stream_loop" in c for c in cmds)
 
@@ -425,9 +425,9 @@ def test_multiact_filter_complex_has_setsar1_and_no_trailing_comma(tmp_path, mon
     assert "format=yuv420p[v_act1]" in fc
     assert ",[v_act1]" not in fc
 
-    # Policy checks: FFmpeg-first defaults veryfast and CRF 21
+    # Policy checks: FFmpeg-first defaults veryfast and CRF 19
     assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
-    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
+    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "19"
 
 
 def test_scene_planner_hud_disabled_preserves_stream_copy(tmp_path):
@@ -570,8 +570,8 @@ def test_multiact_stream_copy_vertical_when_homogeneous_no_hud(tmp_path, monkeyp
     assert any("-f" in c and "concat" in c and c[c.index("-c:v") + 1] == "copy" for c in cmds)
 
 
-def test_multiact_inhomogeneous_falls_back_to_veryfast_crf21(tmp_path, monkeypatch):
-    """Mismatched pix_fmt must not stream-copy; one veryfast/CRF21 encode with setsar=1."""
+def test_multiact_inhomogeneous_falls_back_to_veryfast_crf19(tmp_path, monkeypatch):
+    """Mismatched pix_fmt must not stream-copy; one veryfast/CRF19 encode with setsar=1."""
     from src.media.encode_defaults import default_render_crf, default_render_preset
 
     loop_a = tmp_path / "a.mp4"
@@ -619,7 +619,7 @@ def test_multiact_inhomogeneous_falls_back_to_veryfast_crf21(tmp_path, monkeypat
     assert "setsar=1" in fc
     assert "concat=n=2" in fc
     assert cmd[cmd.index("-preset") + 1] == default_render_preset() == "veryfast"
-    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "21"
+    assert cmd[cmd.index("-crf") + 1] == str(default_render_crf()) == "19"
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
 
 

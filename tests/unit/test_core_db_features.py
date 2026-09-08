@@ -256,7 +256,8 @@ class TestLanesCLIAndVoiceProfiles:
             ret_json = handle_lanes(args_json)
         assert ret_json == 0
         data = json.loads(buf_json.getvalue())
-        assert data["count"] == 3
+        from src.core.lanes import load_lanes
+        assert data["count"] == len(load_lanes())
         lane_ids = [item["lane_id"] for item in data["lanes"]]
         assert "moku-scp-shorts" in lane_ids
         assert "moku-horror-long" in lane_ids

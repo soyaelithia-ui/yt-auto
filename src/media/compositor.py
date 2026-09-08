@@ -8,7 +8,7 @@ Default assembly (DIRECTOR_SINGLE_PASS=1): when every scene is procedural and ca
 resolve, skip per-scene libx264 re-encodes and assemble via stream-copy trim + concat demuxer
 (-c:v copy; near-zero CPU) or one filter_complex scale+concat when loops need resize.
 Planner ``niche_hud`` (SCP / Reddit-AITA / abyssal) is burned with one extra FFmpeg
-drawtext/drawbox stage on that concat graph (encode_defaults veryfast/CRF21) — not N
+drawtext/drawbox stage on that concat graph (encode_defaults veryfast/CRF19) — not N
 per-scene encodes, no Playwright, no wgpu, no per-frame Pillow. No HUD keeps -c:v copy
 when geometry matches. Real FFmpeg xfade is opt-in (DIRECTOR_XFADE=1) because it shortens
 the timeline.
@@ -38,8 +38,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.media.interface import BaseVideoCompositor, CompositorError
 from src.log import get_logger
-from src.media.hybrid_engine import HybridVideoEngine
-from src.media.proc_engine import ProceduralVideoEngine
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
 from src.media.subtitles_ass import (
     escape_ffmpeg_filter_path,
@@ -101,20 +99,28 @@ class MultiSceneCompositor(BaseVideoCompositor):
 
     def __init__(
         self,
-        hybrid_engine: Optional[HybridVideoEngine] = None,
-        procedural_engine: Optional[ProceduralVideoEngine] = None,
+        hybrid_engine: Optional[Any] = None,
+        procedural_engine: Optional[Any] = None,
     ) -> None:
-        self.hybrid_engine = hybrid_engine or HybridVideoEngine()
+        # Lazy-load hybrid/proc engines so the default beats→loop path never
+        # pays their import tax (numpy/PIL/hybrid stack) at module import time.
+        if hybrid_engine is not None:
+            self.hybrid_engine = hybrid_engine
+        else:
+            from src.media.hybrid_engine import HybridVideoEngine
+            self.hybrid_engine = HybridVideoEngine()
         if procedural_engine is not None:
             self.procedural_engine = procedural_engine
         elif _native_procedural_hot_path_enabled():
             # Opt-in only (SSOT PDF v2.4.0): quarantined under src.media._legacy.
             from src.media._legacy.native_procedural import NativeProceduralEngine
+            from src.media.proc_engine import ProceduralVideoEngine
             logger.warning(
                 "ENABLE_NATIVE_PROCEDURAL=1: wiring quarantined NativeProceduralEngine (wgpu) from src.media._legacy"
             )
             self.procedural_engine = ProceduralVideoEngine(renderer=NativeProceduralEngine())
         else:
+            from src.media.proc_engine import ProceduralVideoEngine
             # Default: FFmpeg lavfi / catalog loops via ProceduralVideoEngine (no wgpu).
             self.procedural_engine = ProceduralVideoEngine()
 

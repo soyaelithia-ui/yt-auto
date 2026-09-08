@@ -254,6 +254,202 @@ class TestLoopCatalogRepository(unittest.TestCase):
         listed = self.repo.list_loops(category="monsters", orientation="vertical", limit=1000)
         self.assertEqual(self.repo.count_loops(category="monsters", orientation="vertical"), len(listed))
 
+    def test_channel_isolation_and_seeded_rotation(self):
+        """Verify get_best_loop respects channel affinity and rotates deterministically with seeds."""
+        f_moku1 = self._create_dummy_video("loops/moku_corr.mp4")
+        f_moku2 = self._create_dummy_video("loops/moku_forest.mp4")
+        f_drama = self._create_dummy_video("loops/aelithia_cozy.mp4")
+
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_corr_h",
+            category="horror",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_moku1,
+            file_size_bytes=30_000,
+            sha256="m1",
+            theme_tags=["moku", "horizontal", "horror"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_forest_h",
+            category="dark_forest",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_moku2,
+            file_size_bytes=30_000,
+            sha256="m2",
+            theme_tags=["moku", "horizontal", "dark_forest"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="drama_cozy_h",
+            category="drama",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_drama,
+            file_size_bytes=30_000,
+            sha256="d1",
+            theme_tags=["aelithia", "horizontal", "drama"],
+            usage_count=0,
+        ))
+
+        # Channel isolation: unknown category for moku should fallback to moku, NOT drama
+        loop = self.repo.get_best_loop("classified_terminal", "horizontal", channel="moku")
+        self.assertIsNotNone(loop)
+        self.assertIn("moku", loop.theme_tags)
+        self.assertNotEqual(loop.loop_id, "drama_cozy_h")
+
+        # Channel isolation: foreign existing category for moku must NEVER leak drama loop
+        loop_foreign = self.repo.get_best_loop("drama", "horizontal", channel="moku")
+        self.assertIsNotNone(loop_foreign)
+        self.assertIn("moku", loop_foreign.theme_tags)
+        self.assertNotEqual(loop_foreign.loop_id, "drama_cozy_h")
+
+        # Seeded rotation: seed 0 vs seed 1 should rotate between the 2 moku loops
+        loop_s0 = self.repo.get_best_loop("horror", "horizontal", channel="moku", seed=0)
+        loop_s1 = self.repo.get_best_loop("horror", "horizontal", channel="moku", seed=1)
+        self.assertIsNotNone(loop_s0)
+        self.assertIsNotNone(loop_s1)
+        self.assertNotEqual(loop_s0.loop_id, loop_s1.loop_id)
+
+    def test_candidate_pool_multi_record_category_retains_category_filtering(self):
+        """Verify that when a category has >1 records, rotation is strictly within that category."""
+        f_h1 = self._create_dummy_video("loops/horror_1.mp4")
+        f_h2 = self._create_dummy_video("loops/horror_2.mp4")
+        f_df = self._create_dummy_video("loops/dark_forest_1.mp4")
+
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_h1",
+            category="horror",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_h1,
+            file_size_bytes=30_000,
+            sha256="mh1",
+            theme_tags=["moku", "horizontal", "horror"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_h2",
+            category="horror",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_h2,
+            file_size_bytes=30_000,
+            sha256="mh2",
+            theme_tags=["moku", "horizontal", "horror"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_df1",
+            category="dark_forest",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_df,
+            file_size_bytes=30_000,
+            sha256="mdf1",
+            theme_tags=["moku", "horizontal", "dark_forest"],
+        ))
+
+        # Because 'horror' has 2 records (> 1), candidate pool should only contain horror records
+        loop_s0 = self.repo.get_best_loop("horror", "horizontal", channel="moku", seed=0)
+        loop_s1 = self.repo.get_best_loop("horror", "horizontal", channel="moku", seed=1)
+        self.assertIsNotNone(loop_s0)
+        self.assertIsNotNone(loop_s1)
+        self.assertEqual(loop_s0.category, "horror")
+        self.assertEqual(loop_s1.category, "horror")
+        self.assertNotEqual(loop_s0.loop_id, loop_s1.loop_id)
+        self.assertNotIn("moku_df1", (loop_s0.loop_id, loop_s1.loop_id))
+
+    def test_scifi_channel_isolation_and_rotation(self):
+        """Verify scifi channel loops rotate smoothly and reject foreign horror loops."""
+        f_s1 = self._create_dummy_video("loops/scifi_space.mp4")
+        f_s2 = self._create_dummy_video("loops/scifi_cyber.mp4")
+        f_m1 = self._create_dummy_video("loops/moku_containment.mp4")
+
+        self.repo.register_loop(LoopRecord(
+            loop_id="scifi_space_h",
+            category="space_abyss",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_s1,
+            file_size_bytes=30_000,
+            sha256="ss1",
+            theme_tags=["scifi", "horizontal", "space_abyss"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="scifi_cyber_h",
+            category="deep_space",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_s2,
+            file_size_bytes=30_000,
+            sha256="ss2",
+            theme_tags=["scifi", "horizontal", "deep_space"],
+        ))
+        self.repo.register_loop(LoopRecord(
+            loop_id="moku_cont_h",
+            category="horror",
+            technology="ai_master",
+            orientation="horizontal",
+            width=1920,
+            height=1080,
+            duration_sec=60.0,
+            fps=24,
+            file_path=f_m1,
+            file_size_bytes=30_000,
+            sha256="mc1",
+            theme_tags=["moku", "horizontal", "horror"],
+        ))
+
+        # Test rotation across single-match category falling back to channel distinct loops
+        s0 = self.repo.get_best_loop("space_abyss", "horizontal", channel="scifi", seed=0)
+        s1 = self.repo.get_best_loop("space_abyss", "horizontal", channel="scifi", seed=1)
+        self.assertIsNotNone(s0)
+        self.assertIsNotNone(s1)
+        self.assertNotEqual(s0.loop_id, s1.loop_id)
+        self.assertIn("scifi", s0.theme_tags)
+        self.assertIn("scifi", s1.theme_tags)
+        self.assertNotIn("moku", s0.theme_tags)
+        self.assertNotIn("moku", s1.theme_tags)
+
+        # Strict isolation: querying horror on scifi must NEVER return moku
+        leak = self.repo.get_best_loop("horror", "horizontal", channel="scifi", seed=0)
+        self.assertIsNotNone(leak)
+        self.assertIn("scifi", leak.theme_tags)
+        self.assertNotIn("moku", leak.theme_tags)
+
+
+
     # === Milestone 1 New Tests ===
 
     def test_sync_catalog_from_assets_indexes_all_loops(self):

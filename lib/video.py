@@ -46,7 +46,7 @@ SHORT_MAX_SCENE_SECONDS = 4.5
 VIDEO_FPS = max(15, int(os.environ.get("VIDEO_FPS", "30")))
 # Quality & performance knobs (env-overridable). Defaults: CRF 21, veryfast preset
 # (aligned with docker-compose RENDER_* and src.config SETTINGS.render_crf).
-RENDER_CRF = max(0, min(51, int(os.environ.get("RENDER_CRF", "21"))))
+RENDER_CRF = max(0, min(51, int(os.environ.get("RENDER_CRF", "19"))))
 RENDER_PRESET = os.environ.get("RENDER_PRESET", "veryfast").strip() or "veryfast"
 _FFMPEG_THREADS_ENV = os.environ.get("FFMPEG_THREADS", "")
 # R7: respect the env knob up to the CPU count (capped at the container quota

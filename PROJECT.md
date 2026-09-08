@@ -1,98 +1,76 @@
-# Project: yt-auto Codebase Reconciliation, Browser Eradication, Doc Purge & Test Certification
+# Project: 16:9 Long-Form Video Pipeline Optimization & Thematic Loop Rotation
 
 ## Architecture
-The yt-auto media pipeline is built on a zero-browser, deterministic **FFmpeg-first** architecture (SSOT Teología PDF v2.4.0):
-1. **Production visual path (FFmpeg)**:
-   - **Beats / loop**: `LoopVideoEngine` concat demuxer + `-c:v copy` (near-zero reencode) on the default horizontal path.
-   - **Director / multi-scene**: `MultiSceneCompositor` + `HybridVideoEngine` Ken Burns via FFmpeg `zoompan`. Default `DIRECTOR_SINGLE_PASS=1` assembles all-procedural manifests from catalog loops with stream-copy trim + concat demuxer (eliminates per-scene libx264). Real `xfade` is opt-in (`DIRECTOR_XFADE=1`) because it shortens the timeline; `MultiActVideoRenderer` uses `xfade` in one `filter_complex`. `ENABLE_NATIVE_PROCEDURAL` defaults to **off** (quarantined under `src/media/_legacy`).
-2. **Loop catalog (`src/media/loop_worker.py`, `src/media/loop_engine.py`)**:
-   - Background synthetic video loop creation via native FFmpeg `lavfi` (`technology=ffmpeg_lavfi`).
-   - Stream looping (`-stream_loop -1`), EBU R128 sidechain ducking filtergraphs, and ASS subtitle burning.
-   - Strictly zero Playwright, Chromium, or headless browser subprocesses in media rendering.
-3. **Quarantined**: `src/media/_legacy/native_procedural.py` + shaders (WebGPU/`wgpu-py` WGSL). Not SSOT. Production = FFmpeg + Pillow thumbs. Constructed only if `ENABLE_NATIVE_PROCEDURAL=1`.
-4. **Storage & Concurrency Architecture**:
-   - SQLite with Write-Ahead Logging (`WAL`), `PRAGMA busy_timeout=15000`, `synchronous=NORMAL`.
-   - Discrete per-PID test review databases avoiding lock collisions under concurrency.
-   - Strict offline socket network isolation in test environments.
-
----
+- **Pipeline & Composition Engine (`src/pipeline.py`, `src/media/loop_engine.py`)**:
+  - Narrative synthesis & TTS audio generation (`lib/tts.py`).
+  - Audio chain: sidechain ducking (`sidechaincompress`), mixing (`amix`), and EBU R128 loudness mastering (`loudnorm`).
+  - Video composition: Concat demuxer (`ffconcat version 1.0`) with per-shot `duration` directives and stream-copy (`-c:v copy`), preserving exact 1080p 16:9 geometry without CPU-intensive re-encoding.
+- **Master Loop Catalog & Rotation (`src/core/catalog.py`, `data/loop_catalog.db`, `assets/loops/`)**:
+  - Pre-rendered 1080p H.264 Main 24fps master loops for `moku` and `scifi`.
+  - Channel isolation enforcement via `CHANNEL_THEMES`.
+  - Seeded modulo candidate pool rotation across scenes/acts without consecutive repetitions.
+- **Locking & Concurrency (`src/core/lock.py`, `src/orchestrator/pipeline.py`)**:
+  - Non-blocking/timed `ChannelLock` with polling timeout and reentrancy registration in `_active_locks`.
+- **Review Delivery & Telegram Bot (`review/telegram_bot.py`, `src/telegram/notifier.py`)**:
+  - Size preflight check against 50 MB Telegram cloud limit.
+  - Adaptive review proxy generation (ultrafast x264, 15fps, 360p/480p/720p).
+  - Multipart POST to `https://api.telegram.org/bot[REDACTED]/sendVideo`, verifying HTTP 200 and `ok: true`.
+- **Governance & CI (`./scripts/verify_integrity.sh`, `.githooks/pre-commit`)**:
+  - Zero-Browser policy in media/pipeline.
+  - Zero-Secrets policy across git and memory.
+  - 100% HEALTHY state verified via `./scripts/verify_integrity.sh`.
 
 ## Feature Inventory
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| F01 | Stage & Preserve Local Shaders & Profiles | Commit uncommitted WGSL shader updates, hex accent parsing, Kelvin mapping, and Aelithia profiles. | M1 | Survey 1 / R1 |
-| F02 | Git Reconcile with origin/main (acc279f) | Fast-forward/merge local main with origin/main (acc279f) cleanly without merge conflicts. | M1 | Survey 1 / R1 |
-| F03 | Purge Obsolete Architecture Blueprints | Delete permanently docs/architecture/01_*.md to 05_*.md resuscitated in acc279f. | M1 | Survey 1 / R1 |
-| F04 | Discard & Prune Outdated Worktree | Remove implement_grill_test_suite worktree and prune git worktrees. | M1 | Survey 1 / R1 |
-| F05 | Media Browser Eradication & Code Alignment | Guarantee 0 playwright/chromium imports in src/media/ and src/cli/handlers/loop.py, and clean cosmetic docstrings. | M2 | Survey 2 / R2 |
-| F06 | Performance Policy Spec Ratification | Ratify explicit ban on headless browsers in openspec/specs/media-processing-performance-policy/spec.md with Gherkin scenarios. | M2 | Survey 2 / R2 |
-| F07 | CLI Loop Generation Latency SLA (<2.0s) | Optimize FFmpeg encoding preset to ultrafast in loop_worker.py and defer eager imports in main.py. | M2 | Survey 3 / R2 |
-| F08 | Verification Targets Certification | Certify 100% green pass on the 4 targeted test suites (test_native_procedural_uniforms, test_cinematic_storyboard, test_multiscene_dispatch, test_loop_video_engine). | M3 | Survey 3 / R3 |
-| F09 | Full Suite Zero-Regression & DB Concurrency Certification | Run full pytest suite, verifying 0 failures, 0 database locks (WAL/busy_timeout), 0 browser leaks, and 0 network quota consumption. | M3 | Survey 3 / R3 |
-| F10 | Monotonic Timestamp Sanitizer | Timestamp sanitization enforcing monotonicity, non-negative durations, and millisecond ASS formatting. | M3 | Tier 1 |
-| F11 | Unified Atomic FFmpeg Encoder | Unified single-pass filtergraph, libass subtitles, EBU R128 ducking, and async stderr drain. | M3 | Tier 1 |
-| F12 | SceneManifest Contract Synchronization | Synchronization of SceneManifest and JSON Schema contracts with VisualArchetypeId. | M4 | Tier 1 |
-| F13 | Scene Planner Agent Sync | Scene planner agent resolving archetype tokens and generating valid vertical SceneManifest instances. | M4 | Tier 1 |
-| F14 | Deterministic Video QA Gate | Forensic audiovisual QA auditor verifying faststart, yuv420p, loudness, and frame integrity. | M4 | Tier 1 |
-| F15 | Documentation Synchronization | Architecture and operations documentation synchronization with zero legacy blueprints. | M4 | Tier 1 |
-| F16 | E2E Testing Suite (Tiers 1–4) | Complete test runner CLI, multi-tier test suites (Tiers 1–4), and boundary/workload coverage. | E2E | Tier 1 |
-
----
+| # | Feature ID | Feature | Description | Milestone | Source |
+|---|------------|---------|-------------|-----------|--------|
+| 1 | F01 | Stream-Copy Concat Slicing | `ffconcat version 1.0` with `duration <shot_dur>` per entry in `LoopVideoEngine.compose()` | M1 | Survey (Explorer 1) |
+| 2 | F02 | Elimination of Re-encoding Bottlenecks | Use `-c:v copy` for all 1080p Main master loops; eliminate redundant `libx264` re-encoding | M1 | Survey (Explorer 1) |
+| 3 | F03 | Lock Hardening & Anti-Deadlock | Add polling timeout and `_active_locks` registration to `ChannelLock` to eliminate self-collisions | M1 | Survey (Explorer 1) |
+| 4 | F04 | Catalog Candidate Pool Fallback | Allow seeded rotation across distinct channel-compatible loops when subcategory count == 1 | M2 | Survey (Explorer 3) |
+| 5 | F05 | Thematic Loop Rotation & Channel Isolation | Alternating scene background rotation per channel theme (dark/horror for Moku, cosmos/tech for SciFi) | M2 | Survey (Explorer 2) |
+| 6 | F06 | 16:9 Aspect Ratio Preservation | Preserve exact 1920x1080 dimensions without distortion across all master loop transitions | M2 | Survey (Explorer 2) |
+| 7 | F07 | Long-Form Test Generation (Moku & SciFi) | Generate test 16:9 longform videos for `moku-horror-long` and `scifi-singularity-long` | M3 | User Request (R3) |
+| 8 | F08 | Telegram Proxy Generation (<= 50MB) | Ensure longform videos are adaptively compressed to <= 50MB for Telegram review delivery | M3 | Survey (Explorer 3) |
+| 9 | F09 | Telegram Delivery Verification | Send test video review to chat `8266399903`, verifying HTTP 200 and `ok: true` | M3 | User Request (R3) |
+| 10 | F10 | Secret Hygiene Remediation | Redact plain-text Telegram token in `ORIGINAL_REQUEST.md` to pass `.githooks/pre-commit` | M4 | Survey (Explorer 3) |
+| 11 | F11 | Invariant & Governance Verification | Verify `./scripts/verify_integrity.sh` 100% HEALTHY, zero-browser, and zero-secrets | M4 | User Request (R4) |
+| 12 | F12 | Git Branch Integration & Push | Pull/rebase remote commits, create semantic commits, and push to `origin/verify_vps_github_status` | M4 | User Request (R4) |
+| 13 | F13 | E2E Test Suite Creation | Requirements-driven opaque-box test suite (Tiers 1-4) published via `TEST_READY.md` | E2E Track | Project Pattern |
+| 14 | F14 | Live Director Shot Mix | Majority settled background reuse with minority designed in-moment grades | Pipeline | PR #69 |
+| 15 | F15 | Precomputed QA Metrics Gate | `bank_manifest.json` visual metrics avoid double full-file decode in prepublication QA | Pipeline | PR #69 |
+| 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Moku, Aelithia, and SciFi (Shorts + Longform) | Pipeline | PR #69 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Git SSOT Sync, Doc Purge & Worktree Cleanup | Stage untracked tests & local WGSL/Aelithia changes, sync main with origin/main (acc279f), purge docs/architecture/0*.md, prune worktree. (F01, F02, F03, F04) | none | DONE |
-| M2 | Media Browser Eradication & Policy Ratification | Verify zero Playwright in src/media/, clean cosmetic docstrings, optimize loop generation to <2.0s, ratify openspec policy. (F05, F06, F07) | M1 | IN_PROGRESS |
-| M3 | Test Suite Certification & Zero Regressions | Execute target suites (32 tests) and full pytest suite (1850+ tests), benchmark loop generation, verify zero DB locks, zero browser processes. (F08, F09) | M2 | PLANNED |
-
----
+| M1 | Stream-Copy Concat & Lock Hardening | `src/media/loop_engine.py`, `src/core/lock.py`, `src/pipeline.py` | none | DONE |
+| M2 | Catalog Candidate Pool & Thematic Rotation | `src/core/catalog.py`, `tests/unit/test_loop_catalog.py` | none | DONE |
+| M3 | Long-Form Generation & Telegram Delivery | `src/orchestrator/pipeline.py`, `review/telegram_bot.py`, generation CLI | M1, M2 | DONE |
+| M4 | Final Milestone: E2E Validation & Governance | E2E test pass, secret redaction, `./scripts/verify_integrity.sh`, git push | M3, E2E Track | DONE |
 
 ## Interface Contracts
+### LoopVideoEngine ↔ FFmpeg Concat Demuxer
+- Input: `loop_concat_list.txt` formatted with `ffconcat version 1.0`, followed by alternating `file '<path>'` and `duration <dur_sec>` lines.
+- FFmpeg Command: `ffmpeg -y -f concat -safe 0 -i loop_concat_list.txt -i speech.wav -i bgm.mp3 -filter_complex <ducking_filter> -c:v copy -c:a aac -movflags +faststart <output.mp4>`.
+- Guarantees: Zero video re-encoding, sub-second composition, exact 1920x1080 16:9 output.
 
-### 1. Git Repository SSOT State
-- Target Remote: `origin/main` commit `acc279f`.
-- Working Tree: clean working tree (`git status` clean) with all WGSL shaders, Aelithia profiles, and test files tracked.
-- Architecture Docs: `docs/architecture/0*.md` must not exist.
-- Worktrees: `implement_grill_test_suite` removed from `git worktree list`.
+### LoopCatalogRepository ↔ Pipeline
+- Signature: `get_best_loop(category: str, orientation: str = "horizontal", seed: Optional[int] = None, channel: Optional[str] = None) -> LoopMetadata`
+- Semantics:
+  - If `channel` is provided, candidate pool is filtered strictly by `CHANNEL_THEMES[channel]`.
+  - If matching category has <= 1 record, fallback to all distinct channel records to allow seeded rotation.
+  - Returns `LoopMetadata` with verified physical path in `assets/loops/horizontal/`.
 
-### 2. Media Rendering Pipeline ↔ Zero-Browser Policy
-- Module Boundary: `src/media/` and `src/cli/handlers/loop.py`.
-- Invariant: 0 imports of `playwright` or launches of `chromium`.
-- SLA: `main.py loop generate -c drama_aita -o horizontal --duration 3.0` executes in $\le 2.0\text{s}$ wall-clock time using native FFmpeg lavfi.
-- Policy: `openspec/specs/media-processing-performance-policy/spec.md` mandates zero browser runtimes with explicit Gherkin scenarios.
-
-### 3. Test Suite & Concurrency Invariants
-- Pytest invocation: `.venv/bin/pytest tests/unit/test_native_procedural_uniforms.py tests/unit/test_cinematic_storyboard.py tests/integration/test_multiscene_dispatch.py tests/unit/test_loop_video_engine.py` -> 100% pass (32/32 green).
-- Full suite: 0 failures, 0 database locked exceptions, 0 external network requests.
-
----
+### TelegramReviewBot ↔ Telegram Bot API
+- Target: `https://api.telegram.org/bot[REDACTED]/sendVideo`
+- Payload: multipart/form-data with `chat_id=8266399903`, `video=<proxy_file>`, `supports_streaming=true`.
+- Output: `DeliveryResult(ok=True, message_id=<int>)` on HTTP 200.
 
 ## Code Layout
-```text
-src/
-├── cli/
-│   ├── handlers/
-│   │   └── loop.py                   # Loop CLI handler (FFmpeg lavfi, 0 browser)
-│   └── parser.py                     # CLI argument parser
-├── media/
-│   ├── loop_engine.py                # LoopVideoEngine (FFmpeg audio & video looping)
-│   ├── loop_worker.py                # LoopSynthesizerWorker (fast FFmpeg lavfi generator)
-│   ├── _legacy/native_procedural.py  # QUARANTINED: wgpu/WGSL (ENABLE_NATIVE_PROCEDURAL=1 only)
-│   ├── native_procedural.py          # DEPRECATED shim -> _legacy (fail-closed without opt-in)
-│   └── shaders/
-│       └── maritime_lighthouse.wgsl  # WGSL shader with photometric luminance floor
-docs/
-└── architecture/                     # Obsolete 01-05 blueprints purged
-openspec/
-└── specs/
-    └── media-processing-performance-policy/
-        └── spec.md                   # Ratified zero-browser performance policy
-tests/
-├── unit/
-│   ├── test_native_procedural_uniforms.py
-│   ├── test_cinematic_storyboard.py
-│   └── test_loop_video_engine.py
-└── integration/
-    └── test_multiscene_dispatch.py
-```
+- `src/media/loop_engine.py`: Concat demuxer writing, stream-copy composition, audio filtergraph.
+- `src/core/lock.py`: File locking mechanism (`ChannelLock`).
+- `src/core/catalog.py`: Loop catalog repository, channel themes, seeded candidate rotation.
+- `src/pipeline.py`: Main pipeline execution, shot planning, audio generation.
+- `src/orchestrator/pipeline.py`: Channel orchestration, topic story creation, telegram review trigger.
+- `review/telegram_bot.py`: Telegram review bot, preflight size check, proxy builder.
+- `tests/e2e/`: E2E test suites covering loop stream-copy, rotation, locks, and delivery.

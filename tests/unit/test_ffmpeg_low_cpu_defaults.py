@@ -21,9 +21,9 @@ def test_default_render_preset_is_veryfast(monkeypatch):
     assert default_render_preset() == "veryfast"
 
 
-def test_default_render_crf_is_21(monkeypatch):
+def test_default_render_crf_is_19(monkeypatch):
     monkeypatch.delenv("RENDER_CRF", raising=False)
-    assert default_render_crf() == 21
+    assert default_render_crf() == 19
 
 
 def test_render_env_overrides(monkeypatch):
@@ -120,7 +120,7 @@ def test_lib_video_crf_default_matches_compose(monkeypatch):
     monkeypatch.delenv("RENDER_PRESET", raising=False)
     # Re-import would be sticky; assert source default string instead
     src = Path("lib/video.py").read_text(encoding="utf-8")
-    assert 'os.environ.get("RENDER_CRF", "21")' in src
+    assert 'os.environ.get("RENDER_CRF", "19")' in src
     assert 'os.environ.get("RENDER_PRESET", "veryfast")' in src
 
 

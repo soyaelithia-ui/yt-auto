@@ -553,7 +553,12 @@ def validate_prepublication(
         if not has_faststart(video):
             report.issues.append("MP4 sin moov atom previo a mdat (+faststart)")
         try:
-            longest_black, black_segments = detect_long_black_frames(video)
+            if isinstance(precomputed_visual, dict) and "longest_black_seconds" in precomputed_visual:
+                longest_black = float(precomputed_visual["longest_black_seconds"])
+                black_segments = list(precomputed_visual.get("black_segments", []))
+                report.facts["black_source"] = "precomputed_visual"
+            else:
+                longest_black, black_segments = detect_long_black_frames(video)
             report.facts["longest_black_seconds"] = longest_black
             report.facts["black_segments"] = len(black_segments)
             if longest_black >= 3.0:

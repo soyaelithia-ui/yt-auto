@@ -26,7 +26,7 @@ def _get_active_channels(db_path: str | None = None) -> list[str]:
 
     func = getattr(cm, "get_active_channels", None)
     if func is None:
-        return ["moku", "aelithia"]
+        return ["moku", "aelithia", "scifi"]
     try:
         return list(func(db_path))
     except TypeError:
@@ -105,7 +105,7 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
             try:
                 ch = _resolve_channel_key(raw_ch)
             except (ValueError, KeyError):
-                msg = f"Canal desconocido o inválido: {raw_ch!r}. Canales válidos: 'moku', 'aelithia'"
+                msg = f"Canal desconocido o inválido: {raw_ch!r}. Canales válidos: 'moku', 'aelithia', 'scifi'"
                 if parser is not None:
                     parser.error(msg)
                 else:
@@ -139,23 +139,28 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
     channel = getattr(args, "channel", "all") or "all"
     if target_story and channel == "all":
         if parser is not None:
-            parser.error("--topic o --story-id requiere --channel moku o --channel aelithia")
+            parser.error("--topic o --story-id requiere --channel moku, --channel aelithia o --channel scifi")
         else:
-            print("Error: --topic o --story-id requiere --channel moku o --channel aelithia", file=sys.stderr)
+            print("Error: --topic o --story-id requiere --channel moku, --channel aelithia o --channel scifi", file=sys.stderr)
             return 2
+
+    lane_id = getattr(args, "lane", None)
+    if channel == "all" and lane_id:
+        for prefix in ("moku", "aelithia", "scifi"):
+            if lane_id.startswith(prefix):
+                channel = prefix
+                break
 
     if channel != "all":
         try:
             ch = _resolve_channel_key(channel)
         except (ValueError, KeyError):
-            msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: 'moku', 'aelithia', 'all'"
+            msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: 'moku', 'aelithia', 'scifi', 'all'"
             if parser is not None:
                 parser.error(msg)
             else:
                 print(f"Error: {msg}", file=sys.stderr)
                 return 2
-
-    lane_id = getattr(args, "lane", None)
 
     if channel == "all":
         active = _get_active_channels(db_path)
@@ -175,6 +180,7 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
             try:
                 res = orchestrator.run_channel(
                     channel=ch,
+                    lane_id=lane_id,
                     generate_only=getattr(args, "generate_only", False),
                     dispatch_telegram=getattr(args, "dispatch_telegram", False),
                     skip_lock=True,
@@ -201,6 +207,7 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
                 dry_run=getattr(args, "dry_run", False),
                 generate_only=getattr(args, "generate_only", False),
                 dispatch_telegram=getattr(args, "dispatch_telegram", False),
+                skip_lock=True,
             )
             print(f"[{ch}] Result: {res.status}")
             if res.telegram_delivery:

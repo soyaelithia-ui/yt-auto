@@ -36,4 +36,5 @@ jobs:
       - name: Run offline suite (live tests excluded)
         env:
           YT_PROFILE: test
+          YT_LIVE_RSS_PEAK_MB: 768
         run: pytest -m "not live" -q --timeout=600

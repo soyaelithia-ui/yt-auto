@@ -59,7 +59,7 @@ def legacy_database(path: Path) -> None:
 def test_canonical_channels_are_strict_and_config_is_canonical():
     assert canonical_channel("terror") is CanonicalChannel.MOKU
     assert canonical_channel("soy_el_malo") is CanonicalChannel.AELITHIA
-    assert set(CHANNELS_CONFIG) == {"moku", "aelithia"}
+    assert set(CHANNELS_CONFIG) == {"moku", "aelithia", "scifi"}
     with pytest.raises(ValueError):
         canonical_channel("")
     with pytest.raises(ValueError):
