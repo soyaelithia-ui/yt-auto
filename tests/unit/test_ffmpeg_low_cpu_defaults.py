@@ -235,3 +235,29 @@ def test_apply_code_subtitles_to_video_cmd_wires_encode_defaults(tmp_path, monke
     assert "faster" not in write_cmd
     assert "-b:v" not in write_cmd
 
+
+def test_quality_gate_ffmpeg_calls_enforce_thread_limit(tmp_path):
+    """Verify that quality gate live FFmpeg fallback commands enforce -threads 2."""
+    from src.core.quality import detect_long_black_frames, analyze_perceptual_luminance
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        detect_long_black_frames("dummy.mp4")
+        assert mock_run.called
+        cmd = mock_run.call_args[0][0]
+        assert "-threads" in cmd
+        assert cmd[cmd.index("-threads") + 1] == "2"
+        assert cmd.index("-threads") < cmd.index("-i")
+
+    dummy_file = tmp_path / "dummy.mp4"
+    dummy_file.write_bytes(b"dummy_content")
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        analyze_perceptual_luminance(dummy_file)
+        assert mock_run.called
+        cmd = mock_run.call_args[0][0]
+        assert "-threads" in cmd
+        assert cmd[cmd.index("-threads") + 1] == "2"
+        assert cmd.index("-threads") < cmd.index("-i")
+
+

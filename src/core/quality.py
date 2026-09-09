@@ -193,12 +193,17 @@ def has_faststart(path: str | os.PathLike[str]) -> bool:
 
 
 def detect_long_black_frames(
-    path: str | os.PathLike[str], *, maximum_seconds: float = 3.0
+    path: str | os.PathLike[str],
+    *,
+    maximum_seconds: float = 3.0,
+    threads: int = 2,
 ) -> tuple[float, list[float]]:
     command = [
         "ffmpeg",
         "-v",
         "error",
+        "-threads",
+        str(threads),
         "-i",
         str(path),
         "-vf",
@@ -351,7 +356,11 @@ def avg_luminance_gate_passes(avg_lum: float, dark_ratio: float) -> bool:
     return avg_lum >= LUMINANCE_AVG_MIN and dark_ratio <= LUMINANCE_DARK_RATIO_MAX
 
 
-def analyze_perceptual_luminance(video_path: Path | str) -> dict[str, Any]:
+def analyze_perceptual_luminance(
+    video_path: Path | str,
+    *,
+    threads: int = 2,
+) -> dict[str, Any]:
     """
     Perceptual darkness analysis across video frames.
     Measures average luminance, percentiles, and near-black ratio to ensure horror
@@ -381,6 +390,7 @@ def analyze_perceptual_luminance(video_path: Path | str) -> dict[str, Any]:
         # mirrors when embedding perceptual_luminance into its report.
         cmd = [
             "ffmpeg", "-y", "-v", "error",
+            "-threads", str(threads),
             "-i", str(target),
             "-vf", f"fps={LUMINANCE_SAMPLE_FPS},scale=-2:{LUMINANCE_DOWNSCALE_HEIGHT}",
             os.path.join(tmpdir, "frame_%04d.jpg"),
