@@ -25,7 +25,7 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 | **`backup`** | Respaldo atómico de SQLite con verificación. | `-o` (directorio destino), `-j` (salida JSON) | `python3 main.py backup` |
 | **`migrate`** | Migraciones de esquema SQLite. | `-d` (dry-run), `-j` (salida JSON) | `python3 main.py migrate -d` |
 | **`service`** | Control de servicios Systemd y logs. | `build`, `start`, `stop`, `restart`, `logs` | `python3 main.py service logs` |
-| **`loop`** | Administración y síntesis de bucles de video web (Three.js/Canvas/CSS). | `list`, `generate`, `preview`, `audit`, `daemon`, `-c` (categoría), `-o` (orientación), `-n` (cantidad), `-j` (JSON) | `python3 main.py loop list`<br>`python3 main.py loop generate -c cosmic_horror -o vertical`<br>`python3 main.py loop audit` |
+| **`loop`** | Administración e indexación de bucles de video (catálogo de videos pre-renderizados MP4 y stream-copy). | `list`, `generate`, `preview`, `audit`, `daemon`, `-c` (categoría), `-o` (orientación), `-n` (cantidad), `-j` (JSON) | `python3 main.py loop list`<br>`python3 main.py loop generate -c cosmic_horror -o vertical`<br>`python3 main.py loop audit` |
 
 
 ### Opciones Globales (heredables antes o después del subcomando)
@@ -137,5 +137,19 @@ sudo systemctl edit yt-review-bot.service
 # WorkingDirectory=/opt/yt-auto
 # ExecStart=/opt/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
 ```
+
+---
+
+## 4. Gestión de Worktrees Concurrentes y Aprovisionamiento de Assets
+
+Flujos multi-agente concurrentes y aislamiento de ramas de desarrollo sin colisiones:
+
+- **`scripts/agent_worktree.sh`**: Gestiona worktrees aislados fuera del checkout primario (`/home/moku/projects/yt-auto`).
+  - `create <name> [branch]`: Crea worktree y rama de trabajo aislada.
+  - `remove <name>`: Desmonta el worktree de forma segura y ejecuta `git worktree prune`.
+  - `list`: Inspecciona worktrees activos garantizando higiene sin ramas huérfanas.
+- **`scripts/setup_worktree_env.sh`**: Configura de forma idempotente el entorno del worktree derivado:
+  - Enlaza `.venv`, `.agents` y `.env` usando rutas relativas seguras sin exponer secretos.
+  - Enlaza el catálogo de videos pre-renderizados (`assets/loops/`) y la base de datos SQLite (`data/loop_catalog.db`) desde `$PRIMARY_ROOT`, garantizando stream-copy (`-c:v copy`) instantáneo sin duplicar gigabytes ni desalinear Git tracking.
 
 Catálogo CI vs prod (seed test / sin inventar media): [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).

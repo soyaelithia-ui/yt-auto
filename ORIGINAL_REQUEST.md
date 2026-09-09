@@ -143,3 +143,65 @@ Todas las composiciones FFmpeg y procesos de generación deben ejecutarse con m�
 
 ## PR #69 feature acceptance (verify_vps_github_status)
 - 6 lanes; stream-copy multi-scene loop composition; honest precomputed QA; CHANNEL_THEMES channel isolation.
+
+## 2026-09-09T20:28:35Z
+
+Implementar y certificar las optimizaciones de rendimiento de hardware para eliminar cuellos de botella de renderizado y control de calidad (activando Stream-Copy con los videos pre-renderizados del catálogo de assets y sellando métricas en QA manifest), realizar la poda y unificación de worktrees para coordinación limpia, eliminar procesos huérfanos del host, actualizar la documentación técnica oficial (`docs/`), validar la integridad y suite de pruebas del proyecto, y coordinar la publicación de cambios mediante commits atómicos y push en la rama `analyze_system_performance_benchmark` en GitHub.
+
+> [!NOTE]
+> **Aclaración sobre Gobernanza y Política Anti-Procedural:**
+> Los "loops de código" (shaders WGSL, WebGPU, Three.js, Canvas y generadores matemáticos por código) **fueron eliminados definitivamente en el commit `7114ca7` y siguen terminantemente prohibidos** bajo el Invariante 6. Esta tarea **NO revive ningún renderizador por código**. Se refiere exclusivamente al enlace simbólico hacia los **archivos de video físicos pre-renderizados (`*.mp4`) del catálogo de assets** (`/home/moku/projects/yt-auto/assets/loops/`) que no viajan en Git por estar en `.gitignore`.
+
+Working directory: /home/moku/.gemini/antigravity-cli/worktrees/yt-auto/analyze_system_performance_benchmark
+Integrity mode: development
+
+## Requirements
+
+### R1. Poda, Unificación y Gobernanza de Worktrees para Coordinación Limpia
+Ejecutar y estandarizar la poda completa de worktrees derivados obsoletos mediante `scripts/agent_worktree.sh`, garantizando que únicamente persistan el checkout principal (`/home/moku/projects/yt-auto`) y el worktree activo de trabajo. Prunear los metadatos de Git (`git worktree prune`) para que cualquier nuevo agente opere sobre ramas frescas y coordinadas sin colisiones de ramas stale.
+
+### R2. Enlace Idempotente del Catálogo de Videos Pre-renderizados en Worktrees
+Actualizar `scripts/setup_worktree_env.sh` para enlazar de forma idempotente la carpeta de videos pre-renderizados del catálogo (`assets/loops`) y la base de datos de catálogo SQLite (`data/loop_catalog.db`) desde el repositorio principal (`$PRIMARY_ROOT`) hacia los worktrees derivados. Si en el worktree de destino ya existen carpetas esqueleto (`horizontal/`, `vertical/`), resolver de forma robusta la vinculación para que el motor de composición encuentre los archivos MP4 físicos de 1080p y active la ruta de stream-copy instantáneo (`-c:v copy`), sin re-renderizar fotogramas con CPU.
+
+### R3. Certificación y Sellado de Métricas Visuales en el Manifiesto de Activos
+Calcular y registrar de forma persistente en `assets/loops/bank_manifest.json` las métricas de calidad precalculadas (`longest_black_seconds` y `perceptual_luminance`) para cada uno de los videos maestros del catálogo, de modo que el motor de prepublicación (`validate_prepublication`) omita la decodificación redundante en vivo en `10_qa_gating`.
+
+### R4. Protección de Hilos en Control de Calidad en Vivo
+Establecer un límite de concurrencia (`-threads 2`) en los procesos FFmpeg de decodificación en vivo para detección de cuadros negros y análisis de luminancia en `src/core/quality.py`, evitando saturación del 100% de CPU en el host cuando se evalúen medios no certificados.
+
+### R5. Limpieza de Procesos Huérfanos del Proyecto y del Host
+Terminar de forma exhaustiva los procesos zombi y huérfanos del sistema host relacionados con el proyecto: instancias residuales de Chromium/Playwright (`ms-playwright`), procesos zombi de Python (runners de prueba y kernels huérfanos), procesos residuales de FFmpeg y workers descolgados, recuperando la memoria RAM física disponible del sistema.
+
+### R6. Actualización de Documentación Oficial del Proyecto
+Actualizar los documentos técnicos y manuales operativos en `docs/`:
+1. `docs/OPERACION.md`: Documentar la gestión y poda de worktrees (`scripts/agent_worktree.sh`), la vinculación del catálogo en entornos derivados (`scripts/setup_worktree_env.sh`), y purgar cualquier referencia obsoleta legacy (p.ej. menciones a Three.js/Canvas/CSS en subcomandos de bucles).
+2. `docs/FFMPEG_LOW_CPU.md`: Incorporar el contrato de limitación de hilos (`-threads 2`) en pasadas de validación y control de calidad visual (QA Gating) y la garantía de stream-copy para activos de catálogo certificados.
+3. `docs/POLITICA_CATALOGO_CI.md`: Registrar el requisito de persistencia de métricas (`longest_black_seconds`, `perceptual_luminance`) en `bank_manifest.json` y el aprovisionamiento de assets en worktrees concurrentes.
+
+### R7. Auditoría de Integridad y Suite Anti-Regresión
+Ejecutar `./scripts/verify_integrity.sh` y la suite de pruebas unitarias (`pytest`), garantizando el cumplimiento estricto del Invariante 6 (cero generadores procedurales matemáticos/shaders), Invariante 4 (cero resurrección de docs de arquitectura obsoletos en `docs/architecture/0*.md`) y todas las directivas de seguridad y aislamiento de `AGENTS.md`.
+
+### R8. Publicación y Coordinación en GitHub
+Crear commits convencionales y atómicos (`fix: ...`, `perf: ...`, `docs: ...`) respetando los githooks (`.githooks/pre-commit`) y sincronizar los cambios mediante `git push` a la rama remota `origin/analyze_system_performance_benchmark` en GitHub.
+
+## Acceptance Criteria
+
+### Rendimiento y Gestión del Entorno
+- [ ] Stale worktrees podados y eliminados; `scripts/agent_worktree.sh list` reporta únicamente el checkout primario y el worktree actual.
+- [ ] Procesos huérfanos de Chromium/Playwright y runners de Python/FFmpeg eliminados del host, con memoria RAM recuperada.
+- [ ] `scripts/setup_worktree_env.sh` vincula exitosamente los assets físicos de `assets/loops` y `data/loop_catalog.db`.
+- [ ] Cero código procedural matemático, shaders WGSL o canvas introducidos (respeto estricto a Invariant 6).
+- [ ] `LoopVideoEngine.get_loop_quality_metrics` devuelve un diccionario con `longest_black_seconds` y `perceptual_luminance` para los videos maestros de `bank_manifest.json`.
+- [ ] `validate_prepublication` utiliza `report.facts["black_source"] == "precomputed_visual"` y no invoca `detect_long_black_frames` cuando el activo está certificado.
+- [ ] Las llamadas de fallback de FFmpeg en `src/core/quality.py` incluyen explícitamente el argumento `-threads 2`.
+
+### Documentación y Calidad
+- [ ] `docs/OPERACION.md`, `docs/FFMPEG_LOW_CPU.md` y `docs/POLITICA_CATALOGO_CI.md` actualizados y alineados con la arquitectura actual.
+- [ ] Ninguna documentación legacy resucitada en `docs/architecture/0*.md`.
+- [ ] `./scripts/verify_integrity.sh` retorna código 0 (`HEALTHY`).
+- [ ] La suite de pruebas unitarias relevantes (`test_zero_procedural_math_video_policy.py`, `test_catalog_asset_only_composition.py`, `test_ffmpeg_low_cpu_defaults.py`, etc.) pasa al 100%.
+- [ ] Ningún archivo binario de video, audio temporal o archivo de clave/secreto se agrega al índice de Git.
+
+### Git & GitHub
+- [ ] Los commits locales pasan la verificación estricta de `.githooks/pre-commit`.
+- [ ] La rama `analyze_system_performance_benchmark` queda sincronizada y actualizada en el repositorio remoto de GitHub (`origin`).
