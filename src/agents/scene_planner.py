@@ -28,10 +28,6 @@ from src.scene_manifest import (
     ColorProfile,
     DuckingConfig,
     HybridAIConfig,
-    LightingConfig,
-    ParticleConfig,
-    ProceduralConfig,
-    ProceduralPalette,
     SafeArea,
     SceneConfig,
     SceneManifestV2,
@@ -243,9 +239,9 @@ class ScenePlannerCompositorAgent:
         # AITA / Drama Lane override
         if "aita" in lane_l or "drama" in lane_l or "confession" in lane_l:
             return (
-                "drama_aita",
-                "drama_waves_canvas.html",
-                {"waveSpeed": round(0.8 + 0.2 * tension, 2), "glowIntensity": 1.0},
+                "drama",
+                "drama",
+                {},
             )
 
         # 1. Classified / Terminal / Intel / Radar / Logs / Surveillance / Protocol / Telemetry / Archive
@@ -261,12 +257,8 @@ class ScenePlannerCompositorAgent:
         ):
             return (
                 "classified_terminal",
-                "archetype_classified_terminal.html",
-                {
-                    "docTitle": "REGISTRO CLASIFICADO // EXPEDIENTE",
-                    "alertLevel": f"NIVEL DE ALERTA {tension} // ACTIVO",
-                    "glowIntensity": round(0.85 + 0.15 * tension, 2),
-                },
+                "classified_terminal",
+                {},
             )
 
         # 2. Synaptic / Consciousness / Neural / Mind / Brain / Telepathy / Memory
@@ -275,17 +267,14 @@ class ScenePlannerCompositorAgent:
             "recuerdo", "memoria", "psiquico", "psíquico", "red", "matriz", "psicologico", "psicológico",
             "brain", "mind", "neural", "synapse", "synaptic", "consciousness", "cyber", "digital", "data", "matrix", "psycho", "psychological", "pneuma"
         }
-        if "synaptic_network" not in excluded and (
+        if "dark_ambient" not in excluded and (
             words.intersection(synaptic_keywords)
             or any(k in text for k in ("mente", "cerebro", "neural", "conciencia", "sinap", "mind", "psychological"))
         ):
             return (
-                "synaptic_network",
-                "archetype_synaptic_network.html",
-                {
-                    "nodeDensity": 24 + 6 * tension,
-                    "pulseSpeed": round(0.85 + 0.2 * tension, 2),
-                },
+                "dark_ambient",
+                "dark_ambient",
+                {},
             )
 
         # 3. Cosmic Singularity / Black Hole / Vortex / Relativistic Abyss / Space / Void
@@ -294,17 +283,14 @@ class ScenePlannerCompositorAgent:
             "gravedad", "lente", "galaxia", "universo", "horizonte", "sucesos", "vacio", "vacío",
             "singularity", "void", "black_hole", "rift", "portal", "abyss", "cosmic", "space", "vortex", "dimension", "event horizon"
         }
-        if "cosmic_singularity" not in excluded and (
+        if "cosmic_horror" not in excluded and (
             words.intersection(cosmic_keywords)
             or any(k in text for k in ("singularidad", "vortice", "vórtice", "espacio", "agujero negro", "singularity", "black hole", "rift", "cosmic", "event horizon"))
         ):
             return (
-                "cosmic_singularity",
-                "archetype_cosmic_singularity.html",
-                {
-                    "swirlSpeed": round(0.85 + 0.2 * tension, 2),
-                    "singularityScale": round(0.95 + 0.08 * tension, 2),
-                },
+                "cosmic_horror",
+                "cosmic_horror",
+                {},
             )
 
         # 4. Anomaly Silhouette / Monster / Beast / Breach / Creature / Colossus / Titan
@@ -314,18 +300,15 @@ class ScenePlannerCompositorAgent:
             "monster", "monsters", "creature", "creatures", "beast", "breach", "rampage",
             "threat", "chaos", "climax", "confrontation", "colossus", "titan", "cataclysmic"
         }
-        if "anomaly_silhouette" not in excluded and (
+        if "horror" not in excluded and (
             words.intersection(anomaly_keywords)
             or any(k in text for k in ("criatura", "monstruo", "coloso", "anomal", "monster", "beast", "devor", "rampage", "cataclysm"))
             or (tension >= 4 and dramatic_role in ("climax_confrontation", "climax_manifestation"))
         ):
             return (
-                "anomaly_silhouette",
-                "archetype_anomaly_silhouette.html",
-                {
-                    "threatLevel": tension,
-                    "emberCount": 35 + 10 * tension,
-                },
+                "horror",
+                "horror",
+                {},
             )
 
         # 5. Atmospheric Landscape / Wasteland / Steppe / Monoliths / Lighthouse / Coast / Ocean
@@ -335,19 +318,14 @@ class ScenePlannerCompositorAgent:
             "océano", "fosa", "playa", "marino", "tormenta", "olas", "ola", "isla", "niebla",
             "wasteland", "steppe", "monolith", "desert", "ruins", "ash", "landscape", "lighthouse", "ocean", "sea", "coast"
         }
-        if "atmospheric_landscape" not in excluded and (
+        if "dark_forest" not in excluded and (
             words.intersection(landscape_keywords)
             or any(k in text for k in ("paramo", "páramo", "monolito", "faro", "costa", "ceniza", "estepa", "mar ", "oceano", "océano", "wasteland", "desert", "monolith"))
         ):
-            is_marine = any(k in text for k in ("faro", "mar", "costa", "oceano", "océano", "fosa", "ola", "lighthouse", "ocean", "sea"))
             return (
-                "atmospheric_landscape",
-                "archetype_atmospheric_landscape.html",
-                {
-                    "silhouetteType": "lighthouse" if is_marine else "monolith",
-                    "stormType": "mist" if is_marine else ("ash" if tension >= 3 else "mist"),
-                    "accentColor": "#00e5a3" if is_marine else "#22b8ff",
-                },
+                "dark_forest",
+                "dark_forest",
+                {},
             )
 
         # 6. Tactical Chamber / Bunker / Vault / Facility / Corridor / Containment / Laboratory
@@ -363,22 +341,18 @@ class ScenePlannerCompositorAgent:
         ):
             return (
                 "tactical_chamber",
-                "archetype_tactical_chamber.html",
-                {
-                    "chamberType": "corridor" if tension <= 3 else "vault",
-                    "strobeSpeed": round(0.75 + 0.25 * tension, 2),
-                    "fogDensity": round(0.35 + 0.12 * tension, 2),
-                },
+                "tactical_chamber",
+                {},
             )
 
         # 7. Dynamic Fallback: Choose the next available distinct archetype
         all_archetypes = [
-            ("atmospheric_landscape", "archetype_atmospheric_landscape.html", {"silhouetteType": "monolith", "stormType": "ash"}),
-            ("classified_terminal", "archetype_classified_terminal.html", {"docTitle": "ARCHIVO CONFIDENCIAL", "alertLevel": f"NIVEL {tension}"}),
-            ("tactical_chamber", "archetype_tactical_chamber.html", {"chamberType": "corridor"}),
-            ("anomaly_silhouette", "archetype_anomaly_silhouette.html", {"threatLevel": tension}),
-            ("synaptic_network", "archetype_synaptic_network.html", {"nodeDensity": 26}),
-            ("cosmic_singularity", "archetype_cosmic_singularity.html", {"swirlSpeed": 1.0}),
+            ("dark_forest", "dark_forest", {}),
+            ("classified_terminal", "classified_terminal", {}),
+            ("tactical_chamber", "tactical_chamber", {}),
+            ("horror", "horror", {}),
+            ("dark_ambient", "dark_ambient", {}),
+            ("cosmic_horror", "cosmic_horror", {}),
         ]
         
         available = [a for a in all_archetypes if a[0] not in excluded]
@@ -502,12 +476,11 @@ class ScenePlannerCompositorAgent:
                 motion_type = camera_motion_types[global_scene_idx % len(camera_motion_types)]
 
                 # Engine & Template Selection
-                # Use pure_procedural_webgl with dynamic universal visual archetypes for all scenes
+                # Use catalog_loop with dynamic universal visual categories for all scenes
                 is_procedural = True
                 
                 if is_procedural:
-                    engine_type = "pure_procedural_webgl"
-                    palette_data = sc_plan.get("palette", {})
+                    engine_type = "catalog_loop"
                     dram_role = sc_script.get("dramatic_role", "")
                     narration_snippet = sc_script.get("narration_text", "") or sc_script.get("scene_text", "")
 
@@ -518,10 +491,8 @@ class ScenePlannerCompositorAgent:
                     upstream_archetype = sc_plan.get("archetype_id")
                     if upstream_archetype:
                         category = upstream_archetype
-                        template_name = upstream_archetype
-                        custom_params = sc_plan.get("uniform_params", {})
                     else:
-                        category, template_name, custom_params = self._resolve_scene_archetype(
+                        category, _template_name, _custom_params = self._resolve_scene_archetype(
                             env_name=f"{env_name} {narration_snippet}",
                             tension=tension,
                             dramatic_role=dram_role,
@@ -531,32 +502,9 @@ class ScenePlannerCompositorAgent:
                         )
                     used_archetypes_short.add(category)
                     prev_archetype = category
-
-                    proc_config = {
-                        "template_name": template_name,
-                        "seed": 42 + global_scene_idx * 19,
-                        "palette": {
-                            "base_dark": palette_data.get("shadow", "#000305"),
-                            "mid_tone": palette_data.get("primary", resolved_primary),
-                            "accent": palette_data.get("accent", resolved_accent),
-                        },
-                        "uniforms": {
-                            "u_noise_scale": round(1.0 + 0.25 * tension, 2),
-                            "u_speed": round(0.85 + 0.18 * tension, 2),
-                            "u_distortion": round(0.35 + 0.12 * tension, 2),
-                            "u_glow_intensity": round(0.8 + 0.1 * tension, 2),
-                            **custom_params,
-                        },
-                    }
                     hybrid_config = None
                 else:
                     engine_type = "hybrid_cinematic_ai"
-                    proc_config = None
-
-                    atmosphere_data = sc_plan.get("atmosphere", {})
-                    particle_type = atmosphere_data.get("particle_layer", "fog_mist")
-                    if particle_type not in ("dust_motes", "ember_sparks", "fog_mist", "spores", "rain_streaks"):
-                        particle_type = "fog_mist"
 
                     hybrid_config = {
                         "seed": 1000 + global_scene_idx * 37,
@@ -569,20 +517,6 @@ class ScenePlannerCompositorAgent:
                             "easing": "cubic_bezier",
                             "parallax_intensity": round(0.12 + 0.09 * tension, 2),
                         },
-                        "lighting": {
-                            "volumetric_rays": tension >= 3,
-                            "light_source_pos": [0.75, 0.25],
-                            "intensity": round(0.28 + 0.12 * tension, 2),
-                            "flicker_frequency": round(3.5 if tension >= 4 else 0.0, 1),
-                            "color_tint": sc_plan.get("palette", {}).get("accent", resolved_accent),
-                        },
-                        "particles": {
-                            "type": particle_type,
-                            "density": 35 + 25 * tension,
-                            "velocity": round(0.9 + 0.3 * tension, 2),
-                            "color": sc_plan.get("palette", {}).get("highlight", "#b0fff1"),
-                            "opacity": 0.5,
-                        },
                     }
                     pos_prompt = sc_plan.get("image_prompts", {}).get("positive_prompt")
                     if pos_prompt:
@@ -591,7 +525,7 @@ class ScenePlannerCompositorAgent:
                 scene_entry: Dict[str, Any] = {
                     "scene_index": global_scene_idx,
                     "scene_id": sub_sc_id,
-                    "environment_name": f"{env_name} (Cut {sub_i+1})" if len(sub_durations) > 1 else env_name,
+                    "environment_name": category if is_procedural else (f"{env_name} (Cut {sub_i+1})" if len(sub_durations) > 1 else env_name),
                     "start_sec": round(current_time, 2),
                     "duration_sec": round(sub_dur, 2),
                     "tension_level": tension,
@@ -604,8 +538,6 @@ class ScenePlannerCompositorAgent:
 
                 if hybrid_config:
                     scene_entry["hybrid_ai_config"] = hybrid_config
-                if proc_config:
-                    scene_entry["procedural_config"] = proc_config
 
                 # Niche HUD telemetry + resolved visual-bank asset (PR #2 value on cheap director)
                 lane_l = lane.lower()

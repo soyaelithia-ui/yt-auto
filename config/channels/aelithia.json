@@ -55,13 +55,13 @@
     "prompt_style_suffix": "photorealistic, Arri Alexa, 35mm lens, shallow depth of field",
     "negative_prompt": "horror, scary, blood, monster, dark, blurry, low resolution",
     "archetype_mappings": {
-      "drama": "cozy_hearth",
-      "arcade": "arcade_vector_flight",
-      "parkour": "parkour_runner",
-      "gameplay": "arcade_vector_flight",
-      "mind": "synaptic_network",
-      "cabin": "cozy_hearth",
-      "confession": "arcade_vector_flight"
+      "drama": "drama",
+      "arcade": "drama",
+      "parkour": "drama",
+      "gameplay": "drama",
+      "mind": "cozy_ambient",
+      "cabin": "drama",
+      "confession": "drama"
     }
   },
   "audio": {

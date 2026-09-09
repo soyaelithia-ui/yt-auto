@@ -1,9 +1,10 @@
-# Plan Maestro de Arquitectura y Auditoría Técnica: Automatización Audiovisual y Publicación Basada en Sesiones (`yt-auto` v3.1)
+# [OBSOLETO / HISTÓRICO - PURGADO ENERO 2025] Plan Maestro de Arquitectura y Auditoría Técnica: Automatización Audiovisual y Publicación Basada en Sesiones (`yt-auto` v3.1)
+
+> ⚠️ **AVISO DE OBSOLECENCIA HISTÓRICA**: Este documento representa una versión previa concebida durante la transición a v3.1. Las vías de renderizado por código, WebGL, shaders WGSL, motores procedurales (`proc_engine.py`, `NativeProceduralEngine`) y síntesis matemática (`lavfi_palettes`) descritas en este documento fueron **100% erradicadas y purgadas** de la arquitectura en favor de un pipeline unificado basado en assets reales (`LoopVideoEngine` con stream-copy `-c:v copy` + Ken Burns nativo en stills + overlays PNG pre-renderizados).
 
 > **Documento:** Plan Arquitectónico Integral, Diagnóstico Forense y Especificación Estructural  
 > **Ámbito:** Sistema de Automatización Audiovisual Multi-Carril `yt-auto`  
-> **Fase:** Auditoría Diagnóstica, Descarte de Sobreingeniería y Diseño Arquitectónico (Cero Implementación de Código)  
-> **Estado:** OFICIAL / GUÍA DE ARQUITECTURA Y HOJA DE RUTA VINCULANTE  
+> **Estado:** [OBSOLETO - ARCHIVADO]  
 > **Fecha:** 2026-09  
 
 ---

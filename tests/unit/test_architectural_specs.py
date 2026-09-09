@@ -321,22 +321,8 @@ class TestSchemaCompletenessAndDraft07:
                     "start_sec": 0.0,
                     "duration_sec": 60.0,
                     "tension_level": 3,
-                    "engine_type": "pure_procedural_webgl",
-                    "procedural_config": {
-                        "template_name": "cosmic_horror_three.html",
-                        "seed": 42,
-                        "palette": {
-                            "base_dark": "#020104",
-                            "mid_tone": "#1e0838",
-                            "accent": "#780a1e",
-                        },
-                        "uniforms": {
-                            "u_noise_scale": 1.0,
-                            "u_speed": 1.0,
-                            "u_distortion": 0.5,
-                            "u_glow_intensity": 0.8,
-                        },
-                    },
+                    "engine_type": "catalog_loop",
+                    "asset_path": "assets/loops/scene_001.mp4",
                     "transition_out": {
                         "type": "crossfade",
                         "duration_sec": 0.8,

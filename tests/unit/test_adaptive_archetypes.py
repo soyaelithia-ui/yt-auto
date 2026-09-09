@@ -4,7 +4,6 @@ tests/unit/test_adaptive_archetypes.py - Unit tests for universal adaptive visua
 from pathlib import Path
 import pytest
 from src.agents.scene_planner import ScenePlannerCompositorAgent
-from src.media.proc_engine import ProceduralVideoEngine
 
 
 class TestUniversalAdaptiveArchetypes:
@@ -12,11 +11,11 @@ class TestUniversalAdaptiveArchetypes:
         """Verifies that all 6 universal archetype categories are defined and distinct."""
         expected_archetypes = [
             "classified_terminal",
-            "atmospheric_landscape",
+            "dark_forest",
             "tactical_chamber",
-            "synaptic_network",
-            "anomaly_silhouette",
-            "cosmic_singularity",
+            "dark_ambient",
+            "horror",
+            "cosmic_horror",
         ]
         assert len(expected_archetypes) == 6
         for arch in expected_archetypes:
@@ -32,8 +31,7 @@ class TestUniversalAdaptiveArchetypes:
             lane_id="moku-scp-shorts",
         )
         assert cat == "classified_terminal"
-        assert tmpl == "archetype_classified_terminal.html"
-        assert "docTitle" in params
+        assert tmpl == "classified_terminal"
 
         # 2. Brutalist Vault / Subterranean Bunker
         cat, tmpl, params = ScenePlannerCompositorAgent._resolve_scene_archetype(
@@ -43,8 +41,7 @@ class TestUniversalAdaptiveArchetypes:
             lane_id="moku-horror-long",
         )
         assert cat == "tactical_chamber"
-        assert tmpl == "archetype_tactical_chamber.html"
-        assert "chamberType" in params
+        assert tmpl == "tactical_chamber"
 
         # 3. Neural Mind / Collective Consciousness / Entity
         cat, tmpl, params = ScenePlannerCompositorAgent._resolve_scene_archetype(
@@ -53,9 +50,8 @@ class TestUniversalAdaptiveArchetypes:
             dramatic_role="rising_action_dread",
             lane_id="moku-horror-long",
         )
-        assert cat == "synaptic_network"
-        assert tmpl == "archetype_synaptic_network.html"
-        assert "nodeDensity" in params
+        assert cat == "dark_ambient"
+        assert tmpl == "dark_ambient"
 
         # 4. Anomaly / Colossus / Beast Rampage
         cat, tmpl, params = ScenePlannerCompositorAgent._resolve_scene_archetype(
@@ -64,9 +60,8 @@ class TestUniversalAdaptiveArchetypes:
             dramatic_role="climax_confrontation",
             lane_id="moku-horror-long",
         )
-        assert cat == "anomaly_silhouette"
-        assert tmpl == "archetype_anomaly_silhouette.html"
-        assert params.get("threatLevel") == 5
+        assert cat == "horror"
+        assert tmpl == "horror"
 
         # 5. Dimensional Singularity / Cosmic Rift
         cat, tmpl, params = ScenePlannerCompositorAgent._resolve_scene_archetype(
@@ -75,9 +70,8 @@ class TestUniversalAdaptiveArchetypes:
             dramatic_role="climax_confrontation",
             lane_id="moku-horror-long",
         )
-        assert cat == "cosmic_singularity"
-        assert tmpl == "archetype_cosmic_singularity.html"
-        assert "swirlSpeed" in params
+        assert cat == "cosmic_horror"
+        assert tmpl == "cosmic_horror"
 
         # 6. Drama / AITA lane
         cat, tmpl, params = ScenePlannerCompositorAgent._resolve_scene_archetype(
@@ -86,8 +80,8 @@ class TestUniversalAdaptiveArchetypes:
             dramatic_role="exposition",
             lane_id="moku-aita-shorts",
         )
-        assert cat == "drama_aita"
-        assert tmpl == "drama_waves_canvas.html"
+        assert cat == "drama"
+        assert tmpl == "drama"
 
     def test_end_to_end_manifest_generation_with_archetypes(self):
         """Validates that plan_manifest produces valid SceneManifestV2 containing archetypes."""
@@ -153,11 +147,12 @@ class TestUniversalAdaptiveArchetypes:
         
         # Scene 1 should resolve to classified_terminal archetype
         sc1 = manifest["scenes"][0]
-        assert sc1["engine_type"] == "pure_procedural_webgl"
-        assert sc1["procedural_config"]["template_name"] == "archetype_classified_terminal.html"
-        assert sc1["procedural_config"]["palette"]["accent"] == "#00ff66"
+        assert sc1["engine_type"] == "catalog_loop"
+        assert sc1["environment_name"] == "classified_terminal"
+        assert "procedural_config" not in sc1
 
-        # Scene 2 should resolve to anomaly_silhouette archetype
+        # Scene 2 should resolve to horror archetype
         sc2 = manifest["scenes"][1]
-        assert sc2["engine_type"] == "pure_procedural_webgl"
-        assert sc2["procedural_config"]["template_name"] == "archetype_anomaly_silhouette.html"
+        assert sc2["engine_type"] == "catalog_loop"
+        assert sc2["environment_name"] == "horror"
+        assert "procedural_config" not in sc2

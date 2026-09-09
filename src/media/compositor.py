@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -36,7 +37,7 @@ from src.media.encode_defaults import (
 )
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.media.interface import BaseVideoCompositor, CompositorError
+from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
 from src.log import get_logger
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
 from src.media.subtitles_ass import (
@@ -76,17 +77,6 @@ __all__ = [
 ]
 
 
-
-def _native_procedural_hot_path_enabled() -> bool:
-    """Return True only when ENABLE_NATIVE_PROCEDURAL explicitly opts into wgpu render."""
-    return os.environ.get("ENABLE_NATIVE_PROCEDURAL", "0").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-
 class MultiSceneCompositorError(CompositorError):
     """Base exception for MultiSceneCompositor operations."""
     pass
@@ -100,29 +90,30 @@ class MultiSceneCompositor(BaseVideoCompositor):
     def __init__(
         self,
         hybrid_engine: Optional[Any] = None,
+        loop_engine: Optional[Any] = None,
         procedural_engine: Optional[Any] = None,
     ) -> None:
-        # Lazy-load hybrid/proc engines so the default beats→loop path never
-        # pays their import tax (numpy/PIL/hybrid stack) at module import time.
         if hybrid_engine is not None:
             self.hybrid_engine = hybrid_engine
         else:
             from src.media.hybrid_engine import HybridVideoEngine
             self.hybrid_engine = HybridVideoEngine()
-        if procedural_engine is not None:
-            self.procedural_engine = procedural_engine
-        elif _native_procedural_hot_path_enabled():
-            # Opt-in only (SSOT PDF v2.4.0): quarantined under src.media._legacy.
-            from src.media._legacy.native_procedural import NativeProceduralEngine
-            from src.media.proc_engine import ProceduralVideoEngine
-            logger.warning(
-                "ENABLE_NATIVE_PROCEDURAL=1: wiring quarantined NativeProceduralEngine (wgpu) from src.media._legacy"
-            )
-            self.procedural_engine = ProceduralVideoEngine(renderer=NativeProceduralEngine())
+
+        if loop_engine is not None:
+            self.loop_engine = loop_engine
+        elif procedural_engine is not None:
+            self.loop_engine = procedural_engine
         else:
-            from src.media.proc_engine import ProceduralVideoEngine
-            # Default: FFmpeg lavfi / catalog loops via ProceduralVideoEngine (no wgpu).
-            self.procedural_engine = ProceduralVideoEngine()
+            from src.media.loop_engine import LoopVideoEngine
+            self.loop_engine = LoopVideoEngine()
+
+    @property
+    def procedural_engine(self) -> Any:
+        return self.loop_engine
+
+    @procedural_engine.setter
+    def procedural_engine(self, val: Any) -> None:
+        self.loop_engine = val
 
     def render(
         self,
@@ -242,7 +233,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
                             threads=threads_per_worker,
                         )
                     else:
-                        self.procedural_engine.render_scene_segment(
+                        self.loop_engine.render_scene_segment(
                             scene=scene,
                             width=width,
                             height=height,
@@ -350,16 +341,16 @@ class MultiSceneCompositor(BaseVideoCompositor):
         height: int,
         lane_id: str,
     ) -> Optional[Path]:
-        """Resolve a catalog/on-disk loop for a procedural scene without re-encoding."""
-        eng = self.procedural_engine
-        cfg = scene.procedural_config
+        """Resolve a catalog/on-disk loop for a scene without re-encoding."""
+        eng = self.loop_engine
         orientation = "vertical" if height > width else "horizontal"
-        category = eng._resolve_category(  # noqa: SLF001 — shared resolver
-            scene.environment_name,
-            getattr(cfg, "template_name", None) if cfg else None,
-            lane_id,
-        )
-        matching = eng.catalog.get_best_loop(category=category, orientation=orientation)
+        env_name = scene.environment_name or lane_id or "dark_ambient"
+        base_env = re.sub(r"\s*\(Cut\s+\d+\)", "", str(env_name)).strip()
+        category = eng.normalize_category(base_env) if hasattr(eng, "normalize_category") else base_env
+
+        matching = None
+        if hasattr(eng, "catalog") and eng.catalog is not None:
+            matching = eng.catalog.get_best_loop(category=category, orientation=orientation, channel=lane_id)
         if matching and Path(matching.file_path).is_file():
             from src.media.loop_engine import is_grey_procedural_plane, is_overlay_not_plane0
 
@@ -374,17 +365,20 @@ class MultiSceneCompositor(BaseVideoCompositor):
                 logger.info("Skipping grey/overlay loop as plane-0: %s", hit)
             else:
                 return hit
-        # Fall back to any existing synthesized loop path used by proc_engine naming.
-        seed = getattr(cfg, "seed", 42) if cfg else 42
-        synth = (
-            Path("assets/loops/web_procedural")
-            / category
-            / f"proc_{category}_{orientation}_{width}x{height}_s{seed}_6s.mp4"
-        )
-        if synth.is_file():
-            return synth.resolve()
-        # Do NOT pick an arbitrary *.mp4 from the category (wrong loop risk).
-        # Return None so the caller falls back to legacy multi-pass.
+
+        if hasattr(eng, "resolve_loop_video"):
+            try:
+                cand = eng.resolve_loop_video(
+                    category=category,
+                    orientation=orientation,
+                    channel=lane_id,
+                    allow_fallback=False,
+                )
+                if cand and isinstance(cand, Path) and cand.is_file():
+                    return cand.resolve()
+            except Exception:
+                pass
+
         return None
 
     def _stream_copy_signature(

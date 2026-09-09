@@ -177,8 +177,8 @@ def test_f03_legacy_web_template_config_rejected():
     assert schema_file.exists(), "Schema file must exist"
     with open(schema_file, "r", encoding="utf-8") as f:
         schema = json.load(f)
-    # Manifest schema should validate archetype_id
-    assert "archetype_id" in json.dumps(schema)
+    # Manifest schema must forbid procedural_config
+    assert "procedural_config" in json.dumps(schema)
 
 
 # ==============================================================================
@@ -752,21 +752,27 @@ def test_f11_broken_pipe_error_resilience(tmp_path: Path):
 
 @pytest.mark.tier1
 def test_f12_visual_archetype_id_enum():
-    """Verify VisualArchetypeId enum defines all 4 canonical visual archetypes."""
+    """Verify SceneConfig and schema define asset-only engine types."""
     manifest_file = PROJECT_ROOT / "src" / "scene_manifest.py"
     content = manifest_file.read_text(encoding="utf-8")
-    assert "cosmic_singularity" in content
-    assert "dark_forest" in content
-    assert "synaptic_network" in content
-    assert "tactical_chamber" in content
+    assert "catalog_loop" in content
+    assert "static_matte" in content
+    assert "hybrid_cinematic_ai" in content
 
 
 @pytest.mark.tier1
 def test_f12_procedural_config_requires_archetype_id():
-    """Verify ProceduralConfig data model defines archetype_id field."""
-    manifest_file = PROJECT_ROOT / "src" / "scene_manifest.py"
-    content = manifest_file.read_text(encoding="utf-8")
-    assert "archetype_id" in content
+    """Verify SceneConfig forbids procedural_config and pure_procedural_webgl."""
+    from src.scene_manifest import SceneConfig
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        SceneConfig(
+            scene_index=1,
+            scene_id="sc1",
+            duration_sec=5.0,
+            engine_type="pure_procedural_webgl",
+        )
 
 
 @pytest.mark.tier1
@@ -776,23 +782,6 @@ def test_f12_json_schema_archetype_validation():
     with open(schema_path, "r", encoding="utf-8") as f:
         schema = json.load(f)
     
-    valid_instance = {
-        "schema_version": "2.0.0",
-        "video_id": "test-vid-001",
-        "title": "Test Video",
-        "duration_sec": 15.0,
-        "format": "shorts_vertical",
-        "scenes": [
-            {
-                "scene_id": "scene_01",
-                "start_sec": 0.0,
-                "end_sec": 5.0,
-                "archetype_id": "cosmic_singularity",
-                "tension": 3,
-            }
-        ]
-    }
-    # Schema validation should pass for valid archetype_id
     assert "properties" in schema
 
 
@@ -809,8 +798,9 @@ def test_f12_invalid_archetype_rejected_by_pydantic():
     schema_path = PROJECT_ROOT / "schemas" / "scene_manifest.schema.json"
     with open(schema_path, "r", encoding="utf-8") as f:
         schema_content = json.dumps(json.load(f))
-    # Schema must enumerate valid archetypes
-    assert "cosmic_singularity" in schema_content
+    # Schema must enumerate valid asset engine types
+    assert "catalog_loop" in schema_content
+    assert "hybrid_cinematic_ai" in schema_content
 
 
 # ==============================================================================

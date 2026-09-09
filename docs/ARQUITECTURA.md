@@ -84,18 +84,16 @@ El sistema implementa una arquitectura desacoplada de 6 agentes orquestados con 
 
 ---
 
-## 6. Detección Escénica (Arquetipos de Catálogo)
+## 6. Detección Escénica (Arquetipos y Categorías de Catálogo)
 
-Ubicado en `src/core/scenic_detector.py`, clasifica el tema hacia arquetipos canónicos usados por el catálogo FFmpeg / `ProceduralVideoEngine` (sin importar `wgpu` ni `NativeProceduralEngine` en el hot path). No usa Canvas, Three.js ni WebGL de navegador. Arquetipos canónicos (`VALID_ARCHETYPES`):
-- `tactical_chamber`: Túneles, búnkeres, contención y pasillos industriales.
-- `dark_forest`: Bosques, niebla y caminos nocturnos.
-- `arctic_desolation`: Nieve, ventisca y tundra.
-- `cosmic_singularity`: Espacio profundo y singularidades.
-- `arcade_vector_flight`: Vuelo vectorial retro / asteroides.
-- `parkour_runner`: Recorrido isométrico tipo parkour.
-- `cozy_hearth`: Interior cálido / confesiones domésticas.
-- `synaptic_network`: Redes neuronales e introspección.
-- `maritime_lighthouse`: Faro, costa y tormenta marina.
+Ubicado en `src/core/scenic_detector.py` y `src/narrative/archetypes.py`, clasifica el tema hacia categorías canónicas de video del catálogo (`assets/loops/` y `data/loop_catalog.db`). El pipeline es 100% basado en assets pre-renderizados; no usa Canvas, Three.js, shaders WGSL ni WebGL. Categorías canónicas del catálogo:
+- `classified_terminal`: Monitores, búnkeres, contención y expedientes clasificados.
+- `dark_forest`: Bosques, niebla, sombras y caminos nocturnos.
+- `dark_ambient`: Fondos oscuros atmosféricos y tensión ambiental.
+- `cosmic_horror`: Abismos estelares, fenómenos cósmicos y horror desconocido.
+- `tactical_chamber`: Instalaciones industriales subterráneas.
+- `horror`: Criaturas, entidades y anomalías.
+- `drama`: Relaciones humanas y confesiones.
 
 Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical_lift`, `karaoke_glow`, `cinematic_fade`, entre otros). Los subtítulos activos se queman con ASS + **libass** en FFmpeg.
 
@@ -117,12 +115,15 @@ Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical
 
 ---
 
-## 9. Políticas Arquitectónicas Anti-Regresión (REG-01 a REG-09)
+## 9. Políticas Arquitectónicas Anti-Regresión (REG-01 a REG-13)
 
 El sistema impone invariantes arquitectónicos nativos verificados automáticamente en CI/pytest:
-- **Renderizado FFmpeg SSOT (Teología v2.4.0)**: beats = concat demuxer + `-c:v copy`; director = `zoompan` (hybrid) + `DIRECTOR_SINGLE_PASS` stream-copy/concat para bucles procedurales (default on; elimina N re-encodes). `xfade` real en `MultiActVideoRenderer`; en `MultiSceneCompositor` solo con `DIRECTOR_XFADE=1`. `ENABLE_NATIVE_PROCEDURAL` default off; `native_procedural`/shaders viven quarantined en `src/media/_legacy` (no SSOT; FFmpeg + Pillow thumbs).
-- **Tipografía Vectorizada y Overlays Dinámicos**: Rasterización SVG de alto rendimiento vía `resvg-py` y composición de overlays con técnica zero-copy.
+- **Pipeline 100% Basado en Assets (Zero Procedural/Math Video)**: Erradicación total de `wgpu`, shaders WGSL, `src/media/_legacy/`, `proc_engine.py`, bucles de frames con Pillow y filtros sintéticos matemáticos (`lavfi_palettes`). Los videos se componen exclusivamente mediante:
+  1. `LoopVideoEngine`: Catálogo de loops maestros H.264 con concat demuxer stream-copy (`-c:v copy`), logrando ~0% uso de CPU en codificación de video.
+  2. `HybridVideoEngine`: Efecto Ken Burns nativo en FFmpeg (`zoompan`) sobre imágenes fijas 2K/4K reales.
+  3. Overlays PNG pre-renderizados en `assets/overlays/static/` y animaciones alpha en `assets/overlays/motion/`.
+- **Fail-Closed Temprano**: Si cualquier categoría o escena carece de asset físico en disco, el pipeline lanza `CatalogAssetNotFoundError` inmediatamente.
+- **Tipografía Vectorizada y Overlays Dinámicos**: Rasterización SVG de alto rendimiento vía `resvg-py`.
 - **Subtítulos Nativos Atómicos (`libass`)**: Generación directa de archivos `.ass` con temporización karaoke (`{\kf}`) y márgenes de seguridad para UI móvil (`MarginV >= 240px`), integrados nativamente en la cadena de filtros de FFmpeg.
 - **Transcodificación Atómica en Pase Único**: Pipeline unificado de FFmpeg (`-filter_complex`) con drenaje asíncrono de flujo `stderr` para evitar bloqueos por buffers de tubería del SO.
-- **Compositor de Memoria Determinista**: Reutilización estricta de buffers contiguos de NumPy preasignados ($\le 140$ MB RAM) para garantizar ausencia de fugas de memoria y rendimiento predecible en streaming de frames.
 

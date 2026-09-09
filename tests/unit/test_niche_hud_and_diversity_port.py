@@ -371,7 +371,7 @@ def test_scene_config_does_not_widen_extra_allow():
         start_sec=0.0,
         duration_sec=5.0,
         tension_level=2,
-        engine_type="pure_procedural_webgl",
+        engine_type="catalog_loop",
         niche_hud={"story_type": "scp"},
         image_path="/x.jpg",
         asset_path="/x.jpg",

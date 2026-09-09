@@ -367,7 +367,11 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
             ui_bot = min(450, max(1, int(round(h * 450 / 1920))))
             ui_rail = min(120, max(1, int(round(w * 120 / 1080))))
             title_y = max(safe_zone.top, min(safe_zone.bottom, h - ui_bot - 10) - estimated_text_h)
-            # Clean safe area positioning without hard geometric bounding box artifacts
+            scrim_top = max(safe_zone.top, title_y - int(h * 0.025))
+            scrim_bot = min(safe_zone.bottom, h - ui_bot, title_y + estimated_text_h + int(h * 0.02))
+            draw.rectangle([(0, h - ui_bot), (w, h)], fill=(0, 0, 0, 160))
+            draw.rectangle([(w - ui_rail, int(h * 0.25)), (w, h)], fill=(0, 0, 0, 90))
+            draw.rectangle([(0, scrim_top), (w - ui_rail, scrim_bot)], fill=(0, 0, 0, 90))
             if scp_id:
                 fnt_id = DynamicTypographyEngine.resolve_font(
                     "Montserrat-Black.ttf", int(h * 0.064)

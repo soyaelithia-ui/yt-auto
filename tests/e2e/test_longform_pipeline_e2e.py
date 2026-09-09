@@ -61,7 +61,10 @@ def catalog_repo() -> LoopCatalogRepository:
     """Provides initialized LoopCatalogRepository backed by the project catalog."""
     if not LOOP_CATALOG_DB.is_file():
         pytest.skip(f"Catalog DB not found at {LOOP_CATALOG_DB} (local asset; skipped in CI)")
-    return LoopCatalogRepository(db_path=str(LOOP_CATALOG_DB))
+    repo = LoopCatalogRepository(db_path=str(LOOP_CATALOG_DB))
+    if repo.count_loops() == 0:
+        pytest.skip(f"Catalog DB at {LOOP_CATALOG_DB} has no indexed loops (local asset; skipped in CI)")
+    return repo
 
 
 @pytest.fixture

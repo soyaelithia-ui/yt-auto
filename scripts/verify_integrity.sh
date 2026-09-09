@@ -71,6 +71,31 @@ else
     echo "✅ [PASS] Zero-Browser Policy: zero Playwright imports in media and pipeline."
 fi
 
+# 4b. Zero-Procedural-Math Policy: No _legacy, no *.wgsl, no proc_engine, no wgpu/pygfx in src/
+PROC_VIOLATIONS=""
+if [ -d "src/media/_legacy" ]; then
+    PROC_VIOLATIONS="Found forbidden src/media/_legacy directory."
+fi
+WGSL_COUNT=$(find . -name "*.wgsl" -not -path "*/.*" | wc -l)
+if [ "$WGSL_COUNT" -gt 0 ]; then
+    PROC_VIOLATIONS="$PROC_VIOLATIONS Found $WGSL_COUNT *.wgsl shader files."
+fi
+if [ -f "src/media/proc_engine.py" ] || [ -f "src/media/native_procedural.py" ] || [ -f "src/media/lavfi_palettes.py" ]; then
+    PROC_VIOLATIONS="$PROC_VIOLATIONS Found deleted procedural engine files in src/media/."
+fi
+PROC_IMPORTS=$(grep -rn --exclude-dir=".venv" --exclude-dir=".git" -E "from[[:space:]]+src\.media\.(proc_engine|native_procedural|lavfi_palettes)|import[[:space:]]+wgpu|import[[:space:]]+pygfx" src/ || true)
+if [ -n "$PROC_IMPORTS" ]; then
+    PROC_VIOLATIONS="$PROC_VIOLATIONS Forbidden imports detected: $PROC_IMPORTS"
+fi
+
+if [ -n "$PROC_VIOLATIONS" ]; then
+    echo "❌ [FAIL] Zero-Procedural-Math Policy violation:"
+    echo "   $PROC_VIOLATIONS"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "✅ [PASS] Zero-Procedural-Math Policy: zero WGSL shaders, zero legacy procedural files/imports."
+fi
+
 # 5. Check Git Hooks Configuration
 HOOKS_PATH=$(git config core.hooksPath || echo "")
 if [ "$HOOKS_PATH" != ".githooks" ] || [ ! -x ".githooks/pre-commit" ]; then

@@ -204,12 +204,7 @@ def _catalog_shots_from_manifest(
             continue
         if dur <= 0:
             continue
-        proc = sc.get("procedural_config") if isinstance(sc.get("procedural_config"), dict) else {}
-        cat = (
-            sc.get("category")
-            or proc.get("template_name")
-            or last_cat
-        )
+        cat = sc.get("category") or last_cat
         last_cat = str(cat).strip().lower().replace(" ", "_") or last_cat
         usable.append({"duration": dur, "category": last_cat, "scene": sc})
 
@@ -483,7 +478,7 @@ def run_pipeline_once(
     if not is_supported_engine:
         raise ValueError(
             f"video_engine={engine_mode!r} is not supported. "
-            "Supported engine modes: 'director', 'multiscene', 'hybrid', 'procedural', or 'loop'."
+            "Supported engine modes: 'director', 'multiscene', 'hybrid', or 'loop'."
         )
 
     # Product path: Subtitles deactivated permanently for all formats (clean cinematic video surface).

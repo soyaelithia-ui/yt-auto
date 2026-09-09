@@ -1,5 +1,13 @@
 # Plan Maestro de Arquitectura y Rediseño: Pipeline Visual
 
+> ⚡ **ACTUALIZACIÓN ARQUITECTÓNICA - ENERO 2025**:
+> Todas las vías de renderizado por código, WebGL, shaders WGSL (`NativeProceduralEngine`), simulación física de partículas y filtros sintéticos matemáticos (`lavfi_palettes`) han sido **100% erradicadas**.
+> El pipeline visual opera exclusivamente con **assets pre-renderizados reales**:
+> 1. `LoopVideoEngine`: Catálogo de loops de video H.264 maestro + FFmpeg stream-copy (`-c:v copy`) sin re-codificación.
+> 2. `HybridVideoEngine`: Ken Burns fotográfico nativo (`zoompan` / crop) sobre stills reales sin bucles de frames en software.
+> 3. Overlays PNG pre-renderizados en `assets/overlays/static/` y videos animados con canal alpha en `assets/overlays/motion/`.
+> 4. Fail-closed temprano: `CatalogAssetNotFoundError` si un asset falta en disco.
+
 ---
 
 ## 1. Consolidación de Auditorías Previas y Registro de Anti-patrones (Errores Marcados)
@@ -454,19 +462,14 @@ yt-auto/
 │   │   └── repository.py
 │   ├── media/
 │   │   ├── __init__.py
-│   │   ├── inmemory_compositor.py       <-- [NUEVO] Composición Alpha SIMD Zero-Copy
-│   │   ├── loop_engine.py               <-- [ACTUALIZADO] Motor canónico offline FFmpeg
-│   │   ├── native_procedural.py         <-- [NUEVO] Motor wgpu-py con shaders WGSL
-│   │   ├── shaders/                     <-- [NUEVO] Catálogo de Sombreadores WGSL
-│   │   │   ├── __init__.py
-│   │   │   ├── cosmic_singularity.wgsl
-│   │   │   ├── dark_forest.wgsl
-│   │   │   ├── synaptic_network.wgsl
-│   │   │   └── tactical_chamber.wgsl
-│   │   ├── subtitles_ass.py             <-- [NUEVO] Generador ASS nativo libass
-│   │   ├── svg_overlay.py               <-- [NUEVO] Rasterizador resvg-py
+│   │   ├── loop_engine.py               <-- Motor canónico de loops y stream-copy FFmpeg (-c:v copy)
+│   │   ├── hybrid_engine.py             <-- Motor Ken Burns fotográfico nativo sobre stills
+│   │   ├── compositor.py                <-- MultiSceneCompositor unificado por catálogo
+│   │   ├── interface.py                 <-- Contratos tipados y CatalogAssetNotFoundError
+│   │   ├── subtitles_ass.py             <-- Generador ASS nativo libass
+│   │   ├── svg_overlay.py               <-- Rasterizador resvg-py
 │   │   ├── thumbnail_engine.py          <-- Generación local de miniaturas
-│   │   └── unified_encoder.py           <-- [NUEVO] Orquestador atómico de FFmpeg
+│   │   └── unified_encoder.py           <-- Orquestador atómico de FFmpeg
 │   ├── pipeline.py                      <-- Orquestador principal saneado
 │   ├── scene_manifest.py                <-- Contrato de datos Pydantic tipado
 │   └── youtube/

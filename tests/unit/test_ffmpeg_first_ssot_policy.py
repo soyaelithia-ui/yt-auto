@@ -273,7 +273,7 @@ def test_hot_path_still_has_no_module_level_native_or_wgpu_imports():
 
 
 def test_compositor_default_still_does_not_load_wgpu(monkeypatch):
-    """Native procedural remains opt-in; compositor default does not load wgpu."""
+    """Compositor uses LoopVideoEngine; does not load wgpu or native procedural."""
     monkeypatch.delenv("ENABLE_NATIVE_PROCEDURAL", raising=False)
     for key in list(sys.modules):
         if (
@@ -289,7 +289,8 @@ def test_compositor_default_still_does_not_load_wgpu(monkeypatch):
             del sys.modules[key]
 
     from src.media.compositor import MultiSceneCompositor
+    from src.media.loop_engine import LoopVideoEngine
 
     compositor = MultiSceneCompositor()
-    assert compositor.procedural_engine.renderer is None
+    assert isinstance(compositor.loop_engine, LoopVideoEngine)
     assert "wgpu" not in sys.modules

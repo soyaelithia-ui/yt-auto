@@ -11,9 +11,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.media.compositor import MultiSceneCompositor
-from src.media.proc_engine import ProceduralVideoEngine
-from src.media.native_procedural import NativeProceduralEngine
-from src.scene_manifest import SceneConfig, ProceduralConfig
+from src.media.loop_engine import LoopVideoEngine
+from src.scene_manifest import SceneConfig
 
 
 def test_pipeline_engine_resolution_director():
@@ -60,62 +59,55 @@ def test_pipeline_engine_resolution_invalid_mode_raises():
     assert is_supported is False, "Unrecognized engine mode should be rejected"
 
 
-def test_compositor_default_wiring_skips_native_engine(monkeypatch):
-    """Default MultiSceneCompositor must NOT construct NativeProceduralEngine / WebGPU."""
-    monkeypatch.delenv("ENABLE_NATIVE_PROCEDURAL", raising=False)
+def test_compositor_default_wiring_uses_loop_engine():
+    """MultiSceneCompositor must wire LoopVideoEngine for catalog_loop scenes."""
     compositor = MultiSceneCompositor()
-    assert compositor.procedural_engine is not None
-    assert compositor.procedural_engine.renderer is None
+    assert isinstance(compositor.loop_engine, LoopVideoEngine)
+    assert compositor.procedural_engine is compositor.loop_engine
 
 
-def test_compositor_opt_in_native_engine(monkeypatch):
-    """ENABLE_NATIVE_PROCEDURAL=1 may wire NativeProceduralEngine (skip if no adapter/dep)."""
-    monkeypatch.setenv("ENABLE_NATIVE_PROCEDURAL", "1")
-    try:
-        compositor = MultiSceneCompositor()
-    except RuntimeError as exc:
-        if "No WebGPU adapter available" in str(exc) or "wgpu is not installed" in str(exc):
-            pytest.skip(f"Native procedural unavailable: {exc}")
-        raise
-    assert isinstance(compositor.procedural_engine.renderer, NativeProceduralEngine)
+def test_compositor_renders_catalog_loop_scene(tmp_path, monkeypatch):
+    """Verify MultiSceneCompositor dispatches catalog_loop scenes to LoopVideoEngine."""
+    from src.scene_manifest import SceneManifestV2, AudioTracks
 
-
-def test_procedural_engine_renders_via_native_procedural(tmp_path):
-    """Verify ProceduralVideoEngine renders via NativeProceduralEngine without falling back to PIL."""
-    try:
-        native_eng = NativeProceduralEngine()
-    except RuntimeError as exc:
-        if "No WebGPU adapter available" in str(exc) or "wgpu is not installed" in str(exc):
-            pytest.skip(f"Native procedural unavailable: {exc}")
-        raise
-    proc_eng = ProceduralVideoEngine(renderer=native_eng)
+    compositor = MultiSceneCompositor()
+    dummy_mp4 = tmp_path / "rendered.mp4"
+    dummy_mp4.write_bytes(b"dummy_video_bytes")
     
+    mock_render = MagicMock(return_value=dummy_mp4)
+    monkeypatch.setattr(compositor.loop_engine, "render_scene_segment", mock_render)
+    monkeypatch.setattr(compositor, "_assemble_video_scenes", lambda *a, **k: dummy_mp4)
+    monkeypatch.setattr(compositor, "_master_assembly", lambda *a, **k: None)
+
     scene = SceneConfig(
         scene_id="scene_001",
         scene_index=1,
-        engine_type="pure_procedural_webgl",
+        engine_type="catalog_loop",
         duration_sec=2.0,
         start_sec=0.0,
         end_sec=2.0,
         tension_level=3,
-        environment_name="maritime_lighthouse",
-        procedural_config=ProceduralConfig(
-            template_name="maritime_lighthouse",
-            seed=42,
-            uniforms={"speed": 1.2, "distortion": 0.5},
-        ),
+        environment_name="dark_forest",
     )
-    
-    out_mp4 = tmp_path / "proc_scene_001.mp4"
-    res_path = proc_eng.render_scene_segment(
-        scene=scene,
-        width=160,
-        height=90,
-        fps=15,
+    from src.scene_manifest import SafeArea
+    manifest = SceneManifestV2(
+        story_id="test_story",
         lane_id="moku-horror-long",
-        output_mp4=out_mp4,
+        channel_name="moku",
+        total_duration_sec=2.0,
+        resolution=(1920, 1080),
+        safe_area=SafeArea(margin_top=60, margin_bottom=124, margin_left=85, margin_right=85),
+        audio_tracks=AudioTracks(narration_path=""),
+        scenes=[scene],
+    )
+    man_file = tmp_path / "manifest.json"
+    man_file.write_text(manifest.model_dump_json(), encoding="utf-8")
+    
+    out_video = tmp_path / "out_final.mp4"
+    compositor.render(
+        manifest_path=man_file,
+        output_video_path=out_video,
     )
     
-    assert Path(res_path).exists()
-    assert Path(res_path).stat().st_size > 0
-    native_eng.close()
+    mock_render.assert_called_once()
+

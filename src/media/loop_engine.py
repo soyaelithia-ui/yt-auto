@@ -16,15 +16,21 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import wave
 from pathlib import Path
-from src.media.encode_defaults import default_ffmpeg_threads, default_render_crf, default_render_preset
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from src.media.encode_defaults import (
+    default_ffmpeg_threads,
+    default_render_crf,
+    default_render_preset,
+    loop_matches_target_geometry,
+)
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
-from src.media.interface import BaseVideoCompositor, CompositorError
+from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
 from src.core.catalog import CHANNEL_THEMES, LoopCatalogRepository, resolve_loop_file_path
 from src.log import get_logger
 from src.media.subtitles_ass import (
@@ -1997,6 +2003,153 @@ class LoopVideoEngine(BaseVideoCompositor):
     ) -> dict[str, Any]:
         """Alias for assemble_multiscene_video / render."""
         return self.render(manifest_path, output_video_path, **extra_kwargs)
+
+    def render_scene_segment(
+        self,
+        scene: Any,
+        width: int,
+        height: int,
+        fps: int,
+        lane_id: str,
+        output_mp4: Union[Path, str],
+        crf: int | None = None,
+        subtitle_cues: Optional[List[Any]] = None,
+        scene_start_sec: float = 0.0,
+        subtitle_theme: Optional[Any] = None,
+        **extra_kwargs: Any,
+    ) -> Path:
+        """Renders an individual catalog loop scene segment to exact scene duration."""
+        from src.media.subtitles_ass import (
+            force_pillow_subtitles_enabled,
+            libass_filter_clause,
+            write_ass_from_cues_or_words,
+        )
+
+        out_path = Path(output_mp4).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        duration = max(0.5, float(getattr(scene, "duration_sec", 1.0) or 1.0))
+        orientation = "vertical" if height > width else "horizontal"
+
+        env_name = getattr(scene, "environment_name", None) or lane_id or "dark_ambient"
+        base_env = re.sub(r"\s*\(Cut\s+\d+\)", "", str(env_name)).strip()
+        category = self.normalize_category(base_env)
+
+        loop_file: Optional[Path] = None
+        if self.catalog is not None:
+            matching = self.catalog.get_best_loop(
+                category=category,
+                orientation=orientation,
+                channel=lane_id,
+            )
+            if matching and Path(matching.file_path).is_file():
+                cand = Path(matching.file_path).resolve()
+                if not is_overlay_not_plane0(cand) and not is_grey_procedural_plane(
+                    technology=getattr(matching, "technology", None),
+                    category=getattr(matching, "category", None),
+                    loop_id=getattr(matching, "loop_id", None),
+                    path=cand,
+                    sha256=getattr(matching, "sha256", None),
+                ):
+                    loop_file = cand
+
+        if loop_file is None:
+            try:
+                cand = self.resolve_loop_video(
+                    category=category,
+                    orientation=orientation,
+                    channel=lane_id,
+                    allow_fallback=False,
+                )
+                if cand and cand.is_file():
+                    loop_file = cand.resolve()
+            except Exception:
+                loop_file = None
+
+        if loop_file is None or not loop_file.is_file():
+            scene_id = getattr(scene, "scene_id", "unknown")
+            raise CatalogAssetNotFoundError(
+                f"Catalog loop not found on disk for category '{category}' (scene_id='{scene_id}')"
+            )
+
+        loop_duration = 6.0
+        try:
+            probe = probe_media(loop_file)
+            if probe.primary_video and probe.primary_video.duration:
+                loop_duration = probe.primary_video.duration
+            elif probe.duration:
+                loop_duration = probe.duration
+        except Exception:
+            pass
+
+        loop_count = int(math.ceil(duration / max(0.1, loop_duration))) + 1
+        with tempfile.TemporaryDirectory(prefix=f"catalog_concat_{getattr(scene, 'scene_id', 'seg')}_") as concat_dir_str:
+            concat_txt = Path(concat_dir_str) / "concat.txt"
+            with open(concat_txt, "w") as f:
+                for _ in range(loop_count):
+                    f.write(f"file '{loop_file.resolve()}'\n")
+
+            threads_val = str(extra_kwargs.get("threads") or default_ffmpeg_threads())
+            if crf is None:
+                crf = default_render_crf()
+            preset = str(extra_kwargs.get("preset") or default_render_preset())
+
+            use_pillow_bridge = bool(subtitle_cues) and force_pillow_subtitles_enabled(extra_kwargs)
+
+            if subtitle_cues and not use_pillow_bridge:
+                ass_path = Path(concat_dir_str) / "scene_subs.ass"
+                write_ass_from_cues_or_words(
+                    output_path=ass_path,
+                    cues=subtitle_cues,
+                    video_width=width,
+                    video_height=height,
+                    time_offset_sec=float(scene_start_sec or 0.0),
+                )
+                fonts_dir = Path("assets/fonts").resolve()
+                fonts_arg = fonts_dir if fonts_dir.is_dir() else None
+                vf = f"scale={width}:{height},{libass_filter_clause(ass_path, fonts_arg)},format=yuv420p"
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-vf", vf,
+                    "-c:v", "libx264",
+                    "-crf", str(crf),
+                    "-preset", preset,
+                    "-threads", threads_val,
+                    "-pix_fmt", "yuv420p",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+            elif loop_matches_target_geometry(loop_file, width, height):
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-c:v", "copy",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+            else:
+                vf = f"scale={width}:{height},format=yuv420p"
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+                    "-t", f"{duration:.3f}",
+                    "-vf", vf,
+                    "-c:v", "libx264",
+                    "-crf", str(crf),
+                    "-preset", preset,
+                    "-threads", threads_val,
+                    "-pix_fmt", "yuv420p",
+                    "-an",
+                    "-movflags", "+faststart",
+                    str(out_path),
+                ]
+            run_ffmpeg(ffmpeg_cmd)
+
+        return out_path
 
 
 # Alias for compositor interface factory naming convention

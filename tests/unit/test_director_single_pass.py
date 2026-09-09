@@ -110,7 +110,7 @@ def test_multiact_xfade_opt_out_uses_concat(tmp_path, monkeypatch):
 
 def test_compositor_stream_copy(tmp_path, monkeypatch):
     from src.media.compositor import MultiSceneCompositor
-    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    from src.scene_manifest import SceneConfig, SceneManifestV2, AudioTracks, SafeArea
     loop = tmp_path / "cat.mp4"; loop.write_bytes(b"\0"*64)
     vs = MagicMock(width=1280, height=720, codec_name="h264", pix_fmt="yuv420p")
     probe = MagicMock(
@@ -125,7 +125,7 @@ def test_compositor_stream_copy(tmp_path, monkeypatch):
     monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
     monkeypatch.setenv("DIRECTOR_SINGLE_PASS","1"); monkeypatch.setenv("DIRECTOR_XFADE","0")
     comp = MultiSceneCompositor()
-    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig())
+    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="catalog_loop")
     scene2 = scene.model_copy(update={"scene_index":2,"scene_id":"s2","start_sec":1.0})
     manifest = SceneManifestV2(story_id="t", lane_id="lane", channel_name="moku", resolution=[1280,720], fps=30, total_duration_sec=2.0, scenes=[scene,scene2], audio_tracks=AudioTracks(narration_path=str(tmp_path/"n.wav")), safe_area=SafeArea())
     (tmp_path/"n.wav").write_bytes(b"RIFF"+b"\0"*40)
@@ -137,7 +137,7 @@ def test_compositor_stream_copy(tmp_path, monkeypatch):
 def test_compositor_inhomogeneous_falls_back_to_scale_concat(tmp_path, monkeypatch):
     """Mismatched codec/pix_fmt/time_base must NOT stream-copy; use scale+concat encode."""
     from src.media.compositor import MultiSceneCompositor
-    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    from src.scene_manifest import SceneConfig, SceneManifestV2, AudioTracks, SafeArea
     loop_a = tmp_path / "a.mp4"; loop_a.write_bytes(b"\0"*64)
     loop_b = tmp_path / "b.mp4"; loop_b.write_bytes(b"\0"*64)
     vs_a = MagicMock(width=1280, height=720, codec_name="h264", pix_fmt="yuv420p")
@@ -161,7 +161,7 @@ def test_compositor_inhomogeneous_falls_back_to_scale_concat(tmp_path, monkeypat
     monkeypatch.setattr("src.media.compositor.run_ffmpeg", fake_run)
     monkeypatch.setenv("DIRECTOR_SINGLE_PASS","1"); monkeypatch.setenv("DIRECTOR_XFADE","0")
     comp = MultiSceneCompositor()
-    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig())
+    scene = SceneConfig(scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2, engine_type="catalog_loop")
     scene2 = scene.model_copy(update={"scene_index":2,"scene_id":"s2","start_sec":1.0})
     manifest = SceneManifestV2(story_id="t", lane_id="lane", channel_name="moku", resolution=[1280,720], fps=30, total_duration_sec=2.0, scenes=[scene,scene2], audio_tracks=AudioTracks(narration_path=str(tmp_path/"n.wav")), safe_area=SafeArea())
     (tmp_path/"n.wav").write_bytes(b"RIFF"+b"\0"*40)
@@ -175,7 +175,7 @@ def test_compositor_inhomogeneous_falls_back_to_scale_concat(tmp_path, monkeypat
 def test_resolve_loop_no_glob_fallback(tmp_path, monkeypatch):
     """Arbitrary sorted(glob('*.mp4'))[0] must not be used; return None → multi-pass."""
     from src.media.compositor import MultiSceneCompositor
-    from src.scene_manifest import ProceduralConfig, SceneConfig
+    from src.scene_manifest import SceneConfig
     cat = tmp_path / "assets" / "loops" / "web_procedural" / "dark_forest"
     cat.mkdir(parents=True)
     (cat / "wrong_loop.mp4").write_bytes(b"\0"*32)
@@ -183,11 +183,12 @@ def test_resolve_loop_no_glob_fallback(tmp_path, monkeypatch):
     comp = MultiSceneCompositor()
     eng = MagicMock()
     eng.catalog.get_best_loop.return_value = None
+    eng.resolve_loop_video.return_value = None
     eng._resolve_category.return_value = "dark_forest"
-    comp.procedural_engine = eng
+    comp.loop_engine = eng
     scene = SceneConfig(
         scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2,
-        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(),
+        engine_type="catalog_loop",
         environment_name="dark_forest",
     )
     assert comp._resolve_procedural_loop_path(scene, width=1280, height=720, lane_id="lane") is None
@@ -230,7 +231,7 @@ def test_compositor_single_pass_burns_niche_hud(tmp_path, monkeypatch):
     """Planner niche_hud is burned on DIRECTOR_SINGLE_PASS via one FFmpeg HUD filter."""
     from src.media.compositor import MultiSceneCompositor
     from src.media.encode_defaults import default_render_crf, default_render_preset
-    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    from src.scene_manifest import SceneConfig, SceneManifestV2, AudioTracks, SafeArea
 
     monkeypatch.delenv("RENDER_PRESET", raising=False)
     monkeypatch.delenv("RENDER_CRF", raising=False)
@@ -253,7 +254,7 @@ def test_compositor_single_pass_burns_niche_hud(tmp_path, monkeypatch):
     }
     scene = SceneConfig(
         scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=5,
-        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(), niche_hud=hud,
+        engine_type="catalog_loop", niche_hud=hud,
     )
     scene2 = scene.model_copy(update={"scene_index": 2, "scene_id": "s2", "start_sec": 1.0})
     manifest = SceneManifestV2(
@@ -285,7 +286,7 @@ def test_compositor_single_pass_burns_niche_hud(tmp_path, monkeypatch):
 def test_compositor_no_hud_still_stream_copy_when_geometry_matches(tmp_path, monkeypatch):
     """No niche_hud → homogeneous loops still use -c:v copy (existing single-pass contract)."""
     from src.media.compositor import MultiSceneCompositor
-    from src.scene_manifest import ProceduralConfig, SceneConfig, SceneManifestV2, AudioTracks, SafeArea
+    from src.scene_manifest import SceneConfig, SceneManifestV2, AudioTracks, SafeArea
     loop = tmp_path / "cat.mp4"; loop.write_bytes(b"\0"*64)
     cmds = []
     def fake_run(cmd, **kw):
@@ -296,7 +297,7 @@ def test_compositor_no_hud_still_stream_copy_when_geometry_matches(tmp_path, mon
     monkeypatch.setenv("DIRECTOR_XFADE", "0")
     scene = SceneConfig(
         scene_index=1, scene_id="s1", start_sec=0.0, duration_sec=1.0, tension_level=2,
-        engine_type="pure_procedural_webgl", procedural_config=ProceduralConfig(),
+        engine_type="catalog_loop",
     )
     assert scene.niche_hud is None
     scene2 = scene.model_copy(update={"scene_index": 2, "scene_id": "s2", "start_sec": 1.0})

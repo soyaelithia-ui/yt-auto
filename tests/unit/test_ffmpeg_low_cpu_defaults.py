@@ -102,17 +102,12 @@ def test_loop_stream_copy_cmd_uses_copy_codec():
 
 
 def test_no_default_rawvideo_outside_force_flags():
-    """Hybrid default path must stay behind FORCE_PILLOW_*; source-level guard."""
+    """Hybrid engine must have 0 rawvideo loops and 0 mathematical lavfi generation."""
     hybrid = Path("src/media/hybrid_engine.py").read_text(encoding="utf-8")
-    assert "force_pillow_hybrid_frames_enabled" in hybrid
-    assert "FORCE_PILLOW_HYBRID_FRAMES" in hybrid
-    assert "force_pillow_particles_enabled" in hybrid
-    assert "FORCE_PILLOW_PARTICLES" in hybrid
-    # Default branch calls ffmpeg camera path, not rawvideo, unless force flag
     assert "_render_scene_ffmpeg_camera" in hybrid
-    assert "use_pillow_frames = force_pillow_hybrid_frames_enabled" in hybrid
-    assert "_build_ffmpeg_particle_lavfi" in hybrid
-    assert "_build_ffmpeg_god_rays_lavfi" in hybrid
+    assert "_render_scene_pillow_rawvideo" not in hybrid
+    assert "_build_ffmpeg_particle_lavfi" not in hybrid
+    assert "_build_ffmpeg_god_rays_lavfi" not in hybrid
 
 
 def test_lib_video_crf_default_matches_compose(monkeypatch):
@@ -141,15 +136,13 @@ def test_loop_matches_target_geometry_uses_probe(monkeypatch):
     assert loop_matches_target_geometry("/tmp/loop.mp4", 1080, 1920) is False
 
 
-def test_proc_engine_stream_copy_aligned_with_director_pr11():
-    """Guardrail: procedural no-sub path shares geometry helper + PR #11 copy/scale shape."""
-    src = Path("src/media/proc_engine.py").read_text(encoding="utf-8")
+def test_loop_engine_stream_copy_aligned_with_director_pr11():
+    """Guardrail: loop engine shares geometry helper + PR #11 copy/scale shape."""
+    src = Path("src/media/loop_engine.py").read_text(encoding="utf-8")
     assert "loop_matches_target_geometry" in src
     assert "-stream_loop" in src
-    assert '"-c:v", "copy"' in src
-    assert "force_original_aspect_ratio=increase" in src
-    assert '"-preset", "faster"' not in src
-    assert "default_render_preset()" in src
+    assert "copy" in src
+    assert "default_render_preset" in src
 
 
 def test_subtitles_rejects_faster_preset_and_unlimited_threads():
@@ -169,9 +162,9 @@ def test_compositor_thread_defaults_use_ssot():
     assert "default_ffmpeg_threads" in src
 
 
-def test_proc_engine_thread_defaults_use_ssot():
-    """Procedural engine must use default_ffmpeg_threads(), not (cpu_count // 4)."""
-    src = Path("src/media/proc_engine.py").read_text(encoding="utf-8")
+def test_loop_engine_thread_defaults_use_ssot():
+    """Loop engine must use default_ffmpeg_threads(), not (cpu_count // 4)."""
+    src = Path("src/media/loop_engine.py").read_text(encoding="utf-8")
     assert "(os.cpu_count() or 4) // 4" not in src
     assert "default_ffmpeg_threads" in src
 

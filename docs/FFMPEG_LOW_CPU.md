@@ -16,8 +16,8 @@ Helpers: `src/media/encode_defaults.py` (`default_render_preset`, `default_rende
 
 1. **Horizontal beats / loop** (`LoopVideoEngine`): prefer `-c:v copy` when orientation is horizontal and subtitles are not burned. Pipeline already sets `stream_copy=True` in that case.
 2. **Re-encode paths** (vertical + libass, hybrid zoompan, multi-scene master): use `veryfast` + CRF 21 — **not** `slow` (CPU disaster) and **not** blind `ultrafast` on final delivers.
-3. **Pillow / rawvideo**: opt-in only via `FORCE_PILLOW_SUBTITLES` / `FORCE_PILLOW_HYBRID_FRAMES` / `FORCE_PILLOW_PARTICLES`. Default hybrid/procedural paths must not open a Python frame pipe. Hybrid particles/god rays default to FFmpeg lavfi `noise`/`geq` (or a pre-made `assets/overlays/*.png` if present) — never Pillow `ImageDraw` unless `FORCE_PILLOW_PARTICLES` or `FORCE_PILLOW_HYBRID_FRAMES` is set.
-4. **Procedural segments** without subtitles: stream-copy trim (`-stream_loop` + `-c:v copy`) when `loop_matches_target_geometry` says WxH already match — same predicate as director single-pass (PR #11). Mismatched geometry re-encodes with scale+crop+fps + `veryfast`/`RENDER_CRF`.
+3. **Pillow / rawvideo frame loops**: Permanently purged from the video pipeline. Composition relies exclusively on pre-rendered assets and FFmpeg native filters (`zoompan` for Ken Burns).
+4. **Catalog loop segments** (`LoopVideoEngine`): stream-copy trim (`-c:v copy`) via concat demuxer when `loop_matches_target_geometry` matches target resolution and no subtitles are burned.
 
 ## Guardrails
 
@@ -25,8 +25,6 @@ See `tests/unit/test_ffmpeg_low_cpu_defaults.py`.
 
 ## Coordination with director single-pass (PR #11)
 
-`proc_engine` stream-copy / geometry logic is intentionally aligned with
-`MultiSceneCompositor._loop_matches_target` / single-pass assembly on
-`perf/director-single-pass-ffmpeg`. Prefer landing **this PR (encode_defaults)
-before #11**, then rebase #11 onto it and switch the compositor helper to call
-`loop_matches_target_geometry` so the two PRs do not fight over `proc_engine.py`.
+Catalog loop stream-copy / geometry logic in `LoopVideoEngine.render_scene_segment` is intentionally aligned with
+`MultiSceneCompositor` single-pass assembly on `perf/director-single-pass-ffmpeg`, calling
+`loop_matches_target_geometry` to guarantee zero-copy rendering without re-encoding overhead.
