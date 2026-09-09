@@ -259,7 +259,7 @@ class MockScenePlannerCompositor:
                         },
                     }
                 else:
-                    engine_type = "pure_procedural_webgl"
+                    engine_type = "catalog_loop"
                     scene_obj = {
                         "scene_index": idx,
                         "scene_id": sc["scene_id"],
@@ -268,21 +268,7 @@ class MockScenePlannerCompositor:
                         "duration_sec": dur,
                         "tension_level": tension,
                         "engine_type": engine_type,
-                        "procedural_config": {
-                            "template_name": "cosmic_horror_three.html",
-                            "seed": 42 + idx,
-                            "palette": {
-                                "base_dark": "#020104",
-                                "mid_tone": "#1e0838",
-                                "accent": "#780a1e",
-                            },
-                            "uniforms": {
-                                "u_noise_scale": 1.0 + (tension * 0.2),
-                                "u_speed": 0.8 + (tension * 0.3),
-                                "u_distortion": 0.3 + (tension * 0.15),
-                                "u_glow_intensity": 0.7 + (tension * 0.1),
-                            },
-                        },
+                        "asset_path": f"assets/loops/scene_{idx}.mp4",
                         "transition_out": {
                             "type": "crossfade",
                             "duration_sec": 1.0,
@@ -445,13 +431,13 @@ class TestPipeline4AgentDataFlowAndManifest:
         assert manifest_path.is_file()
         assert validate_scene_manifest(manifest_path) is True
 
-        # Verify dual engine composition: Scene 1 & 3 are Hybrid AI; Scene 2 & 4 are Procedural WebGL
+        # Verify dual engine composition: Scene 1 & 3 are Hybrid AI; Scene 2 & 4 are Catalog Loop
         loaded_manifest = load_scene_manifest(manifest_path)
         assert len(loaded_manifest["scenes"]) == 4
         assert loaded_manifest["scenes"][0]["engine_type"] == "hybrid_cinematic_ai"
-        assert loaded_manifest["scenes"][1]["engine_type"] == "pure_procedural_webgl"
+        assert loaded_manifest["scenes"][1]["engine_type"] == "catalog_loop"
         assert loaded_manifest["scenes"][2]["engine_type"] == "hybrid_cinematic_ai"
-        assert loaded_manifest["scenes"][3]["engine_type"] == "pure_procedural_webgl"
+        assert loaded_manifest["scenes"][3]["engine_type"] == "catalog_loop"
 
         # Verify sidechain ducking and safe area parameters
         assert loaded_manifest["audio_tracks"]["ducking"]["target_lufs"] == -14.0

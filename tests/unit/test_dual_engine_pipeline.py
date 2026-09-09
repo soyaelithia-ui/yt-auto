@@ -22,8 +22,8 @@ from src.agents.script_curator import CinematicScriptCuratorAgent
 from src.agents.art_director import ArtDirectorMoodAgent
 from src.agents.scene_planner import ScenePlannerCompositorAgent
 from src.agents.qa_auditor import VisualAudioQAAuditorAgent
-from src.media.hybrid_engine import HybridVideoEngine, cubic_bezier_ease
-from src.media.proc_engine import ProceduralVideoEngine
+from src.media.hybrid_engine import HybridVideoEngine, KEN_BURNS_ZOOM_START, KEN_BURNS_ZOOM_END
+from src.media.loop_engine import LoopVideoEngine
 from src.media.compositor import MultiSceneCompositor
 from src.scene_manifest import (
     SceneManifestV2,
@@ -162,20 +162,22 @@ class TestVisualAudioQAAuditorAgent:
 
 
 class TestDualEnginesAndCompositor:
-    def test_cubic_bezier_easing(self):
-        assert cubic_bezier_ease(0.0) == 0.0
-        assert cubic_bezier_ease(1.0) == 1.0
-        mid = cubic_bezier_ease(0.5)
-        assert 0.4 <= mid <= 0.6
+    def test_ken_burns_zoom_constants(self):
+        assert KEN_BURNS_ZOOM_START >= 1.0
+        assert KEN_BURNS_ZOOM_END > KEN_BURNS_ZOOM_START
 
     def test_multi_scene_compositor_interface(self):
         comp = MultiSceneCompositor()
         assert comp.hybrid_engine is not None
-        assert comp.procedural_engine is not None
+        assert comp.loop_engine is not None
+        assert comp.procedural_engine is comp.loop_engine
 
     def test_hybrid_engine_render_scene_segment(self, tmp_path):
-        from src.scene_manifest import SceneConfig, HybridAIConfig, CameraMotionConfig, LightingConfig, ParticleConfig
+        from PIL import Image
+        from src.scene_manifest import SceneConfig, HybridAIConfig, CameraMotionConfig
         engine = HybridVideoEngine()
+        bg_png = tmp_path / "bg.png"
+        Image.new("RGB", (320, 180), (30, 40, 50)).save(bg_png)
         sc = SceneConfig(
             scene_index=1,
             scene_id="sc_test_hybrid",
@@ -183,10 +185,10 @@ class TestDualEnginesAndCompositor:
             duration_sec=0.5,
             tension_level=4,
             engine_type="hybrid_cinematic_ai",
+            image_path=str(bg_png),
             hybrid_ai_config=HybridAIConfig(
+                background_image_path=str(bg_png),
                 camera_motion=CameraMotionConfig(type="ken_burns_3d", pan_direction="center_to_top"),
-                lighting=LightingConfig(volumetric_rays=True, intensity=0.4),
-                particles=ParticleConfig(type="dust_motes", density=15),
             ),
         )
         out_mp4 = tmp_path / "hybrid_scene.mp4"
@@ -201,8 +203,8 @@ class TestDualEnginesAndCompositor:
         assert out_mp4.exists()
         assert out_mp4.stat().st_size > 500
 
-    def test_multi_scene_compositor_full_render(self, tmp_path):
-        import wave, struct, math
+    def test_multi_scene_compositor_full_render(self, tmp_path, monkeypatch):
+        import wave, struct, math, subprocess
         speech_wav = tmp_path / "speech.wav"
         with wave.open(str(speech_wav), "wb") as wf:
             wf.setnchannels(1)
@@ -239,6 +241,16 @@ class TestDualEnginesAndCompositor:
 
         out_master = tmp_path / "master_render.mp4"
         comp = MultiSceneCompositor()
+
+        # Provide a synthetic dummy loop video so loop_engine resolves cleanly
+        dummy_loop = tmp_path / "dummy_loop.mp4"
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=1.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "1.0", str(dummy_loop)],
+            check=True,
+            capture_output=True,
+        )
+        monkeypatch.setattr(comp.loop_engine, "resolve_loop_video", lambda *args, **kwargs: dummy_loop)
+
         res = comp.render(
             manifest_path=manifest_file,
             output_video_path=out_master,
@@ -296,7 +308,6 @@ class TestDualEnginesAndCompositor:
         out_p = tmp_path / "out_threads.mp4"
 
         captured_threads = []
-        orig_render = comp.procedural_engine.render_scene_segment
 
         def mock_render_segment(*args, **kwargs):
             captured_threads.append(kwargs.get("threads"))
@@ -309,7 +320,7 @@ class TestDualEnginesAndCompositor:
                     capture_output=True,
                 )
 
-        comp.procedural_engine.render_scene_segment = mock_render_segment
+        comp.loop_engine.render_scene_segment = mock_render_segment
         res = comp.render(manifest_path=manifest_file, output_video_path=out_p, crf=28, preset="ultrafast")
         assert res["status"] == "success"
         assert len(captured_threads) >= 1
@@ -317,24 +328,35 @@ class TestDualEnginesAndCompositor:
             assert isinstance(t, int)
             assert t >= 1
 
-    def test_procedural_engine_subtitled_single_pass_rendering(self, tmp_path):
+    def test_loop_engine_subtitled_rendering(self, tmp_path, monkeypatch):
         from src.scene_manifest import SceneConfig
         from src.media.subtitles import CodeSubtitleDrawer
-        engine = ProceduralVideoEngine()
+        engine = LoopVideoEngine()
         sc = SceneConfig(
             scene_index=1,
-            scene_id="sc_proc_sub",
+            scene_id="sc_loop_sub",
             start_sec=0.0,
             duration_sec=0.4,
             tension_level=2,
-            engine_type="pure_procedural_webgl",
+            engine_type="catalog_loop",
+            environment_name="dark_ambient",
         )
         words = [
             {"word": "ENTIDAD", "start": 0.0, "end": 0.2},
             {"word": "DETECTADA", "start": 0.2, "end": 0.4},
         ]
         cues = CodeSubtitleDrawer.parse_word_timestamps(words, words_per_cue=2)
-        out_sub = tmp_path / "proc_sub_scene.mp4"
+        out_sub = tmp_path / "loop_sub_scene.mp4"
+
+        dummy_loop = tmp_path / "dummy_loop.mp4"
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=320x180:d=1.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "1.0", str(dummy_loop)],
+            check=True,
+            capture_output=True,
+        )
+        monkeypatch.setattr(engine, "resolve_loop_video", lambda *args, **kwargs: dummy_loop)
+
         engine.render_scene_segment(
             scene=sc,
             width=320,

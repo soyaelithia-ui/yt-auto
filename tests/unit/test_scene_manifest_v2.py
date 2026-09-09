@@ -20,11 +20,6 @@ from src.scene_manifest import (
     DuckingConfig,
     HybridAIConfig,
     LayerConfig,
-    LightingConfig,
-    ParticleConfig,
-    ProceduralConfig,
-    ProceduralPalette,
-    ProceduralUniforms,
     SafeArea,
     SceneConfig,
     SceneManifestV2,
@@ -145,25 +140,10 @@ def canonical_v2_payload() -> Dict[str, Any]:
                 "start_sec": 65.0,
                 "duration_sec": 75.0,
                 "tension_level": 4,
-                "engine_type": "pure_procedural_webgl",
-                "procedural_config": {
-                    "template_name": "cosmic_horror_three.html",
-                    "seed": 4208,
-                    "palette": {
-                        "base_dark": "#020104",
-                        "mid_tone": "#1e0838",
-                        "accent": "#780a1e",
-                    },
-                    "uniforms": {
-                        "u_noise_scale": 2.4,
-                        "u_speed": 1.2,
-                        "u_distortion": 0.65,
-                        "u_glow_intensity": 0.85,
-                    },
-                },
+                "engine_type": "catalog_loop",
                 "transition_out": {
-                    "type": "volumetric_fade",
-                    "duration_sec": 0.8,
+                    "type": "cut",
+                    "duration_sec": 0.0,
                 },
             },
         ],
@@ -221,7 +201,7 @@ def test_pydantic_model_instantiation(canonical_v2_payload):
     assert manifest.resolution == [1920, 1080]
     assert len(manifest.scenes) == 2
     assert manifest.scenes[0].engine_type == "hybrid_cinematic_ai"
-    assert manifest.scenes[1].engine_type == "pure_procedural_webgl"
+    assert manifest.scenes[1].engine_type == "catalog_loop"
     assert manifest.scenes[0].tension_level == 2
     assert manifest.scenes[1].tension_level == 4
 
@@ -244,11 +224,11 @@ def test_save_and_load_scene_manifest_roundtrip(canonical_v2_payload, tmp_path):
 # 3. Builder Function (build_scene_manifest_v2) Tests
 # ===========================================================================
 
-def test_build_scene_manifest_v2_default_procedural(tmp_path):
-    """Verify build_scene_manifest_v2 generates valid manifest with default procedural scene."""
+def test_build_scene_manifest_v2_default_catalog_loop(tmp_path):
+    """Verify build_scene_manifest_v2 generates valid manifest with default catalog loop scene."""
     manifest_path = build_scene_manifest_v2(
         work_dir=tmp_path,
-        story_id="story_procedural_test",
+        story_id="story_catalog_loop_test",
         lane_id="moku-horror-long",
         channel_name="moku",
         total_duration_sec=90.0,
@@ -263,7 +243,7 @@ def test_build_scene_manifest_v2_default_procedural(tmp_path):
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert data["manifest_version"] == "2.0"
     assert len(data["scenes"]) == 1
-    assert data["scenes"][0]["engine_type"] == "pure_procedural_webgl"
+    assert data["scenes"][0]["engine_type"] == "catalog_loop"
     assert data["safe_area"]["margin_bottom"] == 124
 
 
@@ -310,13 +290,8 @@ def test_build_scene_manifest_v2_with_explicit_scenes(tmp_path):
             "start_sec": 45.0,
             "duration_sec": 45.0,
             "tension_level": 5,
-            "engine_type": "pure_procedural_webgl",
-            "procedural_config": {
-                "template_name": "cosmic_horror_three.html",
-                "seed": 999,
-                "palette": {"base_dark": "#020104", "mid_tone": "#1e0838", "accent": "#780a1e"},
-            },
-            "transition_out": {"type": "volumetric_fade", "duration_sec": 0.8},
+            "engine_type": "catalog_loop",
+            "transition_out": {"type": "crossfade", "duration_sec": 0.8},
         },
     ]
 

@@ -99,6 +99,9 @@ def test_reencode_cap_per_minute_bounds_still_segments():
 def test_45s_still_render_emits_multiple_zoompan_segments(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("FORCE_PILLOW_HYBRID_FRAMES", raising=False)
     engine = HybridVideoEngine()
+    from PIL import Image
+    dummy_bg = tmp_path / "test_bg.jpg"
+    Image.new("RGB", (320, 180), color=(20, 30, 40)).save(dummy_bg)
     sc = SceneConfig(
         scene_index=1,
         scene_id="sc_kb_45s",
@@ -106,6 +109,7 @@ def test_45s_still_render_emits_multiple_zoompan_segments(tmp_path: Path, monkey
         duration_sec=45.0,
         tension_level=2,
         engine_type="hybrid_cinematic_ai",
+        image_path=str(dummy_bg),
         hybrid_ai_config=HybridAIConfig(
             camera_motion=CameraMotionConfig(pan_direction="center_to_top"),
         ),

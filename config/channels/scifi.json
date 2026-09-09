@@ -55,11 +55,11 @@
     "prompt_style_suffix": "volumetric lighting, photorealistic, cinematic, deep space",
     "negative_prompt": "fantasy, medieval, low quality, blurry, cartoon",
     "archetype_mappings": {
-      "singularity": "archetype_cosmic_singularity.html",
-      "space": "archetype_cosmic_singularity.html",
-      "vortex": "archetype_cosmic_singularity.html",
-      "terminal": "archetype_classified_terminal.html",
-      "neural": "archetype_synaptic_network.html"
+      "singularity": "cosmic_horror",
+      "space": "deep_space",
+      "vortex": "space_abyss",
+      "terminal": "scifi",
+      "neural": "cyberpunk"
     }
   },
   "audio": {

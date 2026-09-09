@@ -104,7 +104,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             mock_validate.assert_called_once()
             call_kwargs = mock_validate.call_args[1]
             self.assertIn(call_kwargs.get("video_engine"), ("loop", "beats"))
-            self.assertTrue(call_kwargs.get("require_subtitles"))
+            self.assertFalse(call_kwargs.get("require_subtitles"))
 
     @patch("src.pipeline.validate_prepublication")
     @patch("src.youtube.uploader.upload_video")

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SceneManifestV2",
-  "description": "Canonical Visual & Audio Scene Manifest Contract for Dual-Engine Video Rendering Pipeline",
+  "description": "Canonical Visual & Audio Scene Manifest Contract for Asset-Based Video Rendering Pipeline",
   "type": "object",
   "required": [
     "manifest_version",
@@ -195,6 +195,13 @@
           "tension_level",
           "engine_type"
         ],
+        "not": {
+          "anyOf": [
+            {"required": ["procedural_config"]},
+            {"required": ["uniforms"]},
+            {"properties": {"engine_type": {"enum": ["pure_procedural_webgl", "procedural_canvas2d"]}}}
+          ]
+        },
         "properties": {
           "scene_index": {
             "type": "integer",
@@ -222,9 +229,9 @@
           "engine_type": {
             "type": "string",
             "enum": [
-              "hybrid_cinematic_ai",
-              "pure_procedural_webgl",
-              "procedural_canvas2d"
+              "catalog_loop",
+              "static_matte",
+              "hybrid_cinematic_ai"
             ]
           },
           "hybrid_ai_config": {
@@ -395,69 +402,6 @@
                     "minimum": 0.0,
                     "maximum": 1.0,
                     "default": 0.4
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
-            "additionalProperties": true
-          },
-          "procedural_config": {
-            "type": "object",
-            "properties": {
-              "archetype_id": {
-                "type": "string",
-                "enum": [
-                  "cosmic_singularity",
-                  "dark_forest",
-                  "synaptic_network",
-                  "tactical_chamber"
-                ],
-                "default": "cosmic_singularity"
-              },
-              "template_name": {
-                "type": "string"
-              },
-              "seed": {
-                "type": "integer",
-                "default": 42
-              },
-              "palette": {
-                "type": "object",
-                "properties": {
-                  "base_dark": {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$"
-                  },
-                  "mid_tone": {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$"
-                  },
-                  "accent": {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$"
-                  }
-                },
-                "additionalProperties": true
-              },
-              "uniforms": {
-                "type": "object",
-                "properties": {
-                  "u_noise_scale": {
-                    "type": "number",
-                    "default": 1.0
-                  },
-                  "u_speed": {
-                    "type": "number",
-                    "default": 1.0
-                  },
-                  "u_distortion": {
-                    "type": "number",
-                    "default": 0.5
-                  },
-                  "u_glow_intensity": {
-                    "type": "number",
-                    "default": 0.8
                   }
                 },
                 "additionalProperties": true

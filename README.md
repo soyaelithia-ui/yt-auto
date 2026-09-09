@@ -76,14 +76,13 @@ python3 main.py daemon --interval 60
 
 ## 🎨 Motor Visual FFmpeg (SSOT Teología v2.4.0) y Catálogo Local de Bucles
 
-El stack visual de **producción** es **FFmpeg-first y determinista** (sin navegador headless, sin WebGPU en el hot path):
-- **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** (stream-copy, casi cero reencode) cuando la orientación es horizontal y no se queman subtítulos.
-- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns vía FFmpeg **`zoompan`** en escenas hybrid; ensamble master FFmpeg (libass + EBU R128). Con `DIRECTOR_SINGLE_PASS=1` (default) y escenas procedurales con bucles de catálogo compatibles, **omite N re-encodes** y arma con stream-copy trim + concat demuxer (`-c:v copy`). `DIRECTOR_XFADE=1` activa `xfade` real (acorta timeline; off por defecto para sync con narración). `MultiActVideoRenderer` sí usa `xfade` en un solo `filter_complex`. `ENABLE_NATIVE_PROCEDURAL` default **off**.
-- **Catálogo de bucles** (SQLite `video_loops` + `loop_worker.py`): micro-bucles **6–10 s** (~2–5 MB) sintetizados con FFmpeg lavfi (`technology=ffmpeg_lavfi`), expandidos con `-stream_loop -1`.
-- **Temáticas**: `cosmic_horror`, `dark_forest`, `monsters`, `space_abyss`, `scp`, `drama_aita` (y `dark_ambient` en el worker). Cero Canvas/Three.js/WebGL en el camino activo.
-- **Agentes vs píxeles**: los agentes emiten texto/JSON; el código de media es dueño de los píxeles (ASS + **libass** cuando hay subtítulos).
-- **Quarantined (no prod)**: `src/media/_legacy/native_procedural.py` + WGSL shaders (`wgpu`/Lavapipe). SSOT = FFmpeg + Pillow thumbs. Opt-in only via `ENABLE_NATIVE_PROCEDURAL=1`; default off.
-- **Low-CPU encode defaults**: `RENDER_PRESET=veryfast` + `RENDER_CRF=21` (see `src/media/encode_defaults.py` / docker-compose). Horizontal beats keep `-c:v copy`. Do not reintroduce `preset=slow` on the hot path or default Pillow/`rawvideo` frame loops (opt-in via `FORCE_PILLOW_*` only).
+El stack visual de **producción** es **100% basado en assets y FFmpeg nativo** (cero navegadores, cero WebGPU, cero simulación matemática):
+- **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** (stream-copy, casi cero CPU) sobre loops maestros de video H.264 pre-renderizados.
+- **Modo director / multi-escena** (`MultiSceneCompositor` + `HybridVideoEngine`): Ken Burns fotográfico vía FFmpeg **`zoompan`** sobre imágenes fijas 2K/4K reales; ensamble master FFmpeg (libass + EBU R128). Con `DIRECTOR_SINGLE_PASS=1` (default) y loops de catálogo compatibles, arma con stream-copy trim + concat demuxer (`-c:v copy`), omitiendo re-encodificaciones redundantes.
+- **Catálogo de bucles y assets** (`LoopCatalogRepository` + `data/loop_catalog.db`): loops maestros de alta definición (`assets/loops/`) y overlays pre-renderizados (`assets/overlays/static/` y `assets/overlays/motion/`). Fail-closed con `CatalogAssetNotFoundError` si un asset no existe en disco.
+- **Temáticas canónicas**: `cosmic_horror`, `dark_forest`, `dark_ambient`, `tactical_chamber`, `monsters`, `space_abyss`, `classified_terminal`, `drama`. Cero Canvas/Three.js/WebGL/WGSL.
+- **Agentes vs píxeles**: los agentes emiten texto/JSON declarativo; el código de media resuelve y ensambla los assets físicos (ASS + **libass** cuando hay subtítulos).
+- **Zero Procedural / Low-CPU**: Toda generación procedural por código o shaders (`_legacy`, `proc_engine.py`, bucles de frames con Pillow) ha sido **100% erradicada**. Parámetros de codificación para cuando el re-encode es inevitable: `RENDER_PRESET=veryfast` + `RENDER_CRF=21`.
 
 > [!NOTE]
 > Para compatibilidad con despliegues previos, `python3 manage.py` reenvía de forma transparente todos los comandos al CLI unificado. Consulta [docs/OPERACION.md](docs/OPERACION.md) para la referencia completa de subcomandos y alias.

@@ -18,7 +18,11 @@ pytestmark = [
     pytest.mark.skip(reason="quarantined: native_procedural/wgpu under src.media._legacy; SSOT is FFmpeg + Pillow thumbs (ENABLE_NATIVE_PROCEDURAL opt-in only)"),
 ]
 
-from src.media.native_procedural import NativeProceduralEngine, VALID_ARCHETYPES
+try:
+    from src.media.native_procedural import NativeProceduralEngine, VALID_ARCHETYPES
+except ImportError:
+    NativeProceduralEngine = None
+    VALID_ARCHETYPES = []
 from src.media.svg_overlay import SVGOverlayEngine
 from src.media.inmemory_compositor import InMemoryCompositor
 

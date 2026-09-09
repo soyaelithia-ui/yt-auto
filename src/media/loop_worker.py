@@ -136,8 +136,7 @@ class LoopSynthesizerWorker:
         width, height = SHORT_RESOLUTION if orientation in ("vertical", "9:16") else LONGFORM_RESOLUTION
         synth_mp4 = synth_dir / f"loop_{category}_{orientation}_{seed_val}.mp4"
 
-        from src.media.lavfi_palettes import resolve_lavfi_palette
-        c0, c1 = resolve_lavfi_palette(category)
+        c0, c1 = "0x1a252f", "0x34495e"
         import subprocess
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",

@@ -27,7 +27,7 @@ from src.agents.art_director import ArtDirectorMoodAgent
 from src.agents.scene_planner import ScenePlannerCompositorAgent
 from src.agents.script_curator import CinematicScriptCuratorAgent
 from src.core.channel_profile import ChannelProfileRegistry
-from src.media.proc_engine import ProceduralVideoEngine
+from src.media.loop_engine import LoopVideoEngine
 from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
 from src.youtube.uploader import _youtube_service
 
@@ -161,9 +161,9 @@ def produce_short_production() -> Dict[str, Any]:
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    # 4. Render Pure Procedural WebGL Scenes
+    # 4. Render Catalog Loop Scenes
     raw_video = short_dir / "raw_procedural_scenes.mp4"
-    proc_engine = ProceduralVideoEngine()
+    proc_engine = LoopVideoEngine()
     proc_engine.render(manifest_path=manifest_path, output_video_path=raw_video)
 
     # 5. Subtitles
@@ -268,9 +268,9 @@ def produce_longform_production() -> Dict[str, Any]:
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    # 4. Render Pure Procedural WebGL Scenes
+    # 4. Render Catalog Loop Scenes
     raw_video = long_dir / "raw_procedural_scenes.mp4"
-    proc_engine = ProceduralVideoEngine()
+    proc_engine = LoopVideoEngine()
     proc_engine.render(manifest_path=manifest_path, output_video_path=raw_video)
 
     # 5. Subtitles

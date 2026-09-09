@@ -2,7 +2,7 @@
 src/scene_manifest.py - Canonical Visual & Audio Scene Manifest Contract Engine (v2.0).
 
 Defines Draft-07 JSON Schema validation, Pydantic data models, and high-level builders
-for the Dual-Engine (Hybrid Cinematic AI + Pure Procedural WebGL/Canvas) rendering pipeline.
+for the Asset-Based (Master Video Loops + FFmpeg Concat Demuxer + Overlays) rendering pipeline.
 """
 from __future__ import annotations
 
@@ -99,74 +99,14 @@ class CameraMotionConfig(BaseModel):
     parallax_intensity: float = Field(0.15, ge=0.0, le=1.0)
 
 
-class LightingConfig(BaseModel):
-    volumetric_rays: bool = False
-    light_source_pos: Optional[List[float]] = None
-    intensity: float = Field(0.3, ge=0.0, le=1.0)
-    flicker_frequency: float = Field(0.0, ge=0.0)
-    color_tint: str = "#ffffff"
-
-    @field_validator("light_source_pos")
-    @classmethod
-    def validate_light_pos(cls, v: Optional[List[float]]) -> Optional[List[float]]:
-        if v is not None and len(v) != 2:
-            raise ValueError("light_source_pos must have exactly 2 coordinates [x, y]")
-        return v
-
-
-class ParticleConfig(BaseModel):
-    type: Literal[
-        "dust_motes",
-        "ember_sparks",
-        "fog_mist",
-        "spores",
-        "rain_streaks",
-        "none",
-    ] = "none"
-    density: int = Field(40, ge=0, le=500)
-    velocity: float = Field(1.0, ge=0.0, le=5.0)
-    color: str = "#ffffff"
-    opacity: float = Field(0.4, ge=0.0, le=1.0)
-
-
 class HybridAIConfig(BaseModel):
     background_image_path: Optional[str] = None
+    still_bg: Optional[str] = None
     depth_map_path: Optional[str] = None
     prompt_used: Optional[str] = None
     seed: Optional[int] = None
     layers: Optional[List[LayerConfig]] = Field(default_factory=list)
     camera_motion: Optional[CameraMotionConfig] = Field(default_factory=CameraMotionConfig)
-    lighting: Optional[LightingConfig] = Field(default_factory=LightingConfig)
-    particles: Optional[ParticleConfig] = Field(default_factory=ParticleConfig)
-
-
-class ProceduralPalette(BaseModel):
-    base_dark: Optional[str] = "#020104"
-    mid_tone: Optional[str] = "#1e0838"
-    accent: Optional[str] = "#780a1e"
-
-
-class ProceduralUniforms(BaseModel):
-    u_noise_scale: float = 1.0
-    u_speed: float = 1.0
-    u_distortion: float = 0.5
-    u_glow_intensity: float = 0.8
-
-
-VisualArchetypeId = Literal[
-    "cosmic_singularity",
-    "dark_forest",
-    "synaptic_network",
-    "tactical_chamber",
-]
-
-
-class ProceduralConfig(BaseModel):
-    archetype_id: VisualArchetypeId = "cosmic_singularity"
-    template_name: Optional[str] = None
-    seed: int = 42
-    palette: Optional[ProceduralPalette] = Field(default_factory=ProceduralPalette)
-    uniforms: Optional[ProceduralUniforms] = Field(default_factory=ProceduralUniforms)
 
 
 class TransitionConfig(BaseModel):
@@ -192,17 +132,27 @@ class SceneConfig(BaseModel):
     duration_sec: float = Field(..., ge=0.1)
     tension_level: int = Field(..., ge=1, le=5)
     engine_type: Literal[
+        "catalog_loop",
+        "static_matte",
         "hybrid_cinematic_ai",
-        "pure_procedural_webgl",
-        "procedural_canvas2d",
     ]
     hybrid_ai_config: Optional[HybridAIConfig] = None
-    procedural_config: Optional[ProceduralConfig] = None
+    asset_config: Optional[Dict[str, Any]] = None
     transition_out: Optional[TransitionConfig] = Field(default_factory=TransitionConfig)
     niche_hud: Optional[Dict[str, Any]] = None
     camera_motion: Optional[Union[CameraMotionConfig, Dict[str, Any]]] = None
     image_path: Optional[str] = None
     asset_path: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_procedural_math_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "procedural_config" in data and data["procedural_config"] is not None:
+                raise ValueError("procedural_config is prohibited in asset-based pipeline")
+            if "uniforms" in data and data["uniforms"] is not None:
+                raise ValueError("uniforms is prohibited in asset-based pipeline")
+        return data
 
 
 class SubtitleCue(BaseModel):
@@ -351,12 +301,10 @@ def parse_scene_manifest_model(
         img_p = sc.get("image_path") or sc.get("source")
         is_video_source = bool(img_p and str(img_p).endswith(".mp4"))
         if is_video_source:
-            engine_t = "pure_procedural_webgl"
-            proc_cfg = ProceduralConfig(template_name="cosmic_horror_three.html")
+            engine_t = "catalog_loop"
             hyb_cfg = None
         else:
             engine_t = "hybrid_cinematic_ai"
-            proc_cfg = None
             hyb_cfg = HybridAIConfig(background_image_path=str(img_p) if img_p else None)
 
         adapted_scenes.append(
@@ -369,7 +317,6 @@ def parse_scene_manifest_model(
                 tension_level=3,
                 engine_type=engine_t,
                 hybrid_ai_config=hyb_cfg,
-                procedural_config=proc_cfg,
                 transition_out=TransitionConfig(type="crossfade", duration_sec=0.8),
             )
         )
@@ -382,8 +329,7 @@ def parse_scene_manifest_model(
                 start_sec=0.0,
                 duration_sec=dur,
                 tension_level=3,
-                engine_type="pure_procedural_webgl",
-                procedural_config=ProceduralConfig(),
+                engine_type="catalog_loop",
             )
         )
 
@@ -518,22 +464,7 @@ def build_scene_manifest_v2(
             "start_sec": 0.0,
             "duration_sec": round(float(total_duration_sec), 3),
             "tension_level": 3,
-            "engine_type": "pure_procedural_webgl",
-            "procedural_config": {
-                "template_name": "cosmic_horror_three.html",
-                "seed": 42,
-                "palette": {
-                    "base_dark": "#020104",
-                    "mid_tone": "#1e0838",
-                    "accent": "#780a1e",
-                },
-                "uniforms": {
-                    "u_noise_scale": 1.0,
-                    "u_speed": 1.0,
-                    "u_distortion": 0.5,
-                    "u_glow_intensity": 0.8,
-                },
-            },
+            "engine_type": "catalog_loop",
             "transition_out": {
                 "type": "crossfade",
                 "duration_sec": 0.8,

@@ -22,11 +22,6 @@ from src.scene_manifest import (
     DuckingConfig,
     HybridAIConfig,
     LayerConfig,
-    LightingConfig,
-    ParticleConfig,
-    ProceduralConfig,
-    ProceduralPalette,
-    ProceduralUniforms,
     SafeArea,
     SceneConfig,
     SceneManifestV2,
@@ -143,26 +138,11 @@ def valid_base_payload() -> Dict[str, Any]:
             {
                 "scene_index": 2,
                 "scene_id": "sc_02",
-                "environment_name": "Cosmic Abyss",
+                "environment_name": "dark_forest",
                 "start_sec": 60.0,
                 "duration_sec": 60.0,
                 "tension_level": 5,
-                "engine_type": "pure_procedural_webgl",
-                "procedural_config": {
-                    "template_name": "cosmic_horror_three.html",
-                    "seed": 999,
-                    "palette": {
-                        "base_dark": "#020104",
-                        "mid_tone": "#1e0838",
-                        "accent": "#780a1e",
-                    },
-                    "uniforms": {
-                        "u_noise_scale": 1.5,
-                        "u_speed": 1.2,
-                        "u_distortion": 0.7,
-                        "u_glow_intensity": 0.9,
-                    },
-                },
+                "engine_type": "catalog_loop",
                 "transition_out": {
                     "type": "cut",
                     "duration_sec": 0.0,
@@ -261,6 +241,8 @@ class TestEngineTypeAdversarial:
         "blender_cycles",
         "hybrid",
         "procedural",
+        "pure_procedural_webgl",
+        "procedural_canvas2d",
         "HYBRID_CINEMATIC_AI",
         "PURE_PROCEDURAL_WEBGL",
         "",
@@ -275,8 +257,8 @@ class TestEngineTypeAdversarial:
 
     @pytest.mark.parametrize("valid_engine", [
         "hybrid_cinematic_ai",
-        "pure_procedural_webgl",
-        "procedural_canvas2d",
+        "catalog_loop",
+        "static_matte",
     ])
     def test_accept_valid_engine_types(self, valid_base_payload, valid_engine):
         payload = copy.deepcopy(valid_base_payload)
@@ -432,18 +414,19 @@ class TestHexColorAdversarial:
         with pytest.raises(ValueError, match=r"color_tint|pattern"):
             validate_scene_manifest(payload)
 
-    @pytest.mark.parametrize("bad_hex", ["#fff", "1e0838", "#zzzzzz", "dark_violet"])
-    def test_reject_invalid_procedural_palette(self, valid_base_payload, bad_hex):
+    def test_reject_procedural_config_strictly_forbidden(self, valid_base_payload):
         payload = copy.deepcopy(valid_base_payload)
-        payload["scenes"][1]["procedural_config"]["palette"]["mid_tone"] = bad_hex
-        with pytest.raises(ValueError, match=r"mid_tone|pattern"):
+        payload["scenes"][1]["procedural_config"] = {
+            "template_name": "test_template",
+            "seed": 123,
+        }
+        with pytest.raises(ValueError, match=r"procedural_config"):
             validate_scene_manifest(payload)
 
     @pytest.mark.parametrize("good_hex", ["#020104", "#1E0838", "#780A1E", "#ffffff", "#000000"])
     def test_accept_valid_hex_colors(self, valid_base_payload, good_hex):
         payload = copy.deepcopy(valid_base_payload)
         payload["scenes"][0]["hybrid_ai_config"]["lighting"]["color_tint"] = good_hex
-        payload["scenes"][1]["procedural_config"]["palette"]["base_dark"] = good_hex
         assert validate_scene_manifest(payload) is True
 
 
@@ -634,7 +617,8 @@ def test_schema_and_model_parity_on_mutations(valid_base_payload):
         (lambda p: p["scenes"][0].update({"tension_level": 5}), True, "max tension 5"),
         (lambda p: p["scenes"][0].update({"tension_level": 0}), False, "under min tension 0"),
         (lambda p: p["scenes"][0].update({"tension_level": 6}), False, "over max tension 6"),
-        (lambda p: p["scenes"][0].update({"engine_type": "procedural_canvas2d"}), True, "canvas2d engine"),
+        (lambda p: p["scenes"][0].update({"engine_type": "catalog_loop"}), True, "catalog_loop engine"),
+        (lambda p: p["scenes"][0].update({"engine_type": "procedural_canvas2d"}), False, "canvas2d rejected"),
         (lambda p: p["scenes"][0].update({"engine_type": "fake_engine"}), False, "fake engine"),
         (lambda p: p.update({"resolution": [640, 640]}), True, "min resolution 640x640"),
         (lambda p: p.update({"resolution": [639, 640]}), False, "sub-min resolution 639"),
@@ -754,7 +738,7 @@ class TestExhaustiveEnumsAndScalingAdversarial:
         """Stress test manifest validation scaling up to 100 sequential multi-engine scenes."""
         payload = copy.deepcopy(valid_base_payload)
         scenes = []
-        engines = ["hybrid_cinematic_ai", "pure_procedural_webgl", "procedural_canvas2d"]
+        engines = ["hybrid_cinematic_ai", "catalog_loop", "static_matte"]
         cum_sec = 0.0
         for i in range(1, 101):
             dur = 60.0
@@ -773,11 +757,6 @@ class TestExhaustiveEnumsAndScalingAdversarial:
                 sc["hybrid_ai_config"] = {
                     "background_image_path": f"/bg/img_{i}.png",
                     "depth_map_path": f"/bg/depth_{i}.png",
-                }
-            elif eng == "pure_procedural_webgl":
-                sc["procedural_config"] = {
-                    "template_name": "cosmic_horror_three.html",
-                    "seed": i * 100,
                 }
             scenes.append(sc)
             cum_sec += dur

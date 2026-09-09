@@ -287,8 +287,8 @@ class CosmicNarrativeEngine:
         preset: Dict[str, Any],
         archetype: NarrativeArchetype,
     ) -> List[SceneContract]:
-        """Maps narrative acts into distinct WebGL scene shaders with progressive tension parameters."""
-        shaders = preset["shader_sequence"]
+        """Maps narrative acts into distinct catalog scenes with progressive tension parameters."""
+        shaders = preset.get("visual_sequence") or preset.get("shader_sequence", [])
         num_scenes = len(shaders)
         scene_dur = total_dur / float(num_scenes)
         tension_scores = score_5phase_tension_curve(num_scenes)

@@ -1,17 +1,32 @@
 {
-  "version": "1.1.0",
-  "updated_at": "2026-09-06T20:19:08Z",
+  "version": "1.2.0",
+  "updated_at": "2026-09-09T20:36:28Z",
   "master_loops_count": 9,
   "master_loops": [
     {
       "filename": "moku_containment_facility_master_60s.mp4",
-      "title": "Moku Horror: Instalaciones Subterráneas y Confinamiento",
+      "title": "Moku Horror: Instalaciones Subterr\u00e1neas y Confinamiento",
       "category": "horror",
       "orientation": "horizontal",
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/horror/moku_containment_facility_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/horror/moku_containment_facility_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 66.1332,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "moku_dark_wilderness_master_60s.mp4",
@@ -21,7 +36,22 @@
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/dark_forest/moku_dark_wilderness_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/dark_forest/moku_dark_wilderness_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 96.4745,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "moku_vertical_shorts_master_60s.mp4",
@@ -31,27 +61,72 @@
       "duration_sec": 60.458333,
       "width": 1080,
       "height": 1920,
-      "file_path": "assets/loops/vertical/horror/moku_vertical_shorts_master_60s.mp4"
+      "file_path": "assets/loops/vertical/horror/moku_vertical_shorts_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 71.9948,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "aelithia_cozy_interiors_master_60s.mp4",
-      "title": "Aelithia Drama: Interiores Cálidos y Rincones Acogedores",
+      "title": "Aelithia Drama: Interiores C\u00e1lidos y Rincones Acogedores",
       "category": "drama",
       "orientation": "horizontal",
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/drama/aelithia_cozy_interiors_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/drama/aelithia_cozy_interiors_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 73.2809,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "aelithia_nocturne_city_master_60s.mp4",
-      "title": "Aelithia Drama: Ciudad Nocturna y Melancolía Urbana",
+      "title": "Aelithia Drama: Ciudad Nocturna y Melancol\u00eda Urbana",
       "category": "drama",
       "orientation": "horizontal",
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/drama/aelithia_nocturne_city_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/drama/aelithia_nocturne_city_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 69.1038,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "aelithia_vertical_shorts_master_60s.mp4",
@@ -61,7 +136,22 @@
       "duration_sec": 60.458333,
       "width": 1080,
       "height": 1920,
-      "file_path": "assets/loops/vertical/drama/aelithia_vertical_shorts_master_60s.mp4"
+      "file_path": "assets/loops/vertical/drama/aelithia_vertical_shorts_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 85.794,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "scifi_deep_space_and_cyber_master_60s.mp4",
@@ -71,17 +161,47 @@
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/scifi/scifi_deep_space_and_cyber_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/scifi/scifi_deep_space_and_cyber_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 75.6345,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "scifi_cyber_infrastructure_master_60s.mp4",
-      "title": "Singularidad Sci-Fi: Infraestructura Cibernética e Hiperespacio",
+      "title": "Singularidad Sci-Fi: Infraestructura Cibern\u00e9tica e Hiperespacio",
       "category": "scifi",
       "orientation": "horizontal",
       "duration_sec": 60.458333,
       "width": 1920,
       "height": 1080,
-      "file_path": "assets/loops/horizontal/scifi/scifi_cyber_infrastructure_master_60s.mp4"
+      "file_path": "assets/loops/horizontal/scifi/scifi_cyber_infrastructure_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 75.4865,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     },
     {
       "filename": "scifi_vertical_shorts_master_60s.mp4",
@@ -91,7 +211,22 @@
       "duration_sec": 60.458333,
       "width": 1080,
       "height": 1920,
-      "file_path": "assets/loops/vertical/scifi/scifi_vertical_shorts_master_60s.mp4"
+      "file_path": "assets/loops/vertical/scifi/scifi_vertical_shorts_master_60s.mp4",
+      "longest_black_seconds": 0.0,
+      "black_segments": [],
+      "perceptual_luminance": {
+        "avg_luminance": 70.8593,
+        "dark_ratio": 0.0,
+        "passed": true,
+        "dark_frames": 0,
+        "total_frames": 15,
+        "luminance_params": {
+          "sample_fps": 0.25,
+          "downscale_height": 480,
+          "avg_luminance_min": 22.0,
+          "dark_ratio_max": 0.45
+        }
+      }
     }
   ],
   "total_atomic_clips": 55

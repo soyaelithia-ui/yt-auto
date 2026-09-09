@@ -65,6 +65,8 @@ link_shared() {
         return 0
     fi
 
+    mkdir -p "$dest_parent"
+
     if [ -e "$dest" ] && [ ! -L "$dest" ]; then
         echo "skip ${label}: exists and is not a symlink"
         return 0
@@ -79,6 +81,38 @@ link_shared() {
     link_target="$(relative_or_absolute "$src" "$dest_parent")"
     ln -sfn "$link_target" "$dest"
     echo "Linked ${label}"
+}
+
+link_loop_assets() {
+    local src_root="$PRIMARY_ROOT/assets/loops"
+    local dest_root="$TARGET_DIR/assets/loops"
+
+    if [ ! -d "$src_root" ]; then
+        return 0
+    fi
+
+    mkdir -p "$dest_root"
+
+    # Link all .mp4 physical assets preserving category directory structure
+    find "$src_root" -type f -name "*.mp4" | while IFS= read -r src_file; do
+        local rel_path="${src_file#"$src_root"/}"
+        local dest_file="$dest_root/$rel_path"
+        local dest_dir
+        dest_dir="$(dirname "$dest_file")"
+        mkdir -p "$dest_dir"
+
+        if [ -L "$dest_file" ] && same_target "$dest_file" "$src_file"; then
+            continue
+        fi
+
+        local link_target
+        link_target="$(relative_or_absolute "$src_file" "$dest_dir")"
+        ln -sfn "$link_target" "$dest_file"
+    done
+
+    # Prune any dangling .mp4 symlinks in worktree if files were deleted from primary
+    find "$dest_root" -xtype l -name "*.mp4" -delete 2>/dev/null || true
+    echo "Linked assets/loops video files"
 }
 
 TARGET_DIR="$(cd "${1:-.}" && pwd)"
@@ -100,5 +134,11 @@ fi
 link_shared ".venv" "$PRIMARY_ROOT/.venv" "$TARGET_DIR/.venv"
 link_shared ".agents" "$PRIMARY_ROOT/.agents" "$TARGET_DIR/.agents"
 link_shared ".env" "$PRIMARY_ROOT/.env" "$TARGET_DIR/.env"
+mkdir -p "$TARGET_DIR/data"
+if [ -f "$TARGET_DIR/data/loop_catalog.db" ] && [ ! -L "$TARGET_DIR/data/loop_catalog.db" ]; then
+    rm -f "$TARGET_DIR/data/loop_catalog.db"
+fi
+link_shared "data/loop_catalog.db" "$PRIMARY_ROOT/data/loop_catalog.db" "$TARGET_DIR/data/loop_catalog.db"
+link_loop_assets
 
 echo "Worktree environment initialized in ${TARGET_DIR}"

@@ -36,7 +36,7 @@ def director_xfade_enabled() -> bool:
 
 def is_procedural_engine_type(engine_type: Optional[str]) -> bool:
     et = (engine_type or "").strip().lower()
-    return et in ("pure_procedural_webgl", "procedural_canvas2d", "procedural", "pure_procedural")
+    return et in ("pure_procedural_webgl", "procedural_canvas2d", "procedural", "pure_procedural", "catalog_loop", "static_matte")
 
 
 def manifest_eligible_for_loop_single_pass(scenes: Sequence[Any]) -> bool:

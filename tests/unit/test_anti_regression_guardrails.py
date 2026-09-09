@@ -128,8 +128,8 @@ class TestSubtitleAndTypographyGuardrails:
         comp_src = (MEDIA_DIR / "compositor.py").read_text(encoding="utf-8")
         assert "force_pillow_subtitles_enabled" in comp_src
         assert "write_ass_from_cues_or_words" in comp_src or "ass=" in comp_src
-        proc_src = (MEDIA_DIR / "proc_engine.py").read_text(encoding="utf-8")
-        assert "force_pillow_subtitles_enabled" in proc_src
+        loop_src = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
+        assert "force_pillow_subtitles_enabled" in loop_src
 
     def test_reg05_ass_generator_enforces_safe_area_margin(self, tmp_path: Path) -> None:
         """Assert ASSSubtitleGenerator enforces MarginV >= 240px for YouTube Shorts UI."""
@@ -202,22 +202,15 @@ class TestCompositorAndProceduralGuardrails:
     """Ensures deterministic memory bounds and zero-allocation frame buffering."""
 
     def test_reg07_wgsl_shader_catalog_completeness(self) -> None:
-        """Assert WGSL shaders remain quarantined under _legacy (not production path)."""
+        """Assert zero WGSL shaders and zero _legacy directory exist on disk (100% asset-only pipeline)."""
         assert not (MEDIA_DIR / "shaders").exists(), (
-            "REG-07 VIOLATION: src/media/shaders must be quarantined under src/media/_legacy/shaders"
+            "REG-07 VIOLATION: src/media/shaders must not exist"
         )
-        shaders_dir = MEDIA_DIR / "_legacy" / "shaders"
-        required_shaders = [
-            "cosmic_singularity.wgsl",
-            "dark_forest.wgsl",
-            "synaptic_network.wgsl",
-            "tactical_chamber.wgsl",
-        ]
-        for s_name in required_shaders:
-            s_file = shaders_dir / s_name
-            assert s_file.is_file(), f"REG-07 VIOLATION: Missing quarantined shader: {s_name}"
-            content = s_file.read_text(encoding="utf-8")
-            assert "@fragment" in content, f"REG-07 VIOLATION: Shader {s_name} missing @fragment entry point"
+        assert not (MEDIA_DIR / "_legacy").exists(), (
+            "REG-07 VIOLATION: src/media/_legacy must be completely eradicated"
+        )
+        found_wgsl = list(REPO_ROOT.glob("**/*.wgsl"))
+        assert len(found_wgsl) == 0, f"REG-07 VIOLATION: Found WGSL shaders on disk: {found_wgsl}"
 
     def test_reg08_inmemory_compositor_reuses_buffers(self) -> None:
         """Assert InMemoryCompositor allocates contiguous memory buffers and does not leak."""
@@ -233,25 +226,21 @@ class TestCompositorAndProceduralGuardrails:
 # ==============================================================================
 
 class TestContractSchemaGuardrails:
-    """Ensures schema and Pydantic models strictly maintain VisualArchetypeId."""
+    """Ensures schema strictly forbids procedural_config and only accepts asset engine types."""
 
     def test_reg09_visual_archetype_tokens_in_sync(self) -> None:
-        """Assert VisualArchetypeId matches exactly between schema and Pydantic model."""
+        """Assert schema strictly forbids procedural_config and only accepts asset engine types."""
         import json
-        from src.scene_manifest import VisualArchetypeId
-        from typing import get_args
-
         schema_path = REPO_ROOT / "schemas" / "scene_manifest.schema.json"
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
-        props = schema["properties"]["scenes"]["items"]["properties"]["procedural_config"]["properties"]
-        schema_archetypes = set(props["archetype_id"]["enum"])
-        pydantic_archetypes = set(get_args(VisualArchetypeId))
+        scene_schema = schema["properties"]["scenes"]["items"]
+        not_rules = scene_schema.get("not", {}).get("anyOf", [])
+        forbidden_reqs = [rule.get("required") for rule in not_rules if "required" in rule]
+        assert ["procedural_config"] in forbidden_reqs
 
-        assert schema_archetypes == pydantic_archetypes, (
-            f"REG-09 VIOLATION: Archetype tokens mismatch between schema and Pydantic:\n"
-            f"Schema: {schema_archetypes}\nPydantic: {pydantic_archetypes}"
-        )
+        allowed_engines = set(scene_schema["properties"]["engine_type"]["enum"])
+        assert allowed_engines == {"catalog_loop", "static_matte", "hybrid_cinematic_ai"}
 
 
 # ==============================================================================

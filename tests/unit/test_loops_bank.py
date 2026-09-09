@@ -82,3 +82,24 @@ def test_loop_video_engine_resolves_all_channels():
         v_asset = engine.resolve_loop_video(category=cat, orientation="vertical", allow_fallback=True)
         assert v_asset is not None
         assert v_asset.exists()
+
+
+def test_master_loops_certified_visual_metrics(bank_manifest):
+    """Verifies that all master loops in bank_manifest.json have sealed precomputed visual metrics."""
+    master_loops = bank_manifest.get("master_loops", [])
+    assert len(master_loops) == 9
+    engine = LoopVideoEngine(loops_root_dir=LOOPS_DIR, db_path=DB_PATH)
+    for item in master_loops:
+        fn = item["filename"]
+        assert "longest_black_seconds" in item
+        assert item["longest_black_seconds"] == 0.0
+        assert "perceptual_luminance" in item
+        lum = item["perceptual_luminance"]
+        assert lum["passed"] is True
+        assert lum["avg_luminance"] >= 22.0
+        assert lum["dark_ratio"] <= 0.45
+
+        metrics = engine.get_loop_quality_metrics(fn)
+        assert metrics.get("longest_black_seconds") == 0.0
+        assert metrics.get("perceptual_luminance", {}).get("passed") is True
+

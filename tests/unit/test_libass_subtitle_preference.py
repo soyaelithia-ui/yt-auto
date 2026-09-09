@@ -65,10 +65,9 @@ def test_compositor_prefers_libass_and_skips_pillow_cues(tmp_path: Path, monkeyp
     from src.media.compositor import MultiSceneCompositor
     from src.scene_manifest import SceneConfig, SceneManifestV2, AudioTracks, SafeArea
 
-    # Avoid NativeProceduralEngine GPU init in CI/box — inject stubs.
     comp = MultiSceneCompositor(
         hybrid_engine=MagicMock(),
-        procedural_engine=MagicMock(),
+        loop_engine=MagicMock(),
     )
     captured = {"cues": "UNSET", "subtitle_path": "UNSET"}
 
@@ -106,7 +105,7 @@ def test_compositor_prefers_libass_and_skips_pillow_cues(tmp_path: Path, monkeyp
                 start_sec=0.0,
                 duration_sec=0.4,
                 tension_level=1,
-                engine_type="pure_procedural_webgl",
+                engine_type="catalog_loop",
             )
         ],
     )
@@ -124,7 +123,7 @@ def test_compositor_prefers_libass_and_skips_pillow_cues(tmp_path: Path, monkeyp
     words = [{"word": "TEST", "start": 0.0, "end": 0.3}]
     cues = CodeSubtitleDrawer.parse_word_timestamps(words)
 
-    comp.procedural_engine.render_scene_segment = fake_proc_render  # type: ignore
+    comp.loop_engine.render_scene_segment = fake_proc_render  # type: ignore
     comp._master_assembly = fake_master  # type: ignore
     comp._assemble_video_scenes = lambda *a, **k: Path(a[1]).write_bytes(b"v")  # type: ignore
 
@@ -145,32 +144,32 @@ def test_compositor_prefers_libass_and_skips_pillow_cues(tmp_path: Path, monkeyp
     assert Path(captured["subtitle_path"]).suffix.lower() == ".ass"
 
 
-def test_proc_engine_default_path_uses_libass_not_pillow(tmp_path: Path, monkeypatch):
+def test_loop_engine_default_path_uses_libass_not_pillow(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("FORCE_PILLOW_SUBTITLES", raising=False)
-    from src.media.proc_engine import ProceduralVideoEngine
+    from src.media.loop_engine import LoopVideoEngine
     from src.scene_manifest import SceneConfig
 
-    engine = ProceduralVideoEngine()
+    engine = LoopVideoEngine()
     sc = SceneConfig(
         scene_index=1,
-        scene_id="sc_proc_sub_libass",
+        scene_id="sc_loop_sub_libass",
         start_sec=0.0,
         duration_sec=0.4,
         tension_level=2,
-        engine_type="pure_procedural_webgl",
+        engine_type="catalog_loop",
+        environment_name="dark_forest",
     )
     words = [
         {"word": "ENTIDAD", "start": 0.0, "end": 0.2},
         {"word": "DETECTADA", "start": 0.2, "end": 0.4},
     ]
     cues = CodeSubtitleDrawer.parse_word_timestamps(words, words_per_cue=2)
-    out_sub = tmp_path / "proc_sub_libass.mp4"
+    out_sub = tmp_path / "loop_sub_libass.mp4"
 
     seen_cmds = []
 
     def fake_run_ffmpeg(cmd, *a, **k):
         seen_cmds.append(list(cmd))
-        # Create output file referenced in cmd
         out = Path(cmd[-1])
         import subprocess
         subprocess.run(
@@ -181,27 +180,23 @@ def test_proc_engine_default_path_uses_libass_not_pillow(tmp_path: Path, monkeyp
             check=True,
             capture_output=True,
         )
-        return {"returncode": 0}
+        return MagicMock(returncode=0)
 
-    # Avoid needing a real loop catalog: stub fallback loop generator
-    def fake_fallback(*a, **k):
-        loop = tmp_path / "loop.mp4"
-        import subprocess
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=0.5",
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "0.5", str(loop),
-            ],
-            check=True,
-            capture_output=True,
-        )
-        return loop
+    loop = tmp_path / "loop.mp4"
+    import subprocess
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=0.5",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "0.5", str(loop),
+        ],
+        check=True,
+        capture_output=True,
+    )
 
-    engine._generate_fallback_loop = fake_fallback  # type: ignore
-    engine.renderer = None
+    monkeypatch.setattr(engine, "resolve_loop_video", lambda *a, **k: loop)
 
-    with patch("src.media.proc_engine.run_ffmpeg", side_effect=fake_run_ffmpeg):
-        with patch("src.media.proc_engine.probe_media") as probe:
+    with patch("src.media.loop_engine.run_ffmpeg", side_effect=fake_run_ffmpeg):
+        with patch("src.media.loop_engine.probe_media") as probe:
             probe.return_value = MagicMock(primary_video=MagicMock(duration=0.5), duration=0.5)
             engine.render_scene_segment(
                 scene=sc,

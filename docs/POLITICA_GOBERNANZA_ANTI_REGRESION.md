@@ -31,6 +31,11 @@
    - Prohibida la existencia de directorios jubilados (`src/rendering/`, `src/compositing/`, `src/export/`).
 5. **Certificación de Suite de Anti-Regresión**:
    - La suite de pruebas de guardrails (`tests/unit/test_anti_regression_guardrails.py`, REG-01 a REG-30) debe aprobar al 100% en tiempo de ejecución.
+6. **Cero Vías Procedurales o Matemáticas de Video (100% Asset-Based Pipeline)**:
+   - Prohibición permanente de motores procedurales/matemáticos (`wgpu`, shaders WGSL, `src/media/_legacy/`, `proc_engine.py`, `NativeProceduralEngine`, WebGL o canvas2d).
+   - Prohibición de bucles de rasterizado frame a frame por software vía Pillow (`_render_scene_pillow_rawvideo`, `force_pillow_rawvideo`).
+   - Prohibición de filtros generativos matemáticos de FFmpeg (`gradients=`, `mandelbrot`, `cellauto`).
+   - Toda composición se realiza exclusivamente mediante assets reales del catálogo (`LoopVideoEngine` con stream-copy `-c:v copy`, Ken Burns nativo en imágenes fijas, y overlays PNG pre-renderizados en `assets/overlays/`). Fail-closed mediante `CatalogAssetNotFoundError` si falta cualquier asset.
 
 ---
 

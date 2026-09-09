@@ -19,7 +19,16 @@ FORBIDDEN_DIRS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src
 if [ -n "$FORBIDDEN_DIRS" ]; then
     echo "❌ ERROR: Attempting to commit to retired legacy subsystem (src/rendering, src/compositing, src/export):"
     echo "$FORBIDDEN_DIRS"
-    echo "Rendering in v3.1 is handled exclusively by src/media/ (NativeProceduralEngine / LoopVideoEngine)."
+    echo "Rendering is handled exclusively by asset-based composition in src/media/ (LoopVideoEngine / HybridVideoEngine)."
+    exit 1
+fi
+
+# 2b. Zero-Procedural-Math Policy: Prohibit WGSL shaders, _legacy, or retired procedural engine files
+FORBIDDEN_PROC=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.wgsl$|^src/media/_legacy/|^src/media/(proc_engine|native_procedural|lavfi_palettes)\.py$' || true)
+if [ -n "$FORBIDDEN_PROC" ]; then
+    echo "❌ ERROR: Attempting to commit procedural/mathematical video files (*.wgsl, _legacy, proc_engine):"
+    echo "$FORBIDDEN_PROC"
+    echo "Policy Mandate: Procedural shaders and mathematical rendering pathways are permanently purged."
     exit 1
 fi
 
@@ -53,22 +62,22 @@ if [ -n "$FORBIDDEN_BLOAT" ]; then
     exit 1
 fi
 
-# 5. Prohibit imports of retired legacy subsystems (src.rendering, src.compositing, src.export)
+# 5. Prohibit imports of retired legacy subsystems and procedural engines
 RETIRED_IMPORT_FILES=()
 for file in $STAGED_PY_FILES; do
     if [ -f "$file" ]; then
-        if grep -E 'from[[:space:]]+src\.(rendering|compositing|export)|import[[:space:]]+src\.(rendering|compositing|export)' "$file" > /dev/null 2>&1; then
+        if grep -E 'from[[:space:]]+src\.(rendering|compositing|export)|import[[:space:]]+src\.(rendering|compositing|export)|from[[:space:]]+src\.media\.(proc_engine|native_procedural|lavfi_palettes)|import[[:space:]]+wgpu|import[[:space:]]+pygfx' "$file" > /dev/null 2>&1; then
             RETIRED_IMPORT_FILES+=("$file")
         fi
     fi
 done
 
 if [ ${#RETIRED_IMPORT_FILES[@]} -gt 0 ]; then
-    echo "❌ ERROR: Import from retired legacy subsystem detected in staged file(s):"
+    echo "❌ ERROR: Import from retired legacy subsystem or procedural engine detected in staged file(s):"
     for rf in "${RETIRED_IMPORT_FILES[@]}"; do
         echo "   - $rf"
     done
-    echo "Namespaces src.rendering, src.compositing, and src.export are permanently retired."
+    echo "Namespaces src.rendering, src.compositing, src.export, and proc_engine/wgpu are permanently retired."
     exit 1
 fi
 

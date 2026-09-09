@@ -40,8 +40,8 @@ flowchart TD
 | 5 | Síntesis TTS y Audio | `lib/tts.py` | Edge-TTS según perfil de voz del carril (`config/voice_profiles.json`), normalización EBU R128 (-14 LUFS, TP ≤ -1.5 dBTP) y auto-ducking musical. |
 | 6 | Verificación de Duración | `src/pipeline.py` | Re-condensación de guion si excede el techo del carril o auto-expansión multihistoria en formatos largos. |
 | 7 | Subtítulos Karaoke ASS | `src/subtitles.py` | Generación ASS palabra por palabra en resolución nativa (`1080x1920` vertical con `MarginV 240-250` o `1920x1080` horizontal). |
-| 8 | Resolución de Assets | `src/core/loop_catalog.py`, `src/media/loop_video_engine.py` | Selección de bucle procedimental web desde la base de datos local SQLite (`video_loops`) con rotación por menor uso (Three.js/Canvas/CSS/WebGL) o síntesis JIT. |
-| 9 | Composición y Render | `src/media/loop_video_engine.py` | Expansión matemática del bucle ligero (`-stream_loop -1`) en FFmpeg H.264 CRF 19-21 / 30fps con ducking sidechain y subtítulos incrustados. |
+| 8 | Resolución de Assets | `src/core/catalog.py`, `src/media/loop_engine.py` | Selección de video maestro pre-renderizado desde el catálogo offline (`assets/loops/` y `data/loop_catalog.db`) o imagen fija real. Fail-closed con `CatalogAssetNotFoundError` si el asset no existe. Cero generación WebGL o procedural. |
+| 9 | Composición y Render | `src/media/loop_engine.py`, `src/media/compositor.py` | Composición nativa en FFmpeg: concat demuxer stream-copy (`-c:v copy`) sobre loops o Ken Burns nativo (`zoompan`), ducking de audio y subtítulos incrustados con libass. |
 
 | 10 | Veredicto por Código | `src/core/code_review_verdict.py` | Evaluación determinista offline: integridad de contenedor, decodificación, compuertas QA estrictas (LUFS, freeze, sync A/V) y ROI. |
 | 11 | Miniatura y Metadatos | `src/thumbnail.py`, `src/branding.py` | Generación local determinista de portada con branding mediante PIL/SVG y archivo estructurado `metadata.json`. |
