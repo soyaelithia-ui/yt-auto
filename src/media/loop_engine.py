@@ -31,7 +31,12 @@ from src.media.encode_defaults import (
 from src.config import BASE_DIR, DEFAULT_DB_PATH
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
-from src.core.catalog import CHANNEL_THEMES, LoopCatalogRepository, resolve_loop_file_path
+from src.core.catalog import (
+    CHANNEL_THEMES,
+    LoopCatalogRepository,
+    resolve_loop_file_path,
+    _LEGACY_CHECKOUT_PREFIXES,
+)
 from src.log import get_logger
 from src.media.subtitles_ass import (
     escape_ffmpeg_filter_path,
@@ -692,24 +697,26 @@ class LoopVideoEngine(BaseVideoCompositor):
                     )
 
                 if best_loop:
+                    if not allow_fallback and getattr(best_loop, "category", "").strip().lower() != norm_cat.strip().lower():
+                        best_loop = None
+                if best_loop:
                     loop_fp = Path(best_loop.file_path)
                     if ".." in loop_fp.parts:
                         raise LoopVideoAssetError(
                             f"Path traversal detected in catalog loop asset: {best_loop.file_path}"
                         )
                     resolved_p = resolve_loop_file_path(best_loop.file_path).resolve()
-                    assets_root = (BASE_DIR / "assets").resolve()
-                    loops_root = self.loops_root_dir.resolve()
-                    is_safe = False
-                    try:
-                        resolved_p.relative_to(assets_root)
-                        is_safe = True
-                    except ValueError:
-                        try:
-                            resolved_p.relative_to(loops_root)
-                            is_safe = True
-                        except ValueError:
-                            is_safe = False
+                    allowed_roots = [
+                        (BASE_DIR / "assets").resolve(),
+                        self.loops_root_dir.resolve(),
+                    ]
+                    for prefix in _LEGACY_CHECKOUT_PREFIXES:
+                        allowed_roots.append((Path(prefix) / "assets").resolve())
+
+                    is_safe = any(
+                        resolved_p.is_relative_to(root)
+                        for root in allowed_roots
+                    )
 
                     if not is_safe:
                         raise LoopVideoAssetError(
@@ -2035,24 +2042,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         category = self.normalize_category(base_env)
 
         loop_file: Optional[Path] = None
-        if self.catalog is not None:
-            matching = self.catalog.get_best_loop(
-                category=category,
-                orientation=orientation,
-                channel=lane_id,
-            )
-            if matching and Path(matching.file_path).is_file():
-                cand = Path(matching.file_path).resolve()
-                if not is_overlay_not_plane0(cand) and not is_grey_procedural_plane(
-                    technology=getattr(matching, "technology", None),
-                    category=getattr(matching, "category", None),
-                    loop_id=getattr(matching, "loop_id", None),
-                    path=cand,
-                    sha256=getattr(matching, "sha256", None),
-                ):
-                    loop_file = cand
-
-        if loop_file is None:
+        if hasattr(self, "resolve_loop_video"):
             try:
                 cand = self.resolve_loop_video(
                     category=category,

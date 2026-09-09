@@ -10,10 +10,15 @@ import argparse
 import json
 import logging
 import re
+import os
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from lib.ffmpeg import (
     FFmpegExecutionError,
@@ -122,8 +127,8 @@ def inspect_video_media(
         width = int(v_stream.get("width", 1080))
         height = int(v_stream.get("height", 1920))
     else:
-        duration = float(probe_info.duration_sec)
-        primary_v = probe_info.primary_video
+        duration = float(getattr(probe_info, "duration", getattr(probe_info, "duration_sec", 0.0)))
+        primary_v = getattr(probe_info, "primary_video", None) or (probe_info.video_streams[0] if getattr(probe_info, "video_streams", None) else None)
         width = primary_v.width if primary_v else 1080
         height = primary_v.height if primary_v else 1920
 

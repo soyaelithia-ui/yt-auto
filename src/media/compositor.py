@@ -348,24 +348,6 @@ class MultiSceneCompositor(BaseVideoCompositor):
         base_env = re.sub(r"\s*\(Cut\s+\d+\)", "", str(env_name)).strip()
         category = eng.normalize_category(base_env) if hasattr(eng, "normalize_category") else base_env
 
-        matching = None
-        if hasattr(eng, "catalog") and eng.catalog is not None:
-            matching = eng.catalog.get_best_loop(category=category, orientation=orientation, channel=lane_id)
-        if matching and Path(matching.file_path).is_file():
-            from src.media.loop_engine import is_grey_procedural_plane, is_overlay_not_plane0
-
-            hit = Path(matching.file_path).resolve()
-            if is_overlay_not_plane0(hit) or is_grey_procedural_plane(
-                technology=getattr(matching, "technology", None),
-                category=getattr(matching, "category", None),
-                loop_id=getattr(matching, "loop_id", None),
-                path=hit,
-                sha256=getattr(matching, "sha256", None),
-            ):
-                logger.info("Skipping grey/overlay loop as plane-0: %s", hit)
-            else:
-                return hit
-
         if hasattr(eng, "resolve_loop_video"):
             try:
                 cand = eng.resolve_loop_video(
