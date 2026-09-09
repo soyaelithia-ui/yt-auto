@@ -112,9 +112,15 @@ class ChannelSettings:
         """
         data = asdict(self)
         data["key"] = self.key.value if hasattr(self.key, "value") else str(self.key)
-        data["cookies_available"] = self.cookies_path.is_file()
+        try:
+            data["cookies_available"] = self.cookies_path.is_file()
+        except OSError:
+            data["cookies_available"] = False
         data.pop("cookies_path", None)
-        data["youtube_token_available"] = self.youtube_token_path.is_file()
+        try:
+            data["youtube_token_available"] = self.youtube_token_path.is_file()
+        except OSError:
+            data["youtube_token_available"] = False
         data.pop("youtube_token_path", None)
         return data
 
@@ -355,10 +361,10 @@ SETTINGS = RuntimeSettings(
 
 
 def validate_runtime_config(
-    *,
     require_drive: bool = False,
     require_publish: bool = False,
     require_review: bool = False,
+    channel: str | None = None,
 ) -> None:
     errors: list[str] = []
     if require_drive:
@@ -377,13 +383,31 @@ def validate_runtime_config(
                 "Falta DRIVE_KEY_PATH y no hay un token OAuth de canal con scope Drive"
             )
     if require_publish:
-        for channel in SETTINGS.channels.values():
-            if not channel.cookies_path.exists() or not channel.youtube_token_path.exists():
+        from src.core.channel_profile import ChannelProfileRegistry
+        if channel and channel != "all":
+            channels_to_check = [SETTINGS.channel(channel)]
+        else:
+            channels_to_check = []
+            for ch in SETTINGS.channels.values():
+                cid = ch.key.value if hasattr(ch.key, "value") else str(ch.key)
+                try:
+                    prof = ChannelProfileRegistry.get_channel(cid)
+                    if prof and not prof.enabled:
+                        continue
+                except Exception:
+                    pass
+                if ch.expected_youtube_channel_id and "PLACEHOLDER" in ch.expected_youtube_channel_id:
+                    continue
+                channels_to_check.append(ch)
+
+        for ch in channels_to_check:
+            cid = ch.key.value if hasattr(ch.key, "value") else str(ch.key)
+            if not ch.cookies_path.exists() or not ch.youtube_token_path.exists():
                 errors.append(
-                    f"{channel.key.value}: faltan cookies o token de YouTube"
+                    f"{cid}: faltan cookies o token de YouTube"
                 )
-            if not channel.expected_youtube_channel_id:
-                errors.append(f"{channel.key.value}: falta el channel ID de YouTube")
+            if not ch.expected_youtube_channel_id:
+                errors.append(f"{cid}: falta el channel ID de YouTube")
     if require_review:
         if os.environ.get("TEST_MODE") == "1":
             errors.append("TEST_MODE=1 no está permitido en producción")

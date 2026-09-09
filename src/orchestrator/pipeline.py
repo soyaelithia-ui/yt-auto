@@ -364,6 +364,7 @@ class PipelineOrchestrator:
                 require_drive=True,
                 require_publish=True,
                 require_review=True,
+                channel=channel,
             )
 
         with ChannelLock(channel):

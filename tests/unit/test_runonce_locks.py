@@ -80,7 +80,12 @@ def main_module(monkeypatch):
         activate_channel=lambda name: {},
         get_active_channels=lambda: ["moku", "aelithia"],
     )
-    _stub("src.cleaner", clean_system_cache=lambda dry_run=False: {})
+    _stub(
+        "src.cleaner",
+        clean_system_cache=lambda dry_run=False: {},
+        clean_expired_failed_runs=lambda: 0,
+        clean_untracked_temp_files=lambda: 0,
+    )
     _stub("src.cli", print_queue=lambda **k: None, print_status=lambda **k: None)
     _stub("src.daemon", request_shutdown=lambda: None, run_pipeline_once=lambda **k: {})
     _stub("src.monitor", run_publication_check=lambda: {})
@@ -111,6 +116,7 @@ def main_module(monkeypatch):
         LOCK_FILE_PATH=str(REPO_ROOT / "scratch" / "test.lock"),
         TOKEN_CHANNEL2_PATH="/tmp/t2.json",
         YOUTUBE_TOKEN_PATH="/tmp/t1.json",
+        SETTINGS=types.SimpleNamespace(video_engine="loop", short_compositor="loop"),
         validate_runtime_config=lambda **k: None,
     )
     # main reads RUNTIME_PROFILE at call time via module attribute access on import
