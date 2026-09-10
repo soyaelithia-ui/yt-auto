@@ -208,6 +208,27 @@ CATEGORY_ALIASES: dict[str, str] = {
     "arctic_desolation": "dark_ambient",
 }
 
+_ROTATION_STATE_FILE = (BASE_DIR / "data" / "loop_rotation_state.json").resolve()
+
+
+def _load_rotation_state() -> dict[str, int]:
+    try:
+        if _ROTATION_STATE_FILE.is_file():
+            data = json.loads(_ROTATION_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {str(k): int(v) for k, v in data.items() if isinstance(v, (int, float))}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_rotation_state(state: dict[str, int]) -> None:
+    try:
+        _ROTATION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _ROTATION_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
 
 class LoopVideoEngine(BaseVideoCompositor):
     """
@@ -324,11 +345,49 @@ class LoopVideoEngine(BaseVideoCompositor):
 
     _rotation_indices: dict[str, int] = {"shorts": 0, "longs": 0}
 
+    @classmethod
+    def get_rotation_index(cls, mode: str, total_files: int, *, persist: bool | None = None) -> int:
+        """Determines next rotation index, using disk-backed state in production or in-memory in tests."""
+        from src.config import is_test_environment
+        should_persist = (not is_test_environment()) if persist is None else bool(persist)
+        if should_persist:
+            state = _load_rotation_state()
+            curr = state.get(mode, cls._rotation_indices.get(mode, 0))
+            idx = curr % total_files
+            next_idx = idx + 1
+            cls._rotation_indices[mode] = next_idx
+            state[mode] = next_idx
+            _save_rotation_state(state)
+            return idx
+        else:
+            idx = cls._rotation_indices.get(mode, 0) % total_files
+            cls._rotation_indices[mode] = idx + 1
+            return idx
+
+    @classmethod
+    def reset_rotation_state(cls, mode: str | None = None) -> None:
+        """Resets rotation indices in memory and on disk."""
+        if mode:
+            cls._rotation_indices[mode] = 0
+        else:
+            cls._rotation_indices = {"shorts": 0, "longs": 0}
+        try:
+            if _ROTATION_STATE_FILE.is_file():
+                if mode:
+                    state = _load_rotation_state()
+                    state[mode] = 0
+                    _save_rotation_state(state)
+                else:
+                    _save_rotation_state({"shorts": 0, "longs": 0})
+        except Exception:
+            pass
+
     def resolve_continuous_loop(
         self,
         orientation: str | tuple[int, int] = "vertical",
         *,
         allow_test_mock: bool = False,
+        persist: bool | None = None,
     ) -> Path:
         """
         Resolves a single continuous loop clip from assets/videos/shorts/ (vertical)
@@ -348,8 +407,8 @@ class LoopVideoEngine(BaseVideoCompositor):
         mp4_files: list[Path] = []
         if folder.exists():
             mp4_files = sorted([
-                p for p in folder.glob("*.mp4")
-                if p.is_file() and p.stat().st_size > 0 and not p.name.startswith(".")
+                p for p in folder.iterdir()
+                if p.is_file() and p.suffix.lower() == ".mp4" and p.stat().st_size > 0 and not p.name.startswith(".")
             ])
 
         if not mp4_files:
@@ -361,8 +420,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                 f"({spec}) in '{folder}' to enable video composition."
             )
 
-        idx = LoopVideoEngine._rotation_indices.get(mode, 0) % len(mp4_files)
-        LoopVideoEngine._rotation_indices[mode] = idx + 1
+        idx = self.get_rotation_index(mode, len(mp4_files), persist=persist)
         chosen = mp4_files[idx]
         logger.info(
             "Resolved continuous single-loop [%s] (%d/%d): %s",
@@ -372,22 +430,35 @@ class LoopVideoEngine(BaseVideoCompositor):
 
     @classmethod
     def _get_or_create_test_fixture_loop(cls, orientation: str | tuple[int, int] = "vertical") -> Path:
-        """Provides a lightweight 1s mock fixture mp4 loop for unit/integration tests."""
+        """Provides a lightweight 10s (vertical) or 30s (horizontal) mock fixture mp4 loop for unit/integration tests with Main profile."""
         is_vert = (
             orientation in ("vertical", "9:16", (1080, 1920), (720, 1280))
             or "short" in str(orientation).lower()
             or (isinstance(orientation, (tuple, list)) and len(orientation) == 2 and orientation[1] > orientation[0])
         )
         w, h = (1080, 1920) if is_vert else (1920, 1080)
+        dur = 10 if is_vert else 30
         fixtures_dir = BASE_DIR / "tests" / "fixtures" / "loops"
         fixtures_dir.mkdir(parents=True, exist_ok=True)
         fixture_path = fixtures_dir / f"mock_loop_{w}x{h}.mp4"
+        regenerate = False
         if not fixture_path.exists() or fixture_path.stat().st_size == 0:
+            regenerate = True
+        else:
+            try:
+                probe = probe_media(fixture_path)
+                prof = (probe.video_streams[0].profile if probe.video_streams else "").lower()
+                if "main" not in prof and "baseline" not in prof:
+                    regenerate = True
+            except Exception:
+                regenerate = True
+
+        if regenerate:
             cmd = [
                 "ffmpeg", "-y",
                 "-f", "lavfi", "-i", f"color=c=black:s={w}x{h}:r=30",
-                "-t", "1",
-                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-t", str(dur),
+                "-c:v", "libx264", "-profile:v", "main", "-level", "4.0", "-pix_fmt", "yuv420p",
                 str(fixture_path),
             ]
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -1456,10 +1527,16 @@ class LoopVideoEngine(BaseVideoCompositor):
         if video_loop_path:
             v_path = Path(video_loop_path).expanduser().resolve()
             if not v_path.exists() or not v_path.is_file() or v_path.stat().st_size == 0:
-                logger.warning("Specified video_loop_path '%s' not found or empty; falling back to library.", v_path)
-                v_path = self.resolve_loop_video(category=category, allow_fallback=True, orientation=orientation if isinstance(orientation, str) else None)
+                logger.warning("Specified video_loop_path '%s' not found or empty; falling back to continuous loop.", v_path)
+                try:
+                    v_path = self.resolve_continuous_loop(orientation=orientation)
+                except CatalogAssetNotFoundError:
+                    v_path = self.resolve_loop_video(category=category, allow_fallback=True, orientation=orientation if isinstance(orientation, str) else None)
         else:
-            v_path = self.resolve_loop_video(category=category, allow_fallback=True, orientation=orientation if isinstance(orientation, str) else None)
+            try:
+                v_path = self.resolve_continuous_loop(orientation=orientation)
+            except CatalogAssetNotFoundError:
+                v_path = self.resolve_loop_video(category=category, allow_fallback=True, orientation=orientation if isinstance(orientation, str) else None)
 
         # Determine exact duration
         if duration_sec is None or duration_sec <= 0:
@@ -1493,13 +1570,13 @@ class LoopVideoEngine(BaseVideoCompositor):
             try:
                 loop_probe = probe_media(v_path)
                 # Direct stream copy (-c:v copy) requires exact resolution match.
-                # If dimensions differ, fall back to filtergraph for scaling/cropping.
-                if (
-                    loop_probe.video_streams
-                    and (
-                        loop_probe.video_streams[0].width != target_res[0]
-                        or loop_probe.video_streams[0].height != target_res[1]
-                    )
+                # If dimensions differ or video stream is missing, fall back to filtergraph for scaling/cropping.
+                if not loop_probe.video_streams:
+                    logger.warning("Stream-Copy aborted: no video streams found in %s", v_path)
+                    is_stream_copy = False
+                elif (
+                    loop_probe.video_streams[0].width != target_res[0]
+                    or loop_probe.video_streams[0].height != target_res[1]
                 ):
                     is_stream_copy = False
                 else:
@@ -1617,7 +1694,7 @@ class LoopVideoEngine(BaseVideoCompositor):
                         with open(concat_list_path, "w", encoding="utf-8") as f:
                             f.write("ffconcat version 1.0\n")
                             for s_idx in range(num_scenes):
-                                current_video = scene_clips[s_idx]
+                                current_video = str(scene_clips[s_idx].resolve()).replace("'", "'\\''")
                                 reps = scene_reps[s_idx]
                                 for _ in range(reps):
                                     f.write(f"file '{current_video}'\n")
@@ -1634,10 +1711,11 @@ class LoopVideoEngine(BaseVideoCompositor):
                     else:
                         loop_dur = max(1.0, float(loop_probe.duration or 15.0))
                         reps = max(1, int(math.ceil(float(duration_sec or 60.0) / loop_dur)) + 1)
+                        safe_file_entry = str(v_path.resolve()).replace("'", "'\\''")
                         with open(concat_list_path, "w", encoding="utf-8") as f:
                             f.write("ffconcat version 1.0\n")
                             for _ in range(reps):
-                                f.write(f"file '{v_path.resolve()}'\n")
+                                f.write(f"file '{safe_file_entry}'\n")
 
                     cmd_sc = self.build_stream_copy_composition_cmd(
                         concat_list_path=concat_list_path,

@@ -198,6 +198,8 @@ class ThumbnailEngine:
             "accent_color": accent,
             "tilt_angle": config.tilt_angle,
             "title_raw": config.title,
+            "cover_prompt": config.cover_prompt,
+            "focal_subject": config.focal_subject,
             # metadata without text_box_style must not inject None ("none" disables the badge).
             "text_box_style": config.text_box_style
             or (config.metadata.get("text_box_style") if config.metadata else None)

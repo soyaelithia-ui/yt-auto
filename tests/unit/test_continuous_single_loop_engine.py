@@ -105,6 +105,106 @@ class TestContinuousSingleLoopEngine:
         assert mock_loop.is_file()
         assert mock_loop.stat().st_size > 0
 
+    def test_case_insensitive_mp4_resolution(self, temp_loop_dirs):
+        shorts, longs = temp_loop_dirs
+        clip1 = shorts / "LOOP_01.MP4"
+        clip2 = shorts / "loop_02.mp4"
+        clip1.write_bytes(b"DATA_UPPER")
+        clip2.write_bytes(b"DATA_LOWER")
+
+        engine = LoopVideoEngine()
+        engine.shorts_videos_dir = shorts
+        LoopVideoEngine._rotation_indices["shorts"] = 0
+
+        p1 = engine.resolve_continuous_loop(orientation="vertical")
+        p2 = engine.resolve_continuous_loop(orientation="vertical")
+        assert {p1.name, p2.name} == {"LOOP_01.MP4", "loop_02.mp4"}
+
+    def test_persistent_rotation_state(self, temp_loop_dirs, monkeypatch, tmp_path):
+        shorts, longs = temp_loop_dirs
+        c1 = shorts / "c1.mp4"
+        c2 = shorts / "c2.mp4"
+        c1.write_bytes(b"1")
+        c2.write_bytes(b"2")
+
+        state_file = tmp_path / "test_rotation_state.json"
+        import src.media.loop_engine as le_mod
+        monkeypatch.setattr(le_mod, "_ROTATION_STATE_FILE", state_file)
+
+        LoopVideoEngine.reset_rotation_state("shorts")
+        engine = LoopVideoEngine()
+        engine.shorts_videos_dir = shorts
+
+        # First call with persist=True
+        first = engine.resolve_continuous_loop("vertical", persist=True)
+        assert first == c1
+
+        # Simulate new process instance with fresh in-memory indices
+        LoopVideoEngine._rotation_indices = {"shorts": 0, "longs": 0}
+        second = engine.resolve_continuous_loop("vertical", persist=True)
+        assert second == c2
+
+    def test_test_fixture_loop_profile_is_main_and_standard_durations(self):
+        from lib.ffmpeg import probe_media
+        v_fixture = LoopVideoEngine._get_or_create_test_fixture_loop("vertical")
+        h_fixture = LoopVideoEngine._get_or_create_test_fixture_loop("horizontal")
+
+        assert v_fixture.is_file()
+        assert h_fixture.is_file()
+
+        v_probe = probe_media(v_fixture)
+        h_probe = probe_media(h_fixture)
+
+        assert v_probe.video_streams
+        assert h_probe.video_streams
+
+        v_prof = str(v_probe.video_streams[0].profile).lower()
+        h_prof = str(h_probe.video_streams[0].profile).lower()
+
+        assert "main" in v_prof or "baseline" in v_prof
+        assert "main" in h_prof or "baseline" in h_prof
+
+        assert v_probe.video_streams[0].width == 1080
+        assert v_probe.video_streams[0].height == 1920
+        assert h_probe.video_streams[0].width == 1920
+        assert h_probe.video_streams[0].height == 1080
+
+    def test_ffconcat_escapes_single_quotes_in_path(self, temp_loop_dirs, tmp_path):
+        import subprocess
+        shorts, longs = temp_loop_dirs
+        clip_with_quote = shorts / "horror's_loop.mp4"
+        # Copy valid fixture content
+        v_fix = LoopVideoEngine._get_or_create_test_fixture_loop("vertical")
+        clip_with_quote.write_bytes(v_fix.read_bytes())
+
+        engine = LoopVideoEngine()
+        engine.shorts_videos_dir = shorts
+
+        # Create valid test audio with real signal so loudnorm does not divide by zero
+        dummy_wav = tmp_path / "test_audio.wav"
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                "-c:a", "pcm_s16le",
+                str(dummy_wav),
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+
+        out_mp4 = tmp_path / "out_quoted.mp4"
+        res = engine.compose(
+            audio_path=dummy_wav,
+            output_video_path=out_mp4,
+            orientation="vertical",
+            video_loop_path=clip_with_quote,
+            duration_sec=1.0,
+        )
+        assert Path(res).is_file()
+        assert Path(res).stat().st_size > 0
+
 
 class TestPromptDrivenThumbnails:
     """Tests for prompt-driven real-time thumbnail generation."""
