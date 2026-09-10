@@ -39,6 +39,17 @@ En entornos multi-agente concurrentes, los repositorios derivados no deben dupli
 - Crea enlaces simbólicos individuales para cada video `.mp4` en `assets/loops/` hacia su contraparte física en `$PRIMARY_ROOT`.
 - Mantiene los archivos versionados (`bank_manifest.json` y `.gitkeep`) bajo control de Git sin colisiones de estado ni rastreo indebido de binarios.
 
+## 7. Catálogo Permanente de Marca, Ventana de Revisión y Borrado Post-Publicación
+
+A partir de la reestructuración v3.2:
+- **Base de Recursos Permanente (6 Bucles Maestros):** El catálogo oficial de producción consta estrictamente de 6 bucles maestros certificados con identidad de marca (3 Moku, 3 Aelithia). Todos los clips atómicos no marcados y activos de canales deshabilitados (Sci-Fi) han sido purgados físicamente y del catálogo SQLite (`data/loop_catalog.db`).
+- **Canales y Cadencias Oficiales:**
+  - 8 Shorts / hora: 4 Moku SCP (`cadence.min_gap_seconds: 900`) + 4 Aelithia Drama (`cadence.min_gap_seconds: 900`).
+  - 3 Videos Largos / hora: 2 Aelithia AITA (`cadence.min_gap_seconds: 1800`, uno cada 30 min) + 1 Moku Horror (`cadence.min_gap_seconds: 3600`, uno cada 60 min).
+  - Canal Sci-Fi inhabilitado (`enabled: false`).
+- **Ventana de Revisión para Rechazo (Telegram 2 Horas):** Todo video generado se envía obligatoriamente a Telegram en estado `PENDING_REVIEW` con los metadatos de veredicto técnico adjuntos. El operador humano dispone de una ventana de 2 horas (7200s) para veto/rechazo o aprobación inmediata. Si transcurren las 2 horas sin intervención humana, el barrido automático (`_run_auto_publish_sweep`) lo publica en YouTube (*fail-open programado*).
+- **Eliminación Física Local Post-Publicación:** Confirmada la subida pública a YouTube y el respaldo verificado en Google Drive, la rutina `delete_local_post_publication` elimina de `work/<run_id>/` el archivo `.mp4` y los audios TTS (`.mp3`, `.wav`), manteniendo únicamente metadatos ligeros. La permanencia a largo plazo reside 100% en Google Drive.
+
 ## Referencias
 
 `src/core/catalog.py` · [OPERACION.md](OPERACION.md) · [MULTICHANNEL_PIPELINE.md](MULTICHANNEL_PIPELINE.md) · [visual-assets-policy.md](visual-assets-policy.md)

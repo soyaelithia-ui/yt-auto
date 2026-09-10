@@ -28,13 +28,13 @@ def test_bank_manifest_structure(bank_manifest):
     """Verifies that bank_manifest.json contains required metadata."""
     assert "version" in bank_manifest
     assert "master_loops" in bank_manifest
-    assert len(bank_manifest["master_loops"]) >= 5
-    assert bank_manifest["total_atomic_clips"] >= 50
+    assert len(bank_manifest["master_loops"]) == 6
+    assert bank_manifest["total_atomic_clips"] == 0
 
 
 def test_master_loops_exist_and_valid(bank_manifest):
     """Verifies that all master loops registered in the manifest exist on disk with canonical 1080p geometry."""
-    assert bank_manifest["total_atomic_clips"] == 55
+    assert bank_manifest["total_atomic_clips"] == 0
     master_loops = bank_manifest.get("master_loops", [])
     if not any((BASE_DIR / item["file_path"]).is_file() for item in master_loops):
         pytest.skip("Master loop video binaries (.mp4) not present in local checkout (gitignored)")
@@ -60,19 +60,18 @@ def test_sqlite_catalog_populated():
     loops = repo.list_loops(limit=100)
     if len(loops) == 0:
         pytest.skip("data/loop_catalog.db has 0 records in local checkout")
-    assert len(loops) >= 8, f"Expected at least 8 catalog records, got {len(loops)}"
+    assert len(loops) >= 6, f"Expected at least 6 catalog records, got {len(loops)}"
 
     categories = {l.category for l in loops}
     assert "horror" in categories
     assert "drama" in categories
-    assert "scifi" in categories
 
 
 def test_loop_video_engine_resolves_all_channels():
     """Verifies that LoopVideoEngine resolves bank assets without error or live synthesis."""
     engine = LoopVideoEngine(loops_root_dir=LOOPS_DIR, db_path=DB_PATH, enable_live_synth=False)
 
-    for cat in ("horror", "drama", "scifi", "dark_forest", "space_abyss"):
+    for cat in ("horror", "drama", "dark_forest", "dark_ambient", "cosmic_horror"):
         # Test horizontal
         h_asset = engine.resolve_loop_video(category=cat, orientation="horizontal", allow_fallback=True)
         assert h_asset is not None
@@ -87,7 +86,7 @@ def test_loop_video_engine_resolves_all_channels():
 def test_master_loops_certified_visual_metrics(bank_manifest):
     """Verifies that all master loops in bank_manifest.json have sealed precomputed visual metrics."""
     master_loops = bank_manifest.get("master_loops", [])
-    assert len(master_loops) == 9
+    assert len(master_loops) == 6
     engine = LoopVideoEngine(loops_root_dir=LOOPS_DIR, db_path=DB_PATH)
     for item in master_loops:
         fn = item["filename"]

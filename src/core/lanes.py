@@ -334,7 +334,11 @@ def fallback_lanes() -> tuple[LaneProfile, ...]:
     return tuple(parse_lane(doc) for doc in FALLBACK_LANE_DOCUMENTS)
 
 
-def load_lanes(path: str | os.PathLike[str] | None = None) -> tuple[LaneProfile, ...]:
+def load_lanes(
+    path: str | os.PathLike[str] | None = None,
+    *,
+    include_disabled: bool = False,
+) -> tuple[LaneProfile, ...]:
     """Load and validate lanes from JSON; fall back to built-ins fail-safe.
 
     The result is cached per resolved path + mtime so daemon ticks stay cheap;
@@ -348,9 +352,9 @@ def load_lanes(path: str | os.PathLike[str] | None = None) -> tuple[LaneProfile,
         stat = resolved.stat()
         # mtime alone is insufficient: two writes within one timestamp tick
         # (typical in tests) must not serve a stale document.
-        cache_key = f"{resolved}|{stat.st_mtime_ns}|{stat.st_size}"
+        cache_key = f"{resolved}|{stat.st_mtime_ns}|{stat.st_size}|{include_disabled}"
     except OSError:
-        cache_key = f"{resolved}|missing"
+        cache_key = f"{resolved}|missing|{include_disabled}"
 
     if _LANES_CACHE is not None and _LANES_CACHE[0] == cache_key:
         return _LANES_CACHE[1]
@@ -368,9 +372,12 @@ def load_lanes(path: str | os.PathLike[str] | None = None) -> tuple[LaneProfile,
                 raise ValueError(f"ID de lane duplicado: {lane.id}")
             seen_ids.add(lane.id)
             parsed.append(lane)
-        result = tuple(lane for lane in parsed if lane.enabled)
+        if include_disabled:
+            result = tuple(parsed)
+        else:
+            result = tuple(lane for lane in parsed if lane.enabled)
         disabled_count = len(parsed) - len(result)
-        if disabled_count:
+        if disabled_count and not include_disabled:
             logger.info("Lanes deshabilitados por configuración: %d", disabled_count)
     except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
         logger.error(

@@ -204,6 +204,16 @@ def publish(payload: Dict[str, Any]) -> Dict[str, Any]:
             retention_warning = "No se encontró un marcador de run válido; se conserva el material local"
             logger.warning(retention_warning)
 
+        # Post-publication physical cleanup: delete local .mp4 and TTS audio files
+        try:
+            from src.cleaner import delete_local_post_publication
+            delete_local_post_publication(
+                work_dir=Path(original_video_path).parent,
+                video_path=original_video_path,
+            )
+        except Exception as clean_exc:
+            logger.warning("Post-publication local cleanup failed: %s", clean_exc)
+
         published_folder = str(getattr(SETTINGS, "drive_published_folder_id", "") or "").strip()
         if published_folder and isinstance(drive_backup, dict):
             for key in ("video", "cover", "metadata"):

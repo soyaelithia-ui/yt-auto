@@ -6,15 +6,16 @@
   - Audio chain: sidechain ducking (`sidechaincompress`), mixing (`amix`), and EBU R128 loudness mastering (`loudnorm`).
   - Video composition: Concat demuxer (`ffconcat version 1.0`) with per-shot `duration` directives and stream-copy (`-c:v copy`), preserving exact 1080p 16:9 geometry without CPU-intensive re-encoding.
 - **Master Loop Catalog & Rotation (`src/core/catalog.py`, `data/loop_catalog.db`, `assets/loops/`)**:
-  - Pre-rendered 1080p H.264 Main 24fps master loops for `moku` and `scifi`.
-  - Channel isolation enforcement via `CHANNEL_THEMES`.
+  - Exactly 6 certified permanent master loops (3 Moku, 3 Aelithia; 0 unbranded atomic clips).
+  - Channel isolation enforcement via `CHANNEL_THEMES` (SciFi disabled).
   - Seeded modulo candidate pool rotation across scenes/acts without consecutive repetitions.
 - **Locking & Concurrency (`src/core/lock.py`, `src/orchestrator/pipeline.py`)**:
   - Non-blocking/timed `ChannelLock` with polling timeout and reentrancy registration in `_active_locks`.
-- **Review Delivery & Telegram Bot (`review/telegram_bot.py`, `src/telegram/notifier.py`)**:
+- **Review Delivery & Telegram Bot (`review/telegram_bot.py`, `src/telegram/approval.py`)**:
   - Size preflight check against 50 MB Telegram cloud limit.
-  - Adaptive review proxy generation (ultrafast x264, 15fps, 360p/480p/720p).
-  - Multipart POST to `https://api.telegram.org/bot[REDACTED]/sendVideo`, verifying HTTP 200 and `ok: true`.
+  - Mandatory 2-hour rejection window for human veto/approval (`AUTO_PUBLISH_TIMEOUT_HOURS = 2`).
+  - Automatic publish sweep after 2 hours without human action (fail-open programmed).
+  - Post-publication local cleanup (`delete_local_post_publication`): unlinks local `.mp4` and TTS audios, archiving permanently to Google Drive.
 - **Governance & CI (`./scripts/verify_integrity.sh`, `.githooks/pre-commit`)**:
   - Zero-Browser policy in media/pipeline.
   - Zero-Secrets policy across git and memory.
@@ -39,6 +40,10 @@
 | 14 | F14 | Live Director Shot Mix | Majority settled background reuse with minority designed in-moment grades | Pipeline | PR #69 |
 | 15 | F15 | Precomputed QA Metrics Gate | `bank_manifest.json` visual metrics avoid double full-file decode in prepublication QA | Pipeline | PR #69 |
 | 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Moku, Aelithia, and SciFi (Shorts + Longform) | Pipeline | PR #69 |
+| 17 | F17 | Permanent 6 Master Loops Catalog | Purge 66 unbranded atomic clips & Sci-Fi loops; exactly 6 certified brand master loops | Pipeline | v3.2 Restructure |
+| 18 | F18 | Production Cadence Calibration | 8 shorts/h (4 Moku + 4 Aelithia) and 3 longs/h (2 Aelithia c/30m + 1 Moku c/60m); Sci-Fi disabled | Pipeline | v3.2 Restructure |
+| 19 | F19 | Telegram 2h Rejection Window | All generated videos sent to Telegram in PENDING_REVIEW; 2h operator veto window before auto-publish | Review | v3.2 Restructure |
+| 20 | F20 | Post-Publish Local Reclamation | Unlink local .mp4 and TTS audio files post-publish, retaining 100% video archive on Google Drive | Storage | v3.2 Restructure |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -46,7 +51,8 @@
 | M1 | Stream-Copy Concat & Lock Hardening | `src/media/loop_engine.py`, `src/core/lock.py`, `src/pipeline.py` | none | DONE |
 | M2 | Catalog Candidate Pool & Thematic Rotation | `src/core/catalog.py`, `tests/unit/test_loop_catalog.py` | none | DONE |
 | M3 | Long-Form Generation & Telegram Delivery | `src/orchestrator/pipeline.py`, `review/telegram_bot.py`, generation CLI | M1, M2 | DONE |
-| M4 | Final Milestone: E2E Validation & Governance | E2E test pass, secret redaction, `./scripts/verify_integrity.sh`, git push | M3, E2E Track | DONE |
+| M4 | E2E Validation & Governance | E2E test pass, secret redaction, `./scripts/verify_integrity.sh`, git push | M3, E2E Track | DONE |
+| M5 | 6 Loops Catalog, Cadence, 2h Telegram Window & Post-Publish Clean | `assets/loops/`, `config/lanes.json`, `src/pipeline.py`, `src/telegram/approval.py`, `src/cleaner.py` | M1-M4 | DONE |
 
 ## Interface Contracts
 ### LoopVideoEngine ↔ FFmpeg Concat Demuxer

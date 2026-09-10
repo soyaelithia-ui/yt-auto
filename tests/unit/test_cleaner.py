@@ -17,6 +17,7 @@ from src.cleaner import (
     clean_test_artifacts,
     clean_tts_cache,
     clean_untracked_temp_files,
+    delete_local_post_publication,
     verify_and_cleanup,
 )
 
@@ -382,6 +383,35 @@ class TestVPSCleaner(unittest.TestCase):
             self.assertGreater(report["freed_bytes"], 0)
             self.assertGreater(report["deleted_files_count"], 0)
             self.assertFalse(run1.exists())
+
+    def test_delete_local_post_publication(self):
+        run_dir = self.work_root / "run_published_123"
+        run_dir.mkdir(parents=True)
+        video = run_dir / "video.mp4"
+        video.write_bytes(b"FINAL_VIDEO_BYTES" * 100)
+        voice = run_dir / "voice.wav"
+        voice.write_bytes(b"VOICE_AUDIO_BYTES" * 50)
+        audio_mp3 = run_dir / "tts.mp3"
+        audio_mp3.write_bytes(b"TTS_AUDIO_BYTES" * 50)
+        concat = run_dir / "concat_list.txt"
+        concat.write_text("file 'seg.mp4'")
+        marker = run_dir / ".run.json"
+        marker.write_text('{"run_id": "run_published_123", "retention_satisfied": true}')
+        metadata = run_dir / "story.json"
+        metadata.write_text('{"title": "Story Title"}')
+
+        report = delete_local_post_publication(run_dir, video_path=video)
+
+        self.assertGreater(report["freed_bytes"], 0)
+        self.assertGreaterEqual(report["deleted_files_count"], 4)
+        # Video, TTS audios, and concat list deleted
+        self.assertFalse(video.exists())
+        self.assertFalse(voice.exists())
+        self.assertFalse(audio_mp3.exists())
+        self.assertFalse(concat.exists())
+        # Lightweight metadata preserved
+        self.assertTrue(marker.exists())
+        self.assertTrue(metadata.exists())
 
 
 if __name__ == "__main__":

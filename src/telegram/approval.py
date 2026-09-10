@@ -21,16 +21,15 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("telegram_approval")
 
 # Env-driven so operators can tune the review window without a code change.
-# Default raised to 24h so transient infrastructure blips do not auto-publish
-# a job that the deterministic verdict is still evaluating.
+# Default is 2 hours (rejection window before auto-publishing).
 try:
-    AUTO_PUBLISH_TIMEOUT_HOURS: int = max(1, int(os.environ.get("AUTO_PUBLISH_TIMEOUT_HOURS", "24")))
+    AUTO_PUBLISH_TIMEOUT_HOURS: int = max(1, int(os.environ.get("AUTO_PUBLISH_TIMEOUT_HOURS", "2")))
 except ValueError:
     logger.warning(
-        "AUTO_PUBLISH_TIMEOUT_HOURS inválido (%r); usando default 24",
+        "AUTO_PUBLISH_TIMEOUT_HOURS inválido (%r); usando default 2",
         os.environ.get("AUTO_PUBLISH_TIMEOUT_HOURS"),
     )
-    AUTO_PUBLISH_TIMEOUT_HOURS = 24
+    AUTO_PUBLISH_TIMEOUT_HOURS = 2
 
 
 def _cutoff_time(max_age_seconds: int) -> datetime:
@@ -66,12 +65,6 @@ def get_expired_pending_videos(
     cooldown = int(os.environ.get("APPROVED_RETRY_COOLDOWN_SECONDS", "900"))
     for job in store.get_stale_pending_jobs(max_age_seconds=max_age, approved_retry_cooldown_seconds=cooldown):
         metadata = job.metadata if isinstance(job.metadata, dict) else {}
-        if isinstance(metadata.get("code_verdict"), dict) and metadata["code_verdict"]:
-            logger.info(
-                "Sweep skipping %s v%s — code verdict already set",
-                job.job_id, job.version,
-            )
-            continue
         out.append(
             {
                 "id": job.job_id,

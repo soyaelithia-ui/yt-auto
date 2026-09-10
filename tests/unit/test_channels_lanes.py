@@ -117,12 +117,24 @@ class TestPhase2MultiChannelLanesAndNarratives:
     """Tests for 6-lane configuration parity, voice profile, narratives, and curation."""
 
     def test_six_lanes_configuration_parity(self):
-        """config/lanes.json defines exactly 6 production lanes across Moku, Aelithia, and SciFi."""
+        """config/lanes.json defines active lanes across Moku and Aelithia, with SciFi disabled."""
         from src.core.lanes import load_lanes
 
-        lanes = load_lanes()
-        lane_ids = {lane.id for lane in lanes}
-        expected_ids = {
+        active_lanes = load_lanes()
+        active_ids = {lane.id for lane in active_lanes}
+        expected_active_ids = {
+            "moku-scp-shorts",
+            "moku-horror-long",
+            "aelithia-drama-shorts",
+            "aelithia-aita-long",
+        }
+        assert active_ids == expected_active_ids, f"Expected {expected_active_ids}, got {active_ids}"
+        assert len(active_lanes) == 4
+
+        # Verify Sci-Fi lanes are defined but disabled
+        all_lanes = load_lanes(include_disabled=True)
+        all_ids = {lane.id for lane in all_lanes}
+        expected_all_ids = {
             "moku-scp-shorts",
             "moku-horror-long",
             "aelithia-drama-shorts",
@@ -130,14 +142,14 @@ class TestPhase2MultiChannelLanesAndNarratives:
             "scifi-singularity-shorts",
             "scifi-singularity-long",
         }
-        assert lane_ids == expected_ids, f"Expected {expected_ids}, got {lane_ids}"
-        assert len(lanes) == 6
+        assert all_ids == expected_all_ids, f"Expected {expected_all_ids}, got {all_ids}"
+        assert len(all_lanes) == 6
 
-        # Check orientation breakdown: 3 vertical (Shorts), 3 horizontal (Longform)
-        verticals = [l for l in lanes if l.orientation == "vertical"]
-        horizontals = [l for l in lanes if l.orientation == "horizontal"]
-        assert len(verticals) == 3
-        assert len(horizontals) == 3
+        # Check orientation breakdown of active lanes: 2 vertical (Shorts), 2 horizontal (Longform)
+        verticals = [l for l in active_lanes if l.orientation == "vertical"]
+        horizontals = [l for l in active_lanes if l.orientation == "horizontal"]
+        assert len(verticals) == 2
+        assert len(horizontals) == 2
 
     def test_scifi_voice_profile_registered(self):
         """scifi_documentary_es voice profile is registered in config/voice_profiles.json."""
