@@ -1,7 +1,7 @@
 {
   "version": "1.2.0",
   "updated_at": "2026-09-09T20:36:28Z",
-  "master_loops_count": 9,
+  "master_loops_count": 6,
   "master_loops": [
     {
       "filename": "moku_containment_facility_master_60s.mp4",
@@ -152,82 +152,7 @@
           "dark_ratio_max": 0.45
         }
       }
-    },
-    {
-      "filename": "scifi_deep_space_and_cyber_master_60s.mp4",
-      "title": "Singularidad Sci-Fi: Cosmos Profundo y Nebulosas",
-      "category": "scifi",
-      "orientation": "horizontal",
-      "duration_sec": 60.458333,
-      "width": 1920,
-      "height": 1080,
-      "file_path": "assets/loops/horizontal/scifi/scifi_deep_space_and_cyber_master_60s.mp4",
-      "longest_black_seconds": 0.0,
-      "black_segments": [],
-      "perceptual_luminance": {
-        "avg_luminance": 75.6345,
-        "dark_ratio": 0.0,
-        "passed": true,
-        "dark_frames": 0,
-        "total_frames": 15,
-        "luminance_params": {
-          "sample_fps": 0.25,
-          "downscale_height": 480,
-          "avg_luminance_min": 22.0,
-          "dark_ratio_max": 0.45
-        }
-      }
-    },
-    {
-      "filename": "scifi_cyber_infrastructure_master_60s.mp4",
-      "title": "Singularidad Sci-Fi: Infraestructura Cibern\u00e9tica e Hiperespacio",
-      "category": "scifi",
-      "orientation": "horizontal",
-      "duration_sec": 60.458333,
-      "width": 1920,
-      "height": 1080,
-      "file_path": "assets/loops/horizontal/scifi/scifi_cyber_infrastructure_master_60s.mp4",
-      "longest_black_seconds": 0.0,
-      "black_segments": [],
-      "perceptual_luminance": {
-        "avg_luminance": 75.4865,
-        "dark_ratio": 0.0,
-        "passed": true,
-        "dark_frames": 0,
-        "total_frames": 15,
-        "luminance_params": {
-          "sample_fps": 0.25,
-          "downscale_height": 480,
-          "avg_luminance_min": 22.0,
-          "dark_ratio_max": 0.45
-        }
-      }
-    },
-    {
-      "filename": "scifi_vertical_shorts_master_60s.mp4",
-      "title": "Singularidad Sci-Fi: Shorts Vertical Master Loop 60s",
-      "category": "scifi",
-      "orientation": "vertical",
-      "duration_sec": 60.458333,
-      "width": 1080,
-      "height": 1920,
-      "file_path": "assets/loops/vertical/scifi/scifi_vertical_shorts_master_60s.mp4",
-      "longest_black_seconds": 0.0,
-      "black_segments": [],
-      "perceptual_luminance": {
-        "avg_luminance": 70.8593,
-        "dark_ratio": 0.0,
-        "passed": true,
-        "dark_frames": 0,
-        "total_frames": 15,
-        "luminance_params": {
-          "sample_fps": 0.25,
-          "downscale_height": 480,
-          "avg_luminance_min": 22.0,
-          "dark_ratio_max": 0.45
-        }
-      }
     }
   ],
-  "total_atomic_clips": 55
+  "total_atomic_clips": 0
 }

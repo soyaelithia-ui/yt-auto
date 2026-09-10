@@ -311,7 +311,7 @@ class TestCodeReviewEnabledFlag(unittest.TestCase):
             os.environ.pop("CODE_REVIEW_ENABLED", None)
 
 
-class TestAutoPublishSweepSkipsCodeVerdict(unittest.TestCase):
+class TestAutoPublishSweepProcessesCodeVerdict(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self.tmp.name, "review.db")
@@ -337,13 +337,13 @@ class TestAutoPublishSweepSkipsCodeVerdict(unittest.TestCase):
         self.tmp.cleanup()
         os.environ.pop("VIDEO_REVIEW_DB_PATH", None)
 
-    def test_sweep_skips_rows_with_code_verdict(self) -> None:
+    def test_sweep_processes_rows_with_code_verdict(self) -> None:
         from src.telegram.approval import get_expired_pending_videos
 
         results = get_expired_pending_videos()
         ids = sorted(r["job_id"] for r in results)
-        # The job with a code verdict must be filtered out, only the legacy one remains.
-        self.assertEqual(ids, ["story-legacy"])
+        # Both the job with a code verdict and the legacy job must be eligible for auto-publication after timeout
+        self.assertEqual(ids, ["story-legacy", "story-verdict"])
 
 
 if __name__ == "__main__":

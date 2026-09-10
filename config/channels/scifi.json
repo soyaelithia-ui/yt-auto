@@ -1,6 +1,6 @@
 {
   "id": "scifi",
-  "enabled": true,
+  "enabled": false,
   "editorial": {
     "public_name": "Singularidad Sci-Fi",
     "handle": "@SingularidadSciFi",

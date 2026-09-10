@@ -1625,20 +1625,15 @@ def run_pipeline_once(
 
             _require_heartbeat()
 
-            # Code-Based Review Verdict (deterministic) — preferred path.
-            # Falls back to the legacy Telegram + AUTO_PUBLISH_TIMEOUT_HOURS sweep path on failure.
-            code_review_succeeded = False
-            code_review_attempted = False
+            # Technical integrity evaluation (deterministic code-based review).
+            verdict_payload: dict[str, Any] = {}
             try:
                 from src.core.verdict import (
                     evaluate_video,
                     is_code_review_enabled,
                 )
-                from review import ReviewJobManager, ReviewStatus
 
                 if is_code_review_enabled():
-                    code_review_attempted = True
-                    review_manager = ReviewJobManager()
                     verdict = evaluate_video(
                         str(video_path),
                         work_dir=str(work_dir),
@@ -1651,105 +1646,83 @@ def run_pipeline_once(
                         channel=channel_name,
                         video_mode="long" if is_long_lane else "short",
                     )
-                    review_job = review_manager.submit_for_code_review(
-                        job_id=story_id,
-                        project="YTShort",
-                        channel=channel_name,
-                        content_type=lane.review_content_type,
-                        original_video_path=str(video_path),
-                        title=youtube_title,
-                        description=youtube_description,
-                        script=script,
-                        work_dir=str(work_dir),
-                        drive_url=drive_url,
-                        thumbnail_path=str(thumbnail_path) if thumbnail_path.is_file() else None,
-                    )
                     verdict_passed = getattr(verdict, "passed", getattr(verdict, "approved", False))
                     from dataclasses import asdict, is_dataclass
                     verdict_payload = asdict(verdict) if is_dataclass(verdict) else (verdict if isinstance(verdict, dict) else {})
-                    if verdict_passed:
-                        review_manager.code_approve(story_id, review_job.version, verdict_payload)
-                        review_job.status = ReviewStatus.APPROVED.value
-                        code_review_succeeded = True
-                        current_review_status = ReviewStatus.APPROVED.value
-                        approved_status_val = ReviewStatus.APPROVED.value
-                        logger.info(
-                            "Short %s APROBADO AUTOMÁTICAMENTE por veredicto basado en código",
-                            story_id,
-                        )
-                    else:
-                        review_job.status = ReviewStatus.REJECTED.value
-                        current_review_status = ReviewStatus.REJECTED.value
-                        approved_status_val = ReviewStatus.APPROVED.value
+                    if not verdict_passed:
                         logger.warning(
-                            "Short %s RECHAZADO por veredicto basado en código: %s",
+                            "Short %s advertencia en veredicto técnico: %s",
                             story_id,
                             getattr(verdict, "reasons", []),
                         )
+                    else:
+                        logger.info(
+                            "Short %s evaluado exitosamente por veredicto técnico",
+                            story_id,
+                        )
             except Exception as exc:
                 logger.warning(
-                    "Code-based review evaluation failed (%s); falling back to Telegram review",
+                    "Code-based review evaluation failed (%s); continuing to Telegram review",
                     exc,
                     exc_info=True,
                 )
-                code_review_succeeded = False
 
-            # Telegram Human Review & Vision Analysis Gate (fallback / legacy)
-            if not code_review_succeeded:
-                try:
-                    from review import ReviewJobManager, ReviewStatus
+            # Telegram Human Review & 2-Hour Rejection Window Gate
+            try:
+                from review import ReviewJobManager, ReviewStatus
 
-                    review_manager = ReviewJobManager()
-                    review_job = review_manager.submit_video_for_review(
-                        job_id=story_id,
-                        project="YTShort",
-                        channel=channel_name,
-                        content_type=lane.review_content_type,
-                        original_video_path=str(video_path),
-                        thumbnail_path=str(thumbnail_path) if thumbnail_path.is_file() else None,
-                        title=youtube_title,
-                        description=youtube_description,
-                        script=script,
-                        subtitle_path=str(ass_path) if ass_path.is_file() else (str(srt_path) if srt_path.is_file() else None),
-                        work_dir=str(work_dir),
-                        drive_url=drive_url,
+                review_manager = ReviewJobManager()
+                review_job = review_manager.submit_video_for_review(
+                    job_id=story_id,
+                    project="YTShort",
+                    channel=channel_name,
+                    content_type=lane.review_content_type,
+                    original_video_path=str(video_path),
+                    thumbnail_path=str(thumbnail_path) if thumbnail_path.is_file() else None,
+                    title=youtube_title,
+                    description=youtube_description,
+                    script=script,
+                    subtitle_path=str(ass_path) if ass_path.is_file() else (str(srt_path) if srt_path.is_file() else None),
+                    work_dir=str(work_dir),
+                    drive_url=drive_url,
+                    metadata={"code_verdict": verdict_payload} if verdict_payload else None,
+                )
+
+                auto_approve = (
+                    is_test_environment()
+                    or os.environ.get("TEST_MODE") == "1"
+                    or os.environ.get("AUTO_APPROVE", "").strip() == "1"
+                )
+                if auto_approve:
+                    reviewer_user_id = int(
+                        os.environ.get("REVIEW_APPROVER_USER_ID")
+                        or os.environ.get("TELEGRAM_ALLOWED_USER_ID")
+                        or "0"
+                    )
+                    review_manager.store.approve_job(
+                        story_id, review_job.version, reviewer_user_id
+                    )
+                    review_job.status = ReviewStatus.APPROVED.value
+                    if os.environ.get("AUTO_APPROVE", "").strip() == "1":
+                        logger.info(
+                            "AUTO_APPROVE=1: review job %s v%s approved without Telegram HITL",
+                            story_id,
+                            review_job.version,
+                        )
+
+                if review_job.status == ReviewStatus.FAILED.value:
+                    return _fail(
+                        "review_delivery_failed",
+                        review_job.delivery_error or "Telegram did not confirm review delivery",
                     )
 
-                    auto_approve = (
-                        is_test_environment()
-                        or os.environ.get("TEST_MODE") == "1"
-                        or os.environ.get("AUTO_APPROVE", "").strip() == "1"
-                    )
-                    if auto_approve:
-                        reviewer_user_id = int(
-                            os.environ.get("REVIEW_APPROVER_USER_ID")
-                            or os.environ.get("TELEGRAM_ALLOWED_USER_ID")
-                            or "0"
-                        )
-                        review_manager.store.approve_job(
-                            story_id, review_job.version, reviewer_user_id
-                        )
-                        review_job.status = ReviewStatus.APPROVED.value
-                        if os.environ.get("AUTO_APPROVE", "").strip() == "1":
-                            logger.info(
-                                "AUTO_APPROVE=1: review job %s v%s approved without Telegram HITL",
-                                story_id,
-                                review_job.version,
-                            )
-
-                    if review_job.status == ReviewStatus.FAILED.value:
-                        return _fail(
-                            "review_delivery_failed",
-                            review_job.delivery_error or "Telegram did not confirm review delivery",
-                        )
-
-                    current_review_status = review_job.status
-                    approved_status_val = ReviewStatus.APPROVED.value
-                except (ImportError, ModuleNotFoundError) as exc:
-                    return _fail("review_core_unavailable", str(exc))
-                except Exception as exc:
-                    logger.exception("Telegram review submission failed for story %s", story_id)
-                    return _fail("review_delivery_failed", str(exc))
+                current_review_status = review_job.status
+                approved_status_val = ReviewStatus.APPROVED.value
+            except (ImportError, ModuleNotFoundError) as exc:
+                return _fail("review_core_unavailable", str(exc))
+            except Exception as exc:
+                logger.exception("Telegram review submission failed for story %s", story_id)
+                return _fail("review_delivery_failed", str(exc))
 
             if generate_only or current_review_status != approved_status_val:
                 terminal_story_status = (
@@ -1933,10 +1906,10 @@ def run_pipeline_once(
                     "; ".join(post_commit_errors),
                 )
             try:
-                from src.cleaner import clean_run_intermediates
-                clean_run_intermediates(work_dir)
-            except Exception:
-                pass
+                from src.cleaner import delete_local_post_publication
+                delete_local_post_publication(work_dir, video_path)
+            except Exception as clean_exc:
+                logger.warning("Post-commit local cleanup failed: %s", clean_exc)
             profiler.emit_telemetry(db_path=database)
             logger.info("\n" + profiler.format_table())
             return {

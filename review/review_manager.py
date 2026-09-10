@@ -130,7 +130,11 @@ class ReviewJobManager:
         work_dir: str = "",
         drive_url: Optional[str] = None,
         chat_id: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> ReviewJob:
+        meta = dict(metadata or {})
+        if drive_url:
+            meta["drive_url"] = str(drive_url)
         job = ReviewJob(
             job_id=job_id,
             project=project,
@@ -141,7 +145,7 @@ class ReviewJobManager:
             description=description,
             status=ReviewStatus.PENDING_REVIEW.value,
             telegram_chat_id=chat_id,
-            metadata={"drive_url": str(drive_url)} if drive_url else {},
+            metadata=meta,
         )
         delivery = self.bot.send_video_review(
             video_path=str(original_video_path),
