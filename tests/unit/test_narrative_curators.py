@@ -41,7 +41,8 @@ def test_aelithia_curator_short():
     script = curator.build_short_narrative("Herencia familiar en disputa")
     assert "¿Soy yo el malo" in script
     assert "SCP" not in script
-    assert "@Aelithia" in script
+    assert "@Aelithia" not in script
+    assert "comentarios" in script
 
 
 def test_organic_connectors():

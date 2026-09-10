@@ -27,14 +27,17 @@ Sistema de producción y publicación automatizada para **YouTube Shorts vertica
 
 ## 🌟 Canales y Carriles de Producción (Lanes)
 
-| Canal | Carril (`--lane`) | Enfoque Narrativo | Orientación y Formato | Plantilla Visual | Perfil de Voz TTS |
-|---|---|---|---|---|---|
-| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` |
-| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` |
-| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` |
+| Canal | Carril (`--lane`) | Enfoque Narrativo | Orientación y Formato | Plantilla Visual | Perfil de Voz TTS | Cadencia |
+|---|---|---|---|---|---|---|
+| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` | 1 c/10m (offset 0s, 6/h) |
+| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-drama-shorts` | Dilemas Morales / AITA | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_drama` | `es-MX-DaliaNeural` | 1 c/10m (offset 300s, 6/h) |
+| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` | 1 c/60m (offset 0s, 1/h) |
+| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` | 1 c/60m (offset 1800s, 1/h) |
 
-- **Shorts Verticales (9:16)**: Resolución `1080x1920` @30fps, subtítulos ASS Karaoke (libass) en franja segura inferior (`MarginV 240-250`).
-- **Longform Horizontal (16:9)**: Resolución `1920x1080` @30fps, duración ≥600s auto-expandible por compilación multihistoria y carrusel dinámico director.
+- **Cadencia Intercalada**: 12 Shorts/h (1 c/5m alternando Moku y Aelithia) y 2 Videos Largos/h (1 c/30m alternando Moku y Aelithia).
+- **Rendimiento y Bajo Consumo**: Ensamble stream-copy (`-c:v copy`), logrando composiciones en <5s sin saturación de CPU/GPU.
+- **Narración Inmersiva**: Narración en primera persona sin menciones a canales, handles `@...` o CTAs en el relato de audio.
+- **Duración Natural**: Duración gobernada por narrativa TTS (180–320 palabras Shorts; ≥2,600 palabras largos) sin límites artificiales.
 
 ---
 

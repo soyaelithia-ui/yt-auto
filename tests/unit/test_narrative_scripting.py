@@ -29,8 +29,8 @@ class TestMokuHorrorCurator:
         words = script.split()
         word_count = len(words)
         
-        # Must strictly be within 110-155 words for 40-55s Short @ 160-175 WPM
-        assert 110 <= word_count <= 155, f"Topic '{topic}' word count {word_count} out of [110, 155] bounds"
+        # Must strictly be within 180-320 words for 65-115s Short @ 165 WPM
+        assert 180 <= word_count <= 320, f"Topic '{topic}' word count {word_count} out of [180, 320] bounds"
         
         # Must NOT contain disruptive channel outro CTAs that cause swipe drop-off
         assert "@moku" not in script.lower(), "Short script must not contain channel handle outro"

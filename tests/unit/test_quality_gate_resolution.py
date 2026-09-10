@@ -179,3 +179,29 @@ class TestPrecomputedVisualQualityMetrics:
         assert report.facts.get("luminance_source") == "precomputed_visual"
         assert report.facts.get("longest_black_seconds") == 0.0
 
+
+class TestShortDurationGating:
+    def test_short_substandard_44s_rejected_in_production(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("src.core.quality.is_test_environment", lambda: False)
+        _mock_probe_helpers(monkeypatch, width=1080, height=1920, duration_sec=44.0)
+        kwargs = _build_gate_inputs(tmp_path, 44.0, ass_playres=(1080, 1920), scene_duration=11.0, scene_count=4)
+        report = validate_prepublication(**kwargs, video_mode="short")
+        assert not report.passed
+        assert any("duración editorial fuera de rango para Short (60s-180s)" in issue for issue in report.issues)
+
+    def test_short_lane_min_duration_sec_enforced(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("src.core.quality.is_test_environment", lambda: False)
+        _mock_probe_helpers(monkeypatch, width=1080, height=1920, duration_sec=55.0)
+        kwargs = _build_gate_inputs(tmp_path, 55.0, ass_playres=(1080, 1920), scene_duration=11.0, scene_count=5)
+        report = validate_prepublication(**kwargs, video_mode="short", min_duration_sec=60.0)
+        assert not report.passed
+        assert any("duración editorial fuera de rango para Short (60s-180s)" in issue for issue in report.issues)
+
+    def test_short_65s_accepted_in_production(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("src.core.quality.is_test_environment", lambda: False)
+        _mock_probe_helpers(monkeypatch, width=1080, height=1920, duration_sec=65.0)
+        kwargs = _build_gate_inputs(tmp_path, 65.0, ass_playres=(1080, 1920), scene_duration=13.0, scene_count=5)
+        report = validate_prepublication(**kwargs, video_mode="short", min_duration_sec=60.0)
+        assert not any("duración editorial" in issue for issue in report.issues)
+
+

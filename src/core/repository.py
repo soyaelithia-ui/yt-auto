@@ -2217,18 +2217,31 @@ class QueueRepository:
     # Production lanes (scheduler_lane_state + lane_leases)
     # ------------------------------------------------------------------
 
-    def ensure_lane_rows(self, lane_ids: Sequence[str], *, now: int | None = None) -> None:
+    def ensure_lane_rows(
+        self,
+        lane_ids: Sequence[str] | Mapping[str, int],
+        *,
+        offsets: Mapping[str, int] | None = None,
+        now: int | None = None,
+    ) -> None:
         """Seed scheduler state rows for the configured lanes (runtime, not SQL)."""
         stamp = _utc_now()
         current = int(time.time() if now is None else now)
+        items: list[tuple[str, int]] = []
+        if isinstance(lane_ids, Mapping):
+            items = [(str(lid), int(offset)) for lid, offset in lane_ids.items()]
+        else:
+            offsets_map = offsets or {}
+            items = [(str(lid), int(offsets_map.get(str(lid), 0))) for lid in lane_ids]
+
         with connect(self.db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
-            for lane_id in lane_ids:
+            for lane_id, offset in items:
                 conn.execute(
                     "INSERT OR IGNORE INTO scheduler_lane_state("
                     "lane_id, next_due_at, consecutive_empty, updated_at"
                     ") VALUES (?, ?, 0, ?)",
-                    (lane_id, current, stamp),
+                    (lane_id, current + offset, stamp),
                 )
             conn.commit()
 

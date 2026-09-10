@@ -66,7 +66,8 @@ def test_aelithia_short_aita_structure():
     script = build_aelithia_short_narrative(topic, channel="aelithia")
     
     assert "¿Soy yo el malo" in script or "¿Soy la mala" in script or "límites" in script
-    assert "@Aelithia" in script or "comentarios" in script
+    assert "@Aelithia" not in script
+    assert "comentarios" in script
 
 
 def test_normalize_spanglish_terms():

@@ -103,3 +103,39 @@ def test_designed_roles_are_spread():
         last_d = len(roles) - 1 - roles[::-1].index(DESIGNED)
         # Not exclusively a suffix block starting at n-designed.
         assert first_d < len(roles) - roles.count(DESIGNED) or roles.count(DESIGNED) == 1
+
+
+def test_catalog_shots_vertical_single_master_loop_stream_copy_safety():
+    from src.pipeline import _catalog_shots_from_manifest
+
+    class SingleLoopEngine:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def resolve_loop_video(
+            self,
+            category,
+            allow_fallback=True,
+            orientation="vertical",
+            seed=None,
+            exclude_loop_ids=None,
+            channel=None,
+        ):
+            self.calls.append(list(exclude_loop_ids or []))
+            # If the only master loop is excluded, engine falls back to still image
+            if exclude_loop_ids and "/assets/loops/master.mp4" in exclude_loop_ids:
+                return "/assets/backgrounds/still_fallback.jpg"
+            return "/assets/loops/master.mp4"
+
+    engine = SingleLoopEngine()
+    manifest = {"scenes": [{"duration_sec": 8.0, "category": "cosmic"} for _ in range(3)]}
+    paths, durs, _cat = _catalog_shots_from_manifest(manifest, engine, "vertical")
+
+    # All paths MUST be video files (.mp4), never falling back to .jpg
+    assert all(p.endswith(".mp4") for p in paths)
+    assert paths == ["/assets/loops/master.mp4", "/assets/loops/master.mp4", "/assets/loops/master.mp4"]
+    # Verify temporal offsets were attached to scenes for cyclic reuse
+    assert manifest["scenes"][0]["time_offset"] == 0.0
+    assert manifest["scenes"][1]["time_offset"] == 8.0
+    assert manifest["scenes"][2]["time_offset"] == 16.0
+

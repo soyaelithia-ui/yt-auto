@@ -12,14 +12,15 @@ Especificaciones de renderizado audiovisual, perfiles por canal y directivas de 
 ### YouTube Shorts (9:16)
 - **Dimensiones**: Master `1080x1920` @30fps · Render rápido de prueba `768x1360` @30fps.
 - **Motor Visual**: `LoopVideoEngine` con video loop temático continuo (`assets/loops/`).
-- **Códec de Video**: H.264 (`libx264`), `crf=21`, `preset=medium`, `pix_fmt=yuv420p`, GOP 60 (keyframe cada 2.0s).
+- **Códec de Video**: Ensamble stream-copy (`-c:v copy`) directo vía concat demuxer (`ffconcat 1.0`), logrando renderizado sub-segundo con uso mínimo de CPU/RAM; fallback a H.264 (`libx264`, `crf=21`, `preset=veryfast`) solo si las dimensiones no coinciden.
 - **Audio**: AAC 192 kbps, 48 kHz estéreo, masterizado a EBU R128 (`loudnorm=I=-14:LRA=11:TP=-1.5`) con ducking musical a `-18 dB`.
 - **Subtítulos ASS Karaoke**: Sincronización palabra por palabra con resaltado activo (`&H0000FFFF`). Franja segura inferior (`MarginV 240-250` sobre `1080x1920`, libre de botones de la interfaz de Shorts).
+- **Duración Natural**: 60–180s determinada de forma orgánica por el ritmo TTS (180–320 palabras), sin cortes artificiales.
 
 ### Videos Largos / Longform (16:9)
 - **Dimensiones**: Master Full HD `1920x1080` @30fps · Estándar `1280x720` @30fps.
-- **Motor Visual**: `LoopVideoEngine` horizontal continuo.
-- **Duración**: Mínimo ≥600s (10+ min), compilando relatos secuenciales de forma automatizada.
+- **Motor Visual**: `LoopVideoEngine` horizontal continuo con stream-copy (`-c:v copy`).
+- **Duración**: ≥600s (10+ min), compilando relatos secuenciales o documentales lore profundos (≥2,600 palabras) sin límite artificial superior.
 
 ---
 

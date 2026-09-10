@@ -89,6 +89,17 @@ class TestParseLane:
         with pytest.raises(ValueError):
             parse_lane(raw)
 
+    def test_cadence_initial_offset_seconds_parsed(self):
+        raw = {**BASE_LANE, "cadence": {"min_gap_seconds": 600, "initial_offset_seconds": 300}}
+        lane = parse_lane(raw)
+        assert lane.cadence_min_gap_seconds == 600
+        assert lane.cadence_initial_offset_seconds == 300
+
+    def test_negative_initial_offset_rejected(self):
+        raw = {**BASE_LANE, "cadence": {"min_gap_seconds": 600, "initial_offset_seconds": -50}}
+        with pytest.raises(ValueError):
+            parse_lane(raw)
+
     def test_missing_required_field(self):
         incomplete = {k: v for k, v in BASE_LANE.items() if k != "template"}
         with pytest.raises(ValueError):

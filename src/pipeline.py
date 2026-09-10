@@ -261,6 +261,25 @@ def _catalog_shots_from_manifest(
             resolve_kwargs.pop("topic", None)
             path = str(loop_engine.resolve_loop_video(item["category"], **resolve_kwargs))
 
+        video_exts = getattr(loop_engine, "SUPPORTED_VIDEO_EXTENSIONS", (".mp4", ".webm", ".mov", ".mkv", ".avi"))
+        if not is_horizontal:
+            # When exclude_loop_ids exhausts available video files in vertical Shorts,
+            # retry without exclude_loop_ids or cyclically reuse master video loops
+            # to avoid falling back to still images (.jpg/.png) and break stream-copy concat.
+            if Path(path).suffix.lower() not in video_exts:
+                retry_kwargs = dict(resolve_kwargs)
+                retry_kwargs.pop("exclude_loop_ids", None)
+                try:
+                    alt_video = str(loop_engine.resolve_loop_video(item["category"], **retry_kwargs))
+                    if Path(alt_video).suffix.lower() in video_exts:
+                        path = alt_video
+                except Exception:
+                    pass
+            if Path(path).suffix.lower() not in video_exts and paths:
+                video_paths = [p for p in paths if Path(p).suffix.lower() in video_exts]
+                if video_paths:
+                    path = video_paths[idx % len(video_paths)]
+
         # Avoid accidental back-to-back duplicates for designed/horizontal shots.
         if paths and path == paths[-1]:
             resolve_kwargs["seed"] = resolve_kwargs.get("seed", idx) + 1
@@ -277,7 +296,15 @@ def _catalog_shots_from_manifest(
                 except TypeError:
                     pass
             if alt_path != path:
-                path = alt_path
+                if not is_horizontal:
+                    if Path(alt_path).suffix.lower() in video_exts:
+                        path = alt_path
+                else:
+                    path = alt_path
+
+        if not is_horizontal:
+            offset = float(asset_durations.get(path, 0.0))
+            item["scene"]["time_offset"] = offset
 
         asset_durations[path] = asset_durations.get(path, 0.0) + dur
         paths.append(path)
@@ -814,7 +841,6 @@ def run_pipeline_once(
                         f"La duración de audio ({audio['duration_sec']} s) excede el máximo "
                         f"{lane.duration_max_sec} s del carril {lane.id} tras re-condensación"
                     )
-
             # Horizontal (longform) lanes: autonomous post-TTS expansion when the
             # narration falls short of the lane's own minimum duration.
             if is_long_lane and not directed and float(audio["duration_sec"]) < float(lane.duration_min_sec):
@@ -1289,7 +1315,7 @@ def run_pipeline_once(
                     subtitles=[],
                     resolution=tuple(lane.expected_resolution),
                     fps=lane.fps,
-                    stamp_text="[MOKU]" if channel_name == "moku" else "@Aelithia",
+                    stamp_text=f"[{channel_name.upper()}]",
                     channel_name=channel_name,
                     shot_durations=shot_durations,
                 )
@@ -1531,6 +1557,7 @@ def run_pipeline_once(
                 precomputed_visual=visual_integrity_report,
                 video_engine=engine_mode,
                 require_subtitles=subtitles_active,
+                min_duration_sec=float(lane.duration_min_sec),
             )
             report.require_pass()
             if not _set_owned_status(JobStatus.RENDERED):

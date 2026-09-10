@@ -41,9 +41,12 @@
 | 15 | F15 | Precomputed QA Metrics Gate | `bank_manifest.json` visual metrics avoid double full-file decode in prepublication QA | Pipeline | PR #69 |
 | 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Moku, Aelithia, and SciFi (Shorts + Longform) | Pipeline | PR #69 |
 | 17 | F17 | Permanent 6 Master Loops Catalog | Purge 66 unbranded atomic clips & Sci-Fi loops; exactly 6 certified brand master loops | Pipeline | v3.2 Restructure |
-| 18 | F18 | Production Cadence Calibration | 8 shorts/h (4 Moku + 4 Aelithia) and 3 longs/h (2 Aelithia c/30m + 1 Moku c/60m); Sci-Fi disabled | Pipeline | v3.2 Restructure |
+| 18 | F18 | Production Cadence Calibration | 12 shorts/h (1 short c/5m: 6 Moku + 6 Aelithia) and 2 longs/h (1 long c/30m: 1 Moku + 1 Aelithia); interleaved initial offsets | Pipeline | Cadence Sync |
 | 19 | F19 | Telegram 2h Rejection Window | All generated videos sent to Telegram in PENDING_REVIEW; 2h operator veto window before auto-publish | Review | v3.2 Restructure |
 | 20 | F20 | Post-Publish Local Reclamation | Unlink local .mp4 and TTS audio files post-publish, retaining 100% video archive on Google Drive | Storage | v3.2 Restructure |
+| 21 | F21 | Dynamic Procedural Narrative Synthesis | Eradication of 44s shortcuts and static hardcoded stories; procedural synthesis calibrated to 180-320 words (Shorts) and >=2,600 words (Longform) | Narrative | Cadence Sync |
+| 22 | F22 | Narration Channel-Sanitization | Complete removal of spoken channel names, `@` handles, and self-referential promos; 100% immersive narration | Narrative | Audio Purity |
+| 23 | F23 | Low-Resource Fast Composition & Zero Artificial Duration Cap | Concat demuxer stream-copy (`-c:v copy`) sub-second assembly, enabling 5m cadence with zero CPU saturation and natural narrative duration | Media | Pipeline SLA |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -53,6 +56,7 @@
 | M3 | Long-Form Generation & Telegram Delivery | `src/orchestrator/pipeline.py`, `review/telegram_bot.py`, generation CLI | M1, M2 | DONE |
 | M4 | E2E Validation & Governance | E2E test pass, secret redaction, `./scripts/verify_integrity.sh`, git push | M3, E2E Track | DONE |
 | M5 | 6 Loops Catalog, Cadence, 2h Telegram Window & Post-Publish Clean | `assets/loops/`, `config/lanes.json`, `src/pipeline.py`, `src/telegram/approval.py`, `src/cleaner.py` | M1-M4 | DONE |
+| M6 | Cadence Synchronization, Dynamic Narratives & Narration Sanitization | `config/lanes.json`, `src/core/lanes.py`, `src/core/repository.py`, `src/templates/narratives.py`, `src/curators/`, `src/agents/` | M1-M5 | DONE |
 
 ## Interface Contracts
 ### LoopVideoEngine ↔ FFmpeg Concat Demuxer

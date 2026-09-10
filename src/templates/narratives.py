@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Optional
-from src.branding import get_channel_branding, resolve_channel_key
+from src.branding import resolve_channel_key
 from src.core.scp_lore import lookup_scp
 
 
@@ -18,65 +18,68 @@ def build_moku_short_narrative(
     **kwargs: Any,
 ) -> str:
     """
-    Build a high-retention 40-55s Short narrative for Moku (Horror/SCP).
-    Calibrated strictly to 120-180 words for optimal 45s pacing.
-    Grounded in official canonical lore when an SCP is detected.
+    Build a high-retention Short narrative for Moku (Horror/SCP).
+    Calibrated strictly to 180-320 words for optimal 65-115s pacing at 165 WPM.
+    Grounded dynamically in official canonical lore when an SCP is detected,
+    or rich procedural horror generation parameterized by topic.
     Starts with a 0-3s direct hook without conversational greetings.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
+    clean_topic = re.sub(r"[""'']", "", topic).strip()
 
     scp_entry = lookup_scp(topic)
     if scp_entry:
         scp_id = scp_entry.get("scp_id", "")
-        facts = scp_entry.get("key_facts", [])
-        
-        if "087" in scp_id:
-            hook = f"Escalera sin fin bajo la universidad. {topic}."
-            body = (
-                "Las linternas solo alcanzan a iluminar un tramo y medio antes de que la oscuridad absoluta devore cualquier haz luminoso. "
-                "A cientos de metros de profundidad se escuchan constantemente los sollozos desgarradores de un niño en agonía, pero por más que desciendas peldaño a peldaño, la distancia acústica jamás se reduce. "
-                "En la última expedición oficial, las cámaras térmicas registraron a SCP-087-1: un rostro humanoide pálido y flotante, sin boca ni pupilas visibles, observando fijamente desde la penumbra. "
-                "Tras aquel aterrador encuentro, los agentes sellaron la entrada principal con setenta y cinco centímetros de hormigón armado para siempre."
-            )
-        elif "173" in scp_id:
-            hook = f"No parpadees. La estatua se mueve. {topic}."
-            body = (
-                "Clasificado como Euclid por la Fundación, SCP-173 permanece completamente inmóvil mientras se mantenga bajo contacto visual directo e ininterrumpido. "
-                "En la milésima de segundo en que cierras los ojos, se desplaza a velocidades imposibles y fractura las vértebras del cuello de sus observadores en una fracción de segundo. "
-                "Para ingresar a limpiar su celda de contención se requieren tres personas: dos manteniendo la mirada fija y una advirtiendo obligatoriamente en voz alta antes de parpadear para evitar una tragedia inevitable."
-            )
-        elif "049" in scp_id:
-            hook = f"Su máscara esconde una cura atroz. {topic}."
-            body = (
-                "SCP-049 afirma que la humanidad entera sufre una enfermedad terminal desconocida que él denomina la pestilencia. "
-                "Su toque biológico directo detiene las funciones del corazón al instante, para luego reanimar los cuerpos inertes mediante cirugías toscas transformándolos en marionetas obedientes sin voluntad propia ni memoria humana. "
-                "Cualquier intento de diálogo con esta entidad debe realizarse detrás de mamparas de seguridad reforzadas y bajo estricta vigilancia armada permanente."
-            )
-        elif "096" in scp_id:
-            hook = f"Si ves su cara, ya estás muerto. {topic}."
-            body = (
-                "Conocido como el Chico Tímido, SCP-096 entra en un estado de furia ciega e incontrolable en el preciso instante en que alguien observa sus rasgos faciales, ya sea en persona, en una fotografía antigua o en una grabación de video digital. "
-                "En ese momento, la entidad emite alaridos desgarradores y comienza una persecución implacable hacia la posición del observador a través de continentes enteros. "
-                "No importa dónde intentes esconderte ni qué blindaje de acero te proteja: derribará instalaciones subterráneas enteras a velocidades sobrehumanas hasta eliminar a su objetivo sin dejar escapatoria posible."
-            )
-        else:
-            hook = f"Archivo {scp_id}: anomalía letal. {topic}."
-            f_text = " ".join(facts[:3]) if facts else "Contiene manifestaciones imposibles que desafían toda explicación científica conocida en el mundo actual."
-            body = f_text + " Los protocolos de seguridad prohíben cualquier aproximación sin autorización formal previa de los mandos superiores bajo pena de aislamiento definitivo inmediato."
+        obj_class = scp_entry.get("object_class", "Euclid")
+        facts = list(scp_entry.get("key_facts", ()))
+        sensory = scp_entry.get("sensory_cues", {})
+        hooks = scp_entry.get("narrative_hooks", ())
+        summary = scp_entry.get("containment_summary", "")
 
-        outro = f"El expediente completo y las grabaciones clasificadas permanecen archivados bajo estricta custodia en {ch_handle}."
+        canonical_name = scp_entry.get("canonical_name", {}).get("es", "")
+        name_phrase = f", conocido como {canonical_name}," if canonical_name else ""
+        if hooks:
+            hook = f"{hooks[0]} Expediente clasificado de la Fundación para {scp_id}{name_phrase}, bajo clasificación {obj_class}."
+        else:
+            hook = f"Expediente clasificado de la Fundación para {scp_id}{name_phrase}, bajo estricta clasificación {obj_class}: {clean_topic}."
+
+        facts_text = " ".join(facts[:4]) if facts else "Contiene manifestaciones imposibles que desafían toda explicación científica conocida en el mundo actual."
+        sensory_text = ""
+        if sensory.get("visual"):
+            sensory_text += f" Los reportes visuales describen {sensory['visual'].lower()}."
+        if sensory.get("auditory"):
+            sensory_text += f" El análisis acústico confirmó {sensory['auditory'].lower()}."
+
+        containment_text = (
+            f" {summary}" if summary else
+            " Los protocolos de contención primaria exigen mamparas blindadas herméticas bajo estricto aislamiento de nivel cuatro."
+        )
+
+        body = (
+            f"{facts_text}{sensory_text}{containment_text} "
+            "Durante las últimas pruebas oficiales con personal Clase-D, los sensores biométricos registraron fluctuaciones críticas "
+            "mientras la compuerta blindada comenzaba a ceder bajo una tensión estructural inexplicable y un descenso térmico abrupto. "
+            "El Sitio fue puesto de inmediato bajo código de emergencia máxima y cualquier aproximación no autorizada permanece "
+            "terminantemente prohibida bajo pena de confinamiento disciplinario definitivo en celdas de aislamiento permanente."
+        )
+        outro = (
+            "El expediente completo permanece bajo aislamiento de máxima seguridad... "
+            "por eso, si alguna vez te encuentras frente a esta anomalía prohibida..."
+        )
         return f"{hook}\n\n{body}\n\n{outro}"
 
-    # General Creepypasta / Horror Short
-    hook = f"03:00. Alarmas imposibles en {topic}."
+    # Dynamic procedural horror / creepypasta short narrative parameterized by topic
+    hook = f"Una advertencia urgente sobre lo ocurrido en torno a {clean_topic}."
     body = (
-        "Las cámaras térmicas captaron una silueta tridimensional desplazándose en contra de las fuentes de luz artificial en el perímetro exterior de la zona restringida. "
-        "Los sensores perimetrales se descalibraron mientras una modulación en los altavoces de la cabina comenzaba a repetir los nombres de los operadores de guardia en tiempo real. "
-        "Al ingresar a inspeccionar, las puertas blindadas estaban intactas pero las grabaciones magnéticas habían sido borradas por completo, dejando un rastro helado sobre el piso de la instalación abandonada y una advertencia siniestra."
+        f"Las patrullas de guardia en torno a {clean_topic} comenzaron a registrar anomalías térmicas y electromagnéticas que desafían cualquier explicación científica conocida. "
+        "Alrededor de la medianoche, los sensores perimetrales se descalibraron súbitamente mientras las cámaras de seguridad captaban una silueta tridimensional desplazándose contra las fuentes de iluminación artificial en el sector restringido. "
+        "Un frío glacial comenzó a condensar el aire dentro de la cabina de control y los altavoces de emergencia empezaron a modular susurros entrecortados que repetían los nombres del personal de guardia en tiempo real. "
+        "Al acudir a inspeccionar con linternas de alta potencia, las puertas blindadas permanecían selladas con doble cerrojo mecánico, pero sobre el suelo helado se descubrió un rastro húmedo y marcas profundas que indicaban que la presencia ya se encontraba dentro de las instalaciones. "
+        "Las transmisiones de radio con el exterior quedaron bloqueadas por un pulso continuo de estática y la única certeza del equipo fue apagar las luces y mantenerse en silencio absoluto hasta el amanecer."
     )
-    outro = f"El testimonio completo y los registros térmicos de la patrulla permanecen bajo custodia oficial en {ch_handle}."
+    outro = (
+        "El informe forense permanece archivado bajo reserva oficial estricta... "
+        "y la razón por la que nunca debes mirar por la ventana en la noche..."
+    )
     return f"{hook}\n\n{body}\n\n{outro}"
 
 
@@ -86,21 +89,24 @@ def build_aelithia_short_narrative(
     **kwargs: Any,
 ) -> str:
     """
-    Build a high-retention 35-45s Short narrative for Aelithia (Drama / AITA / Moral Dilemmas).
-    Calibrated strictly to 120-180 words for optimal short pacing.
-    Starts with a 0-3s direct hook framing the personal conflict.
+    Build a high-retention Short narrative for Aelithia (Drama / AITA / Moral Dilemmas).
+    Calibrated strictly to 180-320 words for optimal 65-115s pacing at 165 WPM.
+    Starts with a 0-3s direct hook framing the moral dilemma, followed by vivid first-person
+    confrontation with direct dialogue quotes, boundaries, and community engagement outro.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
+    clean_topic = re.sub(r"[""'']", "", topic).strip()
 
-    hook = f"¿Soy yo el malo por poner límites definitivos a mi propia familia para proteger mi patrimonio en torno a {topic}?"
+    hook = f"¿Soy yo el malo por poner límites definitivos a mi entorno más cercano en torno a {clean_topic}?"
     body = (
-        "Tras diez años de trabajar turnos dobles y construir mis ahorros con estricta disciplina, mi familia organizó una cena sorpresa para exigirme que cediera una parte sustancial de mi dinero y saldara las deudas irresponsables de mi hermano. "
-        "Cuando me negué con total serenidad diciendo que no estaba dispuesto a financiar malas decisiones ajenas, me acusaron de ser una persona fría y egoísta, amenazando con expulsarme de las próximas reuniones familiares. "
-        "Incluso intentaron manipular a mis parientes lejanos para presionarme mediante llamadas insistentes a deshoras y mensajes de culpa."
+        f"Durante años trabajé turnos dobles y sacrifiqué mi tiempo personal para construir una estabilidad propia con esfuerzo honrado, pero todo cambió cuando surgió el conflicto sobre {clean_topic}. "
+        "En una reunión que parecía inofensiva, mis parientes decidieron tender una emboscada moral para exigirme que entregara mis ahorros y asumiera responsabilidades financieras que no me correspondían. "
+        "Me dijeron textualmente: 'La familia siempre va primero y si te va bien tienes la obligación moral de salvarnos a todos de nuestras malas decisiones'. "
+        "Cuando me negué con total serenidad respondiendo: 'No voy a permitir que destruyan mi estabilidad económica ni mi dignidad personal por caprichos ajenos', "
+        "el ambiente se transformó en un juicio implacable donde me acusaron de egoísta, frío y desleal, amenazando con expulsarme de futuros encuentros familiares. "
+        "A pesar de las llamadas insistentes y las presiones colectivas en redes sociales, decidí proteger mis límites y buscar asesoría profesional independiente para blindar mis decisiones. "
+        "El distanciamiento fue sumamente amargo en un inicio, pero me brindó una paz mental inquebrantable que ningún chantaje afectivo puede arrebatarme."
     )
-    outro = f"El dilema ético y las reflexiones sobre límites patrimoniales continúan en el canal de {ch_handle}."
+    outro = "¿Habrías actuado igual en mi posición? Déjame tu punto de vista en los comentarios y comparte tu experiencia con nosotros."
     return f"{hook}\n\n{body}\n\n{outro}"
 
 
@@ -116,10 +122,6 @@ def build_scp3000_longform_narrative(
     Structured in 10 continuous immersive beats covering the Bay of Bengal abyss, cognitive decay,
     the harvesting of Y-909, and the horrifying secret behind Foundation amnestics.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
-
     paragraphs = [
         # Beat 1: In Media Res Hook & Ocean Trench Descent
         (
@@ -229,7 +231,7 @@ def build_scp3000_longform_narrative(
         (
             "El expediente del Sitio de Contención SCP-3000 permanece clasificado bajo el nivel cinco de seguridad y las patrullas del buque SCPS Eremita continúan navegando las coordenadas restringidas de la Bahía de Bengala sin descanso. "
             "Las jaulas de alimentación siguen descendiendo hacia las fosas oceánicas y los viales de amnésicos continúan distribuyéndose por cada continente para sostener la frágil ilusión de control que llamamos realidad. "
-            f"El informe completo, las grabaciones recuperadas del fondo marino y los análisis de telemetría abisal permanecen bajo custodia oficial en {ch_handle}."
+            "El informe completo, las grabaciones recuperadas del fondo marino y los análisis de telemetría abisal permanecen bajo custodia oficial en los archivos clasificados de la Fundación."
         ),
     ]
     return "\n\n".join(p.strip() for p in paragraphs)
@@ -247,10 +249,6 @@ def build_moku_longform_narrative(
     Inspired by gold-standard benchmark 'La Frecuencia Prohibida de la Estación de Montaña'.
     Free of vocalized structural section headers ('Sección Primera:', etc.) and mechanical title repetition.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
-
     # Grounded canonical SCP longform documentaries
     norm_topic = topic.lower()
     if "3000" in norm_topic or "anantashesha" in norm_topic:
@@ -300,12 +298,12 @@ def build_moku_longform_narrative(
         (
             "Regresé de inmediato al interior de la estación, asegurando el cerrojo de la puerta blindada y encendiendo los monitores de respaldo con manos temblorosas. "
             "Abrí los archivadores de acero donde se guardaban los diarios de guardia de los antiguos operadores de la estación que habían prestado servicio en décadas pasadas. "
-            "Encontré las libretas amarillentas de un técnico llamado Miller, fechadas a finales de los años ochenta, y lo que leí en sus páginas me heló la sangre por completo. "
-            "Miller describía exactamente los mismos patrones acústicos, las mismas coordenadas en la ladera norte y una advertencia manuscrita en letras rojas: 'Si la frecuencia se sincroniza con tu voz, no respondas por radio'. "
-            "El registro de Miller se interrumpía abruptamente en la tercera semana de octubre, con una última anotación desordenada que decía: 'Ya sabe mi nombre y está tocando la ventana'. "
-            "La caligrafía temblorosa de aquellas últimas líneas reflejaba un pánico idéntico al que en ese preciso momento comenzaba a dominar mis propios pensamientos. "
-            "Revisé los registros de personal posteriores a esa fecha y descubrí con horror que la compañía de telecomunicaciones nunca había reportado formalmente la renuncia ni el traslado de Miller. "
-            "En su ficha de servicio simplemente figuraba una escueta nota administrativa que catalogaba su ausencia como abandono voluntario de puesto sin entrega de inventario."
+            "Encontré las libretas y expedientes de técnicos predecesores fechados a finales de los años ochenta, y lo que leí en sus páginas me heló la sangre por completo. "
+            "Los antiguos operarios describían exactamente los mismos patrones acústicos, las mismas coordenadas en la ladera norte y una advertencia manuscrita en letras rojas: 'Si la frecuencia se sincroniza con tu voz, no respondas por radio'. "
+            "El registro se interrumpía abruptamente en las últimas páginas de octubre, con una última anotación desordenada que decía: 'Ya sabe mi nombre y está tocando la ventana'. "
+            "La caligrafía temblorosa de aquellas líneas reflejaba un pánico idéntico al que en ese preciso momento comenzaba a dominar mis propios pensamientos. "
+            "Al consultar las planillas de servicio descubrí que nadie más había querido asumir este turno nocturno, obligándome a reconocer que mi puesto conllevaba riesgos que la administración jamás se atrevió a detallar formalmente. "
+            "En las fichas de personal simplemente figuraban escuetas notas administrativas que catalogaban las ausencias repentinas como abandonos voluntarios de servicio sin entrega de inventario."
         ),
         # Beat 5: The Escalation & Direct Encounter
         (
@@ -402,7 +400,7 @@ def build_moku_longform_narrative(
         # Beat 15: Outro & Community Conclusion
         (
             "Llegamos al final de este testimonio sobrecogedor y los registros de audio quedan archivados para el análisis de los investigadores en anomalías. "
-            f"El expediente completo y las actualizaciones sobre este fenómeno en la estación de montaña permanecen custodiados en {ch_handle}."
+            "El expediente completo y las actualizaciones sobre este fenómeno en la estación de montaña permanecen custodiados bajo estricto protocolo de investigación."
         ),
     ]
     return "\n\n".join(p.strip() for p in paragraphs)
@@ -420,10 +418,6 @@ def build_aelithia_longform_narrative(
     Inspired by gold-standard benchmark 'Secretos de boda y rupturas inesperadas #824'.
     Structured in 3 distinct compelling cases with direct dialogue quotes, moral dilemmas, and zero repetition.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
-
     paragraphs = [
         # Beat 1: Hook & Introduction to the Theme
         (
@@ -576,7 +570,7 @@ def build_aelithia_longform_narrative(
         ),
         # Beat 18: Outro & Community Perspective
         (
-            f"El debate en torno a los límites personales, las herencias y los acuerdos patrimoniales continúa abierto para toda la comunidad de reflexiones éticas y relaciones en el espacio de {ch_handle}."
+            "El debate en torno a los límites personales, las herencias y los acuerdos patrimoniales continúa abierto para toda la comunidad que busca aprender a proteger su dignidad frente a presiones familiares injustas."
         ),
     ]
     return "\n\n".join(p.strip() for p in paragraphs)
@@ -592,10 +586,6 @@ def build_scifi_short_narrative(
     Calibrated strictly to 120-180 words for optimal 45s pacing.
     Starts with a 0-3s direct hook without conversational greetings.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
-
     hook = f"El límite donde el tiempo se detiene: {topic}."
     body = (
         "Más allá del horizonte de sucesos, las ecuaciones de la relatividad general colapsan en una densidad infinita. "
@@ -604,7 +594,7 @@ def build_scifi_short_narrative(
         "Las fuerzas de marea desgarran cualquier estructura atómica en un proceso de espaguetificación inexorable, "
         "convirtiendo la materia en pura distorsión geométrica del espacio-tiempo."
     )
-    outro = f"Las simulaciones completas y los registros de astrofísica teórica están disponibles en {ch_handle}."
+    outro = "Las simulaciones completas y los registros de astrofísica teórica continúan bajo estudio en los observatorios de espacio profundo..."
     return f"{hook}\n\n{body}\n\n{outro}"
 
 
@@ -620,10 +610,6 @@ def build_scifi_longform_narrative(
     Prologue -> Theoretical Inception -> Observational Anomalies -> The Mathematical Crisis ->
     Cosmological Paradoxes -> Engineering the Impossible -> The Existential Horizon -> Synthesis.
     """
-    actual_channel = kwargs.get("ch") or channel
-    branding = get_channel_branding(actual_channel)
-    ch_handle = branding.handle
-
     paragraphs = [
         # Beat 1: In Media Res Cosmic Hook & The Observational Horizon
         (
@@ -720,11 +706,11 @@ def build_scifi_longform_narrative(
             "En la intersección entre el rigor observacional y la audacia teórica se forja el destino de una especie que rehúsa ser una simple espectadora silenciosa de la maquinaria cósmica. "
             "Mientras continúen existiendo ojos capaces de escrutar el firmamento y mentes dispuestas a descifrar sus enigmas matemáticos, el viaje hacia la comprensión del universo perdurará como nuestro legado más imperecedero."
         ),
-        # Beat 10: Channel Outro & Archival Mandate
+        # Beat 10: Final Synthesis & Archival Horizon
         (
-            f"El análisis riguroso de la telemetría espacial, el estudio de los enigmas astrofísicos más desconcertantes y la exploración de las fronteras teóricas donde convergen la ciencia y la imaginación continúan en cada transmisión de {ch_handle}. "
-            "Si este viaje a través de los límites del universo, las singularidades gravitatorias y la estructura profunda del espacio-tiempo ha desafiado tus certezas sobre la realidad y enriquecido tu perspectiva sobre el cosmos, acompáñanos en futuras expediciones hacia lo desconocido suscribiéndote y activando las notificaciones para no perderte ningún expediente cosmológico. "
-            "El archivo estelar permanece abierto para todos aquellos que conservan el asombro y la disciplina necesarios para interrogar al infinito."
+            "El análisis riguroso de la telemetría espacial, el estudio de los enigmas astrofísicos más desconcertantes y la exploración de las fronteras teóricas donde convergen la ciencia y la imaginación continúan abriendo preguntas fundamentales sobre nuestro lugar en el cosmos. "
+            "Cada nuevo hallazgo en las profundidades del espacio-tiempo demuestra que los límites de nuestra comprensión están en constante expansión. "
+            "El archivo cósmico permanece abierto para todos aquellos que conservan el asombro y la disciplina necesarios para interrogar al infinito."
         ),
     ]
     return "\n\n".join(p.strip() for p in paragraphs)

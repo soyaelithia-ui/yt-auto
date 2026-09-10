@@ -859,7 +859,7 @@ def start_daemon_lanes(
     database = db_path or DEFAULT_DB_PATH
     parallel = max(1, int(max_parallel or os.environ.get("YT_MAX_PARALLEL_LANES", "2")))
     lane_scheduler = LaneScheduler(database)
-    lane_scheduler.initialize()
+    lane_scheduler.initialize(apply_offsets=not is_test_environment())
     active_lanes = {
         lane.id: lane
         for lane in lane_scheduler.lanes

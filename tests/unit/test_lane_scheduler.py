@@ -171,3 +171,21 @@ class TestInitialize:
         scheduler.initialize()
         for lane in lanes:
             assert QueueRepository(db).get_lane_state(lane.id) is not None
+
+    def test_initialize_with_staggered_offsets(self, tmp_path, lanes):
+        from src.core.lanes import replace
+        from src.core.repository import QueueRepository, migrate_database
+
+        db = str(tmp_path / "staggered.db")
+        migrate_database(db)
+        # Create lanes with staggered initial offsets (0s and 300s)
+        staggered = [
+            replace(lanes[0], cadence_initial_offset_seconds=0),
+            replace(lanes[1], cadence_initial_offset_seconds=300),
+        ]
+        scheduler = LaneScheduler(db, lanes=staggered)
+        scheduler.initialize()
+        repo = QueueRepository(db)
+        state_0 = repo.get_lane_state(staggered[0].id)
+        state_1 = repo.get_lane_state(staggered[1].id)
+        assert state_1["next_due_at"] - state_0["next_due_at"] == 300

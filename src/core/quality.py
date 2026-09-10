@@ -458,6 +458,7 @@ def validate_prepublication(
     precomputed_visual: dict[str, Any] | None = None,
     video_engine: str | None = None,
     require_subtitles: bool = False,
+    min_duration_sec: float | None = None,
 ) -> QualityReport:
     channel_key = canonical_channel(channel)
     report = QualityReport(channel=channel_key)
@@ -551,7 +552,7 @@ def validate_prepublication(
         if report.facts["pixel_format"] not in ("yuv420p", "yuvj420p"):
             report.issues.append("pixel format distinto de yuv420p")
         if video_mode == "short":
-            min_dur = 15.0 if is_test_environment() else 30.0
+            min_dur = 15.0 if is_test_environment() else (float(min_duration_sec) if min_duration_sec is not None else 60.0)
             max_dur = SHORT_MAX_DURATION_SEC
             if duration < min_dur or duration > max_dur:
                 report.issues.append(f"duración editorial fuera de rango para Short ({min_dur:.0f}s-{max_dur:.0f}s)")

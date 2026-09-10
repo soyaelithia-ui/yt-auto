@@ -134,9 +134,17 @@ class LaneScheduler:
         self.repository = repository or QueueRepository(db_path)
         self._lanes = tuple(lanes) if lanes is not None else load_lanes()
 
-    def initialize(self) -> None:
+    def initialize(self, *, apply_offsets: bool = True) -> None:
         migrate_database(self.db_path)
-        self.repository.ensure_lane_rows([lane.id for lane in self._lanes])
+        offsets = (
+            {
+                lane.id: getattr(lane, "cadence_initial_offset_seconds", 0)
+                for lane in self._lanes
+            }
+            if apply_offsets
+            else {}
+        )
+        self.repository.ensure_lane_rows([lane.id for lane in self._lanes], offsets=offsets)
 
     @property
     def lanes(self) -> tuple[LaneProfile, ...]:

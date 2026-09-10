@@ -48,7 +48,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "template": "shorts_creepypasta",
         "voice_rate": "+0%",
         "voice_profile": "scp_documentary_es",
-        "cadence": {"min_gap_seconds": 300},
+        "cadence": {"min_gap_seconds": 300, "initial_offset_seconds": 0},
         "sources": {
             "kind": "reddit",
             "subreddits": ["SCP", "SCPDeclassified", "nosleep"],
@@ -66,7 +66,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "template": "creepypasta",
         "voice_rate": "+0%",
         "voice_profile": "moku_terror",
-        "cadence": {"min_gap_seconds": 1800},
+        "cadence": {"min_gap_seconds": 1800, "initial_offset_seconds": 0},
         "sources": {
             "kind": "reddit",
             "subreddits": ["nosleep", "scarystories", "darktales", "libraryofshadows"],
@@ -85,7 +85,7 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "template": "aita",
         "voice_rate": "+6%",
         "voice_profile": "aelithia_reddit",
-        "cadence": {"min_gap_seconds": 1800},
+        "cadence": {"min_gap_seconds": 1800, "initial_offset_seconds": 0},
         "sources": {
             "kind": "reddit",
             "subreddits": [
@@ -137,6 +137,7 @@ class LaneProfile:
     template: str
     voice_rate: str
     cadence_min_gap_seconds: int
+    cadence_initial_offset_seconds: int = 0
     sources: LaneSources = field(default_factory=LaneSources)
     background_audio: LaneBackgroundAudioConfig = field(default_factory=LaneBackgroundAudioConfig)
     enabled: bool = True
@@ -241,6 +242,15 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
             f"Lane '{lane_id}': min_gap_seconds ({gap}s) por debajo del mínimo operativo "
             f"({MIN_GAP_SECONDS}s)"
         )
+    initial_offset_raw = cadence.get("initial_offset_seconds", 0)
+    try:
+        initial_offset = int(initial_offset_raw)
+        if initial_offset < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"Lane '{lane_id}': 'cadence.initial_offset_seconds' debe ser un entero no negativo"
+        )
 
     sources_raw = raw.get("sources") or {}
     kind = str(sources_raw.get("kind", "reddit")).strip().lower()
@@ -310,6 +320,7 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
         template=str(_require(raw, "template", lane_id)).strip(),
         voice_rate=str(raw.get("voice_rate", "+0%")).strip(),
         cadence_min_gap_seconds=gap,
+        cadence_initial_offset_seconds=initial_offset,
         sources=sources,
         background_audio=bg_audio,
         enabled=bool(raw.get("enabled", True)),

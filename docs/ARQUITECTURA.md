@@ -26,19 +26,16 @@ graph TD
 
 ## 2. Carriles Editoriales de Producción (Lanes & `config/lanes.json`)
 
-El sistema sustituye las banderas de formato manuales por **carriles de producción (`LaneProfile`)** autodirigidos por cadencia y configuración:
+El sistema opera con cuatro carriles (`LaneProfile`) autodirigidos por cadencia intercalada:
 
-1. **`moku-scp-shorts` (Shorts Verticales 9:16)**:
-   - Formato vertical `1080x1920` @30fps con `LoopVideoEngine`.
-   - Subtítulos ASS Karaoke en franja segura inferior (`MarginV 240-250` sobre `1080x1920`).
-   - Duración adaptativa 60–180s (objetivo canónico 150s con re-condensación de guion si excede).
-   - Ingestión multi-fuente: subreddits SCP (`r/SCP`, `r/SCPDeclassified`) y SCP Wiki scraper (`src/scraper_scp.py`) con atribución CC BY-SA 3.0.
-2. **`moku-horror-long` (Horizontal 16:9)**:
-   - Formato apaisado `1920x1080` @30fps con video loop continuo.
-   - Compilación multihistoria automática hasta superar presupuesto de palabras (≥2600 palabras) y duración mínima de ≥600s.
-3. **`aelithia-aita-long` (Horizontal 16:9)**:
-   - Formato apaisado `1920x1080` @30fps con compilación multihistoria de relatos AITA / relaciones.
-   - Filtrado temático estricto vía `src/core/topic_filter.py` para garantizar relevancia editorial.
+| Carril | Canal | Formato | Cadencia | Especificaciones |
+|---|---|---|---|---|
+| `moku-scp-shorts` | Moku | 9:16 (`1080x1920`) | 1 c/10m (offset 0s, 6/h) | Anomalías SCP, 60–180s (180–320 palabras), subtítulos ASS Karaoke. |
+| `aelithia-drama-shorts` | Aelithia | 9:16 (`1080x1920`) | 1 c/10m (offset 300s, 6/h) | Dilemas morales y AITA, 60–180s (180–320 palabras), intercalado c/5m. |
+| `moku-horror-long` | Moku | 16:9 (`1920x1080`) | 1 c/60m (offset 0s, 1/h) | Creepypastas/terror, multihistoria ≥2600 palabras, duración ≥600s. |
+| `aelithia-aita-long` | Aelithia | 16:9 (`1920x1080`) | 1 c/60m (offset 1800s, 1/h) | Drama familiar/relaciones, ≥2600 palabras, ≥600s, intercalado c/30m. |
+
+- **Cadencia Agregada Global**: 12 Shorts/h (1 cada 5 min alternando canales) y 2 Videos Largos/h (1 cada 30 min alternando canales). Cero límites artificiales de duración por video; duración natural según narración TTS.
 
 ---
 
@@ -86,16 +83,7 @@ El sistema implementa una arquitectura desacoplada de 6 agentes orquestados con 
 
 ## 6. Detección Escénica (Arquetipos y Categorías de Catálogo)
 
-Ubicado en `src/core/scenic_detector.py` y `src/narrative/archetypes.py`, clasifica el tema hacia categorías canónicas de video del catálogo (`assets/loops/` y `data/loop_catalog.db`). El pipeline es 100% basado en assets pre-renderizados; no usa Canvas, Three.js, shaders WGSL ni WebGL. Categorías canónicas del catálogo:
-- `classified_terminal`: Monitores, búnkeres, contención y expedientes clasificados.
-- `dark_forest`: Bosques, niebla, sombras y caminos nocturnos.
-- `dark_ambient`: Fondos oscuros atmosféricos y tensión ambiental.
-- `cosmic_horror`: Abismos estelares, fenómenos cósmicos y horror desconocido.
-- `tactical_chamber`: Instalaciones industriales subterráneas.
-- `horror`: Criaturas, entidades y anomalías.
-- `drama`: Relaciones humanas y confesiones.
-
-Asimismo, selecciona el estilo de subtítulo óptimo (`tiktok_bounce`, `vertical_lift`, `karaoke_glow`, `cinematic_fade`, entre otros). Los subtítulos activos se queman con ASS + **libass** en FFmpeg.
+Ubicado en `src/core/scenic_detector.py` y `src/narrative/archetypes.py`, clasifica el tema hacia categorías canónicas del catálogo (`assets/loops/` y `data/loop_catalog.db`). El pipeline es 100% basado en assets pre-renderizados (cero shaders/WebGL). Categorías canónicas: `classified_terminal`, `dark_forest`, `dark_ambient`, `cosmic_horror`, `tactical_chamber`, `horror`, `drama`. Asimismo, selecciona el estilo de subtítulo ASS (`tiktok_bounce`, `vertical_lift`, `karaoke_glow`, `cinematic_fade`). Subtítulos activos con ASS + **libass** en FFmpeg.
 
 ---
 
