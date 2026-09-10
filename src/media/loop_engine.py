@@ -121,8 +121,8 @@ class LoopVideoError(CompositorError):
     pass
 
 
-class LoopVideoAssetError(LoopVideoError):
-    """Raised when required video loop assets or fallback media cannot be found."""
+class LoopVideoAssetError(CatalogAssetNotFoundError, LoopVideoError):
+    """Raised when required video loop assets or fallback media cannot be found (fail-closed)."""
     pass
 
 
@@ -396,16 +396,14 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         # 1. Scan predefined thematic category folders (including atomic/ subfolders)
         for cat in self.THEMATIC_CATEGORIES:
-            for cat_dir in (root / cat, root / "procedural" / cat, root / "vertical" / cat, root / "horizontal" / cat):
+            for cat_dir in (root / cat, root / "vertical" / cat, root / "horizontal" / cat):
                 if cat_dir.is_dir():
                     for f in self._iter_media_files(cat_dir, self.SUPPORTED_VIDEO_EXTENSIONS, max_scan=128, recursive=True):
                         if f not in library[cat]:
                             library[cat].append(f)
 
-        # 2. Also discover any extra subdirectories under root and root/procedural
+        # 2. Also discover any extra subdirectories under root
         scan_dirs = [root]
-        if (root / "procedural").is_dir():
-            scan_dirs.append(root / "procedural")
         if (root / "vertical").is_dir():
             scan_dirs.append(root / "vertical")
         if (root / "horizontal").is_dir():
@@ -413,7 +411,7 @@ class LoopVideoEngine(BaseVideoCompositor):
 
         for parent_dir in scan_dirs:
             for entry in sorted(parent_dir.iterdir()):
-                if entry.is_dir() and entry.name not in ("procedural", "vertical", "horizontal"):
+                if entry.is_dir() and entry.name not in ("vertical", "horizontal"):
                     c_name = entry.name
                     if c_name not in library:
                         library[c_name] = []
@@ -538,46 +536,6 @@ class LoopVideoEngine(BaseVideoCompositor):
             return random.Random(seed).choice(collected)
         return collected[0]
 
-    def _try_live_synthesize(
-        self,
-        category: str,
-        orientation: str | None,
-        seed: Any,
-        *,
-        enabled: bool,
-    ) -> Path | None:
-        """
-        On-demand live create via LoopSynthesizerWorker.
-        No-op unless enabled (default-root production path). Mockable in tests.
-        """
-        if not enabled:
-            return None
-        self._live_rss_checkpoint("9_video_rendering_live_create")
-        try:
-            from src.media.loop_worker import LoopSynthesizerWorker
-
-            worker = LoopSynthesizerWorker(db_path=self.db_path)
-            seed_val = seed if isinstance(seed, int) else None
-            rec = worker.synthesize_on_demand(
-                category=category,
-                orientation=orientation or "vertical",
-                seed=seed_val,
-            )
-            path = Path(rec.file_path)
-            if path.is_file() and path.stat().st_size > 0:
-                try:
-                    if self.catalog is not None:
-                        self.catalog.record_loop_usage(rec.loop_id)
-                except Exception:
-                    pass
-                logger.info("Live-synthesized loop on demand: %s (%s)", rec.loop_id, path)
-                self._live_rss_checkpoint("9_video_rendering_live_create_done")
-                return path
-            logger.warning("Live synth produced missing/empty file for category '%s'", category)
-        except Exception as exc:
-            logger.warning("On-demand live loop synth failed for '%s': %s", category, exc)
-        return None
-
     def _find_fallback_in_other_categories(
         self,
         root: Path,
@@ -589,7 +547,7 @@ class LoopVideoEngine(BaseVideoCompositor):
     ) -> Path | None:
         """Lazy cross-category fallback: stop at first usable video (bounded and channel-constrained)."""
         ignored_names = {
-            "procedural", "vertical", "horizontal", norm_cat,
+            "vertical", "horizontal", norm_cat,
             *self.SYNTHETIC_MONOCHROME_CATEGORIES
         }
         eff_channel = (channel or "").lower().strip()
@@ -620,7 +578,6 @@ class LoopVideoEngine(BaseVideoCompositor):
                 dirs_to_check.append(root / orient_name / cat_name)
             dirs_to_check.extend([
                 root / cat_name,
-                root / "procedural" / cat_name,
                 root / "vertical" / cat_name,
                 root / "horizontal" / cat_name,
             ])
@@ -758,7 +715,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         if orientation:
             orient_name = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
             name_keys = (orient_name, f"_{orient_name[:1]}_")
-            for orient_cat_dir in (root / orient_name / norm_cat, root / norm_cat, root / "procedural" / norm_cat):
+            for orient_cat_dir in (root / orient_name / norm_cat, root / norm_cat):
                 use_name_keys = None if orient_cat_dir == (root / orient_name / norm_cat) else name_keys
                 picked = self._pick_media_file(
                     orient_cat_dir,
@@ -774,19 +731,17 @@ class LoopVideoEngine(BaseVideoCompositor):
                         continue
                     return picked
 
-        for cat_dir in (root / norm_cat, root / "procedural" / norm_cat):
-            picked = self._pick_media_file(
-                cat_dir,
-                self.SUPPORTED_VIDEO_EXTENSIONS,
-                seed=seed,
-                max_scan=64,
-                recursive=True,
-                exclude_loop_ids=exclude_loop_ids,
-            )
-            if picked is not None:
-                if self._is_unusable_plane0(picked, category=norm_cat):
-                    continue
-                return picked
+        cat_dir = root / norm_cat
+        picked = self._pick_media_file(
+            cat_dir,
+            self.SUPPORTED_VIDEO_EXTENSIONS,
+            seed=seed,
+            max_scan=64,
+            recursive=True,
+            exclude_loop_ids=exclude_loop_ids,
+        )
+        if picked is not None and not self._is_unusable_plane0(picked, category=norm_cat):
+            return picked
 
         # Fail closed: never invent backgrounds when fallback is disallowed
         if not allow_fallback:
@@ -859,39 +814,13 @@ class LoopVideoEngine(BaseVideoCompositor):
             logger.info("Using multi-crop scenery still as plane-0: %s", still.name)
             return still
 
-        # 3. Color live-synth only after cinematic loops/stills are exhausted.
-        is_default_root = (asset_root is None and self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve())
-        if norm_cat not in self.SYNTHETIC_MONOCHROME_CATEGORIES:
-            synth_path = self._try_live_synthesize(
-                norm_cat,
-                orientation,
-                seed,
-                enabled=is_default_root,
-            )
-            if synth_path is not None and not self._is_unusable_plane0(synth_path, category=norm_cat):
-                return synth_path
-
         if self.default_fallback_image.is_file() and self.default_fallback_image.stat().st_size > 0:
             if not self._is_unusable_plane0(self.default_fallback_image):
                 logger.info("Using default fallback image: %s", self.default_fallback_image.name)
                 return self.default_fallback_image
 
-        from src.config import is_test_environment
-        if is_test_environment() and root == (BASE_DIR / "assets" / "loops").resolve():
-            test_fallback = BASE_DIR / "assets" / "background.jpg"
-            test_fallback.parent.mkdir(parents=True, exist_ok=True)
-            if not test_fallback.exists() or test_fallback.stat().st_size == 0:
-                try:
-                    from PIL import Image
-                    Image.new("RGB", (720, 1280), "black").save(test_fallback)
-                except Exception:
-                    test_fallback.write_bytes(b"TEST_IMAGE")
-            if not self._is_unusable_plane0(test_fallback):
-                return test_fallback
-
         raise LoopVideoAssetError(
-            f"No loop video or fallback asset found for category '{norm_cat}' in {root} or fallback directories "
-            "(grey procedural loops cannot be plane-0)."
+            f"No catalog loop video or certified fallback asset found for category '{norm_cat}' in {root}"
         )
 
     def resolve_background(

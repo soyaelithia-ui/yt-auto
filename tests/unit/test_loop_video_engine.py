@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 from src.core.catalog import LoopCatalogRepository, LoopRecord
 from src.media.interface import (
     BaseVideoCompositor,
+    CatalogAssetNotFoundError,
     CompositorError,
     get_compositor,
 )
@@ -121,53 +122,42 @@ class TestLoopCategoryResolution(unittest.TestCase):
 
 
 
-    def test_scenery_still_preferred_over_live_synth_when_present(self):
-        """Non-grey stills beat lavfi synth so plane-0 is never grey procedural."""
+    def test_scenery_still_preferred_over_synth_when_present(self):
+        """Non-grey stills from fallback dir are used when category loop is missing."""
         fb_img = self.fb_dir / "horror_forest.jpg"
         fb_img.write_bytes(b"FALLBACK_IMAGE")
-        synth_vid = self.root_path / "live_synth.mp4"
-        synth_vid.write_bytes(b"SYNTH_VIDEO")
 
         engine = LoopVideoEngine(
             loops_root_dir=self.loops_dir,
             default_fallback_dir=self.fb_dir,
             default_fallback_image=self.fb_image,
         )
-        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
-            resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
-        mock_synth.assert_not_called()
+        resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
         self.assertEqual(resolved, fb_img)
 
-    def test_live_synth_used_when_no_loop_or_still_exists(self):
-        """Color live-synth is last resort after cinematic loops/stills are exhausted."""
-        synth_vid = self.root_path / "live_synth.mp4"
-        synth_vid.write_bytes(b"SYNTH_VIDEO")
+    def test_missing_asset_fails_closed_when_no_loop_or_fallback_exists(self):
+        """Missing catalog loop and missing fallback fails closed with CatalogAssetNotFoundError."""
         engine = LoopVideoEngine(
             loops_root_dir=self.loops_dir,
             default_fallback_dir=self.fb_dir,
             default_fallback_image=self.root_path / "missing.jpg",
         )
-        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
-            resolved = engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
-        mock_synth.assert_called_once()
-        self.assertEqual(resolved, synth_vid)
+        with self.assertRaises(CatalogAssetNotFoundError) as ctx:
+            engine.resolve_loop_video(category="space_abyss", allow_fallback=True)
+        self.assertIsInstance(ctx.exception, LoopVideoAssetError)
 
     def test_allow_fallback_false_skips_synth_and_background(self):
-        """allow_fallback=False fails closed: no live synth inventing assets, no backgrounds."""
+        """allow_fallback=False fails closed: no fallback background or synthesized assets."""
         fb_img = self.fb_dir / "should_not_use.jpg"
         fb_img.write_bytes(b"FALLBACK_IMAGE")
-        synth_vid = self.root_path / "would_synth.mp4"
-        synth_vid.write_bytes(b"SYNTH_VIDEO")
 
         engine = LoopVideoEngine(
             loops_root_dir=self.loops_dir,
             default_fallback_dir=self.fb_dir,
             default_fallback_image=self.fb_image,
         )
-        with patch.object(engine, "_try_live_synthesize", return_value=synth_vid) as mock_synth:
-            with self.assertRaises(LoopVideoAssetError):
-                engine.resolve_loop_video(category="space_abyss", allow_fallback=False)
-        mock_synth.assert_not_called()
+        with self.assertRaises(CatalogAssetNotFoundError):
+            engine.resolve_loop_video(category="space_abyss", allow_fallback=False)
 
 class TestLoopStreamComposition(unittest.TestCase):
     def setUp(self):

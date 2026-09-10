@@ -205,3 +205,41 @@ Crear commits convencionales y atómicos (`fix: ...`, `perf: ...`, `docs: ...`) 
 ### Git & GitHub
 - [ ] Los commits locales pasan la verificación estricta de `.githooks/pre-commit`.
 - [ ] La rama `analyze_system_performance_benchmark` queda sincronizada y actualizada en el repositorio remoto de GitHub (`origin`).
+
+## 2026-09-10T15:07:50Z
+
+Execute the modernization, legacy dead code reduction, and pipeline stage modularization plan in the `yt-auto` repository without breaking any governance invariants or test contracts.
+
+Working directory: `/home/moku/Projects/yt-auto`
+Integrity mode: development
+
+## Requirements
+
+### R1. Media Engine Pruning & Thumbnail Shim
+Replace the legacy 377-line `src/media/thumbnail_engine.py` with a lightweight backward-compatibility adapter delegating to `src.media.thumbnails.engine.ThumbnailEngine`, and eliminate unused procedural synthetic fallback methods (`_try_live_synthesize`, grey procedural planes) in `src/media/loop_engine.py` in favor of fail-closed `CatalogAssetNotFoundError`.
+
+### R2. Pipeline Stage Modularization
+Modularize `run_pipeline_once` in `src/pipeline.py` by extracting clean, private stage helper functions for the 13 canonical stages, pruning dead subtitle-burning branches and legacy direct-upload fallbacks, while strictly preserving required string tokens (`stream_copy_mode = True`, `subtitles_active = False`) and runtime contracts.
+
+### R3. Governance, Integrity & Documentation SLA
+Ensure `./scripts/verify_integrity.sh` exits 0 (100% HEALTHY), all anti-regression tests (REG-01 to REG-13) pass, and active documentation across the 12 tracked documents in `tests/unit/test_docs_integrity.py` remains strictly ≤ 1000 lines.
+
+## Verification Resources
+- Integrity check: `./scripts/verify_integrity.sh` (must be 100% HEALTHY).
+- Anti-regression suite: `pytest tests/unit/test_anti_regression_guardrails.py` (REG-01 to REG-13).
+- Thumbnail compatibility: `pytest tests/test_quality_remediation.py`.
+- Documentation line budget: `pytest tests/unit/test_docs_integrity.py`.
+- Full unit test suite: `pytest tests/unit/`.
+
+## Acceptance Criteria
+
+### Test & Integrity Gate
+- [ ] `./scripts/verify_integrity.sh` returns exit code 0 (100% HEALTHY).
+- [ ] `pytest tests/unit/test_anti_regression_guardrails.py` passes 100% (REG-01 to REG-13).
+- [ ] `pytest tests/test_quality_remediation.py` passes with the new thumbnail adapter.
+- [ ] `pytest tests/unit/test_docs_integrity.py` passes with active docs count ≤ 1000 lines.
+- [ ] Full unit test suite (`pytest tests/unit/`) passes without regression.
+
+### Line Budget & Code Cleanliness
+- [ ] Net reduction of at least 500 lines of obsolete/duplicate code across `src/media/` and `src/pipeline.py`.
+- [ ] No syntax errors, no broken imports, and zero circular dependencies.
