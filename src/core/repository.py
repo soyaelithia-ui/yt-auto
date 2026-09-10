@@ -798,6 +798,111 @@ class QueueRepository:
                 return True
         return False
 
+    def _execute_write(self, sql: str, params: Sequence[Any] = ()) -> None:
+        with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(sql, params)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    def _fetch_all(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
+        with connect(self.db_path, read_only=True) as conn:
+            return [dict(row) for row in conn.execute(sql, params)]
+
+    def _fetch_one(self, sql: str, params: Sequence[Any] = ()) -> dict[str, Any] | None:
+        with connect(self.db_path, read_only=True) as conn:
+            row = conn.execute(sql, params).fetchone()
+            return dict(row) if row else None
+
+    @staticmethod
+    def _bind_channel_lease_locked(
+        conn: sqlite3.Connection,
+        run_id: str,
+        channel_key: str,
+        story_id: str,
+        mode: str,
+        owner: str,
+        current: int,
+        lease_seconds: int,
+    ) -> None:
+        now_ts = _utc_now()
+        conn.execute(
+            """
+            INSERT INTO runs(
+                run_id, channel, story_id, mode, status, owner,
+                started_at, heartbeat_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (run_id, channel_key, story_id, mode, JobStatus.PROCESSING.value, owner, now_ts, now_ts),
+        )
+        conn.execute(
+            """
+            INSERT INTO leases(
+                job_id, channel, owner, run_id, acquired_at,
+                heartbeat_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                channel = excluded.channel,
+                owner = excluded.owner,
+                run_id = excluded.run_id,
+                acquired_at = excluded.acquired_at,
+                heartbeat_at = excluded.heartbeat_at,
+                expires_at = excluded.expires_at
+            """,
+            (story_id, channel_key, owner, run_id, current, current, current + lease_seconds),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
+            (run_id, story_id),
+        )
+
+    @staticmethod
+    def _bind_lane_lease_locked(
+        conn: sqlite3.Connection,
+        run_id: str,
+        channel_key: str,
+        story_id: str,
+        mode: str,
+        owner: str,
+        lane_key: str,
+        current: int,
+        lease_seconds: int,
+    ) -> None:
+        now_ts = _utc_now()
+        conn.execute(
+            """
+            INSERT INTO runs(
+                run_id, channel, story_id, mode, status, owner,
+                started_at, heartbeat_at, lane_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (run_id, channel_key, story_id, mode, JobStatus.PROCESSING.value, owner, now_ts, now_ts, lane_key),
+        )
+        conn.execute(
+            """
+            INSERT INTO lane_leases(
+                job_id, lane_id, channel, owner, run_id, acquired_at,
+                heartbeat_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                lane_id = excluded.lane_id,
+                channel = excluded.channel,
+                owner = excluded.owner,
+                run_id = excluded.run_id,
+                acquired_at = excluded.acquired_at,
+                heartbeat_at = excluded.heartbeat_at,
+                expires_at = excluded.expires_at
+            """,
+            (story_id, lane_key, channel_key, owner, run_id, current, current, current + lease_seconds),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
+            (run_id, story_id),
+        )
+
     def enqueue(
         self,
         story_id: str,
@@ -896,51 +1001,8 @@ class QueueRepository:
                 conn.rollback()
                 return None
             run_id = uuid.uuid4().hex
-            conn.execute(
-                """
-                INSERT INTO runs(
-                    run_id, channel, story_id, mode, status, owner,
-                    started_at, heartbeat_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    channel_key,
-                    row["story_id"],
-                    mode,
-                    JobStatus.PROCESSING.value,
-                    owner,
-                    _utc_now(),
-                    _utc_now(),
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO leases(
-                    job_id, channel, owner, run_id, acquired_at,
-                    heartbeat_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(job_id) DO UPDATE SET
-                    channel = excluded.channel,
-                    owner = excluded.owner,
-                    run_id = excluded.run_id,
-                    acquired_at = excluded.acquired_at,
-                    heartbeat_at = excluded.heartbeat_at,
-                    expires_at = excluded.expires_at
-                """,
-                (
-                    row["story_id"],
-                    channel_key,
-                    owner,
-                    run_id,
-                    current,
-                    current,
-                    current + lease_seconds,
-                ),
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
-                (run_id, row["story_id"]),
+            self._bind_channel_lease_locked(
+                conn, run_id, channel_key, row["story_id"], mode, owner, current, lease_seconds
             )
             conn.execute(
                 """
@@ -1014,52 +1076,8 @@ class QueueRepository:
                 conn.rollback()
                 return None
             run_id = uuid.uuid4().hex
-            now_text = _utc_now()
-            conn.execute(
-                """
-                INSERT INTO runs(
-                    run_id, channel, story_id, mode, status, owner,
-                    started_at, heartbeat_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    channel_key,
-                    requested_id,
-                    mode,
-                    JobStatus.PROCESSING.value,
-                    owner,
-                    now_text,
-                    now_text,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO leases(
-                    job_id, channel, owner, run_id, acquired_at,
-                    heartbeat_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(job_id) DO UPDATE SET
-                    channel = excluded.channel,
-                    owner = excluded.owner,
-                    run_id = excluded.run_id,
-                    acquired_at = excluded.acquired_at,
-                    heartbeat_at = excluded.heartbeat_at,
-                    expires_at = excluded.expires_at
-                """,
-                (
-                    requested_id,
-                    channel_key,
-                    owner,
-                    run_id,
-                    current,
-                    current,
-                    current + lease_seconds,
-                ),
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
-                (run_id, requested_id),
+            self._bind_channel_lease_locked(
+                conn, run_id, channel_key, requested_id, mode, owner, current, lease_seconds
             )
             updated = conn.execute(
                 f"""
@@ -1916,18 +1934,10 @@ class QueueRepository:
 
     def get_scene_assets(self, story_id: str) -> list[dict[str, Any]]:
         """Retrieve all recorded scene assets for a story ordered by scene and shot."""
-        with connect(self.db_path, read_only=True) as conn:
-            return [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT * FROM story_scene_assets
-                    WHERE story_id = ?
-                    ORDER BY scene_index, shot_index, scene_asset_id
-                    """,
-                    (story_id,),
-                )
-            ]
+        return self._fetch_all(
+            "SELECT * FROM story_scene_assets WHERE story_id = ? ORDER BY scene_index, shot_index, scene_asset_id",
+            (story_id,),
+        )
 
     def record_production_metrics(
         self,
@@ -1979,11 +1989,7 @@ class QueueRepository:
 
     def get_production_metrics(self, run_id: str) -> dict[str, Any] | None:
         """Retrieve production telemetry for a specific run."""
-        with connect(self.db_path, read_only=True) as conn:
-            row = conn.execute(
-                "SELECT * FROM production_metrics WHERE run_id = ?", (run_id,)
-            ).fetchone()
-            return dict(row) if row else None
+        return self._fetch_one("SELECT * FROM production_metrics WHERE run_id = ?", (run_id,))
 
     def record_analytics_snapshot(
         self,
@@ -2033,18 +2039,10 @@ class QueueRepository:
 
     def get_analytics_snapshots(self, story_id: str) -> list[dict[str, Any]]:
         """Retrieve all historical analytics snapshots for a story."""
-        with connect(self.db_path, read_only=True) as conn:
-            return [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT * FROM video_analytics_snapshots
-                    WHERE story_id = ?
-                    ORDER BY recorded_at ASC, snapshot_id ASC
-                    """,
-                    (story_id,),
-                )
-            ]
+        return self._fetch_all(
+            "SELECT * FROM video_analytics_snapshots WHERE story_id = ? ORDER BY recorded_at ASC, snapshot_id ASC",
+            (story_id,),
+        )
 
     # ------------------------------------------------------------------
     # Observability pipe (system_events, migration 004)
@@ -2203,15 +2201,10 @@ class QueueRepository:
 
     def get_run_artifact(self, run_id: str, kind: str) -> dict[str, Any] | None:
         """Return one recorded artifact of a run by kind (e.g. 'video')."""
-        with connect(self.db_path, read_only=True) as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM artifacts WHERE run_id = ? AND kind = ?
-                ORDER BY artifact_id DESC LIMIT 1
-                """,
-                (run_id, kind),
-            ).fetchone()
-            return dict(row) if row else None
+        return self._fetch_one(
+            "SELECT * FROM artifacts WHERE run_id = ? AND kind = ? ORDER BY artifact_id DESC LIMIT 1",
+            (run_id, kind),
+        )
 
     # ------------------------------------------------------------------
     # Production lanes (scheduler_lane_state + lane_leases)
@@ -2285,21 +2278,13 @@ class QueueRepository:
             conn.commit()
 
     def set_lane_paused(self, lane_id: str, paused: bool, reason: str | None = None) -> None:
-        with connect(self.db_path) as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            conn.execute(
-                "UPDATE scheduler_lane_state SET paused = ?, pause_reason = ?, updated_at = ? "
-                "WHERE lane_id = ?",
-                (1 if paused else 0, reason, _utc_now(), lane_id),
-            )
-            conn.commit()
+        self._execute_write(
+            "UPDATE scheduler_lane_state SET paused = ?, pause_reason = ?, updated_at = ? WHERE lane_id = ?",
+            (1 if paused else 0, reason, _utc_now(), lane_id),
+        )
 
     def get_lane_state(self, lane_id: str) -> dict[str, Any] | None:
-        with connect(self.db_path, read_only=True) as conn:
-            row = conn.execute(
-                "SELECT * FROM scheduler_lane_state WHERE lane_id = ?", (lane_id,)
-            ).fetchone()
-        return dict(row) if row else None
+        return self._fetch_one("SELECT * FROM scheduler_lane_state WHERE lane_id = ?", (lane_id,))
 
     def claim_for_lane(
         self,
@@ -2363,54 +2348,8 @@ class QueueRepository:
                 conn.rollback()
                 return None
             run_id = uuid.uuid4().hex
-            conn.execute(
-                """
-                INSERT INTO runs(
-                    run_id, channel, story_id, mode, status, owner,
-                    started_at, heartbeat_at, lane_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    channel_key,
-                    row["story_id"],
-                    mode,
-                    JobStatus.PROCESSING.value,
-                    owner,
-                    _utc_now(),
-                    _utc_now(),
-                    lane_key,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO lane_leases(
-                    job_id, lane_id, channel, owner, run_id, acquired_at,
-                    heartbeat_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(job_id) DO UPDATE SET
-                    lane_id = excluded.lane_id,
-                    channel = excluded.channel,
-                    owner = excluded.owner,
-                    run_id = excluded.run_id,
-                    acquired_at = excluded.acquired_at,
-                    heartbeat_at = excluded.heartbeat_at,
-                    expires_at = excluded.expires_at
-                """,
-                (
-                    row["story_id"],
-                    lane_key,
-                    channel_key,
-                    owner,
-                    run_id,
-                    current,
-                    current,
-                    current + lease_seconds,
-                ),
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
-                (run_id, row["story_id"]),
+            self._bind_lane_lease_locked(
+                conn, run_id, channel_key, row["story_id"], mode, owner, lane_key, current, lease_seconds
             )
             conn.execute(
                 """
@@ -2514,54 +2453,8 @@ class QueueRepository:
                 return None
             row, video_path = chosen
             run_id = uuid.uuid4().hex
-            conn.execute(
-                """
-                INSERT INTO runs(
-                    run_id, channel, story_id, mode, status, owner,
-                    started_at, heartbeat_at, lane_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    channel_key,
-                    row["story_id"],
-                    mode,
-                    JobStatus.PROCESSING.value,
-                    owner,
-                    _utc_now(),
-                    _utc_now(),
-                    lane_key,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO lane_leases(
-                    job_id, lane_id, channel, owner, run_id, acquired_at,
-                    heartbeat_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(job_id) DO UPDATE SET
-                    lane_id = excluded.lane_id,
-                    channel = excluded.channel,
-                    owner = excluded.owner,
-                    run_id = excluded.run_id,
-                    acquired_at = excluded.acquired_at,
-                    heartbeat_at = excluded.heartbeat_at,
-                    expires_at = excluded.expires_at
-                """,
-                (
-                    row["story_id"],
-                    lane_key,
-                    channel_key,
-                    owner,
-                    run_id,
-                    current,
-                    current,
-                    current + lease_seconds,
-                ),
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO run_stories(run_id, story_id, position) VALUES (?, ?, 0)",
-                (run_id, row["story_id"]),
+            self._bind_lane_lease_locked(
+                conn, run_id, channel_key, row["story_id"], mode, owner, lane_key, current, lease_seconds
             )
             conn.execute(
                 """

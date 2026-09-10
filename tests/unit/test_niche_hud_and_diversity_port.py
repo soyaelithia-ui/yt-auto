@@ -335,9 +335,18 @@ def test_thematic_asset_resolver_scene_rotation(tmp_path, monkeypatch):
 
 def test_visual_bank_scenery_assets_present():
     """Title-card orphans live in quarantine; scenery stays clean; templates remain."""
-    root = Path("assets/visual_bank")
-    quarantine = root / "_quarantine_title_cards"
     templates = Path("assets/thumbnails/templates")
+    for p in (
+        templates / "aita" / "master_backdrop.jpg",
+        templates / "horror" / "master_backdrop.jpg",
+        templates / "scp" / "master_backdrop.jpg",
+    ):
+        assert p.is_file() and p.stat().st_size > 1000
+
+    root = Path("assets/visual_bank")
+    if not root.exists():
+        return
+    quarantine = root / "_quarantine_title_cards"
     # Must NOT reappear under scenery/ (would freeze as video backgrounds)
     for banned in (
         root / "aelithia" / "scenery" / "dna_secret.jpg",
@@ -353,12 +362,6 @@ def test_visual_bank_scenery_assets_present():
         quarantine / "moku" / "scp_containment.jpg",
     ]
     for p in quarantined:
-        assert p.is_file() and p.stat().st_size > 1000
-    for p in (
-        templates / "aita" / "master_backdrop.jpg",
-        templates / "horror" / "master_backdrop.jpg",
-        templates / "scp" / "master_backdrop.jpg",
-    ):
         assert p.is_file() and p.stat().st_size > 1000
 
 

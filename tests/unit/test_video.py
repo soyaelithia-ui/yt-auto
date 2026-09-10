@@ -578,101 +578,137 @@ class TestVideo(unittest.TestCase):
         drama_shadow is the opaque black corner layer.
         """
         import numpy
-        from PIL import Image
-        from lib.video import _apply_channel_overlays, _apply_channel_grade
+        from PIL import Image, ImageDraw
+        from lib.video import _apply_channel_overlays, _apply_channel_grade, channel_overlay_paths
 
-        src = os.path.join(self.temp_dir.name, "corner_src.jpg")
-        rng = numpy.random.default_rng(7)
-        flat = numpy.full((1200, 2200, 3), 110, dtype=numpy.uint8)
-        noise = rng.integers(-6, 7, size=flat.shape).astype(numpy.int16)
-        flat = numpy.clip(flat.astype(numpy.int16) + noise, 0, 255).astype(numpy.uint8)
-        Image.fromarray(flat).save(src)
+        patcher = None
+        if not channel_overlay_paths("aelithia"):
+            mock_ov = Path(self.temp_dir.name) / "mock_aelithia_overlay.png"
+            ov_im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(ov_im)
+            draw.rectangle([0, 0, 40, 40], fill=(0, 0, 0, 255))
+            draw.rectangle([160, 0, 200, 40], fill=(0, 0, 0, 255))
+            draw.rectangle([0, 160, 40, 200], fill=(0, 0, 0, 255))
+            draw.rectangle([160, 160, 200, 200], fill=(0, 0, 0, 255))
+            ov_im.save(mock_ov)
+            patcher = patch("lib.video.channel_overlay_paths", return_value=[mock_ov])
+            patcher.start()
 
-        with Image.open(src) as im:
-            plain = im.convert("RGB").resize((1166, 2073), Image.Resampling.BICUBIC)
+        try:
+            src = os.path.join(self.temp_dir.name, "corner_src.jpg")
+            rng = numpy.random.default_rng(7)
+            flat = numpy.full((1200, 2200, 3), 110, dtype=numpy.uint8)
+            noise = rng.integers(-6, 7, size=flat.shape).astype(numpy.int16)
+            flat = numpy.clip(flat.astype(numpy.int16) + noise, 0, 255).astype(numpy.uint8)
+            Image.fromarray(flat).save(src)
 
-            baked = _apply_channel_grade(
-                _apply_channel_overlays(plain.copy(), "aelithia"), "aelithia"
-            )
+            with Image.open(src) as im:
+                plain = im.convert("RGB").resize((1166, 2073), Image.Resampling.BICUBIC)
 
-            plain_arr = numpy.asarray(plain.convert("L"), dtype=float)
-            baked_arr = numpy.asarray(baked.convert("L"), dtype=float)
-            h, w = plain_arr.shape
+                baked = _apply_channel_grade(
+                    _apply_channel_overlays(plain.copy(), "aelithia"), "aelithia"
+                )
 
-            def corners(a):
-                b = 24
-                return (
-                    a[:b, :b].mean() + a[:b, -b:].mean()
-                    + a[-b:, :b].mean() + a[-b:, -b:].mean()
-                ) / 4.0
+                plain_arr = numpy.asarray(plain.convert("L"), dtype=float)
+                baked_arr = numpy.asarray(baked.convert("L"), dtype=float)
+                h, w = plain_arr.shape
 
-            self.assertLess(
-                corners(baked_arr),
-                corners(plain_arr) * 0.9,
-                "vignette bake should darken corners by >=10%",
-            )
-            # Center stays close to the original luminance (subtle grade).
-            center_delta = abs(
-                baked_arr[h // 2 - 50: h // 2 + 50, w // 2 - 50: w // 2 + 50].mean()
-                - plain_arr[h // 2 - 50: h // 2 + 50, w // 2 - 50: w // 2 + 50].mean()
-            )
-            self.assertLess(center_delta, 25.0)
+                def corners(a):
+                    b = 24
+                    return (
+                        a[:b, :b].mean() + a[:b, -b:].mean()
+                        + a[-b:, :b].mean() + a[-b:, -b:].mean()
+                    ) / 4.0
+
+                self.assertLess(
+                    corners(baked_arr),
+                    corners(plain_arr) * 0.9,
+                    "vignette bake should darken corners by >=10%",
+                )
+                # Center stays close to the original luminance (subtle grade).
+                center_delta = abs(
+                    baked_arr[h // 2 - 50: h // 2 + 50, w // 2 - 50: w // 2 + 50].mean()
+                    - plain_arr[h // 2 - 50: h // 2 + 50, w // 2 - 50: w // 2 + 50].mean()
+                )
+                self.assertLess(center_delta, 25.0)
+        finally:
+            if patcher:
+                patcher.stop()
 
     def test_compose_baked_prescaled_output_differs_from_plain_resize(self):
         """compose_video writes a baked prescaled jpg for oversized sources."""
         import wave as _wave
+        from PIL import Image, ImageDraw
+        from lib.video import channel_overlay_paths
 
-        audio_path = os.path.join(self.temp_dir.name, "prescale_audio.wav")
-        with _wave.open(audio_path, "wb") as wav:
-            wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(8000)
-            wav.writeframes(b"\x01\x00" * 8000)
+        patcher = None
+        if not channel_overlay_paths("moku"):
+            mock_ov = Path(self.temp_dir.name) / "mock_moku_overlay.png"
+            ov_im = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(ov_im)
+            draw.rectangle([0, 0, 40, 40], fill=(0, 0, 0, 255))
+            draw.rectangle([160, 0, 200, 40], fill=(0, 0, 0, 255))
+            draw.rectangle([0, 160, 40, 200], fill=(0, 0, 0, 255))
+            draw.rectangle([160, 160, 200, 200], fill=(0, 0, 0, 255))
+            ov_im.save(mock_ov)
+            patcher = patch("lib.video.channel_overlay_paths", return_value=[mock_ov])
+            patcher.start()
 
-        from PIL import Image
-        src = os.path.join(self.temp_dir.name, "oversize_scene.jpg")
-        Image.new("RGB", (1200, 2200), (110, 110, 110)).save(src)
-        out_video = os.path.join(self.temp_dir.name, "prescale_out.mp4")
-
-        captured = {}
-
-        def _grab_prescaled(args, **kwargs):
-            for i, arg in enumerate(args):
-                if arg == "-i" and i > 0 and "prescaled_" in str(args[i - 1]):
-                    p = Path(str(args[i - 1]))
-                    if p.exists():
-                        captured["prescaled"] = p.read_bytes()
-                        captured["input_arg"] = str(args[i - 1])
-            return MagicMock(returncode=0, stdout="", stderr="")
-
-        with patch("subprocess.run", side_effect=_grab_prescaled):
-            with patch("lib.video.validate_video_format", return_value=True):
-                compose_video(
-                    audio_path, "", "", out_video,
-                    duration_sec=5.0,
-                    min_duration=0.0,
-                    scene_images=[src],
-                    video_mode="short",
-                    channel="moku",
-                )
-
-        self.assertIn("prescaled_", captured.get("input_arg", ""))
-        baked_bytes = captured.get("prescaled")
-        self.assertTrue(baked_bytes)
-
-        from PIL import ImageOps
-        with Image.open(src) as im:
-            plain_fit = ImageOps.fit(im.convert("RGB"), (1166, 2073), method=Image.Resampling.BICUBIC)
-        buf = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
         try:
-            plain_fit.save(buf.name, format="JPEG", quality=92)
-            buf.close()
-            self.assertNotEqual(
-                len(baked_bytes), os.path.getsize(buf.name),
-                "baked output should differ from the plain presize",
-            )
+            audio_path = os.path.join(self.temp_dir.name, "prescale_audio.wav")
+            with _wave.open(audio_path, "wb") as wav:
+                wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(8000)
+                wav.writeframes(b"\x01\x00" * 8000)
+
+            from PIL import Image
+            src = os.path.join(self.temp_dir.name, "oversize_scene.jpg")
+            Image.new("RGB", (1200, 2200), (110, 110, 110)).save(src)
+            out_video = os.path.join(self.temp_dir.name, "prescale_out.mp4")
+
+            captured = {}
+
+            def _grab_prescaled(args, **kwargs):
+                for i, arg in enumerate(args):
+                    if arg == "-i" and i > 0 and "prescaled_" in str(args[i - 1]):
+                        p = Path(str(args[i - 1]))
+                        if p.exists():
+                            captured["prescaled"] = p.read_bytes()
+                            captured["input_arg"] = str(args[i - 1])
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            with patch("subprocess.run", side_effect=_grab_prescaled):
+                with patch("lib.video.validate_video_format", return_value=True):
+                    compose_video(
+                        audio_path, "", "", out_video,
+                        duration_sec=5.0,
+                        min_duration=0.0,
+                        scene_images=[src],
+                        video_mode="short",
+                        channel="moku",
+                    )
+
+            self.assertIn("prescaled_", captured.get("input_arg", ""))
+            baked_bytes = captured.get("prescaled")
+            self.assertTrue(baked_bytes)
+
+            from PIL import ImageOps
+            with Image.open(src) as im:
+                plain_fit = ImageOps.fit(im.convert("RGB"), (1166, 2073), method=Image.Resampling.BICUBIC)
+            buf = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            try:
+                plain_fit.save(buf.name, format="JPEG", quality=92)
+                buf.close()
+                self.assertNotEqual(
+                    len(baked_bytes), os.path.getsize(buf.name),
+                    "baked output should differ from the plain presize",
+                )
+            finally:
+                os.unlink(buf.name)
+            # cleanup glob removed the temp file
+            self.assertEqual(list(Path(self.temp_dir.name).glob("prescaled_*.jpg")), [])
         finally:
-            os.unlink(buf.name)
-        # cleanup glob removed the temp file
-        self.assertEqual(list(Path(self.temp_dir.name).glob("prescaled_*.jpg")), [])
+            if patcher:
+                patcher.stop()
 
     def test_eased_pan_rollback_flag_restores_linear_expressions(self):
         """EASED_PAN=0 restores the literal linear pan ramp."""

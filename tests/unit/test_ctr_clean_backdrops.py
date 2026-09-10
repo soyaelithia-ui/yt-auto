@@ -73,48 +73,9 @@ def test_master_backdrops_ocr_has_no_baked_osd() -> None:
             assert token.lower() not in lowered, f"{path.name} OCR contains {token!r}: {text!r}"
 
 
-@pytest.mark.parametrize("folder", SCENERY_DIRS, ids=("moku", "aelithia"))
-def test_visual_bank_scenery_has_at_least_three_jpgs(folder: Path) -> None:
-    jpgs = _jpg_files(folder)
-    assert len(jpgs) >= 3, f"{folder} has {len(jpgs)} jpgs"
-    for p in jpgs:
-        assert p.suffix.lower() != ".gif"
-        assert "_quarantine_title_cards" not in p.as_posix()
-        assert p.name not in QUARANTINE_NAMES
-        assert p.stat().st_size > 20_000
+def test_visual_bank_is_purged_and_templates_preserved() -> None:
+    """Obsolete visual_bank assets are purged; templates/ backdrops remain."""
+    assert not BANK.exists(), "visual_bank directory must be purged"
+    for path in MASTER_BACKDROPS:
+        assert path.is_file(), f"Master backdrop missing: {path}"
 
-
-def test_index_json_lists_scenery_without_quarantine() -> None:
-    index = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
-    assert index.get("updated_at")
-    for channel in ("moku", "aelithia"):
-        entries = index["channels"][channel]["categories"]["scenery"]
-        assert len(entries) >= 3, channel
-        disk_stems = {p.stem for p in _jpg_files(BANK / channel / "scenery")}
-        ids = set()
-        for entry in entries:
-            for key in REQUIRED_META:
-                assert key in entry, f"{channel} scenery missing {key}"
-            path = str(entry["path"])
-            assert "_quarantine_title_cards" not in path
-            assert not path.lower().endswith(".gif")
-            assert str(entry["format"]).lower() in {"jpg", "jpeg"}
-            assert str(entry["file"]).lower().endswith((".jpg", ".jpeg"))
-            assert entry["file"] not in QUARANTINE_NAMES
-            abs_path = REPO / path
-            assert abs_path.is_file(), path
-            with Image.open(abs_path) as im:
-                assert list(entry["resolution"]) == list(im.size), path
-            ids.add(entry["id"])
-        assert ids <= disk_stems
-        assert len(ids & disk_stems) >= 3
-
-
-def test_scenery_dirs_contain_no_gifs_or_quarantine_cards() -> None:
-    for folder in SCENERY_DIRS:
-        for p in folder.iterdir():
-            if p.name.startswith("."):
-                continue
-            assert p.suffix.lower() != ".gif", p
-            assert "_quarantine_title_cards" not in p.as_posix()
-            assert p.name not in QUARANTINE_NAMES

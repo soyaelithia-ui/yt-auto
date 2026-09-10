@@ -49,6 +49,8 @@ class ThumbnailConfig:
     archetype: Optional[str] = None
     template: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    cover_prompt: Optional[str] = None
+    focal_subject: Optional[str] = None
 
 
 class ThumbnailEngine:

@@ -912,6 +912,8 @@ def create_video_thumbnail(
             archetype=kwargs.get("archetype") or kwargs.get("template") or kwargs.get("category"),
             template=kwargs.get("template"),
             metadata=meta,
+            cover_prompt=cover_prompt or kwargs.get("prompt"),
+            focal_subject=kwargs.get("focal_subject"),
         )
         res = engine.generate(
             config=cfg,

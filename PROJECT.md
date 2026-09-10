@@ -2,13 +2,11 @@
 
 ## Architecture
 - **Pipeline & Composition Engine (`src/pipeline.py`, `src/media/loop_engine.py`)**:
-  - Narrative synthesis & TTS audio generation (`lib/tts.py`).
-  - Audio chain: sidechain ducking (`sidechaincompress`), mixing (`amix`), and EBU R128 loudness mastering (`loudnorm`).
-  - Video composition: Concat demuxer (`ffconcat version 1.0`) with per-shot `duration` directives and stream-copy (`-c:v copy`), preserving exact 1080p 16:9 geometry without CPU-intensive re-encoding.
-- **Master Loop Catalog & Rotation (`src/core/catalog.py`, `data/loop_catalog.db`, `assets/loops/`)**:
-  - Exactly 6 certified permanent master loops (3 Moku, 3 Aelithia; 0 unbranded atomic clips).
-  - Channel isolation enforcement via `CHANNEL_THEMES` (SciFi disabled).
-  - Seeded modulo candidate pool rotation across scenes/acts without consecutive repetitions.
+  - Single continuous loop composition: single clip (10s vertical 9:16 for shorts from `assets/videos/shorts/`, 30s horizontal 16:9 for longs from `assets/videos/longs/`) repeated seamlessly across narration duration.
+  - Zero-reencode stream-copy (`-c:v copy`) via concat demuxer (<2s execution, near-zero CPU/RAM).
+  - Multichannel neutrality: round-robin rotation across available `.mp4` files without channel coupling.
+  - Fail-Fast safeguard: raises `CatalogAssetNotFoundError` if video directories are empty.
+  - Prompt-driven real-time thumbnails: Chiaroscuro high-CTR style with 3-5 word viral hooks.
 - **Locking & Concurrency (`src/core/lock.py`, `src/orchestrator/pipeline.py`)**:
   - Non-blocking/timed `ChannelLock` with polling timeout and reentrancy registration in `_active_locks`.
 - **Review Delivery & Telegram Bot (`review/telegram_bot.py`, `src/telegram/approval.py`)**:

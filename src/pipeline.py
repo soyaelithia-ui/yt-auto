@@ -800,8 +800,7 @@ def _stage_04_mood_theme(ctx: RunContext) -> None:
         from src.core.scenic_detector import detect_adaptive_theme
 
         ctx.loop_engine = LoopVideoEngine()
-        planned = False
-        try:
+        if ctx.is_multiscene_mode:
             curator = CinematicScriptCuratorAgent()
             art = ArtDirectorMoodAgent()
             planner = ScenePlannerCompositorAgent()
@@ -822,67 +821,37 @@ def _stage_04_mood_theme(ctx: RunContext) -> None:
             )
             if ctx.scene_bg_list and ctx.shot_durations:
                 ctx.resolved_loop_path = ctx.scene_bg_list[0]
-                planned = True
-                total_audio_sec = float(sum(float(d) for d in ctx.shot_durations))
-                creative = (ctx.visual_plan_payload.get("scenes") if isinstance(ctx.visual_plan_payload, dict) else None) or []
-                scenes_plan = [
-                    {**(dict(creative[i]) if i < len(creative) and isinstance(creative[i], dict) else {}),
-                     "duration": float(d), "source": str(p), "category": str(ctx.target_category), "shot_index": i}
-                    for i, (p, d) in enumerate(zip(ctx.scene_bg_list, ctx.shot_durations))
-                ]
-                if not isinstance(ctx.visual_plan_payload, dict):
-                    ctx.visual_plan_payload = {}
-                ctx.visual_plan_payload.update({
-                    "video_engine": "loop", "loop": True, "mode": "loop", "category": str(ctx.target_category),
-                    "scenes": scenes_plan, "covered_seconds": total_audio_sec, "black_fallbacks": 0, "shot_durations": [float(d) for d in ctx.shot_durations],
-                })
-                ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-                logger.info("Scene director planned %s shots; assembling with loop stream-copy", len(ctx.scene_bg_list))
-        except Exception as plan_err:
-            logger.warning("Scene director planning failed; falling back to theme detect: %s", plan_err, exc_info=True)
-
-        if not planned:
-            adaptive_theme = detect_adaptive_theme(
-                topic=ctx.title or ctx.story.get("title", ""),
-                script=ctx.script or ctx.story.get("raw_content", ""),
-                niche=getattr(ctx.lane, "story_type", "") or ctx.channel_name,
+        else:
+            # Continuous single-loop composition engine:
+            # Resolves loop from assets/videos/shorts/ (vertical) or assets/videos/longs/ (horizontal).
+            # Neutral round-robin rotation, repeats single continuous clip for full audio duration.
+            from src.config import is_test_environment
+            total_audio_sec = float(ctx.audio.get("duration_sec", 15.0) or 15.0) if isinstance(ctx.audio, dict) else 15.0
+            ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
+                orientation=ctx.lane.orientation,
+                allow_test_mock=is_test_environment(),
             )
-            ctx.target_category = (
-                ctx.loop_category
-                or adaptive_theme
-                or getattr(ctx.lane, "loop_category", None)
-                or getattr(ctx.lane, "story_type", None)
-                or ("tactical_chamber" if ctx.channel_name == "moku" else "cozy_hearth")
-            )
-            from src.core.scenic_detector import extract_story_motifs
-            story_topic_text = str(ctx.title or ctx.story.get("title", "") or "")
-            story_script_text = str(ctx.script or ctx.story.get("raw_content", "") or "")
-            story_motifs = extract_story_motifs(story_topic_text, story_script_text)
-
-            total_audio_sec = float(ctx.audio["duration_sec"])
-            _sig = inspect.signature(ctx.loop_engine.resolve_loop_video)
-            _init_kw = {"allow_fallback": True, "orientation": ctx.lane.orientation, "channel": ctx.channel_name, "motifs": story_motifs, "topic": story_topic_text}
-            _init_kw = {k: v for k, v in _init_kw.items() if k in _sig.parameters}
-            ctx.resolved_loop_path = ctx.loop_engine.resolve_loop_video(ctx.target_category, **_init_kw)
-
-            from src.media.pacing import compute_dynamic_shot_pacing
-            ctx.shot_durations = compute_dynamic_shot_pacing(total_audio_sec, orientation=ctx.lane.orientation) or [total_audio_sec]
-            ctx.scene_bg_list = []
-            scenes_plan = []
-            for s_idx, s_dur in enumerate(ctx.shot_durations):
-                _shot_kw = {
-                    "allow_fallback": True, "orientation": ctx.lane.orientation, "seed": s_idx * 101,
-                    "channel": ctx.channel_name, "motifs": story_motifs, "topic": story_topic_text, "exclude_loop_ids": list(ctx.scene_bg_list),
-                }
-                _shot_kw = {k: v for k, v in _shot_kw.items() if k in _sig.parameters}
-                shot_path = ctx.loop_engine.resolve_loop_video(ctx.target_category, **_shot_kw)
-                ctx.scene_bg_list.append(str(shot_path))
-                scenes_plan.append({"duration": s_dur, "source": str(shot_path), "category": str(ctx.target_category), "shot_index": s_idx})
-
-            ctx.visual_plan_path.write_text(json.dumps({
-                "video_engine": "loop", "loop": True, "mode": "loop", "category": str(ctx.target_category),
-                "scenes": scenes_plan, "covered_seconds": total_audio_sec, "black_fallbacks": 0, "scene_prompts": [], "shot_durations": ctx.shot_durations,
-            }, indent=2, ensure_ascii=False), encoding="utf-8")
+            ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
+            ctx.shot_durations = [total_audio_sec]
+            ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
+            scenes_plan = [{
+                "duration": total_audio_sec,
+                "source": str(ctx.resolved_loop_path),
+                "category": str(ctx.target_category),
+                "shot_index": 0,
+            }]
+            ctx.visual_plan_payload = {
+                "video_engine": "loop",
+                "loop": True,
+                "mode": "loop",
+                "category": str(ctx.target_category),
+                "scenes": scenes_plan,
+                "covered_seconds": total_audio_sec,
+                "black_fallbacks": 0,
+                "shot_durations": ctx.shot_durations,
+            }
+            ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info("Continuous single-loop composition: %s (duration: %.1fs)", ctx.resolved_loop_path, total_audio_sec)
 
 
 def _stage_08_loop_scene(ctx: RunContext) -> None:
@@ -1018,29 +987,29 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
             }
             thumb_hook = motif_hooks.get(motifs_for_thumb[0])
 
-        climax_frame_path = None
-        if ctx.video_path.is_file() and ctx.video_path.stat().st_size > 0:
-            try:
-                from src.media.thumbnails.extractor import ClimaxFrameExtractor
-                extractor = ClimaxFrameExtractor()
-                climax_ts = extractor.resolve_climax_timestamp(
-                    manifest_path=ctx.scene_manifest_path if ctx.scene_manifest_path.is_file() else None,
-                    fallback_sec=4.0, motif_keywords=motifs_for_thumb,
-                )
-                cand_dir = ctx.work_dir / "thumb_candidates"
-                cand_dir.mkdir(parents=True, exist_ok=True)
-                cands = extractor.extract_candidate_frames(video_path=ctx.video_path, center_timestamp=climax_ts, output_dir=cand_dir, count=3)
-                best_cand = extractor.select_best_frame(cands)
-                if best_cand and best_cand.is_file():
-                    climax_frame_path = str(best_cand)
-            except Exception as ext_err:
-                logger.warning("Could not extract video climax frame for thumbnail: %s", ext_err)
+        # Prompt-driven real-time thumbnail generation (Chiaroscuro high-CTR style, 3-5 word viral hook, mysterious focal subject)
+        from src.agents.seo_optimizer import SeoOptimizerAgent
+        seo_opt = SeoOptimizerAgent()
+        target_fmt = "longform" if ctx.is_long_lane else "short"
+        seo_res = seo_opt.optimize(
+            topic=ctx.spanish_title or ctx.title,
+            target_format=target_fmt,
+            niche=getattr(ctx.lane, "story_type", "") or ctx.channel_name,
+            use_agent=bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes")),
+        )
+        thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
+        thumb_hook = thumb_concept.get("big_headline") or thumb_hook or "¡EXPEDIENTE SECRETO PROHIBIDO!"
+        thumb_prompt = thumb_concept.get("visual_layout") or "Chiaroscuro high-CTR dramatic lighting mysterious focal subject"
+        palette = thumb_concept.get("color_palette")
+        accent_color = palette[0] if palette and isinstance(palette, list) else None
 
         create_video_thumbnail(
             ctx.spanish_title, ctx.channel_name, str(ctx.thumbnail_path),
             template=ctx.lane.template, archetype=ctx.target_category, strict_official_sdk=False,
-            video_mode="longform" if ctx.is_long_lane else "short", video_path=str(ctx.video_path),
-            bg_image_path=climax_frame_path, manifest_path=str(ctx.scene_manifest_path), hook_text=thumb_hook,
+            video_mode=target_fmt, video_path=str(ctx.video_path),
+            bg_image_path=None, manifest_path=str(ctx.scene_manifest_path), hook_text=thumb_hook,
+            cover_prompt=thumb_prompt, accent_color=accent_color,
+            metadata={"prompt": thumb_prompt, "visual_layout": thumb_prompt, "big_headline": thumb_hook},
         )
         ctx.metadata_path.write_text(json.dumps({
             "channel": ctx.channel_name, "title": ctx.youtube_title, "description": ctx.youtube_description,

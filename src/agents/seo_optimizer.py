@@ -32,7 +32,9 @@ SYSTEM_INSTRUCTIONS = (
     "3. High-retention description with formatted timestamps, CTA, and tags. "
     "4. Relevant tags and valid hashtags. "
     "5. Pinned comment to maximize audience engagement. "
-    "6. Thumbnail concepts with visual layout, big headline, and color palette. "
+    "6. Thumbnail concepts using prompt-driven real-time intelligence: "
+    "   Chiaroscuro high-CTR style, punchy 3-5 word viral hook headline, mysterious focal subject, "
+    "   and high-contrast color palette. "
     "Always output strictly valid JSON conforming to the requested schema."
 )
 
@@ -186,16 +188,16 @@ class SeoOptimizerAgent:
             pinned_comment = f"👇 ¿Crees que la Fundación tomó la decisión correcta con {clean_topic}? ¡Debatamos en los comentarios!"
             thumbnail_concepts = [
                 {
-                    "visual_layout": "Fondo de búnker subterráneo con luz ámbar estroboscópica y sello de contención",
-                    "big_headline": "¡EXPEDIENTE SECRETO! ⚠️",
+                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación volumétrica lateral dramática, sombras profundas, sujeto focal misterioso en penumbra con silueta recortada",
+                    "big_headline": "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
                     "color_palette": ["#FF0000", "#111827", "#F59E0B", "#FFFFFF"],
-                    "facial_expression": "Mirada fija en la sombra con expresión de shock",
+                    "facial_expression": "Silueta misteriosa en sombras con mirada fija",
                 },
                 {
-                    "visual_layout": "Cámara criogénica bioluminiscente con anclas Scranton en primer plano",
-                    "big_headline": "REINICIO TOTAL 🧬",
+                    "visual_layout": "Claroscuro de máximo contraste: luz de contorno verde cian sobre fondo negro abisal, sujeto focal misterioso emergiendo",
+                    "big_headline": "NUNCA ENTRES A SOLAS 🧬",
                     "color_palette": ["#00FF66", "#040A08", "#D8FFE6"],
-                    "facial_expression": "Silueta de espaldas frente al reactor",
+                    "facial_expression": "Sujeto en penumbra de espaldas al abismo",
                 },
             ]
         else:
@@ -227,16 +229,16 @@ class SeoOptimizerAgent:
             pinned_comment = f"👇 ¿Cuál fue el dato que más te sorprendió sobre {clean_topic}? ¡Déjalo abajo!"
             thumbnail_concepts = [
                 {
-                    "visual_layout": "Fondo de alto contraste con iluminación volumétrica dramática y tipografía bold",
-                    "big_headline": "¡NO LO SABÍAS! 🚨",
+                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación de recorte volumétrica de alto impacto, sujeto focal misterioso en primer plano sobre fondo oscuro",
+                    "big_headline": "¡NO COMETAS ESTE ERROR! 🚨",
                     "color_palette": ["#FF0000", "#FFFFFF", "#000000", "#FFD700"],
-                    "facial_expression": "Expresión de asombro y mirada fija",
+                    "facial_expression": "Expresión de impacto y mirada directa intrigante",
                 },
                 {
-                    "visual_layout": "Composición dividida con flechas de neón y texto dorado de alto impacto",
-                    "big_headline": "EL GRAN ERROR ❌",
+                    "visual_layout": "Composición Claroscuro de tensión: fondo oscuro minimalista con resplandor neón dorado y sujeto focal intrigante recortado",
+                    "big_headline": "EL SECRETO MEJOR GUARDADO ❌",
                     "color_palette": ["#00FF88", "#111827", "#F59E0B"],
-                    "facial_expression": "Señalando hacia el punto clave",
+                    "facial_expression": "Sujeto focal en sombra señalando hacia el misterio",
                 },
             ]
 

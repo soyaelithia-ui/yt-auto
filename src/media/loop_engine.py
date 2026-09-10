@@ -64,7 +64,12 @@ __all__ = [
     "is_grey_procedural_plane",
     "is_overlay_not_plane0",
     "GREY_PLANE_TECHNOLOGIES",
+    "SHORTS_VIDEOS_DIR",
+    "LONGS_VIDEOS_DIR",
 ]
+
+SHORTS_VIDEOS_DIR = (BASE_DIR / "assets" / "videos" / "shorts").resolve()
+LONGS_VIDEOS_DIR = (BASE_DIR / "assets" / "videos" / "longs").resolve()
 
 GREY_PLANE_TECHNOLOGIES = frozenset({"ffmpeg_lavfi", "synthetic_monochrome"})
 _OVERLAY_DIR_MARKERS = frozenset({"overlays", "ambient_gifs"})
@@ -314,6 +319,79 @@ class LoopVideoEngine(BaseVideoCompositor):
         self.enable_live_synth = enable_live_synth or (
             os.environ.get("ENABLE_LIVE_LOOP_SYNTH", "0").lower() in ("1", "true", "yes")
         )
+        self.shorts_videos_dir = SHORTS_VIDEOS_DIR
+        self.longs_videos_dir = LONGS_VIDEOS_DIR
+
+    _rotation_indices: dict[str, int] = {"shorts": 0, "longs": 0}
+
+    def resolve_continuous_loop(
+        self,
+        orientation: str | tuple[int, int] = "vertical",
+        *,
+        allow_test_mock: bool = False,
+    ) -> Path:
+        """
+        Resolves a single continuous loop clip from assets/videos/shorts/ (vertical)
+        or assets/videos/longs/ (horizontal) using round-robin rotation.
+        Neutral without channel coupling.
+        Raises CatalogAssetNotFoundError if directory is empty (fail-fast safeguard).
+        """
+        is_vert = (
+            orientation in ("vertical", "9:16", (1080, 1920), (720, 1280))
+            or "short" in str(orientation).lower()
+            or (isinstance(orientation, (tuple, list)) and len(orientation) == 2 and orientation[1] > orientation[0])
+        )
+        folder = self.shorts_videos_dir if is_vert else self.longs_videos_dir
+        mode = "shorts" if is_vert else "longs"
+        spec = "10s vertical 9:16" if is_vert else "30s horizontal 16:9"
+
+        mp4_files: list[Path] = []
+        if folder.exists():
+            mp4_files = sorted([
+                p for p in folder.glob("*.mp4")
+                if p.is_file() and p.stat().st_size > 0 and not p.name.startswith(".")
+            ])
+
+        if not mp4_files:
+            from src.config import is_test_environment
+            if allow_test_mock and is_test_environment():
+                return self._get_or_create_test_fixture_loop(orientation=orientation)
+            raise CatalogAssetNotFoundError(
+                f"No video loops found in '{folder}'. Please place at least one .mp4 loop clip "
+                f"({spec}) in '{folder}' to enable video composition."
+            )
+
+        idx = LoopVideoEngine._rotation_indices.get(mode, 0) % len(mp4_files)
+        LoopVideoEngine._rotation_indices[mode] = idx + 1
+        chosen = mp4_files[idx]
+        logger.info(
+            "Resolved continuous single-loop [%s] (%d/%d): %s",
+            mode, idx + 1, len(mp4_files), chosen.name,
+        )
+        return chosen
+
+    @classmethod
+    def _get_or_create_test_fixture_loop(cls, orientation: str | tuple[int, int] = "vertical") -> Path:
+        """Provides a lightweight 1s mock fixture mp4 loop for unit/integration tests."""
+        is_vert = (
+            orientation in ("vertical", "9:16", (1080, 1920), (720, 1280))
+            or "short" in str(orientation).lower()
+            or (isinstance(orientation, (tuple, list)) and len(orientation) == 2 and orientation[1] > orientation[0])
+        )
+        w, h = (1080, 1920) if is_vert else (1920, 1080)
+        fixtures_dir = BASE_DIR / "tests" / "fixtures" / "loops"
+        fixtures_dir.mkdir(parents=True, exist_ok=True)
+        fixture_path = fixtures_dir / f"mock_loop_{w}x{h}.mp4"
+        if not fixture_path.exists() or fixture_path.stat().st_size == 0:
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", f"color=c=black:s={w}x{h}:r=30",
+                "-t", "1",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                str(fixture_path),
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        return fixture_path
 
     def _is_unusable_plane0(
         self,
@@ -1556,28 +1634,10 @@ class LoopVideoEngine(BaseVideoCompositor):
                     else:
                         loop_dur = max(1.0, float(loop_probe.duration or 15.0))
                         reps = max(1, int(math.ceil(float(duration_sec or 60.0) / loop_dur)) + 1)
-                        rep_loops = [v_path.resolve()]
-                        if self.catalog is not None:
-                            try:
-                                channel_arg = kwargs.get("channel")
-                                alt_loop = self.catalog.get_best_loop(
-                                    category=category,
-                                    orientation=orientation if isinstance(orientation, str) else "horizontal",
-                                    seed=1,
-                                    channel=channel_arg,
-                                )
-                                if alt_loop and Path(alt_loop.file_path).resolve() != v_path.resolve():
-                                    alt_p = Path(alt_loop.file_path).resolve()
-                                    if alt_p.is_file() and alt_p.stat().st_size > 0:
-                                        rep_loops.append(alt_p)
-                            except Exception:
-                                pass
-
                         with open(concat_list_path, "w", encoding="utf-8") as f:
                             f.write("ffconcat version 1.0\n")
-                            for r_idx in range(reps):
-                                chosen_loop = rep_loops[r_idx % len(rep_loops)]
-                                f.write(f"file '{chosen_loop}'\n")
+                            for _ in range(reps):
+                                f.write(f"file '{v_path.resolve()}'\n")
 
                     cmd_sc = self.build_stream_copy_composition_cmd(
                         concat_list_path=concat_list_path,
