@@ -243,3 +243,41 @@ Ensure `./scripts/verify_integrity.sh` exits 0 (100% HEALTHY), all anti-regressi
 ### Line Budget & Code Cleanliness
 - [ ] Net reduction of at least 500 lines of obsolete/duplicate code across `src/media/` and `src/pipeline.py`.
 - [ ] No syntax errors, no broken imports, and zero circular dependencies.
+
+## 2026-09-11T21:29:17Z
+
+This is a single self-contained fix; keep it small and focused.
+Crear una rama de trabajo dedicada (`fix/cadence-watchdog-resiliency`), resolver las cancelaciones prematuras por watchdog (`lease_reaper`) en videos largos para alcanzar la meta de 2 videos largos cada 30 minutos (1 cada 15 min alternado) sin degradar la cadencia de Shorts (1 cada 5 min), optimizar el rendimiento y consumo de recursos, y dejar los cambios verificados listos para PR.
+
+Working directory: /home/moku/Projects/yt-auto
+Integrity mode: development
+
+## Requirements
+
+### R1. Git Branch Isolation and PR Preparation
+Crear y trabajar en una rama Git dedicada `fix/cadence-watchdog-resiliency` a partir del estado actual de `main`. Al finalizar la verificación, documentar los cambios y preparar el commit/PR asegurando el cumplimiento estricto de las directivas de `AGENTS.md`.
+
+### R2. Watchdog & Heartbeat Resiliency for Longform Pipeline
+Garantizar que durante el procesamiento de videos largos (renderizado FFmpeg Stream-Copy en Stage 9 y análisis de audio/video en Stage 10 QA Gatekeeper) el sistema mantenga latidos activos y/o cuente con umbrales de expiración adaptados a la duración real del formato, eliminando falsos positivos de `heartbeat_timeout` que fuercen cancelaciones y reintentos innecesarios.
+
+### R3. Longform Cadence (2 videos cada 30 min) and Resource Efficiency
+Optimizar las fases de procesamiento para que la cadencia de videos largos alcance consistentemente 1 video cada ~15 minutos alternando entre los canales `moku` y `aelithia`, preservando el consumo mínimo de recursos (CPU acotada, RAM < 1 GiB de los 6 GiB asignados, limpieza inmediata de archivos de trabajo) y manteniendo intacta la producción de Shorts (1 cada 5 minutos).
+
+## Acceptance Criteria
+
+### Watchdog & Cadence Fulfillment
+- [ ] Ninguna tarea legítima de video largo es cancelada por `lease_reaper` con `heartbeat_timeout` durante el renderizado o la verificación de calidad.
+- [ ] La cadencia de videos largos permite publicar 1 video cada ~15 minutos (2 videos cada 30 minutos combinados entre ambos canales).
+- [ ] La cadencia de Shorts permanece estable en 1 short cada 3 a 5 minutos.
+
+### Quality & Governance Compliance
+- [ ] `./scripts/verify_integrity.sh` retorna código de salida 0 (100% PASS, sin regresiones ni violaciones a las directivas de `AGENTS.md`).
+- [ ] La suite de pruebas automatizadas (`pytest`) pasa exitosamente.
+- [ ] Cero dependencias prohibidas (`playwright` en renderizado), cero credenciales expuestas y cero archivos temporales acumulados.
+- [ ] Los cambios quedan confirmados en la rama `fix/cadence-watchdog-resiliency` con historial limpio.
+
+## Verification Resources
+- Script obligatorio de integridad: `./scripts/verify_integrity.sh`
+- Pruebas automatizadas del repositorio: `pytest`
+- Telemetría en vivo del sistema: Base de datos SQLite `/app/data/shorts_queue.db` (tablas `publications`, `runs`, `lane_leases`) y logs de Docker `yt-automation`.
+

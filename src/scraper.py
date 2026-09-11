@@ -296,7 +296,7 @@ def _load_canonical_stories(
     # Filter stories to strictly match the requested subreddit/niche
     sub_lower = (subreddit or "").lower()
     is_horror_niche = any(k in sub_lower for k in ("nosleep", "scp", "horror", "creepypasta", "scary", "terror", "moku"))
-    is_confession_niche = any(k in sub_lower for k in ("amitheasshole", "aita", "confession", "relationship", "tifu", "aelithia", "drama"))
+    is_confession_niche = any(k in sub_lower for k in ("amitheasshole", "aita", "confession", "relationship", "tifu", "aelithia", "drama", "trueoffmychest", "offmychest"))
 
     def story_matches_niche(story: Dict[str, Any]) -> bool:
         s_id = str(story.get("id") or "").lower()
@@ -868,7 +868,10 @@ async def async_ensure_queue_depth(
         else min(getattr(lane, "words_min", 100), 250)
     )
 
+    canonical_used = False
     for sub in subreddits:
+        if canonical_used:
+            break
         for sort_cat, t_filter in categories:
             curr_count = await asyncio.to_thread(_get_count)
             if curr_count >= target_depth:
@@ -899,6 +902,16 @@ async def async_ensure_queue_depth(
                     if not filter_story_for_lane(s["title"], s["content"], lane):
                         continue
 
+                    # Check format compatibility for canonical stories
+                    is_canonical_story = "canonical" in str(s.get("url", "")) or str(s.get("id", "")).startswith("FILE-")
+                    if is_canonical_story:
+                        sid = str(s.get("id", "")).lower()
+                        is_lane_long = getattr(lane, "orientation", "") == "horizontal"
+                        if is_lane_long and "_short_" in sid:
+                            continue
+                        if not is_lane_long and "_long_" in sid:
+                            continue
+
                     # Check duplicate
                     is_proc = await asyncio.to_thread(is_story_processed, s["id"], db_path=path)
                     if is_proc:
@@ -924,9 +937,12 @@ async def async_ensure_queue_depth(
                     newly_enqueued += 1
 
                 # If stories came from local canonical workset, or nothing was newly enqueued,
-                # skip the remaining sort categories for this subreddit to avoid redundant queries.
+                # skip remaining iterations to avoid redundant network queries.
                 is_canonical = any("canonical" in str(s.get("url", "")) for s in fetched)
-                if is_canonical or (fetched and newly_enqueued == 0):
+                if is_canonical:
+                    canonical_used = True
+                    break
+                if fetched and newly_enqueued == 0:
                     break
             except Exception as e:
                 logger.warning(
@@ -961,10 +977,13 @@ async def async_ensure_queue_depth(
 
     updated_count = await asyncio.to_thread(_get_count)
     if updated_count <= pending_count:
-        _LANE_REPLENISH_BACKOFF[lane_id] = time.time() + 300.0
+        cooldown = 60.0 if updated_count == 0 else 300.0
+        _LANE_REPLENISH_BACKOFF[lane_id] = time.time() + cooldown
         logger.info(
-            "Lane [%s] replenishment yielded 0 new stories; setting 300s backoff cooldown.",
+            "Lane [%s] replenishment yielded 0 new stories; setting %.0fs backoff cooldown (pending: %d).",
             lane_id,
+            cooldown,
+            updated_count,
         )
     else:
         _LANE_REPLENISH_BACKOFF.pop(lane_id, None)

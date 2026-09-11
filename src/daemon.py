@@ -30,7 +30,9 @@ logger = get_logger("daemon")
 _SHUTDOWN_EVENT = threading.Event()
 _SHUTDOWN_REQUESTED = False
 
-_RENDER_SEMAPHORE = threading.Semaphore(1)
+from src.core.render_guard import _LONG_RENDER_SEMAPHORE, _SHORT_RENDER_SEMAPHORE
+
+_RENDER_SEMAPHORE = _LONG_RENDER_SEMAPHORE
 _SYNTHESIS_SEMAPHORE = threading.Semaphore(2)
 
 
@@ -211,25 +213,24 @@ def run_pipeline_once(
     from src.cleaner import clean_run_intermediates
 
     work_dir = None
-    with _RENDER_SEMAPHORE:
-        try:
-            res = safe_run(
-                channel=canonical_channel(channel or "moku").value,
-                db_path=db_path,
-                generate_only=generate_only,
-                story_id=story_id,
-                lane_id=lane_id,
-                **kwargs,
-            )
-            if isinstance(res, dict):
-                work_dir = res.get("work_dir")
-            return res
-        finally:
-            if work_dir:
-                try:
-                    clean_run_intermediates(work_dir)
-                except Exception:
-                    pass
+    try:
+        res = safe_run(
+            channel=canonical_channel(channel or "moku").value,
+            db_path=db_path,
+            generate_only=generate_only,
+            story_id=story_id,
+            lane_id=lane_id,
+            **kwargs,
+        )
+        if isinstance(res, dict):
+            work_dir = res.get("work_dir")
+        return res
+    finally:
+        if work_dir:
+            try:
+                clean_run_intermediates(work_dir)
+            except Exception:
+                pass
 
 
 def run_lane_once(
@@ -766,17 +767,16 @@ def _execute_lane_pick(
         logger.info(
             "Lane %s reclamó historia %s (%s)", pick.lane_id, job["story_id"], mode
         )
-        with _RENDER_SEMAPHORE:
-            result = safe_run(
-                channel=pick.channel.value,
-                db_path=database,
-                generate_only=generate_only,
-                story_id=job["story_id"],
-                lane_id=pick.lane_id,
-                run_id=job.get("run_id"),
-                owner=owner,
-                story=job,
-            )
+        result = safe_run(
+            channel=pick.channel.value,
+            db_path=database,
+            generate_only=generate_only,
+            story_id=job["story_id"],
+            lane_id=pick.lane_id,
+            run_id=job.get("run_id"),
+            owner=owner,
+            story=job,
+        )
     except QuotaError as exc:
         result = {
             "status": "WAITING_LLM_QUOTA",
@@ -857,7 +857,9 @@ def start_daemon_lanes(
     global scheduler_commit_fire, scheduler_commit_empty
     reset_shutdown()
     database = db_path or DEFAULT_DB_PATH
-    parallel = max(1, int(max_parallel or os.environ.get("YT_MAX_PARALLEL_LANES", "2")))
+    parallel = max(1, int(max_parallel or os.environ.get("YT_MAX_PARALLEL_LANES", "3")))
+    if max_parallel is None and max_picks is not None:
+        parallel = max(parallel, max_picks)
     lane_scheduler = LaneScheduler(database)
     lane_scheduler.initialize(apply_offsets=not is_test_environment())
     active_lanes = {
@@ -894,6 +896,9 @@ def start_daemon_lanes(
     attempts = 0
     ticks = 0
     with ThreadPoolExecutor(max_workers=parallel, thread_name_prefix="lane") as pool:
+        active_jobs: dict[Any, tuple[LanePick, float]] = {}
+        from concurrent.futures import wait, FIRST_COMPLETED
+
         while not _SHUTDOWN_REQUESTED:
             _reap_zombies_safe()
             try:
@@ -901,9 +906,6 @@ def start_daemon_lanes(
                 LeaseReaper(db_path=database).reap_once()
             except Exception:
                 pass
-            if max_ticks is not None and ticks >= max_ticks:
-                break
-            ticks += 1
             if not is_test_environment():
                 _run_auto_publish_sweep()
                 if ticks % 360 == 0:
@@ -920,32 +922,97 @@ def start_daemon_lanes(
                     touch_daemon_liveness(database)
                 except Exception:
                     logger.debug("daemon liveness touch failed", exc_info=True)
-            picks = lane_scheduler.take_due_lanes(
-                max_picks=max_picks, lanes_filter=set(active_lanes)
-            )
-            if not picks:
+
+            # 1. Drain completed futures
+            done_futs = [f for f in active_jobs if f.done()]
+            for fut in done_futs:
+                pick, _ = active_jobs.pop(fut)
+                try:
+                    results.append(fut.result())
+                except Exception as exc:
+                    logger.error(
+                        "Lane %s falló de forma inesperada: %s",
+                        getattr(pick, "lane_id", "?"),
+                        exc,
+                    )
+                    results.append(
+                        {
+                            "status": "RETRYABLE_FAILED",
+                            "lane": getattr(pick, "lane_id", None),
+                            "error": str(exc),
+                        }
+                    )
+
+            # 2. Watchdog: check for timed-out jobs
+            turn_timeout = _turn_timeout_seconds()
+            now_mono = time.monotonic()
+            timed_out = [
+                f for f, (p, s_time) in active_jobs.items()
+                if now_mono - s_time >= turn_timeout
+            ]
+            for fut in timed_out:
+                pick, _ = active_jobs.pop(fut)
+                fut.cancel()
+                if not is_test_environment():
+                    try:
+                        from src.core.process_watch import terminate_hung_ffmpeg
+                        terminate_hung_ffmpeg(
+                            max_age_seconds=0,
+                            parent_pid=os.getpid(),
+                            grace_seconds=1.0,
+                        )
+                    except Exception:
+                        logger.debug("hung ffmpeg terminate failed", exc_info=True)
+                results.append(_timeout_result(pick))
+
+            # 3. Check tick bound
+            if max_ticks is not None and ticks >= max_ticks:
+                break
+            ticks += 1
+
+            # 4. Asynchronous dispatch: query due lanes and submit into available slots
+            running_lane_ids = {p.lane_id for p, _ in active_jobs.values()}
+            allowed_lanes = set(active_lanes) - running_lane_ids
+            capacity = min(parallel, max_picks) if max_picks is not None else parallel
+            available_slots = max(0, capacity - len(active_jobs))
+
+            if available_slots > 0 and allowed_lanes:
+                picks = lane_scheduler.take_due_lanes(
+                    max_picks=available_slots,
+                    lanes_filter=allowed_lanes,
+                    exclude_lanes=running_lane_ids,
+                )
+                for pick in picks:
+                    fut = pool.submit(
+                        _execute_lane_pick, database, pick, breaker, generate_only
+                    )
+                    active_jobs[fut] = (pick, time.monotonic())
+                    attempts += 1
+
+            # 5. Responsive wait: wake on task completion or tick timeout
+            if active_jobs:
+                wait_step = min(5.0, _watchdog_tick_seconds())
+                wait(active_jobs.keys(), timeout=wait_step, return_when=FIRST_COMPLETED)
+            else:
                 wait_time = min(
                     interval_seconds,
                     max(1, lane_scheduler.seconds_until_due(lanes_filter=set(active_lanes))),
                 )
                 if _responsive_sleep(wait_time):
                     break
-                continue
-            futures = {
-                pool.submit(
-                    _execute_lane_pick, database, pick, breaker, generate_only
-                ): pick
-                for pick in picks
-            }
+
+        if active_jobs:
             results.extend(
                 _collect_futures_responsive(
-                    futures,
+                    {f: p for f, (p, _) in active_jobs.items()},
                     timeout=_turn_timeout_seconds(),
                     database=database,
                     tick=_watchdog_tick_seconds(),
                 )
             )
-            attempts += 1
-            if _responsive_sleep(min(interval_seconds, 30)):
-                break
+            active_jobs.clear()
+
     return results
+
+
+run_daemon_loop = start_daemon_lanes

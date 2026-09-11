@@ -167,6 +167,7 @@ class LaneScheduler:
         now: int | None = None,
         max_picks: int = 2,
         lanes_filter: set[str] | None = None,
+        exclude_lanes: set[str] | None = None,
     ) -> list[LanePick]:
         """Return at most ``max_picks`` lanes to fire right now.
 
@@ -185,6 +186,8 @@ class LaneScheduler:
             if lane is None or not lane.enabled:
                 continue
             if lanes_filter is not None and lane.id not in lanes_filter:
+                continue
+            if exclude_lanes is not None and lane.id in exclude_lanes:
                 continue
             # A live lease on this lane means it is already producing.
             lease_row = None
