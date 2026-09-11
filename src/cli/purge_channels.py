@@ -59,6 +59,7 @@ def _fetch_channel_videos(youtube: Any, channel: str) -> List[Dict[str, Any]]:
     """Retrieves all candidate videos uploaded for the canonical channel."""
     wanted_channel_id = expected_channel_id(channel)
     results: List[Dict[str, Any]] = []
+    seen_ids = set()
     page_token: Optional[str] = None
 
     while True:
@@ -93,7 +94,8 @@ def _fetch_channel_videos(youtube: Any, channel: str) -> List[Dict[str, Any]]:
             snippet = item.get("snippet") or {}
             title = snippet.get("title", "Untitled")
             ch_id = snippet.get("channelId", "")
-            if vid_id:
+            if vid_id and vid_id not in seen_ids:
+                seen_ids.add(vid_id)
                 results.append({
                     "video_id": vid_id,
                     "title": title,
@@ -103,6 +105,64 @@ def _fetch_channel_videos(youtube: Any, channel: str) -> List[Dict[str, Any]]:
         page_token = response.get("nextPageToken")
         if not page_token or len(results) >= 500:
             break
+
+    # Also inspect uploads playlist for non-search-indexed / private / unlisted videos
+    try:
+        uploads_playlist = None
+        if hasattr(youtube, "channels"):
+            ch_kwargs: Dict[str, Any] = {"part": "contentDetails"}
+            if wanted_channel_id:
+                ch_kwargs["id"] = wanted_channel_id
+            else:
+                ch_kwargs["mine"] = True
+            ch_resp = youtube.channels().list(**ch_kwargs).execute()
+            if isinstance(ch_resp, dict):
+                ch_items = ch_resp.get("items") or []
+                if ch_items and isinstance(ch_items, list) and isinstance(ch_items[0], dict):
+                    uploads_playlist = (
+                        ch_items[0]
+                        .get("contentDetails", {})
+                        .get("relatedPlaylists", {})
+                        .get("uploads")
+                    )
+        if not uploads_playlist and wanted_channel_id and str(wanted_channel_id).startswith("UC"):
+            uploads_playlist = "UU" + str(wanted_channel_id)[2:]
+
+        if uploads_playlist and hasattr(youtube, "playlistItems"):
+            pl_token = None
+            for _ in range(20):  # safety bound to prevent infinite pagination
+                pl_resp = youtube.playlistItems().list(
+                    part="snippet,contentDetails",
+                    playlistId=uploads_playlist,
+                    maxResults=50,
+                    pageToken=pl_token,
+                ).execute()
+                if not isinstance(pl_resp, dict):
+                    break
+                items = pl_resp.get("items")
+                if not isinstance(items, list):
+                    break
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    vid_id = (item.get("contentDetails") or {}).get("videoId")
+                    snippet = item.get("snippet") or {}
+                    title = snippet.get("title", "Untitled")
+                    ch_id = snippet.get("channelId", wanted_channel_id or "")
+                    if vid_id and vid_id not in seen_ids:
+                        if title == "Deleted video":
+                            continue
+                        seen_ids.add(vid_id)
+                        results.append({
+                            "video_id": vid_id,
+                            "title": title,
+                            "channel_id": ch_id,
+                        })
+                pl_token = pl_resp.get("nextPageToken")
+                if not isinstance(pl_token, str) or not pl_token.strip() or len(results) >= 500:
+                    break
+    except Exception as exc:
+        logger.debug("Uploads playlist scan completed or skipped: %s", exc)
 
     return results
 
