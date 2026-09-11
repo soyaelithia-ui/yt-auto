@@ -373,7 +373,12 @@ class RunContext:
 
     def __post_init__(self) -> None:
         if self.lane is not None:
-            if getattr(self.lane, "orientation", "") == "horizontal":
+            if (
+                getattr(self.lane, "orientation", "") == "horizontal"
+                or getattr(self.lane, "qa_profile", "") == "longform"
+                or (getattr(self.lane, "duration_min_sec", 0) or 0) >= 300
+                or "long" in str(getattr(self.lane, "id", "")).lower()
+            ):
                 self.is_long_lane = True
 
     def heartbeat(self) -> bool:

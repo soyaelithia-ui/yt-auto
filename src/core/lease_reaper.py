@@ -95,10 +95,15 @@ def is_longform_lease(
     combined = f"{lane_id or ''}:{owner or ''}:{job_id or ''}".lower()
     if "long" in combined:
         return True
-    if lane_id:
+    resolved_lane_id = lane_id
+    if not resolved_lane_id and owner and ":" in owner:
+        first_token = owner.split(":")[0]
+        if first_token.startswith("lane-"):
+            resolved_lane_id = first_token[5:]
+    if resolved_lane_id:
         try:
             from src.core.lanes import get_lane
-            lane = get_lane(lane_id)
+            lane = get_lane(resolved_lane_id)
             if lane and (
                 getattr(lane, "orientation", "") == "horizontal"
                 or getattr(lane, "qa_profile", "") == "longform"
@@ -199,15 +204,21 @@ class LeaseReaper:
                         pass
 
                     timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id_hint, owner=owner, job_id=job_id)
-                    is_expired = expires_at is not None and expires_at <= now_ts
+                    is_multi_node = os.environ.get("MULTI_NODE", "0").lower() in ("1", "true", "yes")
+                    clock_skew = 0
+                    if is_multi_node:
+                        try:
+                            clock_skew = max(0, int(os.environ.get("MULTI_NODE_CLOCK_SKEW_SECONDS", "60")))
+                        except ValueError:
+                            clock_skew = 60
+
+                    effective_now = now_ts - clock_skew if (is_multi_node and not is_local_hostname(owner)) else now_ts
+                    is_expired = expires_at is not None and expires_at <= effective_now
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
-                    is_startup_orphan = startup and (
-                        os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
-                        or is_local_hostname(owner)
-                    )
+                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner))
                     is_orphan_remote = not is_local_hostname(owner) and (
-                        os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
+                        not is_multi_node
                         or is_stale_heartbeat
                     )
 
@@ -232,15 +243,27 @@ class LeaseReaper:
                             job_id, run_id, owner, reason,
                         )
                         conn.execute("BEGIN IMMEDIATE")
-                        conn.execute("DELETE FROM leases WHERE job_id = ? AND run_id = ?", (job_id, run_id))
-                        conn.execute(
-                            "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE story_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
-                            (JobStatus.RETRYABLE_FAILED.value, reason, job_id),
-                        )
-                        conn.execute(
-                            "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
-                            (JobStatus.RETRYABLE_FAILED.value, now_utc, err_code, run_id),
-                        )
+                        if job_id and run_id:
+                            conn.execute("DELETE FROM leases WHERE job_id = ? AND run_id = ?", (job_id, run_id))
+                        elif job_id:
+                            conn.execute("DELETE FROM leases WHERE job_id = ?", (job_id,))
+                        elif run_id:
+                            conn.execute("DELETE FROM leases WHERE run_id = ?", (run_id,))
+                        if job_id:
+                            conn.execute(
+                                "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE (story_id = ? OR run_id = ?) AND status IN ('CLAIMED', 'PROCESSING')",
+                                (JobStatus.RETRYABLE_FAILED.value, reason, job_id, run_id),
+                            )
+                        elif run_id:
+                            conn.execute(
+                                "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE run_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
+                                (JobStatus.RETRYABLE_FAILED.value, reason, run_id),
+                            )
+                        if run_id:
+                            conn.execute(
+                                "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
+                                (JobStatus.RETRYABLE_FAILED.value, now_utc, err_code, run_id),
+                            )
                         conn.commit()
                         reaped_count += 1
                 except Exception as row_exc:
@@ -267,15 +290,21 @@ class LeaseReaper:
                     pid = extract_pid_from_owner(owner)
 
                     timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id, owner=owner, job_id=job_id)
-                    is_expired = expires_at is not None and expires_at <= now_ts
+                    is_multi_node = os.environ.get("MULTI_NODE", "0").lower() in ("1", "true", "yes")
+                    clock_skew = 0
+                    if is_multi_node:
+                        try:
+                            clock_skew = max(0, int(os.environ.get("MULTI_NODE_CLOCK_SKEW_SECONDS", "60")))
+                        except ValueError:
+                            clock_skew = 60
+
+                    effective_now = now_ts - clock_skew if (is_multi_node and not is_local_hostname(owner)) else now_ts
+                    is_expired = expires_at is not None and expires_at <= effective_now
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
-                    is_startup_orphan = startup and (
-                        os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
-                        or is_local_hostname(owner)
-                    )
+                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner))
                     is_orphan_remote = not is_local_hostname(owner) and (
-                        os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
+                        not is_multi_node
                         or is_stale_heartbeat
                     )
 
@@ -300,7 +329,12 @@ class LeaseReaper:
                             lane_id, run_id, owner, reason,
                         )
                         conn.execute("BEGIN IMMEDIATE")
-                        conn.execute("DELETE FROM lane_leases WHERE lane_id = ? AND run_id = ?", (lane_id, run_id))
+                        if lane_id and run_id:
+                            conn.execute("DELETE FROM lane_leases WHERE lane_id = ? AND run_id = ?", (lane_id, run_id))
+                        elif lane_id:
+                            conn.execute("DELETE FROM lane_leases WHERE lane_id = ?", (lane_id,))
+                        elif run_id:
+                            conn.execute("DELETE FROM lane_leases WHERE run_id = ?", (run_id,))
                         if job_id:
                             conn.execute(
                                 "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE (run_id = ? OR story_id = ?) AND status IN ('CLAIMED', 'PROCESSING')",
@@ -311,10 +345,11 @@ class LeaseReaper:
                                 "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE run_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
                                 (JobStatus.RETRYABLE_FAILED.value, reason, run_id),
                             )
-                        conn.execute(
-                            "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
-                            (JobStatus.RETRYABLE_FAILED.value, now_utc, err_code, run_id),
-                        )
+                        if run_id:
+                            conn.execute(
+                                "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
+                                (JobStatus.RETRYABLE_FAILED.value, now_utc, err_code, run_id),
+                            )
                         conn.commit()
                         reaped_count += 1
                 except Exception as row_exc:

@@ -68,7 +68,9 @@ class VisualIntegrityVerifier:
         pattern = out_dir / "frame_%04d.png"
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
+            "-threads", "2",
             "-i", str(v_path),
+            "-an",
             "-vf", f"fps={effective_fps}",
             "-vframes", str(target_frames),
             "-pix_fmt", "rgb24",

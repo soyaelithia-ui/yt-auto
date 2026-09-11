@@ -568,6 +568,8 @@ def _strip_ass_tags(text: str) -> str:
 
 
 def _ffmpeg_run(cmd: List[str], timeout: Optional[int] = None) -> subprocess.CompletedProcess:
+    if not cmd:
+        return subprocess.CompletedProcess([], 1, stdout="", stderr="")
     effective_timeout = timeout if timeout is not None else int(os.environ.get("FFMPEG_PROBE_TIMEOUT_SECONDS", "600"))
     if "-threads" not in cmd:
         cmd_exec = [cmd[0], "-threads", "2"] + cmd[1:]

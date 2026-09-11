@@ -580,3 +580,168 @@ class TestWatchdogResiliency:
         )
         assert ctx.is_long_lane is True
 
+    def test_is_longform_lease_via_owner_lane_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify is_longform_lease parses lane id from owner prefix 'lane-<lane_id>:...'."""
+        from unittest.mock import MagicMock
+        from src.core import lanes
+
+        mock_lane = MagicMock()
+        mock_lane.orientation = "horizontal"
+        mock_lane.qa_profile = "longform"
+        mock_lane.duration_min_sec = 600
+
+        monkeypatch.setattr(lanes, "get_lane", lambda lid: mock_lane if lid == "custom_cinema" else None)
+
+        assert is_longform_lease(owner="lane-custom_cinema:worker_node:12345") is True
+        assert get_heartbeat_timeout_seconds(owner="lane-custom_cinema:worker_node:12345") == 1800
+
+    def test_active_remote_lease_not_reaped_on_periodic_sweep(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """In multi-node config, an active remote lease with a fresh heartbeat is NOT reaped during normal sweeps."""
+        monkeypatch.setenv("MULTI_NODE", "1")
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute("CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, lane_id TEXT)")
+            conn.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT, lane_id TEXT)")
+            conn.execute("CREATE TABLE lane_leases (job_id TEXT, lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+            conn.execute("CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+
+            conn.execute("INSERT INTO stories VALUES ('s_remote', 'CLAIMED', 'run_remote', NULL, 'moku-horror-long')")
+            conn.execute("INSERT INTO runs VALUES ('run_remote', 'PROCESSING', NULL, NULL, 'moku-horror-long')")
+            conn.execute(
+                "INSERT INTO lane_leases VALUES ('s_remote', 'moku-horror-long', 'moku', 'lane-moku-horror-long:remote-host-99:1234', 'run_remote', ?, ?, ?)",
+                (now_ts - 20, now_ts - 5, now_ts + 1800),
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once(startup=False)
+
+        # Fresh remote heartbeat must NOT be reaped!
+        assert reaped == 0
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 1
+
+    def test_multi_node_clock_skew_tolerance_on_is_expired(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """In multi-node setups, leases expiring within the clock skew tolerance window are not prematurely reaped."""
+        monkeypatch.setenv("MULTI_NODE", "1")
+        monkeypatch.setenv("MULTI_NODE_CLOCK_SKEW_SECONDS", "60")
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute("CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, lane_id TEXT)")
+            conn.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT, lane_id TEXT)")
+            conn.execute("CREATE TABLE lane_leases (job_id TEXT, lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+            conn.execute("CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+
+            conn.execute("INSERT INTO stories VALUES ('s_skew', 'CLAIMED', 'run_skew', NULL, 'moku-horror-long')")
+            conn.execute("INSERT INTO runs VALUES ('run_skew', 'PROCESSING', NULL, NULL, 'moku-horror-long')")
+            conn.execute(
+                "INSERT INTO lane_leases VALUES ('s_skew', 'moku-horror-long', 'moku', 'lane-moku-horror-long:remote-node-2:1234', 'run_skew', ?, ?, ?)",
+                (now_ts - 900, now_ts - 10, now_ts - 5),  # 5s in past on local clock, but < 60s skew tolerance
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once(startup=False)
+
+        assert reaped == 0
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 1
+
+    def test_lease_with_null_job_id_deleted_cleanly(self, tmp_path: Path) -> None:
+        """A lease entry with NULL job_id is cleanly deleted upon reaping rather than causing infinite sweeps."""
+        db_file = tmp_path / "shorts_queue.db"
+        dead_pid = 999999
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute("CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)")
+            conn.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)")
+            conn.execute("CREATE TABLE leases (job_id TEXT, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+
+            conn.execute("INSERT INTO runs VALUES ('run_null_job', 'PROCESSING', NULL, NULL)")
+            conn.execute(f"INSERT INTO leases VALUES (NULL, 'moku', 'worker:localhost:{dead_pid}', 'run_null_job', 100, 100, 100)")
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once(startup=False)
+
+        assert reaped == 1
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM leases").fetchone()[0] == 0
+
+    def test_story_updated_by_run_id_when_job_id_is_null_in_leases(self, tmp_path: Path) -> None:
+        """In leases table, if job_id is NULL or mismatch, the story matching run_id is updated to RETRYABLE_FAILED."""
+        db_file = tmp_path / "shorts_queue.db"
+        dead_pid = 999999
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute("CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)")
+            conn.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)")
+            conn.execute("CREATE TABLE leases (job_id TEXT, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+
+            conn.execute("INSERT INTO stories VALUES ('story_matched_by_run', 'CLAIMED', 'run_orphan_story', NULL)")
+            conn.execute("INSERT INTO runs VALUES ('run_orphan_story', 'PROCESSING', NULL, NULL)")
+            conn.execute(f"INSERT INTO leases VALUES (NULL, 'moku', 'worker:localhost:{dead_pid}', 'run_orphan_story', 100, 100, 100)")
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once(startup=False)
+
+        assert reaped == 1
+        with sqlite3.connect(str(db_file)) as conn:
+            story = conn.execute("SELECT status FROM stories WHERE story_id = 'story_matched_by_run'").fetchone()
+            assert story[0] == "RETRYABLE_FAILED"
+
+    def test_ffmpeg_run_handles_empty_cmd(self) -> None:
+        """_ffmpeg_run returns CompletedProcess with error instead of raising IndexError on empty cmd."""
+        from lib.qa_gatekeeper import _ffmpeg_run
+        res = _ffmpeg_run([])
+        assert res.returncode == 1
+
+    def test_runcontext_post_init_detects_longform_via_qa_profile_and_duration(self) -> None:
+        """RunContext sets is_long_lane=True if lane qa_profile is longform or duration_min_sec >= 300."""
+        from unittest.mock import MagicMock
+        from pathlib import Path
+        from src.pipeline import RunContext
+
+        mock_lane = MagicMock()
+        mock_lane.orientation = "custom"
+        mock_lane.qa_profile = "longform"
+        mock_lane.duration_min_sec = 600
+
+        ctx = RunContext(
+            story={"story_id": "s2"},
+            story_id="s2",
+            run_id="r2",
+            channel_name="aelithia",
+            channel_key="aelithia",
+            lane=mock_lane,
+            repository=MagicMock(),
+            database=":memory:",
+            owner="owner",
+            lease_seconds=900,
+            settings=MagicMock(),
+            branding=MagicMock(),
+            profiler=MagicMock(),
+            directed=False,
+            generate_only=False,
+            engine_mode="loop",
+            is_loop_mode=True,
+            is_multiscene_mode=False,
+            subtitles_active=False,
+            work_dir=Path("/tmp"),
+            audio_path=Path("/tmp/a.wav"),
+            ass_path=Path("/tmp/a.ass"),
+            srt_path=Path("/tmp/a.srt"),
+            video_path=Path("/tmp/v.mp4"),
+            thumbnail_path=Path("/tmp/t.jpg"),
+            script_path=Path("/tmp/s.txt"),
+            visual_plan_path=Path("/tmp/vp.json"),
+            metadata_path=Path("/tmp/m.json"),
+            scene_manifest_path=Path("/tmp/sm.json"),
+        )
+        assert ctx.is_long_lane is True
+
