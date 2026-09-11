@@ -12,6 +12,8 @@ LEGACY_COOKIE_MARKERS = (
     "cookies_channel2",
     "COOKIES_CHANNEL2_PATH",
     "DECRYPTED_COOKIES_PATH",
+    "cookies_moku",
+    "COOKIES_MOKU_PATH",
 )
 
 
@@ -19,9 +21,9 @@ def _channel_auth(channel: str) -> dict:
     return json.loads((ROOT / "config" / "channels" / f"{channel}.json").read_text(encoding="utf-8"))["auth"]
 
 
-def test_moku_cookie_path_is_branded():
+def test_moku_cookie_path_is_generic_cookies():
     path = _channel_auth("moku")["cookies_path"]
-    assert path == "secrets/cookies_moku.json"
+    assert path == "secrets/cookies.json"
 
 
 def test_aelithia_cookie_path_is_branded():
@@ -37,26 +39,26 @@ def test_scifi_cookie_path_stays_channel_branded():
     assert "decrypted" not in path
 
 
-def test_config_exports_branded_cookie_constants():
+def test_config_exports_generic_cookie_constant():
     import src.config as cfg
 
-    assert hasattr(cfg, "COOKIES_MOKU_PATH")
-    assert hasattr(cfg, "COOKIES_AELITHIA_PATH")
+    assert hasattr(cfg, "COOKIES_PATH")
+    assert not hasattr(cfg, "COOKIES_MOKU_PATH")
     assert not hasattr(cfg, "DECRYPTED_COOKIES_PATH")
     assert not hasattr(cfg, "COOKIES_CHANNEL2_PATH")
-    assert Path(cfg.COOKIES_MOKU_PATH).name == "cookies_moku.json" or "cookies_moku" in str(cfg.COOKIES_MOKU_PATH)
+    assert Path(cfg.COOKIES_PATH).name == "cookies.json"
     assert "cookies_aelithia" in str(cfg.COOKIES_AELITHIA_PATH)
 
 
-def test_env_example_and_compose_use_branded_cookie_filenames():
+def test_env_example_and_compose_use_generic_cookie_filenames():
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     blob = example + "\n" + compose
-    for marker in ("decrypted_cookies", "cookies_channel2"):
+    for marker in ("decrypted_cookies", "cookies_channel2", "cookies_moku.json"):
         assert marker not in blob
-    assert "cookies_moku.json" in example
+    assert "cookies.json" in example
     assert "cookies_aelithia.json" in example
-    assert "cookies_moku.json" in compose
+    assert "cookies.json" in compose
     assert "cookies_aelithia.json" in compose
 
 

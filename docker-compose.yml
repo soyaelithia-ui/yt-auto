@@ -28,7 +28,7 @@ services:
       WORK_ROOT: /app/work
       ARTIFACT_ROOT: /app/artifacts
       SECRETS_DIR: /run/secrets
-      MOKU_COOKIES_PATH: /run/secrets/cookies_moku.json
+      COOKIES_PATH: /run/secrets/cookies.json
       AELITHIA_COOKIES_PATH: /run/secrets/cookies_aelithia.json
       MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/youtube_token.json
       AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/youtube_token_aelithia.json

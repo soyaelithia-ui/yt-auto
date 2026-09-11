@@ -189,7 +189,7 @@ yt-auto/
 │   ├── telegram_bot.py            # Bot de revisión con comando /health integrado
 │   └── ui.py                      # Teclados interactivos de aprobación
 ├── secrets/                       # Almacenamiento seguro de credenciales (cifrado local)
-│   ├── cookies_moku.txt           # Cookies de sesión Netscape para canal MOKU
+│   ├── cookies.txt                # Cookies de sesión Netscape para canal MOKU
 │   └── cookies_aelithia.txt       # Cookies de sesión Netscape para canal AELITHIA
 ├── src/
 │   ├── __init__.py

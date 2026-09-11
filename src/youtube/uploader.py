@@ -7,7 +7,7 @@ import subprocess
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from src.config import (
-    COOKIES_MOKU_PATH,
+    COOKIES_PATH,
     YOUTUBE_TOKEN_PATH,
     TOKEN_CHANNEL2_PATH,
     GOOGLE_CLIENT_ID,
@@ -541,7 +541,7 @@ def upload_video_via_playwright_ts(
     title: str,
     description: str,
     tags: List[str] = None,
-    cookies_path: str = COOKIES_MOKU_PATH,
+    cookies_path: str = COOKIES_PATH,
     dry_run: bool = False,
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,
@@ -600,7 +600,7 @@ def upload_video_via_playwright(
     title: str,
     description: str,
     tags: List[str] = None,
-    cookies_path: str = COOKIES_MOKU_PATH,
+    cookies_path: str = COOKIES_PATH,
     dry_run: bool = False,
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,

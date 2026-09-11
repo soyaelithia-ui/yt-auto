@@ -65,7 +65,7 @@ Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en 
 | Paso | Acción | Criterio de OK |
 |---|---|---|
 | **0** | Árbol vacío / clone limpio; `cp .env.example .env` y editar (sin secretos en git). | `.env` local `chmod 600`; no commitear. |
-| **1** | Layout `secrets/`: `drive_key.json`, `youtube_token.json`, `youtube_token_aelithia.json`, `cookies_moku.json`, `cookies_aelithia.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
+| **1** | Layout `secrets/`: `drive_key.json`, `youtube_token.json`, `youtube_token_aelithia.json`, `cookies.json`, `cookies_aelithia.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
 | **2** | Completar `.env`: Telegram (`TELEGRAM_*` + `TELEGRAM_ALLOWED_CHAT_ID`), Drive IDs (`DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`, …), channel IDs; `TELEGRAM_API_ID`/`HASH` para sidecar. | Placeholders secretos no vacíos en runtime. |
 | **3** | `./scripts/stage_agy.sh` | `build/agy` existe (gitignored). |
 | **4** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |

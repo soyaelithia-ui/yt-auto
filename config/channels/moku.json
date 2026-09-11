@@ -86,7 +86,7 @@
     "default_bg_theme": "scp"
   },
   "auth": {
-    "cookies_path": "secrets/cookies_moku.json",
+    "cookies_path": "secrets/cookies.json",
     "youtube_token_path": "secrets/youtube_token.json",
     "expected_youtube_channel_id": "UC8sStaR-cwz-x7MD4XKNUKA",
     "source_feed": "r/nosleep+r/SCP"

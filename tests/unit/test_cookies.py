@@ -254,7 +254,7 @@ def test_safe_preupload_failure_classification():
 
     err_expired = RuntimeError("Playwright session validation failed: Cookies expiradas (caducaron hace 2.0 días)")
     err_incomplete = RuntimeError("Playwright session validation failed: Cookies incompletas: falta LOGIN_INFO")
-    err_invalid = ValueError("Invalid cookies format in cookies_moku.json")
+    err_invalid = ValueError("Invalid cookies format in cookies.json")
     err_in_flight = RuntimeError("Upload stuck at 85% after network timeout")
 
     assert _safe_preupload_failure(err_expired) is True
