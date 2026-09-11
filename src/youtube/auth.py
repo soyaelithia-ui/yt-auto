@@ -100,26 +100,30 @@ def exchange_code(
     try:
         flow.fetch_token(code=code)
     except Exception as exc:
-        logger.warning(
-            "fetch_token with redirect_uri=%s failed: %s. Trying fallback uri...",
-            redirect_uri,
-            exc,
-        )
-        alt_uri = _ALT_REDIRECT if redirect_uri != _ALT_REDIRECT else _DEFAULT_REDIRECT
-        alt_verifier = verifiers.get(alt_uri) or code_verifier
-        flow = create_oauth_flow(
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=scopes or DEFAULT_SCOPES,
-            redirect_uri=alt_uri,
-        )
-        if alt_verifier:
-            flow.code_verifier = alt_verifier
-        try:
-            flow.fetch_token(code=code)
-        except Exception:
+        if "verifier" in str(exc).lower():
             flow.code_verifier = None
-            flow.fetch_token(code=code)
+            try:
+                flow.fetch_token(code=code)
+            except Exception:
+                pass
+        if not getattr(flow, "credentials", None):
+            logger.warning(
+                "fetch_token with redirect_uri=%s failed: %s. Trying fallback uri...",
+                redirect_uri,
+                exc,
+            )
+            alt_uri = _ALT_REDIRECT if redirect_uri != _ALT_REDIRECT else _DEFAULT_REDIRECT
+            flow = create_oauth_flow(
+                client_id=client_id,
+                client_secret=client_secret,
+                scopes=scopes or DEFAULT_SCOPES,
+                redirect_uri=alt_uri,
+            )
+            try:
+                flow.fetch_token(code=code)
+            except Exception:
+                flow.code_verifier = None
+                flow.fetch_token(code=code)
 
     save_credentials(flow.credentials, target_path)
     if verifier_path.is_file():

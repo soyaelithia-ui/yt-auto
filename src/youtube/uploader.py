@@ -678,6 +678,9 @@ def upload_video_via_playwright(
     
     pids_before = _get_playwright_pids()
 
+    browser_profile_dir = str(BASE_DIR / "browser_data" / "session")
+    os.makedirs(browser_profile_dir, exist_ok=True)
+
     try:
         with sync_playwright() as p:
             browser = None
@@ -685,7 +688,13 @@ def upload_video_via_playwright(
             page = None
             try:
                 try:
-                    browser = p.chromium.launch(headless=True)
+                    context = p.chromium.launch_persistent_context(
+                        user_data_dir=browser_profile_dir,
+                        headless=True,
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+                        viewport={"width": 1280, "height": 720},
+                        args=["--disable-blink-features=AutomationControlled"],
+                    )
                 except Exception as launch_err:
                     if "playwright install" in str(launch_err).lower() or "executable" in str(launch_err).lower():
                         raise RuntimeError(
@@ -693,13 +702,14 @@ def upload_video_via_playwright(
                         ) from launch_err
                     else:
                         raise launch_err
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-                    viewport={"width": 1280, "height": 720}
-                )
-                context.add_cookies(formatted_cookies)
-                
-                page = context.new_page()
+
+                if formatted_cookies:
+                    try:
+                        context.add_cookies(formatted_cookies)
+                    except Exception as cookie_err:
+                        logger.debug("Persistent context cookie seeding: %s", cookie_err)
+
+                page = context.pages[0] if context.pages else context.new_page()
                 
                 # 1. Navigate to upload page
                 logger.info("Navigating to https://youtube.com/upload...")
@@ -719,7 +729,11 @@ def upload_video_via_playwright(
                     raise RuntimeError(
                         "Falta la identidad pública esperada para Playwright"
                     )
-                visible_identity = page.locator("body").inner_text().lower()
+                visible_identity = (
+                    page.locator("body").inner_text().lower()
+                    + " "
+                    + page.url.lower()
+                )
                 for selector in ("#avatar-btn", "[aria-label*='Account']", "[aria-label*='Cuenta']"):
                     locator = page.locator(selector)
                     if locator.count() > 0:
@@ -751,8 +765,31 @@ def upload_video_via_playwright(
                 # Check if Google Identity Verification modal appeared
                 page.wait_for_timeout(3000)
                 if page.locator('text=Verifica tu identidad').count() > 0 or page.locator('text=Confirmar tu identidad').count() > 0:
+                    logger.warning("Google Identity Verification (2FA) detected.")
                     page.screenshot(path=f"{screenshot_dir}/identity_verification_error.png")
-                    raise RuntimeError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
+                    next_btn = page.locator('button:has-text("Siguiente"), button:has-text("Next")')
+                    if next_btn.count() > 0:
+                        logger.info("Clicking 'Siguiente' on Identity Verification modal to trigger 2FA notification...")
+                        next_btn.first.click()
+                        page.wait_for_timeout(5000)
+                        page.screenshot(path=f"{screenshot_dir}/identity_verification_challenge.png")
+                        try:
+                            from review.telegram_bot import send_telegram_message
+                            send_telegram_message("⚠️ *Google solicita verificación 2FA para publicar.* Revisa tu teléfono y confirma la notificación para continuar.")
+                        except Exception:
+                            pass
+                        # Wait up to 60s for user to verify on phone
+                        verified = False
+                        for _ in range(12):
+                            page.wait_for_timeout(5000)
+                            if page.locator('text=Verifica tu identidad').count() == 0 and page.locator('text=Confirmar tu identidad').count() == 0:
+                                verified = True
+                                logger.info("2FA Verification passed successfully!")
+                                break
+                        if not verified:
+                            raise RuntimeError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
+                    else:
+                        raise RuntimeError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
 
                 # 3. Fill Metadata
                 logger.info("Filling metadata...")
@@ -882,10 +919,6 @@ def upload_video_via_playwright(
                     except Exception as page_err:
                         logger.warning(f"Error closing page: {page_err}")
                 if context:
-                    try:
-                        context.clear_cookies()
-                    except Exception:
-                        pass
                     try:
                         context.close()
                     except Exception as ctx_err:
@@ -1170,7 +1203,7 @@ def upload_video(
                 cookies_path=effective_cookies,
                 dry_run=dry_run,
                 thumbnail_path=thumbnail_path,
-                expected_identity=f"{settings.public_name}|{settings.handle}",
+                expected_identity=f"{settings.public_name}|{settings.handle}|{settings.expected_youtube_channel_id}",
             )
             if dry_run:
                 return {"status": "DRY_RUN", "method": "PLAYWRIGHT"}

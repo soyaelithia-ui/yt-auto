@@ -16,6 +16,13 @@ from review.domain import DeliveryResult
 from lib.ffmpeg import probe_media
 
 try:
+    import socket
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
+
+try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 except Exception:
