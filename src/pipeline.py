@@ -371,6 +371,11 @@ class RunContext:
     text_fingerprints: dict[str, str] = field(default_factory=dict)
     file_fingerprints: dict[str, str] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.lane is not None:
+            if getattr(self.lane, "orientation", "") == "horizontal":
+                self.is_long_lane = True
+
     def heartbeat(self) -> bool:
         """Touch active lease heartbeat in database without raising if lease was lost."""
         try:
@@ -575,6 +580,12 @@ def _stage_01_claim_lease(
         try:
             with connect(database) as conn:
                 conn.execute("UPDATE stories SET lane_id = ? WHERE story_id = ?", (lane.id, str(story["story_id"])))
+                run_id_val = str(story.get("run_id") or "")
+                if run_id_val:
+                    try:
+                        conn.execute("UPDATE runs SET lane_id = ? WHERE run_id = ?", (lane.id, run_id_val))
+                    except Exception:
+                        pass
                 conn.commit()
         except Exception:
             logger.debug("No se pudo persistir lane_id en la historia", exc_info=True)

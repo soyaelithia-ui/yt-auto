@@ -374,3 +374,209 @@ class TestWatchdogResiliency:
             assert mock_ctx._heartbeat_ticker_active is True
         assert mock_ctx._heartbeat_ticker_active is False
 
+    def test_is_longform_lease_without_long_in_name_via_lane_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify is_longform_lease resolves longform from LaneProfile even if lane_id lacks 'long'."""
+        from unittest.mock import MagicMock
+        from src.core import lanes
+
+        mock_lane = MagicMock()
+        mock_lane.orientation = "horizontal"
+        mock_lane.qa_profile = "longform"
+        mock_lane.duration_min_sec = 600
+
+        monkeypatch.setattr(lanes, "get_lane", lambda lid: mock_lane if lid == "custom-cinema" else None)
+
+        assert is_longform_lease(lane_id="custom-cinema") is True
+        assert get_heartbeat_timeout_seconds(lane_id="custom-cinema") == 1800
+
+    def test_lease_table_uses_runs_table_fallback(self, tmp_path: Path) -> None:
+        """When stories.lane_id is NULL, LeaseReaper falls back to runs.lane_id."""
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+        cur_host = socket.gethostname()
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute(
+                "CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, lane_id TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT, lane_id TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+
+            # stories.lane_id is NULL, but runs.lane_id has the longform lane!
+            conn.execute(
+                "INSERT INTO stories VALUES ('reddit_post_xyz', 'CLAIMED', 'run_reddit_post', NULL, NULL)"
+            )
+            conn.execute(
+                "INSERT INTO runs VALUES ('run_reddit_post', 'PROCESSING', NULL, NULL, 'aelithia-aita-long')"
+            )
+            conn.execute(
+                "INSERT INTO leases VALUES ('reddit_post_xyz', 'aelithia', ?, 'run_reddit_post', ?, ?, ?)",
+                (
+                    f"{cur_host}:{os.getpid()}",
+                    now_ts - 500,
+                    now_ts - 400,  # 400s old: >300s but <1800s
+                    now_ts + 3600,
+                ),
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once()
+
+        # Must NOT be reaped because runs.lane_id indicated longform!
+        assert reaped == 0
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM leases").fetchone()[0] == 1
+
+    def test_reaper_continues_when_single_row_errors(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An error while reaping one row does not crash or abort sweeping the remaining rows."""
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+        cur_host = socket.gethostname()
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute(
+                "CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+
+            # Dead worker 1: PID 999990
+            conn.execute("INSERT INTO stories VALUES ('s1', 'CLAIMED', 'r1', NULL)")
+            conn.execute("INSERT INTO runs VALUES ('r1', 'PROCESSING', NULL, NULL)")
+            conn.execute(
+                "INSERT INTO lane_leases VALUES ('lane1', 'moku', ?, 'r1', ?, ?, ?)",
+                (f"lane1:{cur_host}:999990", now_ts - 100, now_ts - 50, now_ts + 100),
+            )
+
+            # Dead worker 2: PID 999991
+            conn.execute("INSERT INTO stories VALUES ('s2', 'CLAIMED', 'r2', NULL)")
+            conn.execute("INSERT INTO runs VALUES ('r2', 'PROCESSING', NULL, NULL)")
+            conn.execute(
+                "INSERT INTO lane_leases VALUES ('lane2', 'moku', ?, 'r2', ?, ?, ?)",
+                (f"lane2:{cur_host}:999991", now_ts - 100, now_ts - 50, now_ts + 100),
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once()
+
+        # Both dead workers reaped successfully
+        assert reaped == 2
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 0
+
+    def test_leases_reaper_does_not_clobber_rendered_or_published_story(self, tmp_path: Path) -> None:
+        """When reaping an expired lease, a story that reached RENDERED or PUBLISHED is not set back to RETRYABLE_FAILED."""
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+        cur_host = socket.gethostname()
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute(
+                "CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+
+            # Story already PUBLISHED
+            conn.execute("INSERT INTO stories VALUES ('story_done', 'PUBLISHED', 'run_done', NULL)")
+            conn.execute("INSERT INTO runs VALUES ('run_done', 'COMPLETED', NULL, NULL)")
+            conn.execute(
+                "INSERT INTO leases VALUES ('story_done', 'moku', ?, 'run_done', ?, ?, ?)",
+                (f"worker:{cur_host}:999999", now_ts - 500, now_ts - 400, now_ts - 10),  # expired TTL
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once()
+
+        assert reaped == 1
+        with sqlite3.connect(str(db_file)) as conn:
+            # Lease is deleted
+            assert conn.execute("SELECT COUNT(*) FROM leases").fetchone()[0] == 0
+            # Story remains PUBLISHED, not clobbered to RETRYABLE_FAILED!
+            story_status = conn.execute("SELECT status FROM stories WHERE story_id = 'story_done'").fetchone()[0]
+            assert story_status == "PUBLISHED"
+
+    def test_is_local_hostname_fqdn_matching(self) -> None:
+        """is_local_hostname matches FQDN hostnames against short hostname."""
+        from src.core.lease_reaper import is_local_hostname
+        cur_host = socket.gethostname()
+        short_host = cur_host.split(".")[0]
+
+        # Hostname with FQDN domain
+        owner_fqdn = f"lane-id:{short_host}.internal.net:12345"
+        assert is_local_hostname(owner_fqdn) is True
+
+        # Hostname short
+        owner_short = f"lane-id:{short_host}:12345"
+        assert is_local_hostname(owner_short) is True
+
+        # Remote host
+        owner_remote = "lane-id:other-server-node-99.internal.net:12345"
+        assert is_local_hostname(owner_remote) is False
+
+    def test_extract_pid_from_owner_numeric_token(self) -> None:
+        """extract_pid_from_owner extracts PID from various owner string formats."""
+        from src.core.lease_reaper import extract_pid_from_owner
+        assert extract_pid_from_owner("lane-id:host:12345") == 12345
+        assert extract_pid_from_owner("worker_42") == 42
+        assert extract_pid_from_owner("lane:host:54321:worker") == 54321
+        assert extract_pid_from_owner("invalid_owner") is None
+        assert extract_pid_from_owner("") is None
+
+    def test_runcontext_post_init_sets_is_long_lane(self) -> None:
+        """RunContext initializes is_long_lane=True on creation when lane.orientation is horizontal."""
+        from unittest.mock import MagicMock
+        from pathlib import Path
+        from src.pipeline import RunContext
+
+        mock_lane = MagicMock()
+        mock_lane.orientation = "horizontal"
+
+        ctx = RunContext(
+            story={"story_id": "s1"},
+            story_id="s1",
+            run_id="r1",
+            channel_name="moku",
+            channel_key="moku",
+            lane=mock_lane,
+            repository=MagicMock(),
+            database=":memory:",
+            owner="owner",
+            lease_seconds=900,
+            settings=MagicMock(),
+            branding=MagicMock(),
+            profiler=MagicMock(),
+            directed=False,
+            generate_only=False,
+            engine_mode="loop",
+            is_loop_mode=True,
+            is_multiscene_mode=False,
+            subtitles_active=False,
+            work_dir=Path("/tmp"),
+            audio_path=Path("/tmp/a.wav"),
+            ass_path=Path("/tmp/a.ass"),
+            srt_path=Path("/tmp/a.srt"),
+            video_path=Path("/tmp/v.mp4"),
+            thumbnail_path=Path("/tmp/t.jpg"),
+            script_path=Path("/tmp/s.txt"),
+            visual_plan_path=Path("/tmp/vp.json"),
+            metadata_path=Path("/tmp/m.json"),
+            scene_manifest_path=Path("/tmp/sm.json"),
+        )
+        assert ctx.is_long_lane is True
+

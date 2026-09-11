@@ -51,6 +51,9 @@ def extract_pid_from_owner(owner: str) -> Optional[int]:
     match = re.search(r"[:_](\d+)$", owner)
     if match:
         return int(match.group(1))
+    for part in owner.split(":"):
+        if part.isdigit():
+            return int(part)
     return None
 
 
@@ -59,16 +62,24 @@ def is_local_hostname(owner: str) -> bool:
     if not owner:
         return False
     current_host = socket.gethostname()
+    current_short = current_host.split(".")[0].lower()
     if ":" in owner:
         parts = owner.split(":")
         if len(parts) >= 3:
             # Multi-segment format: prefix:hostname:pid (e.g. lane-id:hostname:pid)
-            return parts[1] == current_host or parts[1] == "localhost"
+            host_part = parts[1].lower()
+            return (
+                host_part in (current_host.lower(), current_short, "localhost")
+                or host_part.split(".")[0] == current_short
+            )
         # Two-segment format: host_or_prefix:pid (e.g. worker:pid or localhost:pid)
-        prefix_or_host = parts[0]
+        prefix_or_host = parts[0].lower()
         if prefix_or_host in ("worker", "legacy", "default"):
             return True
-        return prefix_or_host == current_host or prefix_or_host == "localhost"
+        return (
+            prefix_or_host in (current_host.lower(), current_short, "localhost")
+            or prefix_or_host.split(".")[0] == current_short
+        )
     return True
 
 
@@ -82,7 +93,21 @@ def is_longform_lease(
 ) -> bool:
     """Return True if lease belongs to a longform production lane or format."""
     combined = f"{lane_id or ''}:{owner or ''}:{job_id or ''}".lower()
-    return "long" in combined
+    if "long" in combined:
+        return True
+    if lane_id:
+        try:
+            from src.core.lanes import get_lane
+            lane = get_lane(lane_id)
+            if lane and (
+                getattr(lane, "orientation", "") == "horizontal"
+                or getattr(lane, "qa_profile", "") == "longform"
+                or (getattr(lane, "duration_min_sec", 0) or 0) >= 300
+            ):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def get_heartbeat_timeout_seconds(
@@ -149,7 +174,11 @@ class LeaseReaper:
             # 1. Check leases table
             try:
                 rows = conn.execute("SELECT * FROM leases").fetchall()
-                for row in rows:
+            except sqlite3.OperationalError:
+                rows = []
+
+            for row in rows:
+                try:
                     job_id = row["job_id"] if "job_id" in row.keys() else None
                     run_id = row["run_id"]
                     owner = row["owner"]
@@ -162,6 +191,10 @@ class LeaseReaper:
                         s_row = conn.execute("SELECT lane_id FROM stories WHERE story_id = ?", (job_id,)).fetchone()
                         if s_row and s_row["lane_id"]:
                             lane_id_hint = s_row["lane_id"]
+                        elif run_id:
+                            r_row = conn.execute("SELECT lane_id FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+                            if r_row and r_row["lane_id"]:
+                                lane_id_hint = r_row["lane_id"]
                     except Exception:
                         pass
 
@@ -201,8 +234,8 @@ class LeaseReaper:
                         conn.execute("BEGIN IMMEDIATE")
                         conn.execute("DELETE FROM leases WHERE job_id = ? AND run_id = ?", (job_id, run_id))
                         conn.execute(
-                            "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE story_id = ? AND run_id = ?",
-                            (JobStatus.RETRYABLE_FAILED.value, reason, job_id, run_id),
+                            "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE story_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
+                            (JobStatus.RETRYABLE_FAILED.value, reason, job_id),
                         )
                         conn.execute(
                             "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
@@ -210,13 +243,21 @@ class LeaseReaper:
                         )
                         conn.commit()
                         reaped_count += 1
-            except sqlite3.OperationalError:
-                pass
+                except Exception as row_exc:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    logger.debug("Failed to reap lease row: %s", row_exc)
 
             # 2. Check lane_leases table
             try:
                 lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
-                for row in lane_rows:
+            except sqlite3.OperationalError:
+                lane_rows = []
+
+            for row in lane_rows:
+                try:
                     job_id = row["job_id"] if "job_id" in row.keys() else None
                     lane_id = row["lane_id"]
                     run_id = row["run_id"]
@@ -260,18 +301,28 @@ class LeaseReaper:
                         )
                         conn.execute("BEGIN IMMEDIATE")
                         conn.execute("DELETE FROM lane_leases WHERE lane_id = ? AND run_id = ?", (lane_id, run_id))
-                        conn.execute(
-                            "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE run_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
-                            (JobStatus.RETRYABLE_FAILED.value, reason, run_id),
-                        )
+                        if job_id:
+                            conn.execute(
+                                "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE (run_id = ? OR story_id = ?) AND status IN ('CLAIMED', 'PROCESSING')",
+                                (JobStatus.RETRYABLE_FAILED.value, reason, run_id, job_id),
+                            )
+                        else:
+                            conn.execute(
+                                "UPDATE stories SET status = ?, run_id = NULL, error_msg = ? WHERE run_id = ? AND status IN ('CLAIMED', 'PROCESSING')",
+                                (JobStatus.RETRYABLE_FAILED.value, reason, run_id),
+                            )
                         conn.execute(
                             "UPDATE runs SET status = ?, finished_at = ?, error_code = ? WHERE run_id = ?",
                             (JobStatus.RETRYABLE_FAILED.value, now_utc, err_code, run_id),
                         )
                         conn.commit()
                         reaped_count += 1
-            except sqlite3.OperationalError:
-                pass
+                except Exception as row_exc:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    logger.debug("Failed to reap lane lease row: %s", row_exc)
 
         return reaped_count
 
