@@ -223,6 +223,34 @@ def test_wrap_two_lines_word_bounded_aita_fixture(spy_draw_text):
     assert "SECRETO" in hook and "FAMILIA" in hook
 
 
+def test_extract_hook_text_drama_motifs_and_length_bounds():
+    # 1. Boda motif
+    h_boda = ThumbnailEngine._extract_hook_text(
+        "¿Soy la mala por negarme a ir a la boda de mi hermana porque invitó a mi agresor?"
+    )
+    assert h_boda == "¿ARRUINÉ SU BODA?"
+
+    # 2. Apartamento / herencia motif
+    h_apt = ThumbnailEngine._extract_hook_text(
+        "¿Soy la mala por negarme a vender mi apartamento heredado para pagar las deudas de mi hermano?"
+    )
+    assert h_apt == "¿VENDER MI CASA?"
+
+    # 3. Deudas motif
+    h_deudas = ThumbnailEngine._extract_hook_text(
+        "AITA por negarme a pagar la fianza y las deudas de mi primo irresponsable"
+    )
+    assert h_deudas == "¿PAGAR SUS DEUDAS?"
+
+    # 4. Long arbitrary title bounded to <= 38 chars strictly at word boundary
+    long_title = "ESTA ES UNA HISTORIA TOTALMENTE VERÍDICA QUE NUNCA ANTES HABÍA SIDO CONTADA EN NINGUNA PARTE"
+    h_long = ThumbnailEngine._extract_hook_text(long_title)
+    assert len(h_long) <= 38
+    # No word slicing
+    for w in h_long.split():
+        assert w in long_title.split()
+
+
 def test_ctr_layout_disables_glow_and_tilt(monkeypatch: pytest.MonkeyPatch):
     captured = []
     orig = DynamicTypographyEngine.draw_text_with_effects

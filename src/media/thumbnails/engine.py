@@ -259,4 +259,42 @@ class ThumbnailEngine:
             if right:
                 return right.split(".")[0].strip().upper()
             t = left.strip()
+
+        t_low = t.lower()
+        # High-CTR relationship & drama thematic hooks
+        if any(w in t_low for w in ("boda", "matrimonio", "casamiento")):
+            return "¿ARRUINÉ SU BODA?"
+        if any(w in t_low for w in ("apartamento", "herencia", "heredado")):
+            return "¿VENDER MI CASA?"
+        if any(w in t_low for w in ("deuda", "deudas", "fianza", "prestamo", "préstamo")):
+            return "¿PAGAR SUS DEUDAS?"
+        if any(w in t_low for w in ("infiel", "infidelidad", "amante", "engaño", "engano")):
+            return "¿TRAICIÓN O VENGANZA?"
+
+        # Strip standard AITA boilerplate prefixes
+        for prefix in (
+            "¿soy la mala por ", "¿soy el malo por ",
+            "soy la mala por ", "soy el malo por ",
+            "¿soy la mala ", "¿soy el malo ",
+            "aita por ", "aita for ", "aita: ", "aita ",
+        ):
+            if t_low.startswith(prefix):
+                t = t[len(prefix):].strip().rstrip("?")
+                t_low = t.lower()
+                break
+
+        # Bound length to 6 words or ~38 chars max to prevent safe zone overflow on thumbnail plates
+        words = t.split()
+        if len(words) > 6 or len(t) > 38:
+            short_words = []
+            curr_len = 0
+            for w in words[:6]:
+                if curr_len + len(w) + (1 if short_words else 0) <= 38:
+                    short_words.append(w)
+                    curr_len += len(w) + (1 if len(short_words) > 1 else 0)
+                else:
+                    break
+            if short_words:
+                t = " ".join(short_words)
+
         return (t or "HISTORIA EXCLUSIVA").upper()

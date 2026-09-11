@@ -314,6 +314,10 @@ STORY_MOTIF_KEYWORDS: Dict[str, Tuple[str, ...]] = {
     "lake": ("lago", "laguna", "estanque", "hielo", "congelado", "inundado", "inundación", "sótano inundado"),
     "space": ("espacio", "universo", "galaxia", "estrella", "planeta", "órbita", "orbita", "nebulosa", "agujero negro", "interestelar"),
     "bakery": ("panadería", "panaderia", "pan", "horno", "repostería", "reposteria"),
+    "boda": ("boda", "matrimonio", "casamiento", "novia", "novio", "damas de honor", "recepción", "recepcion"),
+    "apartamento": ("apartamento", "herencia", "heredado", "departamento", "propiedad", "casa propia"),
+    "deudas": ("deuda", "deudas", "fianza", "préstamo", "prestamo", "bancarrota", "dinero"),
+    "hermano": ("hermano", "hermana", "suegra", "cuñado", "cunado", "cuñada", "cunada", "primo", "prima"),
 }
 
 

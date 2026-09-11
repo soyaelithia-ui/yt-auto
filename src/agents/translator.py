@@ -75,9 +75,10 @@ class TranslatorAgent(ProgrammaticAgent):
 
         if not parsed or not parsed.get("translated_text"):
             clean_trans = self._basic_fallback_clean(text_to_translate)
+            from src.branding import truncate_at_word_boundary
             parsed = {
                 "translated_text": clean_trans,
-                "viral_titles": [clean_trans[:50]],
+                "viral_titles": [truncate_at_word_boundary(clean_trans, 50)],
             }
 
         parsed["translated_text"] = self._clean_residual_english(parsed["translated_text"])

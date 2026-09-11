@@ -304,6 +304,8 @@ class LoopVideoEngine(BaseVideoCompositor):
         db_path: str | None = None,
         catalog: Optional[LoopCatalogRepository] = None,
         enable_live_synth: bool = False,
+        shorts_videos_dir: str | Path | None = None,
+        longs_videos_dir: str | Path | None = None,
     ) -> None:
         """
         Initializes the LoopVideoEngine with asset directories and loop catalog database.
@@ -340,8 +342,19 @@ class LoopVideoEngine(BaseVideoCompositor):
         self.enable_live_synth = enable_live_synth or (
             os.environ.get("ENABLE_LIVE_LOOP_SYNTH", "0").lower() in ("1", "true", "yes")
         )
-        self.shorts_videos_dir = SHORTS_VIDEOS_DIR
-        self.longs_videos_dir = LONGS_VIDEOS_DIR
+        if shorts_videos_dir is not None:
+            self.shorts_videos_dir = Path(shorts_videos_dir).expanduser().resolve()
+        elif loops_root_dir is not None:
+            self.shorts_videos_dir = (self.loops_root_dir / "shorts").resolve()
+        else:
+            self.shorts_videos_dir = SHORTS_VIDEOS_DIR
+
+        if longs_videos_dir is not None:
+            self.longs_videos_dir = Path(longs_videos_dir).expanduser().resolve()
+        elif loops_root_dir is not None:
+            self.longs_videos_dir = (self.loops_root_dir / "longs").resolve()
+        else:
+            self.longs_videos_dir = LONGS_VIDEOS_DIR
 
     _rotation_indices: dict[str, int] = {"shorts": 0, "longs": 0}
 

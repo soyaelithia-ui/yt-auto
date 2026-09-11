@@ -984,6 +984,8 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
                 "asylum": "¿QUÉ HABÍA EN EL PASILLO?", "cabin": "¿QUÉ HABÍA EN LA CABAÑA?",
                 "cemetery": "¿QUÉ HABÍA EN LA TUMBA?", "diner": "¿QUÉ PASÓ A LAS 3 AM?",
                 "bakery": "¿QUÉ HABÍA EN EL HORNO?", "mar": "¿QUÉ HABÍA EN EL FARO?",
+                "boda": "¿ARRUINÉ SU BODA?", "hermano": "¿TRAICIÓN FAMILIAR?",
+                "apartamento": "¿EXIGEN MI HERENCIA?", "deudas": "¿PAGAR SUS DEUDAS?",
             }
             thumb_hook = motif_hooks.get(motifs_for_thumb[0])
 

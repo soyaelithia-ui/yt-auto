@@ -134,6 +134,33 @@ class TestBrandingEngine(unittest.TestCase):
         # Reload after test to restore standard configuration
         ChannelProfileRegistry._ensure_loaded(force_reload=True)
 
+    def test_truncate_at_word_boundary_never_splits_words(self):
+        from src.branding import truncate_at_word_boundary
+
+        text = "¿Soy la mala por negarme a vender mi apartamento heredado para pagar las deudas de mi hermano?"
+        res = truncate_at_word_boundary(text, 50)
+        self.assertLessEqual(len(res), 50)
+        self.assertTrue(res.endswith("...?"))
+        self.assertNotIn("apartamento h...", res)
+        clean_words = res.replace("...?", "").replace("¿", "").split()
+        original_words = text.replace("?", "").replace("¿", "").split()
+        for w in clean_words:
+            self.assertIn(w, original_words)
+
+    def test_generate_title_word_bounded_spanish_questions(self):
+        b = get_channel_branding("aelithia")
+        t1 = "¿Soy la mala por negarme a ir a la boda de mi hermana porque invitó a mi agresor y arruinó la relación familiar para siempre?"
+        res1 = b.generate_title(t1)
+        self.assertLessEqual(len(res1), 100)
+        self.assertIn("Aelithia", res1)
+        self.assertTrue(res1.endswith("Aelithia"))
+        self.assertNotIn("hermana p...", res1)
+
+        t2 = "¿Soy la mala por negarme a vender mi apartamento heredado para pagar las deudas de mi hermano?"
+        res2 = b.generate_title(t2)
+        self.assertLessEqual(len(res2), 100)
+        self.assertNotIn("apartamento h...", res2)
+
 
 if __name__ == "__main__":
     unittest.main()

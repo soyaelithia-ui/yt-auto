@@ -12,6 +12,28 @@ from src.log import get_logger
 logger = get_logger("branding")
 
 
+def truncate_at_word_boundary(text: str, max_len: int, trailer: str = "...") -> str:
+    """Truncate string to max_len strictly at word boundary without splitting words.
+
+    Preserves Spanish question mark closing ('...?') if string opens with '¿'.
+    """
+    clean = (text or "").strip()
+    if not clean or len(clean) <= max_len:
+        return clean
+
+    is_question = clean.startswith("¿")
+    effective_trailer = "...?" if (is_question and not trailer.endswith("?")) else trailer
+    budget = max(1, max_len - len(effective_trailer))
+
+    sliced = clean[:budget]
+    last_space = sliced.rfind(" ")
+    if last_space > int(budget * 0.4):
+        sliced = sliced[:last_space]
+
+    sliced = sliced.rstrip(" ,;.:-_'\"¿?")
+    return f"{sliced}{effective_trailer}"
+
+
 @dataclass
 class ChannelBranding:
     channel_key: str              # Canonical key: e.g. "moku" or "aelithia"
@@ -33,7 +55,7 @@ class ChannelBranding:
     def generate_title(self, raw_title: str) -> str:
         """
         Formats a raw translated title into a high-CTR Spanish title format.
-        Ensures the final title never exceeds YouTube's 100-character limit.
+        Ensures the final title never exceeds YouTube's 100-character limit and respects word boundaries.
         """
         clean_t = (raw_title or "").strip()
         if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
@@ -43,8 +65,8 @@ class ChannelBranding:
             suffix = f" | Historias Reales en {self.display_name}" if (not clean_t.startswith("¿") and not clean_t.startswith("[")) else f" | {self.display_name}"
             full = f"{clean_t}{suffix}"
             if len(full) > 100:
-                max_clean_len = max(1, 100 - len(suffix) - 3)
-                clean_t = clean_t[:max_clean_len].strip() + "..."
+                max_clean_len = max(1, 100 - len(suffix))
+                clean_t = truncate_at_word_boundary(clean_t, max_clean_len)
                 full = f"{clean_t}{suffix}"
             return full
         else:
@@ -52,8 +74,8 @@ class ChannelBranding:
             suffix = f" | {self.display_name}"
             full = f"{prefix}{clean_t}{suffix}"
             if len(full) > 100:
-                max_clean_len = max(1, 100 - len(prefix) - len(suffix) - 3)
-                clean_t = clean_t[:max_clean_len].strip() + "..."
+                max_clean_len = max(1, 100 - len(prefix) - len(suffix))
+                clean_t = truncate_at_word_boundary(clean_t, max_clean_len)
                 full = f"{prefix}{clean_t}{suffix}"
             return full
 
@@ -116,16 +138,9 @@ class ChannelBranding:
         if not clean_t:
             clean_t = self.default_title_fallback
 
-        # High-CTR punchy title under 60 chars
+        # High-CTR punchy title under 60 chars strictly at word boundaries
         if len(clean_t) > 55:
-            words = clean_t.split()
-            short_t = ""
-            for w in words:
-                if len((short_t + " " + w).strip()) <= 52:
-                    short_t = (short_t + " " + w).strip()
-                else:
-                    break
-            short_title = f"{short_t}..." if short_t else clean_t[:52] + "..."
+            short_title = truncate_at_word_boundary(clean_t, 55)
         else:
             short_title = clean_t
 
@@ -141,7 +156,7 @@ class ChannelBranding:
             full_title = f"{short_title} #Shorts"
 
         if len(full_title) > 100:
-            full_title = full_title[:97] + "..."
+            full_title = truncate_at_word_boundary(full_title, 100)
 
         summary_text = (summary or f"Relato corto en {self.display_name}").strip()
         description = (

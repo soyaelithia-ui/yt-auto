@@ -358,7 +358,7 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         title_x = safe_zone.left
         max_title_w = int(safe_zone.width * 0.92)
         if is_vertical:
-            max_title_w = min(int(w * 0.84), max(64, w - 260))
+            max_title_w = min(int(w * 0.80), max(64, w - 280))
             title_x = (w - max_title_w) // 2
         estimated_lines = 2 if len(clean_title) > 16 else 1
         estimated_text_h = int(estimated_lines * title_font_size * (1.08 if is_vertical else 1.12))
@@ -366,7 +366,8 @@ class GeneralCinematicLayout(BaseThumbnailLayout):
         if is_vertical:
             ui_bot = min(450, max(1, int(round(h * 450 / 1920))))
             ui_rail = min(120, max(1, int(round(w * 120 / 1080))))
-            title_y = max(safe_zone.top, min(safe_zone.bottom, h - ui_bot - 10) - estimated_text_h)
+            safe_center_y = int(safe_zone.top + (safe_zone.bottom - safe_zone.top) * 0.42)
+            title_y = max(safe_zone.top + 20, min(h - ui_bot - 40 - estimated_text_h, safe_center_y))
             scrim_top = max(safe_zone.top, title_y - int(h * 0.025))
             scrim_bot = min(safe_zone.bottom, h - ui_bot, title_y + estimated_text_h + int(h * 0.02))
             draw.rectangle([(0, h - ui_bot), (w, h)], fill=(0, 0, 0, 160))

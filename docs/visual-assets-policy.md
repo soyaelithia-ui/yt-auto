@@ -1,16 +1,16 @@
 # Visual assets policy (backgrounds vs thumbnails)
 
 > **Estado:** OFICIAL / REPOSITORIO  
-> **Alcance:** `assets/visual_bank/`, scenery, loops, thumbnails, title cards  
+> **Alcance:** `assets/videos/`, `assets/loops/`, thumbnails, title cards  
 > **Última actualización:** 2026-09
 
 Single source of truth for classifying visual media. Keep this short; other docs link here instead of restating rules.
 
 ## Rules
 
-1. **Video backgrounds** = clean scenery stills or motion loops (`assets/visual_bank/{channel}/scenery/`, `assets/loops/`, catalog procedural). **No** baked title text, warning badges, CRT/HUD chrome, Reddit UI, or finished covers. Prefer motion loops over scenery stills for video scenes; empty scenery falls through to catalog/procedural loops (never a baked title card). Filenames containing BITÁCORA/ADVERTENCIA are never indexed as backgrounds. Still backgrounds use canonical Ken Burns (zoom 1.00→1.10, ≥12 s @ 30 fps defaults).
+1. **Video backgrounds** = clean motion loops (`assets/videos/shorts/`, `assets/videos/longs/`, `assets/loops/`) or certified scenery stills. **No** baked title text, warning badges, CRT/HUD chrome, Reddit UI, or finished covers. Continuous single-loops are resolved via `LoopVideoEngine.resolve_continuous_loop`. Filenames containing BITÁCORA/ADVERTENCIA are never indexed as backgrounds. Still backgrounds use canonical Ken Burns (zoom 1.00→1.10, ≥12 s @ 30 fps defaults).
 2. **Title text / warning badges / HUD chrome** = thumbnail composition path only (`src/thumbnail.py`, layouts under `src/media/thumbnails/`, clean bases in `assets/thumbnails/templates/`). Compose text dynamically — never use pre-baked title cards as video frames or as thumbnail bases.
-3. **Misclassified title cards** go to `assets/visual_bank/_quarantine_title_cards/`. **Never** re-index them as scenery backgrounds. Do not move files back into `scenery/` until baked text/UI is removed.
+3. **Misclassified title cards** = Quarantined and excluded from backgrounds. **Never** re-index them as scenery backgrounds. Do not use files until baked text/UI is removed.
 
 ## CTR composition
 
@@ -19,7 +19,7 @@ Production video renderer is FFmpeg. Do not treat WebGL/Canvas as the production
 - **Thumbnails = 3 layers:** clean backdrop (`assets/thumbnails/templates/{aita,horror,scp}/master_backdrop.jpg`, no baked OSD) → dynamic title (≤2 lines, word wrap, cream/white + black outline, no neon glow) → optional badge (omit NONE/empty; AITA `YTA`/`NTA`/`ESH`/`INFO`; SCP `SAFE`/`EUCLID`/`KETER`; horror `ADVERTENCIA · TAPE` only if `tape_id`). Camcorder OSD default off.
 - **Video stills:** Ken Burns via FFmpeg `zoompan` 1.00→1.10; never a single zoompan >20s; split to 12–15s hard cuts (≥2–3 planes if duration >20s). Motion loops preferred; not Ken-Burned. Overlays (`film_grain` / `vignette` / `tv_static`) alpha 15–35%, never as background. No grey procedural loop as plane 0.
 - **Audio (P1):** AAC 44100 + loudnorm `I=-16`.
-- `assets/visual_bank/{channel}/scenery/` has clean stills (min 3/channel) copied from background_scenes; quarantine title cards stay excluded.
+- Continuous loops reside in `assets/videos/shorts/` and `assets/videos/longs/`; master catalog metadata in `assets/loops/bank_manifest.json`.
 
 ## Code guards (do not bypass)
 
@@ -32,4 +32,3 @@ Production video renderer is FFmpeg. Do not treat WebGL/Canvas as the production
 ## Related (do not duplicate)
 
 - Catalog integrity (CI seed vs prod, no ghost scenery): [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md)
-- Quarantine folder note: [`assets/visual_bank/_quarantine_title_cards/README.md`](../assets/visual_bank/_quarantine_title_cards/README.md)
