@@ -345,3 +345,32 @@ class TestLoopHotPathNoBurnGuardrails:
         assert "is_stream_copy = (not subs_active)" not in text
 
 
+class TestResourceTargetGovernanceGuardrails:
+    """Enforce strict 2 Cores and 2 GB RAM target governance in AGENTS.md and technical documentation."""
+
+    def test_reg14_agents_governance_contains_resource_target(self) -> None:
+        agents_doc = REPO_ROOT / "AGENTS.md"
+        assert agents_doc.exists(), "AGENTS.md must exist in repo root"
+        content = agents_doc.read_text(encoding="utf-8")
+        assert "Strict Resource Target & Performance Budget (2 Cores, 2 GB RAM)" in content, (
+            "REG-14 VIOLATION: Section 5 Resource Target & Performance Budget missing in AGENTS.md"
+        )
+        assert "≤ 2 CPU Cores" in content, (
+            "REG-14 VIOLATION: Target ceiling of ≤ 2 CPU Cores missing in AGENTS.md"
+        )
+        assert "≤ 2.0 GiB RAM" in content, (
+            "REG-14 VIOLATION: Target ceiling of ≤ 2.0 GiB RAM missing in AGENTS.md"
+        )
+        assert "Resource Work Refusal" in content, (
+            "REG-14 VIOLATION: Resource Work Refusal policy missing in AGENTS.md"
+        )
+
+    def test_reg14_ffmpeg_low_cpu_documents_resource_target(self) -> None:
+        doc = REPO_ROOT / "docs" / "FFMPEG_LOW_CPU.md"
+        assert doc.exists(), "docs/FFMPEG_LOW_CPU.md must exist"
+        content = doc.read_text(encoding="utf-8")
+        assert "Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)" in content, (
+            "REG-14 VIOLATION: Target Resource Envelope rule missing in docs/FFMPEG_LOW_CPU.md"
+        )
+
+

@@ -24,3 +24,14 @@
 - Use `scripts/agent_worktree.sh` for create, force-remove, list, and prune. It MUST NOT delete or alter the primary repository checkout under any cleanup flag or argument error.
 - `scripts/setup_worktree_env.sh` MUST idempotently link `.venv`, `.agents`, and `.env` into derived worktrees using safe relative (fallback absolute) paths. Never print secret file contents.
 - Prefer shipping production video value over cosmetic refactors; do not rewrite working `src/` solely to slim line count when tests and performance contracts already pass.
+
+## 5. Strict Resource Target & Performance Budget (2 Cores, 2 GB RAM)
+- **Hard Target Ceiling (Meta Objetivo)**: All pipeline workflows, background daemons, and media processing MUST operate within a target ceiling of **≤ 2 CPU Cores** (≤ 200% across all concurrent threads) and **≤ 2.0 GiB RAM** (2,048 MiB peak memory). Docker cgroups maintain an emergency margin (`cpus: 4.0`, `mem_limit: 6g`) solely to prevent premature OOM-kills, but software design and agents must treat 2 Cores and 2 GB RAM as the inviolable operational envelope.
+- **Monotonic Optimization Directive**: Resource consumption must only decrease or remain stable over time; it must NEVER spike or climb across commits. Agents must actively seek lower CPU and memory footprints where logically possible and viable without degrading output quality.
+- **Mandatory Resource Guardrails**:
+  - FFmpeg execution must strictly bound threads (`-threads 2` on QA probes, max `-threads 4` on renders).
+  - Video composition must prioritize Stream-Copy (`-c:v copy`) to avoid CPU-intensive re-encoding.
+  - Media analysis and loudness probes must skip decoding video frames using `-vn`.
+  - In-memory video/audio buffers or raw image loops (e.g. unconstrained Pillow loops) are strictly prohibited; stream assets from disk.
+  - Concurrency is bounded by semaphores (`_SHORT_RENDER_SEMAPHORE = 2`, `_LONG_RENDER_SEMAPHORE = 1`).
+- **Resource Work Refusal**: If any architectural change, library, dependency, or feature causes steady-state or peak resource usage to exceed the 2 Cores / 2 GB RAM target ceiling, agents MUST REFUSE the change and optimize the implementation before merging.

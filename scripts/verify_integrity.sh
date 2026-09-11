@@ -123,7 +123,7 @@ fi
 
 echo "⏳ Running automated anti-regression test suite..."
 if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" tests/unit/test_anti_regression_guardrails.py -q > /dev/null 2>&1; then
-    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-13) passed 100%."
+    echo "✅ [PASS] Anti-regression test suite (REG-01 to REG-14) passed 100%."
 else
     echo "❌ [FAIL] Anti-regression test suite failed or pytest not executable!"
     FAILURES=$((FAILURES + 1))

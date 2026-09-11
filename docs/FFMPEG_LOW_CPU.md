@@ -21,10 +21,11 @@ Helpers: `src/media/encode_defaults.py` (`default_render_preset`, `default_rende
 5. **QA gating live fallbacks thread limiting contract (`-threads 2`)**: When analyzing uncertified media lacking precomputed manifest metrics, live FFmpeg fallback subprocesses (`detect_long_black_frames` and `analyze_perceptual_luminance` in `src/core/quality.py`) strictly enforce `-threads 2` immediately preceding `-i`. This caps CPU thread utilization and prevents 100% core spikes or host exhaustion on multi-core VPS environments.
 6. **Certified catalog assets stream-copy & QA bypass guarantee**: Master video assets indexed in `assets/loops/bank_manifest.json` contain certified empirical visual metrics (`longest_black_seconds: 0.0` and `perceptual_luminance`). Prepublication validation (`validate_prepublication` in `src/core/quality.py`) detects `report.facts["black_source"] == "precomputed_visual"` and `report.facts["luminance_source"] == "precomputed_visual"`, bypassing CPU-heavy live frame decoding entirely (0 frames decoded). Coupled with `-c:v copy` muxing in `LoopVideoEngine` and `MultiSceneCompositor`, video delivery achieves near-zero CPU overhead.
 7. **Post-publish disk reclamation**: Inmediatamente tras la confirmación de subida a YouTube (`PUBLISHED`) y respaldo en Drive, `delete_local_post_publication` elimina el archivo de video final `.mp4` y audios TTS (`.wav`/`.mp3`), asegurando que el host mantenga espacio libre y cero fugas de almacenamiento sin alterar los metadatos ligeros de auditoría.
+8. **Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)**: El hot path de producción está dimensionado para operar bajo un techo objetivo de **≤ 2 CPU Cores** (≤ 200% de CPU agregada) y **≤ 2.0 GiB RAM** (2,048 MiB de memoria residente pico). Cualquier desarrollo o refactorización que aumente el consumo sostenido de recursos por encima de este umbral debe ser rechazado. Docker compose mantiene cgroups de seguridad más amplios (`cpus: 4.0`, `mem_limit: 6g`) solo para evitar terminaciones abruptas OOM en picos esporádicos, pero el software debe ceñirse al presupuesto de 2 Cores / 2 GB RAM.
 
 ## Guardrails
 
-See `tests/unit/test_ffmpeg_low_cpu_defaults.py`.
+See `tests/unit/test_ffmpeg_low_cpu_defaults.py` and `tests/unit/test_anti_regression_guardrails.py`.
 
 ## Coordination with director single-pass (PR #11)
 
