@@ -17,6 +17,7 @@ data/cli/
 data/dev
 data/prod/
 data/test/
+data/loop_rotation_state.json
 data/worksets/*
 !data/worksets/canonical/
 !data/worksets/canonical/*
