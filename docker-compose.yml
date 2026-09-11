@@ -30,8 +30,8 @@ services:
       SECRETS_DIR: /run/secrets
       COOKIES_PATH: /run/secrets/cookies.json
       AELITHIA_COOKIES_PATH: /run/secrets/cookies_aelithia.json
-      MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/youtube_token.json
-      AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/youtube_token_aelithia.json
+      MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/moku.json
+      AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/aelithia.json
       MOKU_YOUTUBE_CHANNEL_ID: ${MOKU_YOUTUBE_CHANNEL_ID:-}
       AELITHIA_YOUTUBE_CHANNEL_ID: ${AELITHIA_YOUTUBE_CHANNEL_ID:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}

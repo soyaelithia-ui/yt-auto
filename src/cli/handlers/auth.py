@@ -45,15 +45,16 @@ def handle_auth(args: argparse.Namespace, parser: argparse.ArgumentParser | None
     try:
         target_channel = _resolve_channel_key(channel)
     except (ValueError, KeyError):
-        msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: 'moku', 'aelithia'"
+        from src.core.domain import CanonicalChannel
+        valid_channels = ", ".join(repr(c.value) for c in CanonicalChannel)
+        msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: {valid_channels}"
         if parser is not None:
             parser.error(msg)
         else:
             print(f"Error: {msg}", file=sys.stderr)
             return 2
 
-    token_ch2_path, token_moku_path = _get_token_paths()
-    target_path = token_ch2_path if target_channel == "aelithia" else token_moku_path
+    target_path = resolve_channel_token_path(target_channel)
     exchange_code_fn, get_auth_url_fn, run_local_login_fn = _get_auth_helpers()
 
     # 1. Login action (interactive local server flow)

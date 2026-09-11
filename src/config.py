@@ -489,7 +489,7 @@ DRIVE_KEY_PATH = str(SETTINGS.drive_key_path)
 DRIVE_UPLOAD_MAX_RETRIES = _env_int("DRIVE_UPLOAD_MAX_RETRIES", 3)
 COOKIES_PATH = os.environ.get("COOKIES_PATH", str(MOKU.cookies_path))
 COOKIES_AELITHIA_PATH = str(AELITHIA.cookies_path)
-YOUTUBE_TOKEN_PATH = str(MOKU.youtube_token_path)
+YOUTUBE_TOKEN_PATH = os.environ.get("YOUTUBE_TOKEN_PATH", str(MOKU.youtube_token_path))
 TOKEN_AELITHIA_PATH = str(AELITHIA.youtube_token_path)
 TOKEN_CHANNEL2_PATH = os.environ.get(
     "TOKEN_CHANNEL2_PATH",

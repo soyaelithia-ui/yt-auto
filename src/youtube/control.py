@@ -20,13 +20,8 @@ VALID_PRIVACY_STATUS = {"public", "private", "unlisted"}
 
 def resolve_token_path(channel: str) -> str:
     """Return the OAuth token path configured for the canonical channel."""
-    from src.branding import resolve_channel_key
-    from src.config import YOUTUBE_TOKEN_PATH, resolve_channel2_token_path
-
-    key = resolve_channel_key(channel)
-    if key == "moku":
-        return YOUTUBE_TOKEN_PATH
-    return resolve_channel2_token_path()
+    from src.core.google_auth import resolve_channel_token_path
+    return resolve_channel_token_path(channel)
 
 
 def expected_channel_id(channel: str) -> str | None:

@@ -73,7 +73,7 @@
   },
   "auth": {
     "cookies_path": "secrets/cookies_scifi.txt",
-    "youtube_token_path": "secrets/youtube_token_scifi.json",
+    "youtube_token_path": "secrets/tokens/scifi.json",
     "expected_youtube_channel_id": "UC_SCIFI_CHANNEL_PLACEHOLDER",
     "source_feed": "r/HFY+r/scifi"
   }

@@ -18,10 +18,12 @@ from googleapiclient.discovery import Resource, build
 import google_auth_oauthlib.flow
 
 from src.config import (
+    BASE_DIR,
     DRIVE_KEY_PATH,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     YOUTUBE_TOKEN_PATH,
+    get_channel_settings,
     resolve_channel2_token_path,
 )
 from src.core.domain import AuthenticationError, CanonicalChannel, canonical_channel
@@ -201,11 +203,54 @@ def standardize_token_file(token_path: str | Path) -> bool:
 
 
 def resolve_channel_token_path(channel: str | CanonicalChannel) -> str:
-    """Resolve the token file path for a canonical channel."""
+    """Resolve the token file path for any canonical channel dynamically."""
     key = canonical_channel(channel)
+    cid = key.value if hasattr(key, "value") else str(key)
+    prefix = cid.upper()
+
+    # 1. Environment variable overrides (highest precedence)
+    override = os.environ.get(f"{prefix}_YOUTUBE_TOKEN_PATH")
+    if override:
+        return str(Path(override).expanduser().resolve())
+
+    # Legacy environment overrides for backwards compatibility
+    if key == CanonicalChannel.AELITHIA:
+        override = os.environ.get("TOKEN_CHANNEL2_PATH") or os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH")
+        if override:
+            return str(Path(override).expanduser().resolve())
+    elif key == CanonicalChannel.MOKU:
+        override = os.environ.get("YOUTUBE_TOKEN_PATH")
+        if override:
+            return str(Path(override).expanduser().resolve())
+
+    # 2. Dynamic profile configuration (e.g. secrets/tokens/<channel>.json)
+    configured_path = None
+    try:
+        settings = get_channel_settings(key)
+        configured_path = Path(settings.youtube_token_path)
+        if configured_path.is_file():
+            return str(configured_path.resolve())
+    except Exception:
+        pass
+
+    # 3. Fallback candidates (modular secrets/tokens/<channel>.json or legacy paths)
+    modular_candidate = BASE_DIR / "secrets" / "tokens" / f"{cid}.json"
+    if modular_candidate.is_file():
+        return str(modular_candidate.resolve())
+
+    legacy_named = BASE_DIR / "secrets" / f"youtube_token_{cid}.json"
+    if legacy_named.is_file():
+        return str(legacy_named.resolve())
+
     if key == CanonicalChannel.MOKU:
-        return YOUTUBE_TOKEN_PATH
-    return resolve_channel2_token_path()
+        legacy_moku = BASE_DIR / "secrets" / "youtube_token.json"
+        if legacy_moku.is_file():
+            return str(legacy_moku.resolve())
+
+    if configured_path:
+        return str(configured_path.resolve())
+
+    return str(modular_candidate.resolve())
 
 
 def build_youtube_service(

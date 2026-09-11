@@ -58,10 +58,10 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 | `CHANNEL_NAME` | Nombre público del canal activo. | Override genérico. |
 | `MOKU_HANDLE` | Handle específico para canal Moku. | Por defecto resuelto de `config/channels/moku.json`. |
 | `MOKU_YOUTUBE_CHANNEL_ID` | ID de canal de YouTube para Moku. | Identificador `UC...` |
-| `MOKU_YOUTUBE_TOKEN_PATH` | Ruta al token OAuth2 de Moku. | `/run/secrets/youtube_token.json` |
+| `MOKU_YOUTUBE_TOKEN_PATH` | Ruta al token OAuth2 de Moku. | `/run/secrets/tokens/moku.json` |
 | `AELITHIA_HANDLE` | Handle específico para canal Aelithia. | Por defecto resuelto de `config/channels/aelithia.json`. |
 | `AELITHIA_YOUTUBE_CHANNEL_ID`| ID de canal de YouTube para Aelithia. | Identificador `UC...` |
-| `AELITHIA_YOUTUBE_TOKEN_PATH`| Ruta al token OAuth2 de Aelithia. | `/run/secrets/youtube_token_aelithia.json` |
+| `AELITHIA_YOUTUBE_TOKEN_PATH`| Ruta al token OAuth2 de Aelithia. | `/run/secrets/tokens/aelithia.json` |
 
 ### E. Telegram Bot API y Puerta de Revisión
 | Variable | Descripción | Valor Predeterminado / Ejemplo |

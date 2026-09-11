@@ -162,26 +162,8 @@ def _verify_uploaded_video(
 
 
 def resolve_channel_token_path(channel: str = "terror") -> str:
-    from src.branding import resolve_channel_key
-    c_key = resolve_channel_key(channel)
-    if c_key == "aelithia":
-        env_override = os.environ.get("TOKEN_CHANNEL2_PATH") or os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH")
-        if env_override:
-            return env_override
-
-        if TOKEN_CHANNEL2_PATH and not os.path.exists(TOKEN_CHANNEL2_PATH):
-            return TOKEN_CHANNEL2_PATH
-
-        t_ael = str(BASE_DIR / "secrets" / "youtube_token_aelithia.json")
-        if os.path.exists(t_ael):
-            return t_ael
-
-        t_malo = str(BASE_DIR / "secrets" / "youtube_token_soy_el_malo.json")
-        if os.path.exists(t_malo):
-            return t_malo
-
-        return TOKEN_CHANNEL2_PATH or t_ael
-    return YOUTUBE_TOKEN_PATH
+    from src.core.google_auth import resolve_channel_token_path as _resolve
+    return _resolve(channel)
 
 
 def verify_youtube_credentials_preflight(channel: str) -> tuple[bool, str]:
