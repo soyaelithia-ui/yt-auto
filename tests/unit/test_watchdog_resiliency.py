@@ -251,3 +251,126 @@ class TestWatchdogResiliency:
 
         assert aelithia_short["cadence"]["min_gap_seconds"] == 600
         assert aelithia_short["cadence"]["initial_offset_seconds"] == 300
+
+    def test_dead_worker_reaped_immediately_on_sigkill(self, tmp_path: Path) -> None:
+        """When worker process crashes/SIGKILLed, LeaseReaper reaps lease immediately without waiting 1800s."""
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+        cur_host = socket.gethostname()
+        dead_pid = 999999  # Guaranteed nonexistent PID on Linux
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute(
+                "CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+
+            conn.execute(
+                "INSERT INTO stories VALUES ('story_dead_worker', 'CLAIMED', 'run_dead_worker', NULL)"
+            )
+            conn.execute(
+                "INSERT INTO runs VALUES ('run_dead_worker', 'PROCESSING', NULL, NULL)"
+            )
+            # Longform lease with heartbeat age only 5s old!
+            conn.execute(
+                "INSERT INTO lane_leases VALUES ('moku-horror-long', 'moku', ?, 'run_dead_worker', ?, ?, ?)",
+                (
+                    f"lane-moku-horror-long:{cur_host}:{dead_pid}",
+                    now_ts - 10,
+                    now_ts - 5,  # 5s old: fresh heartbeat, but PID is dead
+                    now_ts + 3600,
+                ),
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once()
+
+        assert reaped == 1
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM lane_leases").fetchone()[0] == 0
+            run = conn.execute(
+                "SELECT status, error_code FROM runs WHERE run_id = 'run_dead_worker'"
+            ).fetchone()
+            assert run[0] == "RETRYABLE_FAILED"
+            assert run[1] == "worker_sigkill_reaped"
+
+    def test_is_longform_lease_with_job_id(self) -> None:
+        """Verify is_longform_lease detects longform from job_id even if lane_id and owner are generic."""
+        assert is_longform_lease(job_id="aelithia_drama_long_006") is True
+        assert is_longform_lease(job_id="moku_scp_short_001") is False
+        assert is_longform_lease(owner="worker:localhost:123", job_id="story_longform") is True
+
+    def test_multi_node_clock_skew_tolerance(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MULTI_NODE=1 adds clock skew tolerance to timeout."""
+        monkeypatch.delenv("HEARTBEAT_TIMEOUT_LONG_SECONDS", raising=False)
+        monkeypatch.delenv("HEARTBEAT_TIMEOUT_SHORT_SECONDS", raising=False)
+        monkeypatch.setenv("MULTI_NODE", "1")
+        monkeypatch.setenv("MULTI_NODE_CLOCK_SKEW_SECONDS", "45")
+
+        assert get_heartbeat_timeout_seconds("moku-horror-long") == 1800 + 45
+        assert get_heartbeat_timeout_seconds("moku-scp-shorts") == 300 + 45
+
+    def test_lease_table_uses_job_id_for_longform_detection(self, tmp_path: Path) -> None:
+        """In leases table, longform job_id survives 400s stale heartbeat without lane_id in owner."""
+        db_file = tmp_path / "shorts_queue.db"
+        now_ts = int(time.time())
+        cur_host = socket.gethostname()
+
+        with sqlite3.connect(str(db_file)) as conn:
+            conn.execute(
+                "CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT, lane_id TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)"
+            )
+            conn.execute(
+                "CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)"
+            )
+
+            conn.execute(
+                "INSERT INTO stories VALUES ('aelithia_drama_long_006', 'CLAIMED', 'run_directed_long', NULL, 'aelithia-aita-long')"
+            )
+            conn.execute(
+                "INSERT INTO runs VALUES ('run_directed_long', 'PROCESSING', NULL, NULL)"
+            )
+            # Generic owner without 'long' in string
+            conn.execute(
+                "INSERT INTO leases VALUES ('aelithia_drama_long_006', 'aelithia', ?, 'run_directed_long', ?, ?, ?)",
+                (
+                    f"{cur_host}:{os.getpid()}",
+                    now_ts - 500,
+                    now_ts - 400,  # 400s old: >300s but <1800s
+                    now_ts + 3600,
+                ),
+            )
+            conn.commit()
+
+        reaper = LeaseReaper(db_path=db_file)
+        reaped = reaper.reap_once()
+
+        # Should NOT be reaped because job_id has 'long' and story lane_id is longform!
+        assert reaped == 0
+        with sqlite3.connect(str(db_file)) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM leases").fetchone()[0] == 1
+
+    def test_active_heartbeat_scope_none_run_id_safe(self) -> None:
+        """active_heartbeat_scope handles None or missing run_id gracefully."""
+        mock_ctx = MagicMock()
+        mock_ctx.run_id = None
+        mock_ctx._heartbeat_ticker_active = False
+        mock_ctx.heartbeat = MagicMock(return_value=True)
+        mock_ctx.require_heartbeat = MagicMock(return_value=None)
+
+        with active_heartbeat_scope(mock_ctx, interval=0.02):
+            assert mock_ctx._heartbeat_ticker_active is True
+        assert mock_ctx._heartbeat_ticker_active is False
+

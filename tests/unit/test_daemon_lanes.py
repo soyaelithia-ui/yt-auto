@@ -199,6 +199,64 @@ class TestStartDaemonLanes:
         # Verify that short actually completed BEFORE long finished
         assert timestamps["moku-scp-shorts_end"] < timestamps["moku-horror-long_end"]
 
+    def test_concurrent_three_lanes_with_one_unhandled_failure(
+        self, db_path, monkeypatch
+    ):
+        """When 3 lanes run concurrently and 1 throws an unhandled error, the other 2 complete and error is captured."""
+        import threading
+        from src.core.scheduler import LaneScheduler, LanePick
+        from src.core.domain import CanonicalChannel
+
+        _seed_story(db_path, "story_moku_long", channel="moku")
+        _seed_story(db_path, "story_moku_short", channel="moku")
+        _seed_story(db_path, "story_aelithia_short", channel="aelithia")
+
+        def fake_pipeline(**kw):
+            lane_id = kw.get("lane_id")
+            if lane_id == "moku-scp-shorts":
+                raise RuntimeError("Simulated unhandled worker crash in lane")
+            threading.Event().wait(0.02)
+            return {"status": "PUBLISHED", "lane": lane_id}
+
+        monkeypatch.setattr(
+            "src.pipeline.run_pipeline_once", fake_pipeline
+        )
+
+        call_count = 0
+
+        def mock_take_due(self, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            cur = int(time.time())
+            if call_count == 1:
+                return [
+                    LanePick(lane_id="moku-horror-long", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 1800),
+                    LanePick(lane_id="moku-scp-shorts", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 600),
+                    LanePick(lane_id="aelithia-drama-shorts", channel=CanonicalChannel.AELITHIA, fired_at=cur, next_due_at=cur + 600),
+                ]
+            return []
+
+        monkeypatch.setattr(LaneScheduler, "take_due_lanes", mock_take_due)
+        monkeypatch.setattr(daemon_module, "_watchdog_tick_seconds", lambda: 0.05)
+
+        results = daemon_module.start_daemon_lanes(
+            interval_seconds=1,
+            max_parallel=3,
+            db_path=db_path,
+            max_ticks=2,
+        )
+
+        res_by_lane = {r.get("lane"): r for r in results}
+        assert "moku-horror-long" in res_by_lane
+        assert "moku-scp-shorts" in res_by_lane
+        assert "aelithia-drama-shorts" in res_by_lane
+
+        assert res_by_lane["moku-horror-long"]["status"] == "PUBLISHED"
+        assert res_by_lane["aelithia-drama-shorts"]["status"] == "PUBLISHED"
+        assert res_by_lane["moku-scp-shorts"]["status"] == "RETRYABLE_FAILED"
+        assert "Simulated unhandled worker crash in lane" in str(res_by_lane["moku-scp-shorts"].get("error"))
+
+
 
 def conn_one(db_path: str, sql: str) -> str | None:
     from src.core.repository import connect

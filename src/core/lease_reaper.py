@@ -75,35 +75,55 @@ def is_local_hostname(owner: str) -> bool:
 is_local_lease = is_local_hostname
 
 
-def is_longform_lease(lane_id: Optional[str] = None, owner: Optional[str] = None) -> bool:
-    """Return True if lease belongs to a longform production lane."""
-    combined = f"{lane_id or ''}:{owner or ''}".lower()
+def is_longform_lease(
+    lane_id: Optional[str] = None,
+    owner: Optional[str] = None,
+    job_id: Optional[str] = None,
+) -> bool:
+    """Return True if lease belongs to a longform production lane or format."""
+    combined = f"{lane_id or ''}:{owner or ''}:{job_id or ''}".lower()
     return "long" in combined
 
 
-def get_heartbeat_timeout_seconds(lane_id: Optional[str] = None, owner: Optional[str] = None) -> int:
+def get_heartbeat_timeout_seconds(
+    lane_id: Optional[str] = None,
+    owner: Optional[str] = None,
+    job_id: Optional[str] = None,
+) -> int:
     """Determine heartbeat expiration threshold adapted to format duration.
 
     Longform jobs (10-30 min) require a wider heartbeat window (default 1800s / 30m)
     to prevent false-positive watchdog reaping during heavy FFmpeg composition and QA gating.
     Shortform jobs default to 300s (5m). Both can be overridden via environment variables.
+    In multi-node deployments, clock skew tolerance is added to prevent premature reaping.
     """
-    if is_longform_lease(lane_id, owner):
+    if is_longform_lease(lane_id=lane_id, owner=owner, job_id=job_id):
         val = os.environ.get("HEARTBEAT_TIMEOUT_LONG_SECONDS")
         if val:
             try:
-                return max(60, int(val))
+                base = max(60, int(val))
             except ValueError:
-                pass
-        return 1800
+                base = 1800
+        else:
+            base = 1800
+    else:
+        val = os.environ.get("HEARTBEAT_TIMEOUT_SHORT_SECONDS") or os.environ.get("HEARTBEAT_TIMEOUT_SECONDS")
+        if val:
+            try:
+                base = max(30, int(val))
+            except ValueError:
+                base = 300
+        else:
+            base = 300
 
-    val = os.environ.get("HEARTBEAT_TIMEOUT_SHORT_SECONDS") or os.environ.get("HEARTBEAT_TIMEOUT_SECONDS")
-    if val:
+    if os.environ.get("MULTI_NODE", "0").lower() in ("1", "true", "yes"):
         try:
-            return max(30, int(val))
+            clock_skew = max(0, int(os.environ.get("MULTI_NODE_CLOCK_SKEW_SECONDS", "60")))
         except ValueError:
-            pass
-    return 300
+            clock_skew = 60
+        base += clock_skew
+
+    return base
 
 
 class LeaseReaper:
@@ -128,16 +148,24 @@ class LeaseReaper:
 
             # 1. Check leases table
             try:
-                rows = conn.execute("SELECT job_id, run_id, owner, heartbeat_at, expires_at FROM leases").fetchall()
+                rows = conn.execute("SELECT * FROM leases").fetchall()
                 for row in rows:
-                    job_id = row["job_id"]
+                    job_id = row["job_id"] if "job_id" in row.keys() else None
                     run_id = row["run_id"]
                     owner = row["owner"]
                     expires_at = row["expires_at"] if "expires_at" in row.keys() else None
                     heartbeat_at = row["heartbeat_at"] if "heartbeat_at" in row.keys() else None
                     pid = extract_pid_from_owner(owner)
 
-                    timeout_sec = get_heartbeat_timeout_seconds(owner=owner)
+                    lane_id_hint = None
+                    try:
+                        s_row = conn.execute("SELECT lane_id FROM stories WHERE story_id = ?", (job_id,)).fetchone()
+                        if s_row and s_row["lane_id"]:
+                            lane_id_hint = s_row["lane_id"]
+                    except Exception:
+                        pass
+
+                    timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id_hint, owner=owner, job_id=job_id)
                     is_expired = expires_at is not None and expires_at <= now_ts
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
@@ -187,8 +215,9 @@ class LeaseReaper:
 
             # 2. Check lane_leases table
             try:
-                lane_rows = conn.execute("SELECT lane_id, run_id, owner, heartbeat_at, expires_at FROM lane_leases").fetchall()
+                lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
                 for row in lane_rows:
+                    job_id = row["job_id"] if "job_id" in row.keys() else None
                     lane_id = row["lane_id"]
                     run_id = row["run_id"]
                     owner = row["owner"]
@@ -196,7 +225,7 @@ class LeaseReaper:
                     heartbeat_at = row["heartbeat_at"] if "heartbeat_at" in row.keys() else None
                     pid = extract_pid_from_owner(owner)
 
-                    timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id, owner=owner)
+                    timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id, owner=owner, job_id=job_id)
                     is_expired = expires_at is not None and expires_at <= now_ts
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)

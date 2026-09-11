@@ -459,14 +459,17 @@ def active_heartbeat_scope(ctx: RunContext, interval: float = 15.0) -> Iterator[
     def _heartbeat_ticker() -> None:
         while not stop_event.wait(interval):
             try:
-                ctx.heartbeat()
+                ok = ctx.heartbeat()
+                if not ok:
+                    logger.debug("Active heartbeat returned False for run %s (lease lost or reaped)", getattr(ctx, "run_id", "?"))
             except Exception as exc:
                 logger.debug("Active heartbeat tick error: %s", exc)
 
     setattr(ctx, "_heartbeat_ticker_active", True)
+    rid_prefix = str(getattr(ctx, "run_id", "") or "")[:8]
     ticker = threading.Thread(
         target=_heartbeat_ticker,
-        name=f"heartbeat-{ctx.run_id[:8]}",
+        name=f"heartbeat-{rid_prefix}",
         daemon=True,
     )
     ticker.start()
