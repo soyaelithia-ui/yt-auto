@@ -49,6 +49,16 @@ TABOO_BARRIER_PATTERNS = [
     r'(?i)vamos\s+a\s+redactar',
     r'(?i)voy\s+a\s+redactar',
     r'(?i)a\s+continuaci[óo]n',
+    r'(?i)como\s+modelo\s+de\s+lenguaje',
+    r'(?i)como\s+una?\s+ia\b',
+    r'(?i)como\s+inteligencia\s+artificial',
+    r'(?i)</?script>',
+    r'(?i)claro,?\s+aqu[íi]\s+(?:tienes|est[áa])',
+    r'(?i)a\s+continuaci[óo]n\s+presento',
+    r'(?i)adaptaci[óo]n\s+narrativa',
+    r'(?i)instrucciones\s+recibidas',
+    r'(?i)seg[úu]n\s+las\s+instrucciones',
+    r'(?i)\bprompt\s*:',
 ]
 
 

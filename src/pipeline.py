@@ -553,15 +553,20 @@ def _stage_02_ingest_translate(ctx: RunContext) -> None:
             and ctx.lane.multistory_collection
             and len(ctx.content.split()) < max(LONG_MIN_WORDS, ctx.lane.words_min)
         ):
+            target_words = max(LONG_MIN_WORDS, ctx.lane.words_min)
+            current_words = len(ctx.content.split())
             with connect(ctx.database, read_only=True) as conn:
                 for row in conn.execute(
-                    "SELECT * FROM stories WHERE channel = ? AND status = ? AND story_id != ? ORDER BY created_at LIMIT 40",
-                    (ctx.channel_name, JobStatus.PENDING.value, ctx.story_id),
+                    "SELECT * FROM stories WHERE channel = ? AND (lane_id IS NULL OR lane_id = ?) AND status = ? AND story_id != ? ORDER BY created_at LIMIT 5",
+                    (ctx.channel_name, ctx.lane.id, JobStatus.PENDING.value, ctx.story_id),
                 ):
                     candidate = dict(row)
                     c_content, c_title = ensure_spanish_source(str(candidate.get("content") or ""), str(candidate.get("title") or ""))
                     candidate["content"], candidate["title"] = c_content, c_title
                     additional.append(candidate)
+                    current_words += len(c_content.split())
+                    if current_words >= target_words:
+                        break
         ctx.used_ids = [ctx.story_id] + [str(item["story_id"]) for item in additional]
         if ctx.directed:
             if ctx.used_ids != [ctx.story_id]:
@@ -570,8 +575,8 @@ def _stage_02_ingest_translate(ctx: RunContext) -> None:
         else:
             _record_combined_stories(ctx.database, ctx.run_id, ctx.used_ids)
 
-        ctx.words_min = 160 if not ctx.is_long_lane else max(LONG_MIN_WORDS, ctx.lane.words_min)
-        ctx.words_max = None if ctx.is_long_lane else ctx.lane.words_max
+        ctx.words_min = int(ctx.lane.words_min) if not ctx.is_long_lane else max(LONG_MIN_WORDS, ctx.lane.words_min)
+        ctx.words_max = getattr(ctx.lane, "words_max", 4500) if ctx.is_long_lane else ctx.lane.words_max
         curate_provider = "C" if is_test_environment() or os.environ.get("FAST_CURATE") == "1" else "A"
         ctx.script = _dispatch_curate_script(
             ctx.content, ctx.title, additional_stories=[] if not ctx.is_long_lane or ctx.directed else additional,
@@ -689,6 +694,21 @@ def _stage_06_duration_alignment(ctx: RunContext) -> None:
             if float(ctx.audio["duration_sec"]) > float(ctx.lane.duration_max_sec):
                 raise ValueError(
                     f"La duración de audio ({ctx.audio['duration_sec']} s) excede el máximo {ctx.lane.duration_max_sec} s del carril {ctx.lane.id} tras re-condensación"
+                )
+
+        if ctx.lane.orientation == "vertical" and not is_test_environment() and float(ctx.audio["duration_sec"]) < float(ctx.lane.duration_min_sec):
+            logger.warning(
+                "Duración de audio (%s s) es inferior al mínimo de %s s del carril %s; re-curando para alcanzar presupuesto editorial",
+                ctx.audio["duration_sec"], ctx.lane.duration_min_sec, ctx.lane.id,
+            )
+            raw = _dispatch_curate_script(
+                ctx.content, ctx.title, additional_stories=[], min_words=max(int(ctx.lane.words_min), 210),
+                provider="C" if is_test_environment() else None, channel=ctx.channel_name, strict_single_story=True, max_words=ctx.lane.words_max,
+            )
+            _reprocess_script(raw, "re-expansión-short")
+            if float(ctx.audio["duration_sec"]) < float(ctx.lane.duration_min_sec):
+                raise ValueError(
+                    f"Audio {float(ctx.audio['duration_sec']):.1f}s < mínimo {float(ctx.lane.duration_min_sec):.0f}s del carril {ctx.lane.id} tras re-expansión; fallo temprano pre-render"
                 )
 
         if ctx.is_long_lane and not ctx.directed and float(ctx.audio["duration_sec"]) < float(ctx.lane.duration_min_sec):

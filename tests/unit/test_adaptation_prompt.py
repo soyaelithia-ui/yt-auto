@@ -268,3 +268,12 @@ def test_prompt_contains_longform_budget_when_min_words_set():
     assert "FORMATO LARGO" in prompt
     assert "MÍNIMO" in prompt
     assert "NUNCA resumas ni condenses" in prompt
+
+
+def test_prompt_contains_short_budget_when_min_words_set():
+    prompt = llm._build_adaptation_prompt(
+        "Auto Chocado", _content(), channel="aelithia", min_words=210, max_words=380
+    )
+    assert "210" in prompt
+    assert "SHORT" in prompt
+    assert "MÍNIMO" in prompt

@@ -224,6 +224,8 @@ def compile_stories_to_target_words(
             if story_title:
                 extra_titles.append(story_title)
             idx += 1
+            if len(compiled_content.split()) >= min_words:
+                break
 
         if extra_titles:
             compiled_title = f"{main_title} | Compilación Completa"
@@ -405,6 +407,12 @@ def _word_budget_instruction(max_words: Optional[int], min_words: Optional[int] 
             f"RESTRICCIÓN DE FORMATO LARGO (10+ MINUTOS): El guion final debe tener como MÍNIMO "
             f"{int(min_words)} palabras. Conserva todos los párrafos, diálogos, descripciones detalladas "
             f"y giros de la historia fuente. NUNCA resumas ni condenses las escenas."
+        )
+    elif min_words and min_words >= 150:
+        parts.append(
+            f"RESTRICCIÓN DE DURACIÓN MÍNIMA (SHORT >= 60 SEGUNDOS): El guion final debe tener como MÍNIMO "
+            f"{int(min_words)} palabras para alcanzar al menos 60 segundos de narración. Desarrolla las descripciones sensoriales, "
+            f"la tensión del conflicto y las reacciones emocionales sin inventar nuevos hechos."
         )
     if max_words and max_words > 0:
         parts.append(

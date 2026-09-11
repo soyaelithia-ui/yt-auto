@@ -1778,7 +1778,7 @@ class QueueRepository:
                 conn.rollback()
                 raise RuntimeError("El canal confirmado no coincide con el trabajo")
             linked = conn.execute(
-                "SELECT story_id, position FROM run_stories WHERE run_id = ?",
+                "SELECT story_id, position FROM run_stories WHERE run_id = ? ORDER BY position ASC",
                 (run_id,),
             ).fetchall()
             if not linked:
@@ -1787,15 +1787,30 @@ class QueueRepository:
                     (run_id, story_id),
                 )
                 linked = [{"story_id": story_id, "position": 0}]
-            if (
-                len(linked) != 1
-                or linked[0]["story_id"] != story_id
-                or linked[0]["position"] != 0
-            ):
-                conn.rollback()
-                raise RuntimeError(
-                    "La publicación exige run_stories con una única historia principal"
-                )
+            run_row = conn.execute(
+                "SELECT mode FROM runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            is_directed = run_row and "directed" in str(run_row["mode"] or "")
+            if is_directed:
+                if (
+                    len(linked) != 1
+                    or linked[0]["story_id"] != story_id
+                    or linked[0]["position"] != 0
+                ):
+                    conn.rollback()
+                    raise RuntimeError(
+                        "La publicación exige run_stories con una única historia principal"
+                    )
+            else:
+                if (
+                    not linked
+                    or linked[0]["story_id"] != story_id
+                    or linked[0]["position"] != 0
+                ):
+                    conn.rollback()
+                    raise RuntimeError(
+                        "La publicación exige que la historia principal esté en la posición 0"
+                    )
             conn.execute(
                 """
                 INSERT INTO publications(
@@ -1816,25 +1831,26 @@ class QueueRepository:
                     _utc_now(),
                 ),
             )
-            conn.execute(
-                """
-                UPDATE stories
-                SET status = ?, youtube_video_id = ?, youtube_url = ?,
-                    publication_visibility = ?, publication_channel = ?,
-                    run_id = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE story_id = ?
-                """,
-                (
-                    JobStatus.PUBLISHED.value,
-                    proof.video_id,
-                    proof.url,
-                    proof.visibility,
-                    proof.channel.value,
-                    run_id,
-                    story_id,
-                ),
-            )
+            for item in linked:
+                conn.execute(
+                    """
+                    UPDATE stories
+                    SET status = ?, youtube_video_id = ?, youtube_url = ?,
+                        publication_visibility = ?, publication_channel = ?,
+                        run_id = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE story_id = ?
+                    """,
+                    (
+                        JobStatus.PUBLISHED.value,
+                        proof.video_id,
+                        proof.url,
+                        proof.visibility,
+                        proof.channel.value,
+                        run_id,
+                        item["story_id"],
+                    ),
+                )
             conn.execute(
                 "UPDATE runs SET status = ?, finished_at = ? WHERE run_id = ?",
                 (JobStatus.PUBLISHED.value, _utc_now(), run_id),

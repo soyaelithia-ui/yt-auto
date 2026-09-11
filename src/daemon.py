@@ -813,7 +813,7 @@ def _execute_lane_pick(
         return {"status": "LANE_EMPTY", "lane": pick.lane_id, "channel": pick.channel.value}
 
     status_value = str(result.get("status", ""))
-    if status_value in {"PUBLISHED", "COMPLETED", "RENDERED"}:
+    if status_value in {"PUBLISHED", "COMPLETED", "RENDERED", "PENDING_REVIEW", "UPLOAD_UNCONFIRMED"}:
         scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
         breaker.record_success(pick.channel.value)
     else:

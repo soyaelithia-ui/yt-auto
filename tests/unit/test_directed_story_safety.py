@@ -169,6 +169,35 @@ def test_mark_published_rejects_run_with_more_than_one_story(tmp_path):
         ).fetchone()[0] == JobStatus.PROCESSING.value
 
 
+def test_mark_published_accepts_multistory_collection_for_non_directed_run(tmp_path):
+    repository = _repo(tmp_path)
+    repository.enqueue("a_story_main", "Principal", "Historia principal", "https://main", "moku")
+    repository.enqueue("b_story_extra", "Extra", "Historia extra", "https://extra", "moku")
+    claimed = repository.claim_for_lane("moku-horror-long", "moku", "worker")
+    assert claimed and claimed["story_id"] == "a_story_main"
+    with connect(repository.db_path) as conn:
+        conn.execute(
+            "INSERT INTO run_stories(run_id, story_id, position) VALUES (?, ?, 1)",
+            (claimed["run_id"], "b_story_extra"),
+        )
+        conn.commit()
+    proof = PublicationProof(
+        video_id="video999",
+        channel=CanonicalChannel.MOKU,
+        visibility="public",
+        title="Título verificado",
+        description="Descripción verificada",
+        thumbnail_confirmed=True,
+    )
+    repository.mark_published("a_story_main", claimed["run_id"], proof, provider="API")
+    with connect(repository.db_path, read_only=True) as conn:
+        rows = {
+            row["story_id"]: row["status"]
+            for row in conn.execute("SELECT story_id, status FROM stories")
+        }
+    assert rows == {"a_story_main": "PUBLISHED", "b_story_extra": "PUBLISHED"}
+
+
 def test_strict_script_rejects_aggregation(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "1")
     with pytest.raises(ValueError, match="no admite historias adicionales"):

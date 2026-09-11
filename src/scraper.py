@@ -306,11 +306,11 @@ def _load_canonical_stories(
         combined = f"{s_id} {s_title} {s_url} {' '.join(s_tags)}"
         
         if is_horror_niche:
-            if any(k in combined for k in ("aita", "amitheasshole", "confesion", "confesión", "heredado", "hermano", "pareja", "esposo")):
+            if any(k in combined for k in ("aelithia", "aita", "amitheasshole", "confesion", "confesión", "heredado", "hermano", "hermana", "boda", "infidelidad", "desalojo", "pareja", "esposo", "esposa", "fideicomiso")):
                 return False
             return True
         if is_confession_niche:
-            if any(k in combined for k in ("terror", "scp", "anomalia", "monstruo", "tunel", "estacion", "creepy")):
+            if any(k in combined for k in ("moku", "terror", "horror", "scp", "anomalia", "monstruo", "tunel", "estacion", "creepy", "faro", "sanatorio")):
                 return False
             return True
         return True
@@ -320,8 +320,9 @@ def _load_canonical_stories(
         preset_matched = [s for s in PRESET_CANONICAL_STORIES if len(s["content"]) >= min_length and story_matches_niche(s)]
         if preset_matched:
             return preset_matched[:limit]
+        return []
 
-    return (matched_stories or loaded_stories)[:limit]
+    return matched_stories[:limit]
 
 
 def _is_deleted_or_removed(text: Optional[str]) -> bool:

@@ -51,6 +51,21 @@ def audit_scene_diversity(
     scene_count = len(scenes)
     total_dur = float(data.get("duration_sec") or duration_sec or 0.0)
 
+    # Continuous single-loop composition exemption (LoopVideoEngine / F01)
+    is_loop_composition = (
+        data.get("is_loop")
+        or data.get("composition") == "single_loop"
+        or (scene_count == 1 and any("loop" in str(sc.get("image_path") or sc.get("asset_path") or "").lower() for sc in scenes))
+        or (scene_count == 1 and any("/videos/" in str(sc.get("image_path") or sc.get("asset_path") or "").lower() for sc in scenes))
+    )
+    if is_loop_composition and scene_count == 1:
+        return (
+            True,
+            "OK_SCENE_DIVERSITY",
+            f"Continuous loop composition compliant ({scene_count} scene across {total_dur:.1f}s)",
+            {"scene_count": scene_count, "duration_sec": total_dur, "is_loop": True},
+        )
+
     # Scene count invariants (shorts vs longform)
     if is_short:
         if scene_count < min_short_scenes:

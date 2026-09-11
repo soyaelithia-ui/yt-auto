@@ -11,8 +11,8 @@
       "channel": "moku",
       "story_type": "scp",
       "orientation": "vertical",
-      "duration": { "min_sec": 60, "target_sec": 150, "max_sec": 180 },
-      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },
+      "words": { "min": 210, "max": 380, "recondense_max": 340 },
       "template": "shorts_creepypasta",
       "voice_rate": "+0%",
       "voice_profile": "scp_documentary_es",
@@ -25,8 +25,8 @@
         "queue_target_pending": 25
       },
       "topic_filter": {
-        "mode": "off",
-        "keywords": ["scp", "anomal", "contención", "fundación"]
+        "mode": "keyword",
+        "keywords": ["scp", "anomal", "contención", "fundación", "keter", "euclid", "safe"]
       },
       "multistory_collection": false,
       "visual_pipeline": "beats",
@@ -58,7 +58,10 @@
         "limit_per_fetch": 25,
         "queue_target_pending": 25
       },
-      "topic_filter": { "mode": "off" },
+      "topic_filter": {
+        "mode": "keyword",
+        "keywords": ["terror", "horror", "miedo", "maldici", "bosque", "noche", "estación", "faro", "mina", "relojero", "sanatorio", "fantasma", "sombra", "muerte", "aparici", "cadáver", "abismo", "extraño", "escalera", "grito", "pesadilla", "radio", "erebos", "polar", "oscuridad", "creepypasta", "nosleep"]
+      },
       "multistory_collection": true,
       "visual_pipeline": "beats",
       "qa_profile": "longform",
@@ -95,8 +98,8 @@
         "queue_target_pending": 25
       },
       "topic_filter": {
-        "mode": "off",
-        "keywords": ["aita", "wibta", "soy el malo", "familia", "boda", "herencia"]
+        "mode": "keyword",
+        "keywords": ["aita", "wibta", "soy el malo", "soy la mala", "familia", "boda", "herencia", "hermano", "hermana", "tíos", "esposo", "esposa", "novio", "novia", "infidelidad", "desalojo", "dinero", "fraude", "demanda", "fideicomiso", "propiedad"]
       },
       "multistory_collection": true,
       "visual_pipeline": "beats",
@@ -116,8 +119,8 @@
       "channel": "aelithia",
       "story_type": "reddit_aita",
       "orientation": "vertical",
-      "duration": { "min_sec": 60, "target_sec": 120, "max_sec": 180 },
-      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },
+      "words": { "min": 210, "max": 380, "recondense_max": 340 },
       "template": "shorts_aita",
       "voice_rate": "+6%",
       "voice_profile": "aelithia_reddit",
@@ -130,8 +133,8 @@
         "queue_target_pending": 25
       },
       "topic_filter": {
-        "mode": "off",
-        "keywords": ["aita", "wibta", "soy el malo", "familia", "boda", "herencia"]
+        "mode": "keyword",
+        "keywords": ["aita", "wibta", "soy el malo", "soy la mala", "familia", "boda", "herencia", "hermano", "hermana", "tíos", "esposo", "esposa", "novio", "novia", "infidelidad", "desalojo", "dinero", "fraude", "demanda", "fideicomiso", "propiedad"]
       },
       "multistory_collection": false,
       "visual_pipeline": "beats",
@@ -151,8 +154,8 @@
       "channel": "scifi",
       "story_type": "scifi",
       "orientation": "vertical",
-      "duration": { "min_sec": 60, "target_sec": 120, "max_sec": 180 },
-      "words": { "min": 160, "max": 340, "recondense_max": 300 },
+      "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },
+      "words": { "min": 210, "max": 380, "recondense_max": 340 },
       "template": "shorts_scifi",
       "voice_rate": "+0%",
       "voice_profile": "scifi_documentary_es",
