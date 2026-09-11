@@ -184,7 +184,10 @@ def load_authorized_user_credentials(
         try:
             logger.info("Refreshing expired Google credentials for %s", path.name)
             credentials.refresh(Request())
-            save_credentials(credentials, path)
+            try:
+                save_credentials(credentials, path)
+            except OSError as save_err:
+                logger.debug("Could not persist refreshed credentials to %s (read-only filesystem): %s", path, save_err)
         except Exception as exc:
             logger.warning("No se pudo refrescar el token de Google (%s): %s", path, exc)
 

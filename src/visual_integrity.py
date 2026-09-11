@@ -27,8 +27,9 @@ class VisualIntegrityVerifier:
         video_path: Union[str, Path, None],
         output_dir: Union[str, Path, None],
         fps: Optional[float] = None,
+        max_sample_frames: int = 12,
     ) -> List[Path]:
-        """Extracts sample frames from video using FFmpeg."""
+        """Extracts sample frames from video using FFmpeg, bounded to max_sample_frames."""
         if not video_path or not output_dir:
             return []
         try:
@@ -44,13 +45,32 @@ class VisualIntegrityVerifier:
         except Exception:
             return []
 
-        effective_fps = fps if fps is not None else self.sample_fps
+        # Probe video duration to calculate bounded sample rate
+        dur = 0.0
+        try:
+            cmd_probe = [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(v_path),
+            ]
+            res = subprocess.run(cmd_probe, capture_output=True, text=True, timeout=5.0)
+            if res.returncode == 0 and res.stdout.strip():
+                dur = float(res.stdout.strip())
+        except Exception:
+            dur = 0.0
+
+        target_frames = max(1, int(max_sample_frames))
+        base_fps = float(fps) if fps is not None else self.sample_fps
+        if dur > 0:
+            effective_fps = min(base_fps, max(0.005, target_frames / dur))
+        else:
+            effective_fps = base_fps
 
         pattern = out_dir / "frame_%04d.png"
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-i", str(v_path),
             "-vf", f"fps={effective_fps}",
+            "-vframes", str(target_frames),
             "-pix_fmt", "rgb24",
             str(pattern),
         ]

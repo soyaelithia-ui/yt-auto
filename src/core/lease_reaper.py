@@ -75,6 +75,37 @@ def is_local_hostname(owner: str) -> bool:
 is_local_lease = is_local_hostname
 
 
+def is_longform_lease(lane_id: Optional[str] = None, owner: Optional[str] = None) -> bool:
+    """Return True if lease belongs to a longform production lane."""
+    combined = f"{lane_id or ''}:{owner or ''}".lower()
+    return "long" in combined
+
+
+def get_heartbeat_timeout_seconds(lane_id: Optional[str] = None, owner: Optional[str] = None) -> int:
+    """Determine heartbeat expiration threshold adapted to format duration.
+
+    Longform jobs (10-30 min) require a wider heartbeat window (default 1800s / 30m)
+    to prevent false-positive watchdog reaping during heavy FFmpeg composition and QA gating.
+    Shortform jobs default to 300s (5m). Both can be overridden via environment variables.
+    """
+    if is_longform_lease(lane_id, owner):
+        val = os.environ.get("HEARTBEAT_TIMEOUT_LONG_SECONDS")
+        if val:
+            try:
+                return max(60, int(val))
+            except ValueError:
+                pass
+        return 1800
+
+    val = os.environ.get("HEARTBEAT_TIMEOUT_SHORT_SECONDS") or os.environ.get("HEARTBEAT_TIMEOUT_SECONDS")
+    if val:
+        try:
+            return max(30, int(val))
+        except ValueError:
+            pass
+    return 300
+
+
 class LeaseReaper:
     """Proactive reaper of orphaned locks and crashed worker leases."""
 
@@ -106,9 +137,10 @@ class LeaseReaper:
                     heartbeat_at = row["heartbeat_at"] if "heartbeat_at" in row.keys() else None
                     pid = extract_pid_from_owner(owner)
 
+                    timeout_sec = get_heartbeat_timeout_seconds(owner=owner)
                     is_expired = expires_at is not None and expires_at <= now_ts
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
-                    is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > 300)
+                    is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
                     is_startup_orphan = startup and (
                         os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
                         or is_local_hostname(owner)
@@ -129,7 +161,7 @@ class LeaseReaper:
                             reason = f"Orphan remote lease from host {owner} (reaped)"
                             err_code = "orphan_host_reaped"
                         elif is_stale_heartbeat:
-                            reason = f"Lease heartbeat stale ({now_ts - (heartbeat_at or 0)}s > 300s) (reaped)"
+                            reason = f"Lease heartbeat stale ({now_ts - (heartbeat_at or 0)}s > {timeout_sec}s) (reaped)"
                             err_code = "heartbeat_timeout"
                         else:
                             reason = "Lease TTL expired (reaped)"
@@ -164,9 +196,10 @@ class LeaseReaper:
                     heartbeat_at = row["heartbeat_at"] if "heartbeat_at" in row.keys() else None
                     pid = extract_pid_from_owner(owner)
 
+                    timeout_sec = get_heartbeat_timeout_seconds(lane_id=lane_id, owner=owner)
                     is_expired = expires_at is not None and expires_at <= now_ts
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
-                    is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > 300)
+                    is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
                     is_startup_orphan = startup and (
                         os.environ.get("MULTI_NODE", "0").lower() not in ("1", "true", "yes")
                         or is_local_hostname(owner)
@@ -187,7 +220,7 @@ class LeaseReaper:
                             reason = f"Orphan remote lease from host {owner} (reaped)"
                             err_code = "orphan_host_reaped"
                         elif is_stale_heartbeat:
-                            reason = f"Lane lease heartbeat stale ({now_ts - (heartbeat_at or 0)}s > 300s) (reaped)"
+                            reason = f"Lane lease heartbeat stale ({now_ts - (heartbeat_at or 0)}s > {timeout_sec}s) (reaped)"
                             err_code = "heartbeat_timeout"
                         else:
                             reason = "Lane lease TTL expired (reaped)"

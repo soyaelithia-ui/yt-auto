@@ -384,6 +384,32 @@ class TestAsyncRedditScraper(unittest.IsolatedAsyncioTestCase):
         sleep_retry = await _async_backoff_sleep(attempt=0, base=1.0, max_backoff=5.0, retry_after=0.01)
         self.assertAlmostEqual(sleep_retry, 0.01, places=2)
 
+    async def test_async_ensure_queue_depth_format_separation(self):
+        """Canonical stories with _short_ or _long_ must only be enqueued to compatible lanes."""
+        from src.scraper import async_ensure_queue_depth
+        from src.core.lanes import resolve_lane_for_run
+        from src.core.domain import CanonicalChannel
+        import tempfile
+        from src.db import init_db
+
+        with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+            init_db(tmp.name)
+            short_lane = resolve_lane_for_run(CanonicalChannel.AELITHIA, "aelithia-drama-shorts")
+            long_lane = resolve_lane_for_run(CanonicalChannel.AELITHIA, "aelithia-aita-long")
+
+            dummy_stories = [
+                {"id": "FILE-test_drama_long_001", "title": "¿Soy la mala por heredar la casa familiar?", "content": "Texto de drama largo para la familia con herencia " * 50, "url": "https://reddit.com/r/canonical/FILE-test_drama_long_001"},
+                {"id": "FILE-test_drama_short_001", "title": "¿Soy la mala por mi boda y familia?", "content": "Texto de drama corto para la familia en la boda " * 20, "url": "https://reddit.com/r/canonical/FILE-test_drama_short_001"},
+            ]
+            with patch("src.scraper.async_fetch_reddit_stories", return_value=dummy_stories):
+                count_short = await async_ensure_queue_depth(short_lane, db_path=tmp.name)
+                # Short lane should only enqueue the short story
+                self.assertEqual(count_short, 1)
+
+                count_long = await async_ensure_queue_depth(long_lane, db_path=tmp.name)
+                # Long lane should only enqueue the long story
+                self.assertEqual(count_long, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

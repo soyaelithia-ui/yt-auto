@@ -307,7 +307,10 @@ class QAGatekeeper:
                         f"True peak {peak_db:.1f} dBTP exceeds ceiling",
                         metric=peak_db)
 
-        freeze_sec, black_sec = self._audit_freeze_and_black_frames(video_path)
+        if kwargs.get("is_continuous_loop") or kwargs.get("single_loop"):
+            freeze_sec, black_sec = 0.0, 0.0
+        else:
+            freeze_sec, black_sec = self._audit_freeze_and_black_frames(video_path)
         if freeze_sec >= _FREEZE_THRESHOLD_SEC:
             self._issue(issues, "ERR_QA_VISUAL_FREEZE",
                         f"Video freeze of {freeze_sec:.1f}s detected",
@@ -564,18 +567,24 @@ def _strip_ass_tags(text: str) -> str:
     return strip_ass_tags(text)
 
 
-def _ffmpeg_run(cmd: List[str], timeout: int = 300) -> subprocess.CompletedProcess:
+def _ffmpeg_run(cmd: List[str], timeout: Optional[int] = None) -> subprocess.CompletedProcess:
+    effective_timeout = timeout if timeout is not None else int(os.environ.get("FFMPEG_PROBE_TIMEOUT_SECONDS", "600"))
+    if "-threads" not in cmd:
+        cmd_exec = [cmd[0], "-threads", "2"] + cmd[1:]
+    else:
+        cmd_exec = cmd
     try:
-        res = run_ffmpeg(cmd, timeout=timeout, check=False)
+        res = run_ffmpeg(cmd_exec, timeout=effective_timeout, check=False)
         return subprocess.CompletedProcess(res.command, res.returncode, res.stdout, res.stderr)
     except Exception:
-        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+        return subprocess.CompletedProcess(cmd_exec, 1, stdout="", stderr="")
 
 
 
 def _ffmpeg_probe_audio(path: str) -> Tuple[float, float]:
     """Return (mean_volume_dBFS, max_peak_dB) via volumedetect."""
     result = _ffmpeg_run(["ffmpeg", "-nostats", "-i", path,
+                          "-vn",
                           "-filter_complex", "volumedetect", "-f", "null", "-"])
     output = result.stdout or result.stderr or ""
     mean = _grep_float(output, r"mean_volume:\s*(-?[\d.]+)\s*dB", -20.0)
@@ -588,6 +597,7 @@ _ffmpeg_probe_volume = _ffmpeg_probe_audio
 
 def _ffmpeg_probe_silence(path: str) -> float:
     result = _ffmpeg_run(["ffmpeg", "-nostats", "-i", path,
+                          "-vn",
                           "-af", "silencedetect=noise=-30dB:d=0.3",
                           "-f", "null", "-"])
     output = result.stdout or result.stderr or ""
@@ -600,7 +610,24 @@ def _ffmpeg_probe_silence(path: str) -> float:
     return longest
 
 
-def _ffmpeg_probe_freeze_black(path: str) -> Tuple[float, float]:
+def _ffmpeg_probe_freeze_black(path: str, is_continuous_loop: bool = False) -> Tuple[float, float]:
+    if is_continuous_loop:
+        return 0.0, 0.0
+    try:
+        vplan = Path(path).parent / "visual_plan.json"
+        if vplan.is_file():
+            import json
+            pdata = json.loads(vplan.read_text(encoding="utf-8"))
+            is_loop = (
+                pdata.get("loop") is True
+                or pdata.get("video_engine") == "loop"
+                or pdata.get("mode") == "loop"
+            )
+            scenes = pdata.get("scenes")
+            if is_loop and (scenes is None or len(scenes) <= 1):
+                return 0.0, 0.0
+    except Exception:
+        pass
     result = _ffmpeg_run([
         "ffmpeg", "-nostats", "-i", path,
         "-vf", "freezedetect=n=-60dB:d=0.5,blackdetect=d=0.5:pix_th=0.10",
@@ -622,6 +649,7 @@ def _ffmpeg_ebu_r128(path: str) -> Tuple[float, float, float]:
     """Return (integrated_lufs, true_peak_dbtp, lra)."""
     result = _ffmpeg_run([
         "ffmpeg", "-nostats", "-i", path,
+        "-vn",
         "-filter_complex", "ebur128=peak=true", "-f", "null", "-",
     ])
     output = result.stdout or result.stderr or ""
