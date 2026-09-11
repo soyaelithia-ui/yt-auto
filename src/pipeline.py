@@ -373,11 +373,17 @@ class RunContext:
 
     def __post_init__(self) -> None:
         if self.lane is not None:
+            dur = getattr(self.lane, "duration_min_sec", None)
+            dur_is_long = (isinstance(dur, (int, float)) and dur >= 300) or (
+                isinstance(dur, str) and dur.isdigit() and int(dur) >= 300
+            )
+            lane_id = getattr(self.lane, "id", None)
+            lane_id_is_long = isinstance(lane_id, str) and "long" in lane_id.lower()
             if (
                 getattr(self.lane, "orientation", "") == "horizontal"
                 or getattr(self.lane, "qa_profile", "") == "longform"
-                or (getattr(self.lane, "duration_min_sec", 0) or 0) >= 300
-                or "long" in str(getattr(self.lane, "id", "")).lower()
+                or dur_is_long
+                or lane_id_is_long
             ):
                 self.is_long_lane = True
 
@@ -612,7 +618,7 @@ def _stage_02_ingest_translate(ctx: RunContext) -> None:
         ctx.content, ctx.title = ensure_spanish_source(str(ctx.story["content"]), str(ctx.story["title"]))
 
         additional: list[dict[str, Any]] = []
-        ctx.is_long_lane = ctx.lane.orientation == "horizontal"
+        ctx.is_long_lane = ctx.is_long_lane or (getattr(ctx.lane, "orientation", "") == "horizontal")
         if (
             not ctx.directed
             and ctx.lane.multistory_collection

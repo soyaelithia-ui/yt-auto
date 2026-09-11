@@ -104,12 +104,17 @@ def is_longform_lease(
         try:
             from src.core.lanes import get_lane
             lane = get_lane(resolved_lane_id)
-            if lane and (
-                getattr(lane, "orientation", "") == "horizontal"
-                or getattr(lane, "qa_profile", "") == "longform"
-                or (getattr(lane, "duration_min_sec", 0) or 0) >= 300
-            ):
-                return True
+            if lane:
+                dur = getattr(lane, "duration_min_sec", None)
+                dur_is_long = (isinstance(dur, (int, float)) and dur >= 300) or (
+                    isinstance(dur, str) and dur.isdigit() and int(dur) >= 300
+                )
+                if (
+                    getattr(lane, "orientation", "") == "horizontal"
+                    or getattr(lane, "qa_profile", "") == "longform"
+                    or dur_is_long
+                ):
+                    return True
         except Exception:
             pass
     return False

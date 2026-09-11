@@ -745,3 +745,54 @@ class TestWatchdogResiliency:
         )
         assert ctx.is_long_lane is True
 
+    def test_runcontext_post_init_safe_with_unconfigured_magicmock_lane(self) -> None:
+        """RunContext initializes cleanly without TypeError when lane is an unconfigured MagicMock."""
+        from unittest.mock import MagicMock
+        from pathlib import Path
+        from src.pipeline import RunContext
+
+        mock_lane = MagicMock()
+        ctx = RunContext(
+            story={"story_id": "s_mock"},
+            story_id="s_mock",
+            run_id="r_mock",
+            channel_name="moku",
+            channel_key="moku",
+            lane=mock_lane,
+            repository=MagicMock(),
+            database=":memory:",
+            owner="owner",
+            lease_seconds=900,
+            settings=MagicMock(),
+            branding=MagicMock(),
+            profiler=MagicMock(),
+            directed=False,
+            generate_only=False,
+            engine_mode="loop",
+            is_loop_mode=True,
+            is_multiscene_mode=False,
+            subtitles_active=False,
+            work_dir=Path("/tmp"),
+            audio_path=Path("/tmp/a.wav"),
+            ass_path=Path("/tmp/a.ass"),
+            srt_path=Path("/tmp/a.srt"),
+            video_path=Path("/tmp/v.mp4"),
+            thumbnail_path=Path("/tmp/t.jpg"),
+            script_path=Path("/tmp/s.txt"),
+            visual_plan_path=Path("/tmp/vp.json"),
+            metadata_path=Path("/tmp/m.json"),
+            scene_manifest_path=Path("/tmp/sm.json"),
+        )
+        assert ctx.is_long_lane is False
+
+    def test_is_longform_lease_safe_with_mock_lane(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """is_longform_lease safely evaluates when get_lane returns an unconfigured MagicMock."""
+        from unittest.mock import MagicMock
+        from src.core.lease_reaper import is_longform_lease
+
+        mock_lane = MagicMock()
+        monkeypatch.setattr("src.core.lanes.get_lane", lambda lane_id: mock_lane)
+        # Should not raise TypeError and return False for generic unconfigured mock
+        assert is_longform_lease(lane_id="custom_lane") is False
+
+
