@@ -228,13 +228,30 @@ def _resolve_dynamic_channel(key: str | CanonicalChannel) -> ChannelSettings:
     cookies_path = (
         _env_path(f"{prefix}_COOKIES_PATH", profile.auth.cookies_path)
         if f"{prefix}_COOKIES_PATH" in os.environ
-        else profile.auth.cookies_path
+        else (
+            _env_path("COOKIES_PATH", profile.auth.cookies_path)
+            if cid == "moku" and "COOKIES_PATH" in os.environ
+            else profile.auth.cookies_path
+        )
     )
+    if not cookies_path.exists() and "SECRETS_DIR" in os.environ:
+        cand = Path(os.environ["SECRETS_DIR"]) / cookies_path.name
+        if cand.exists():
+            cookies_path = cand
+
     youtube_token_path = (
         _env_path(f"{prefix}_YOUTUBE_TOKEN_PATH", profile.auth.youtube_token_path)
         if f"{prefix}_YOUTUBE_TOKEN_PATH" in os.environ
         else profile.auth.youtube_token_path
     )
+    if not youtube_token_path.exists() and "SECRETS_DIR" in os.environ:
+        cand = Path(os.environ["SECRETS_DIR"]) / "tokens" / youtube_token_path.name
+        if cand.exists():
+            youtube_token_path = cand
+        else:
+            cand_alt = Path(os.environ["SECRETS_DIR"]) / youtube_token_path.name
+            if cand_alt.exists():
+                youtube_token_path = cand_alt
     expected_channel_id = (
         os.environ.get(f"{prefix}_YOUTUBE_CHANNEL_ID")
         or profile.auth.expected_youtube_channel_id
