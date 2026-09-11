@@ -426,7 +426,7 @@ def send_telegram_message(
             "sendMessage",
             token=tok,
             # Extra kwargs (e.g. reply_markup) are forwarded to the Bot API.
-            json={"chat_id": target_chat_id, "text": message, "parse_mode": parse_mode, **kwargs},
+            json=({"chat_id": target_chat_id, "text": message, **kwargs} | ({"parse_mode": parse_mode} if parse_mode else {})),
             timeout=req_t,
         )
         if resp.status_code == 200:
