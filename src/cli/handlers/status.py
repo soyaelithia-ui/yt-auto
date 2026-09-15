@@ -24,7 +24,7 @@ def _is_daemon_running() -> str:
 
     try:
         res = subprocess.run(
-            ["pgrep", "-f", "main.py.*--(daemon|mass-produce)"],
+            ["pgrep", "-f", r"main\.py\s+(--)?(daemon|mass-produce)"],
             capture_output=True,
             text=True,
             timeout=5,

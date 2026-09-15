@@ -706,8 +706,9 @@ def migrate_database(
                     "VALUES (5, 'production_lanes', ?, ?)",
                     (m5_checksum, _utc_now()),
                 )
-                applied.append(5)
-            canonical_after = _count_channels(conn, ("moku", "aelithia"))
+            from src.core.channel_profile import ChannelProfileRegistry
+            active_channel_ids = tuple(ChannelProfileRegistry.list_active_channel_ids())
+            canonical_after = _count_channels(conn, active_channel_ids or ("moku", "aelithia"))
             quick_check = str(conn.execute("PRAGMA quick_check").fetchone()[0])
             if quick_check != "ok":
                 raise RuntimeError(f"SQLite quick_check falló: {quick_check}")
@@ -2348,7 +2349,9 @@ class QueueRepository:
                   AND status IN (?, ?)
                   AND (lane_id IS NULL OR lane_id = ?)
                   AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-                ORDER BY CASE WHEN lane_id = ? THEN 0 ELSE 1 END, created_at, story_id
+                ORDER BY CASE WHEN lane_id = ? THEN 0 ELSE 1 END,
+                         CASE WHEN status = ? THEN 0 ELSE 1 END,
+                         created_at, story_id
                 LIMIT 1
                 """,
                 (
@@ -2358,6 +2361,7 @@ class QueueRepository:
                     lane_key,
                     current,
                     lane_key,
+                    JobStatus.PENDING.value,
                 ),
             ).fetchone()
             if not row:
@@ -2409,6 +2413,7 @@ class QueueRepository:
             JobStatus.RENDERED.value,
             JobStatus.DRIVE_BACKED_UP.value,
             JobStatus.UPLOAD_UNCONFIRMED.value,
+            JobStatus.WAITING_YOUTUBE_LIMIT.value,
         )
         placeholders = ",".join("?" for _ in resumable_states)
         with connect(self.db_path) as conn:

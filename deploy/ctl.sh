@@ -12,9 +12,9 @@ if [ -z "$PY" ] || [ ! -x "$PY" ]; then
     PY="$(command -v python3 || command -v python)"
   fi
 fi
-SESSION_PREFIX="ytauto"
+SESSION_PREFIX="${YT_CTL_SESSION_PREFIX:-ytauto}"
 
-svc_session() { case "$1" in sched) echo "ytauto-sched";; bot) echo "ytauto-bot";; *) return 1;; esac; }
+svc_session() { case "$1" in sched) echo "${SESSION_PREFIX}-sched";; bot) echo "${SESSION_PREFIX}-bot";; *) return 1;; esac; }
 svc_script()  { case "$1" in sched) echo "deploy/tmux_scheduler.py";; bot) echo "deploy/tmux_review_bot.py";; *) return 1;; esac; }
 
 is_running() {  # $1 = svc

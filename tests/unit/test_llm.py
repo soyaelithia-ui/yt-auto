@@ -173,6 +173,25 @@ class TestLLMScriptCuration(unittest.TestCase):
         self.assertNotIn("Edit:", script)
         self.assertFalse(script.startswith("Título:"))
 
+    def test_expand_narrative_to_target_words_scp(self):
+        from src.llm import _expand_narrative_to_target_words
+        short_text = "SCP-096 es una criatura peligrosa en contención."
+        expanded = _expand_narrative_to_target_words(
+            main_title="SCP-096",
+            main_content=short_text,
+            min_words=180,
+            max_words=250,
+            channel="moku",
+        )
+        self.assertGreaterEqual(len(expanded.split()), 180)
+        self.assertTrue(expanded.startswith(short_text))
+
+    def test_expand_narrative_to_target_words_already_long(self):
+        from src.llm import _expand_narrative_to_target_words
+        text = " ".join(["palabra"] * 210)
+        res = _expand_narrative_to_target_words("SCP-096", text, 200, 250, "moku")
+        self.assertEqual(res, text)
+
 
 if __name__ == "__main__":
     unittest.main()

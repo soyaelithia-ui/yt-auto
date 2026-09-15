@@ -233,6 +233,87 @@ def compile_stories_to_target_words(
     return compiled_title, compiled_content
 
 
+def _expand_narrative_to_target_words(
+    main_title: str,
+    main_content: str,
+    min_words: int,
+    max_words: Optional[int] = None,
+    channel: str = "moku",
+) -> str:
+    """Expand a short narrative to satisfy min_words editorial budget when AI chain is offline.
+
+    1. For SCP anomalies (channel=moku or SCP topic), queries canonical lore from
+       src.core.scp_lore (containment_summary, key_facts, sensory_cues, narrative_hooks)
+       to enrich the narrative with 100% verified canonical facts.
+    2. For horror/drama stories, enriches with atmospheric narrative connectors.
+    """
+    # For Spanish channels (moku), filter orphan English blocks first so we count real Spanish words
+    usable_content = main_content
+    if channel == "moku":
+        try:
+            from src.sanitizer import filter_orphan_english_blocks
+            filtered = filter_orphan_english_blocks(main_content, channel="moku")
+            if len(filtered.split()) >= min_words:
+                return filtered
+            usable_content = filtered
+        except Exception:
+            pass
+
+    words = usable_content.split()
+
+    # 1. Canonical SCP lore enrichment
+    try:
+        from src.core.scp_lore import get_scp_canonical_lore, is_scp_topic
+        if is_scp_topic(main_title) or is_scp_topic(main_content) or channel == "moku":
+            lore = get_scp_canonical_lore(main_title) or get_scp_canonical_lore(main_content)
+            if lore:
+                parts: list[str] = []
+                if usable_content.strip():
+                    parts.append(usable_content.strip())
+                else:
+                    scp_name = lore.get("canonical_name", {}).get("es", lore.get("scp_id", main_title))
+                    obj_class = lore.get("object_class", "Euclid")
+                    parts.append(
+                        f"Clasificación de Objeto: {obj_class}. La anomalía designada como {scp_name} constituye una de las prioridades de vigilancia más rigurosas de la Fundación SCP."
+                    )
+                if lore.get("containment_summary"):
+                    parts.append(f"Procedimientos especiales de contención: {lore['containment_summary']}")
+                for hook in lore.get("narrative_hooks", ()):
+                    parts.append(hook)
+                for fact in lore.get("key_facts", ()):
+                    parts.append(fact)
+                for k, cue in (lore.get("sensory_cues") or {}).items():
+                    parts.append(f"Registros de observación sensorial: {cue}")
+                if sum(len(p.split()) for p in parts) < min_words:
+                    parts.append(
+                        "El personal del destacamento móvil asignado al sector de contención mantiene protocolos de respuesta inmediata ante cualquier fluctuación o fallo en los sistemas de sujeción herméticos. "
+                        "Todo el personal asignado debe seguir estrictamente las directivas de seguridad para evitar incidentes irreversibles durante los turnos de observación activa en las instalaciones."
+                    )
+                result = "\n\n".join(parts)
+                if len(result.split()) >= min_words:
+                    return result
+    except Exception as lore_err:
+        logger.debug("Lore expansion fallback skipped: %s", lore_err)
+
+    # 2. General organic connectors
+    try:
+        from src.branding import resolve_channel_key
+        is_drama = resolve_channel_key(channel) == "aelithia"
+        connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
+        additions = []
+        current_count = len(words)
+        for conn in connectors:
+            if conn not in main_content and current_count < min_words:
+                additions.append(conn)
+                current_count += len(conn.split())
+        if additions:
+            return main_content.rstrip() + "\n\n" + " ".join(additions)
+    except Exception:
+        pass
+
+    return main_content
+
+
 def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
     """
     Ensure raw story content and title are in Spanish before curation.
@@ -274,6 +355,18 @@ def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
                     translated_content = trans_dict["translated_text"]
             except Exception:
                 pass
+
+        if not is_spanish_neutral(translated_content) if len(translated_content.split()) >= 20 else not is_spanish_text(translated_content):
+            try:
+                from src.templates.narratives import build_moku_short_narrative
+                from src.core.scp_lore import is_scp_topic
+                if is_scp_topic(clean_t) or "scp" in clean_t.lower() or "scp" in str(title).lower():
+                    synth = build_moku_short_narrative(clean_t)
+                    if synth and is_spanish_neutral(synth):
+                        translated_content = synth
+                        logger.info("ensure_spanish_source synthesized canonical Spanish lore for %s", clean_t)
+            except Exception as synth_err:
+                logger.debug("ensure_spanish_source synthetic fallback skipped: %s", synth_err)
 
     if not is_title_es:
         try:
@@ -659,7 +752,14 @@ def curate_script(
             "AI chain exhausted (%s); using queued narrative content",
             "; ".join(chain_errors),
         )
-        return _trim_script_to_max_words(str(main_content).strip(), max_words)
+        expanded_content = _expand_narrative_to_target_words(
+            main_title=main_title,
+            main_content=str(main_content).strip(),
+            min_words=min_words or 210,
+            max_words=max_words,
+            channel=channel,
+        )
+        return _trim_script_to_max_words(expanded_content, max_words)
 
     raise AIProviderChainExhausted(
         "Cadena de proveedores de IA agotada para curación de guion: "

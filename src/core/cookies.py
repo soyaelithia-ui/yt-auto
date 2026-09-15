@@ -131,7 +131,82 @@ def parse_cookies_file(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
     if netscape_cookies:
         return netscape_cookies
 
+    # 3. Try raw semicolon-separated Cookie header string parsing
+    if ";" in text and "=" in text:
+        raw_header_cookies = parse_raw_cookie_header(text)
+        if raw_header_cookies:
+            return raw_header_cookies
+
     raise ValueError(f"Invalid cookies format in {p.name}")
+
+
+def parse_raw_cookie_header(text: str, default_domain: str = ".youtube.com") -> List[Dict[str, Any]]:
+    """Parse HTTP Cookie header string (name=value; name2=value2) into cookie dicts with dual-domain support."""
+    cookies = []
+    if not text or "=" not in text:
+        return cookies
+
+    items = text.strip().split(";")
+    future_expiry = time.time() + 86400 * 180  # 180 days default
+
+    google_auth_names = {
+        "SID", "HSID", "SSID", "APISID", "SAPISID",
+        "__Secure-1PSID", "__Secure-3PSID",
+        "__Secure-1PAPISID", "__Secure-3PAPISID",
+        "__Secure-1PSIDTS", "__Secure-3PSIDTS",
+        "__Secure-1PSIDCC", "__Secure-3PSIDCC",
+        "SIDCC", "ACCOUNT_CHOOSER",
+    }
+
+    for item in items:
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        name, val = item.split("=", 1)
+        name = name.strip()
+        val = val.strip()
+        if not name:
+            continue
+
+        is_secure = name.startswith("__Secure-") or name in {"SAPISID", "__Secure-3PAPISID", "__Secure-1PAPISID"}
+        is_httponly = name in {"SID", "HSID", "SSID", "__Secure-1PSID", "__Secure-3PSID", "LOGIN_INFO"}
+
+        # Base cookie for default domain (.youtube.com)
+        cookies.append({
+            "name": name,
+            "value": val,
+            "domain": default_domain,
+            "path": "/",
+            "secure": is_secure or True,
+            "httpOnly": is_httponly,
+            "sameSite": "None" if is_secure else "Lax",
+            "expires": future_expiry,
+        })
+
+        # Dual-domain authentication: Google account cookies must also exist on .google.com
+        if name in google_auth_names:
+            cookies.append({
+                "name": name,
+                "value": val,
+                "domain": ".google.com",
+                "path": "/",
+                "secure": is_secure or True,
+                "httpOnly": is_httponly,
+                "sameSite": "None" if is_secure else "Lax",
+                "expires": future_expiry,
+            })
+
+    return cookies
+
+
+def save_cookies_to_file(cookies: List[Dict[str, Any]], file_path: Union[str, Path]) -> None:
+    """Save cookie list to JSON file atomically."""
+    p = Path(file_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    temp_p = p.with_suffix(".tmp")
+    temp_p.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+    temp_p.replace(p)
+
 
 
 def format_cookies_for_playwright(cookies: list) -> List[Dict[str, Any]]:

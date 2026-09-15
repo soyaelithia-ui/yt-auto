@@ -17,7 +17,7 @@ from src.core.repository import (
 
 @dataclass(frozen=True)
 class SchedulerDecision:
-    channel: CanonicalChannel
+    channel: CanonicalChannel | str
     due_at: int
     next_due_at: int
 
@@ -59,21 +59,49 @@ class PersistentScheduler:
                 return None
 
             pref_raw = row["next_channel"]
-            preferred = CanonicalChannel(pref_raw) if pref_raw in ("moku", "aelithia") else CanonicalChannel.MOKU
-            alternate = (
-                CanonicalChannel.AELITHIA
-                if preferred is CanonicalChannel.MOKU
-                else CanonicalChannel.MOKU
-            )
-            chosen: Optional[CanonicalChannel] = None
-            for candidate in (preferred, alternate):
+            from src.core.channel_profile import ChannelProfileRegistry
+            from src.core.domain import canonical_channel
+
+            active_ids = ChannelProfileRegistry.list_active_channel_ids()
+            if not active_ids:
+                ctrl_rows = conn.execute("SELECT channel FROM channel_controls").fetchall()
+                active_ids = [str(r["channel"]) for r in ctrl_rows]
+            if not active_ids:
+                active_ids = ["moku"]
+
+            candidates: list[Any] = []
+            for cid in active_ids:
+                try:
+                    c = canonical_channel(cid)
+                    if c not in candidates:
+                        candidates.append(c)
+                except Exception:
+                    if cid not in candidates:
+                        candidates.append(cid)
+            if not candidates:
+                candidates = [CanonicalChannel.MOKU]
+
+            try:
+                pref_chan = canonical_channel(pref_raw)
+            except Exception:
+                pref_chan = candidates[0]
+
+            if pref_chan in candidates:
+                idx = candidates.index(pref_chan)
+                ordered_candidates = candidates[idx:] + candidates[:idx]
+            else:
+                ordered_candidates = candidates
+
+            chosen: Any | None = None
+            for candidate in ordered_candidates:
+                cand_val = candidate.value if hasattr(candidate, "value") else str(candidate)
                 control = conn.execute(
                     "SELECT paused FROM channel_controls WHERE channel = ?",
-                    (candidate.value,),
+                    (cand_val,),
                 ).fetchone()
                 lease = conn.execute(
                     "SELECT 1 FROM leases WHERE channel = ? AND expires_at > ?",
-                    (candidate.value, current),
+                    (cand_val, current),
                 ).fetchone()
                 if not (control and control["paused"]) and not lease:
                     chosen = candidate
@@ -81,14 +109,23 @@ class PersistentScheduler:
 
             # Always move the clock forward from "now": missed turns are never replayed.
             next_due = current + self.interval_seconds
-            next_channel = alternate if chosen == preferred else preferred
+            if chosen is not None and chosen in candidates:
+                next_idx = (candidates.index(chosen) + 1) % len(candidates)
+                next_channel = candidates[next_idx]
+            elif pref_chan in candidates:
+                next_idx = (candidates.index(pref_chan) + 1) % len(candidates)
+                next_channel = candidates[next_idx]
+            else:
+                next_channel = candidates[0]
+
+            next_channel_val = next_channel.value if hasattr(next_channel, "value") else str(next_channel)
             conn.execute(
                 """
                 UPDATE scheduler_state
                 SET next_channel = ?, next_run_at = ?, last_run_at = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE scheduler_id = 1
                 """,
-                (next_channel.value, next_due, current if chosen else None),
+                (next_channel_val, next_due, current if chosen else None),
             )
             conn.commit()
             if chosen is None:

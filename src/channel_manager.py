@@ -26,19 +26,23 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
                     return data
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("No se pudo leer el archivo de estado JSON %s: %s", target_path, exc)
-        return {
-            "terror": {"name": "Historias de Terror", "status": "ACTIVE", "reason": None},
-            "moku": {"name": "Historias de Terror", "status": "ACTIVE", "reason": None},
-            "aelithia": {"name": "Aelithia", "status": "ACTIVE", "reason": None},
-            "soy_el_malo": {"name": "Aelithia", "status": "ACTIVE", "reason": None},
-        }
+        from src.core.channel_profile import ChannelProfileRegistry
+
+        fallback: Dict[str, Any] = {}
+        for cid in ChannelProfileRegistry.list_active_channel_ids():
+            try:
+                name = ChannelProfileRegistry.get(cid).editorial.public_name
+            except Exception:
+                name = cid.capitalize()
+            fallback[cid] = {"name": name, "status": "ACTIVE", "reason": None}
+        return fallback
 
     migrate_database(target_path)
     with connect(target_path, read_only=True) as conn:
         rows = conn.execute(
             "SELECT channel, paused, reason, updated_at FROM channel_controls"
         ).fetchall()
-    return {
+    statuses = {
         str(row["channel"]): {
             "name": get_channel_settings(str(row["channel"])).public_name,
             "status": "SUSPENDED" if row["paused"] else "ACTIVE",
@@ -47,6 +51,21 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
         }
         for row in rows
     }
+    from src.core.channel_profile import ChannelProfileRegistry
+
+    for cid in ChannelProfileRegistry.list_active_channel_ids():
+        if cid not in statuses:
+            try:
+                name = ChannelProfileRegistry.get(cid).editorial.public_name
+            except Exception:
+                name = get_channel_settings(cid).public_name
+            statuses[cid] = {
+                "name": name,
+                "status": "ACTIVE",
+                "reason": None,
+                "updated_at": None,
+            }
+    return statuses
 
 
 def get_active_channels(db_path: str = None) -> List[str]:
@@ -71,7 +90,8 @@ def suspend_channel(
     repository = QueueRepository(target_path)
     repository.initialize()
     repository.pause(key, reason)
-    return get_channel_statuses(target_path).get(key.value, {})
+    ch_key = key.value if hasattr(key, "value") else str(key)
+    return get_channel_statuses(target_path).get(ch_key, {})
 
 
 def activate_channel(
@@ -86,4 +106,5 @@ def activate_channel(
     repository = QueueRepository(target_path)
     repository.initialize()
     repository.resume(key)
-    return get_channel_statuses(target_path).get(key.value, {})
+    ch_key = key.value if hasattr(key, "value") else str(key)
+    return get_channel_statuses(target_path).get(ch_key, {})

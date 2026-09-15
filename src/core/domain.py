@@ -40,6 +40,13 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
 LEGACY_ALIASES: Final[frozenset[str]] = frozenset({"terror", "soy_el_malo", "scp_shorts", "moku_terror", "aita_drama"})
 
 
+class DynamicChannelKey(str):
+    """Dynamic channel identifier compatible with string and CanonicalChannel enum protocols."""
+    @property
+    def value(self) -> str:
+        return str(self)
+
+
 def canonical_channel(value: str | CanonicalChannel) -> CanonicalChannel | str:
     """Resolve input aliases but never guess an absent or unknown channel."""
     if isinstance(value, CanonicalChannel):
@@ -59,7 +66,7 @@ def canonical_channel(value: str | CanonicalChannel) -> CanonicalChannel | str:
             return CHANNEL_ALIASES[norm_cid]
         active_ids = ChannelProfileRegistry.list_active_channel_ids()
         if norm_cid in active_ids or norm_cid in ChannelProfileRegistry._cache:
-            return norm_cid
+            return DynamicChannelKey(norm_cid)
     except Exception:
         pass
     raise ValueError(f"Canal desconocido o ausente: {value!r}")
@@ -106,6 +113,15 @@ class QuotaError(ProviderError):
 
 class AIProviderChainExhausted(QuotaError):
     code = "ai_provider_chain_exhausted"
+
+
+class YouTubeQuotaExceededError(QuotaError):
+    code = "youtube_quota_exceeded"
+
+
+class YouTubeUploadLimitError(ProviderError):
+    code = "youtube_upload_limit"
+    retryable = True
 
 
 class AuthenticationError(ProviderError):

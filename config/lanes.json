@@ -12,7 +12,7 @@
       "story_type": "scp",
       "orientation": "vertical",
       "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },
-      "words": { "min": 210, "max": 380, "recondense_max": 340 },
+      "words": { "min": 210, "max": 380, "recondense_max": 280 },
       "template": "shorts_creepypasta",
       "voice_rate": "+0%",
       "voice_profile": "scp_documentary_es",

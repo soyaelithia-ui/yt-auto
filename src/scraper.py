@@ -975,6 +975,168 @@ async def async_ensure_queue_depth(
                 session=session,
             )
 
+    # 4. If still 0 stories pending, activate dynamic procedural fallback
+    curr_count = await asyncio.to_thread(_get_count)
+    if curr_count == 0:
+        try:
+            from src.curators.base import get_narrative_director
+            director = get_narrative_director()
+            is_lane_long = getattr(lane, "orientation", "") == "horizontal"
+            padding_themes = getattr(lane, "padding_themes", ())
+            default_horror_themes = (
+                "bosques con niebla", "casas abandonadas", "carreteras nocturnas",
+                "hospitales psiquiátricos clausurados", "túneles subterráneos",
+                "faros aislados en la tormenta", "hoteles clausurados en la montaña",
+                "estaciones de tren desiertas", "archivos clasificados de la fundación",
+                "laboratorios biológicos en cuarentena", "cabinas de radio en la madrugada",
+                "cementerios olvidados en la niebla", "pantanos prohibidos", "minas de carbón clausuradas",
+            )
+            default_drama_themes = (
+                "herencia familiar disputada", "boda cancelada", "desalojo inesperado",
+                "testamento secreto alterado", "hipoteca oculta de mis suegros",
+                "deuda estudiantil exigida", "fiesta de compromiso saboteada",
+                "cena de navidad arruinada", "custodia de mascotas tras divorcio",
+                "negocios turbios de mi cuñado", "depósito de alquiler confiscado",
+                "reparto injusto de bienes paternos", "anillo de compromiso falso",
+                "chantaje de mi hermana menor", "secretos financieros de mi prometido",
+                "viaje familiar cancelado a espaldas", "cuidado de padres ancianos delegado",
+            )
+            default_themes = default_horror_themes if "moku" in channel_key else default_drama_themes
+            horror_hooks = (
+                "El terror de",
+                "La misteriosa entidad en",
+                "No debí entrar jamás a",
+                "La pesadilla olvidada en",
+                "El horror acecha en",
+                "La señal prohibida desde",
+                "El misterio sin resolver en",
+                "El peligro oculto en",
+                "Lo que encontramos en",
+                "La presencia siniestra en",
+            )
+            drama_short_hooks = (
+                "cancelar mi boda por",
+                "cortar contacto con mi familia por",
+                "negarme a prestar mis ahorros por",
+                "vender la propiedad familiar por",
+                "echar a mis parientes por",
+                "no invitar a mi hermana por",
+                "rechazar el chantaje ante",
+                "renunciar al patrimonio por",
+                "expulsar a mi suegra tras",
+                "bloquear las cuentas conjuntas tras",
+                "exigir el pago de la deuda ante",
+                "cambiar las cerraduras de casa tras",
+            )
+            drama_long_hooks = (
+                "mi decisión ante",
+                "poner límites definitivos ante",
+                "negarme al chantaje familiar por",
+                "cortar lazos de por vida tras",
+                "proteger mi patrimonio frente a",
+                "rechazar la herencia tóxica de",
+                "revelar la verdad familiar tras",
+                "defender mi hogar ante",
+                "enfrentar las exigencias injustas de",
+            )
+            qualifiers = (
+                "tras años de silencio",
+                "ante toda la familia reunida",
+                "ante una traición inesperada",
+                "por una deuda que no me correspondía",
+                "tras descubrir la verdad oculta",
+                "después de poner límites claros",
+                "cuando exigieron lo imposible",
+                "en el momento más difícil",
+                "a espaldas de todos",
+                "tras un ultimátum injusto",
+                "sin pedir disculpas",
+                "ante el chantaje de mis parientes",
+            )
+            themes_to_use = tuple(padding_themes) + tuple(default_themes)
+            existing_titles: set[str] = set()
+            existing_texts: list[str] = []
+            try:
+                import sqlite3
+                with sqlite3.connect(path) as _chk_conn:
+                    for _row in _chk_conn.execute(
+                        "SELECT title FROM publications WHERE channel = ? UNION SELECT title FROM stories WHERE channel = ?",
+                        (channel_key, channel_key),
+                    ).fetchall():
+                        if _row and _row[0]:
+                            existing_titles.add(_row[0].strip().lower())
+                from src.core.repository import QueueRepository
+                existing_texts = list(QueueRepository(path).recent_published_texts(channel_key))
+                with sqlite3.connect(path) as _chk_conn:
+                    for _row in _chk_conn.execute(
+                        "SELECT content FROM stories WHERE channel = ? AND status IN ('PENDING', 'PROCESSING', 'RENDERED', 'WAITING_YOUTUBE_LIMIT') ORDER BY created_at DESC LIMIT 30",
+                        (channel_key,),
+                    ).fetchall():
+                        if _row and _row[0]:
+                            existing_texts.append(str(_row[0]))
+            except Exception:
+                pass
+
+            needed = min(3, target_depth)
+            for i in range(needed):
+                seed = int(time.time()) + i
+                theme = themes_to_use[(seed + i) % len(themes_to_use)]
+                attempts = 0
+                title = ""
+                while attempts < 30:
+                    q_part = f" {qualifiers[(seed + i + attempts) % len(qualifiers)]}" if attempts > 0 else ""
+                    if is_lane_long:
+                        hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)] if "moku" in channel_key else drama_long_hooks[(seed + i + attempts) % len(drama_long_hooks)]
+                        cand = f"{hook} {theme}{q_part} en la noche" if "moku" in channel_key else f"¿Soy la mala por {hook} {theme}{q_part}?"
+                    else:
+                        hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)] if "moku" in channel_key else drama_short_hooks[(seed + i + attempts) % len(drama_short_hooks)]
+                        cand = f"{hook} {theme}{q_part} en la noche" if "moku" in channel_key else f"¿Soy la mala por {hook} {theme}{q_part}?"
+                    cand_clean = cand.strip().lower()
+                    if cand_clean not in existing_titles:
+                        title = cand
+                        existing_titles.add(cand_clean)
+                        break
+                    attempts += 1
+                else:
+                    cand = f"¿Soy la mala por {drama_short_hooks[i % len(drama_short_hooks)]} {theme} #{seed % 10000}?" if "aelithia" in channel_key else f"{horror_hooks[i % len(horror_hooks)]} {theme} en la noche #{seed % 10000}"
+                    title = cand
+                    existing_titles.add(cand.strip().lower())
+
+                if is_lane_long:
+                    content = director.build_longform(
+                        channel_key,
+                        title,
+                        target_words=getattr(lane, "words_min", 2600),
+                        seed=seed + i,
+                        recent_texts=existing_texts,
+                    )
+                    prefix = "DYNAMIC-LONG"
+                else:
+                    content = director.build_short(
+                        channel_key, theme, seed_offset=seed + i, recent_texts=existing_texts
+                    )
+                    prefix = "DYNAMIC-SHORT"
+
+                existing_texts.append(content)
+
+                story_id = f"{prefix}-{lane_id}-{seed}"
+                await asyncio.to_thread(
+                    enqueue_story,
+                    story_id=story_id,
+                    title=title,
+                    content=content,
+                    url=f"https://yt-auto.local/{story_id}",
+                    channel=channel_key,
+                    score=999,
+                    upvote_ratio=0.98,
+                    num_comments=50,
+                    lane_id=lane_id,
+                    db_path=path,
+                )
+            logger.info("Dynamic procedural fallback enqueued %d stories for lane [%s]", needed, lane_id)
+        except Exception as dyn_err:
+            logger.warning("Dynamic procedural fallback failed for lane [%s]: %s", lane_id, dyn_err)
+
     updated_count = await asyncio.to_thread(_get_count)
     if updated_count <= pending_count:
         cooldown = 60.0 if updated_count == 0 else 300.0

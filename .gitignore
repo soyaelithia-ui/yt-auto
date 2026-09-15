@@ -29,6 +29,7 @@ data/worksets/*
 
 secrets/
 browser_data/
+data/browser_profiles/
 cookies/
 *.key
 .bot_home*/

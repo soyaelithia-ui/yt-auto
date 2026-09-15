@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import time
@@ -20,8 +21,12 @@ try:
 except ImportError:
     sync_playwright = None
 from src.log import get_logger
+from src.core.domain import YouTubeQuotaExceededError, YouTubeUploadLimitError
 
 logger = get_logger("youtube_uploader")
+
+_LAST_2FA_ALERT_TIME: float = 0.0
+_2FA_ALERT_COOLDOWN_SECONDS: float = 3600.0
 
 
 def _run_subproc(
@@ -274,7 +279,46 @@ def upload_video_via_api(
             .execute()
         )
     except Exception as exc:
-        from src.core.domain import AmbiguousUploadError
+        from src.core.domain import (
+            AmbiguousUploadError,
+            YouTubeQuotaExceededError,
+            YouTubeUploadLimitError,
+        )
+
+        is_limit = False
+        is_quota = False
+        status_code = getattr(getattr(exc, "resp", None), "status", None)
+        exc_str = str(exc)
+
+        if "uploadLimitExceeded" in exc_str:
+            is_limit = True
+        elif hasattr(exc, "error_details") and exc.error_details:
+            for detail in exc.error_details:
+                if isinstance(detail, dict):
+                    if detail.get("reason") == "uploadLimitExceeded":
+                        is_limit = True
+                        break
+                    if detail.get("reason") in ("rateLimitExceeded", "quotaExceeded"):
+                        is_quota = True
+                        break
+
+        if not is_quota and (
+            status_code == 429
+            or "rateLimitExceeded" in exc_str
+            or "quotaExceeded" in exc_str
+            or "RESOURCE_EXHAUSTED" in exc_str
+        ):
+            is_quota = True
+
+        if is_limit:
+            raise YouTubeUploadLimitError(
+                f"YouTube daily upload limit exceeded: {exc_str}"
+            ) from exc
+
+        if is_quota:
+            raise YouTubeQuotaExceededError(
+                f"YouTube API quota exceeded: {exc_str}"
+            ) from exc
 
         raise AmbiguousUploadError(
             "La subida API pudo iniciarse pero no devolvió una respuesta inequívoca; no se reintentará automáticamente"
@@ -407,7 +451,14 @@ def verify_existing_video_via_api(
     }
 
 
+class PlaywrightPrePublishError(RuntimeError):
+    """Raised when Playwright fails before the final publish step (no video published)."""
+    pass
+
+
 def _safe_preupload_failure(error: Exception) -> bool:
+    if isinstance(error, PlaywrightPrePublishError):
+        return True
     detail = str(error).lower()
     return any(
         marker in detail
@@ -428,6 +479,15 @@ def _safe_preupload_failure(error: Exception) -> bool:
             "browsertype.launch",
             "browser failed",
             "cookies file not found",
+            "read-only file system",
+            "permission denied",
+            "browser_data",
+            "google identity verification",
+            "identity verification",
+            "verifica tu identidad",
+            "confirmar tu identidad",
+            "iron-overlay-backdrop",
+            "playwright pre-publish",
         )
     )
 
@@ -536,7 +596,9 @@ def upload_video_via_playwright_ts(
     source_path = BASE_DIR / "ts_services" / "src" / "youtube_studio_uploader.ts"
     ts_services_dir = str(BASE_DIR / "ts_services")
 
-    browser_data_dir = user_data_dir or str(BASE_DIR / "browser_data" / "session")
+    browser_data_dir = user_data_dir or os.environ.get(
+        "PLAYWRIGHT_USER_DATA_DIR", "/tmp/browser_data/session"
+    )
 
     if compiled_path.is_file():
         cmd = ["node", str(compiled_path)]
@@ -586,6 +648,7 @@ def upload_video_via_playwright(
     dry_run: bool = False,
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,
+    user_data_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Strategy B: Automation upload via Playwright using channel session cookies.
@@ -604,6 +667,7 @@ def upload_video_via_playwright(
             dry_run=dry_run,
             thumbnail_path=thumbnail_path,
             expected_identity=expected_identity,
+            user_data_dir=user_data_dir,
         )
     except FileNotFoundError as ts_err:
         logger.warning(
@@ -655,12 +719,30 @@ def upload_video_via_playwright(
     if sync_playwright is None:
         raise RuntimeError("Playwright is not installed or available.")
     
-    screenshot_dir = str(BASE_DIR / "logs" / "debug")
-    os.makedirs(screenshot_dir, exist_ok=True)
+    screenshot_dir = os.environ.get(
+        "PLAYWRIGHT_DEBUG_DIR", str(BASE_DIR / "logs" / "debug")
+    )
+    try:
+        os.makedirs(screenshot_dir, exist_ok=True)
+    except OSError:
+        screenshot_dir = "/tmp/debug"
+        os.makedirs(screenshot_dir, exist_ok=True)
     
     pids_before = _get_playwright_pids()
 
-    browser_profile_dir = str(BASE_DIR / "browser_data" / "session")
+    if not user_data_dir:
+        channel_name = "default"
+        if cookies_path:
+            cp_str = str(cookies_path).lower()
+            if "aelithia" in cp_str:
+                channel_name = "aelithia"
+            elif "moku" in cp_str or "cookies.json" in cp_str:
+                channel_name = "moku"
+        browser_profile_dir = os.environ.get(
+            "PLAYWRIGHT_USER_DATA_DIR", str(BASE_DIR / "data" / "browser_profiles" / channel_name)
+        )
+    else:
+        browser_profile_dir = user_data_dir
     os.makedirs(browser_profile_dir, exist_ok=True)
 
     try:
@@ -668,15 +750,30 @@ def upload_video_via_playwright(
             browser = None
             context = None
             page = None
+            video_published = False
             try:
                 try:
+                    modern_ua = (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    )
                     context = p.chromium.launch_persistent_context(
                         user_data_dir=browser_profile_dir,
                         headless=True,
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+                        user_agent=modern_ua,
                         viewport={"width": 1280, "height": 720},
-                        args=["--disable-blink-features=AutomationControlled"],
+                        args=[
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-sandbox",
+                            "--disable-dev-shm-usage",
+                        ],
                     )
+                    context.add_init_script("""
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => undefined
+                        });
+                    """)
                 except Exception as launch_err:
                     if "playwright install" in str(launch_err).lower() or "executable" in str(launch_err).lower():
                         raise RuntimeError(
@@ -749,29 +846,66 @@ def upload_video_via_playwright(
                 if page.locator('text=Verifica tu identidad').count() > 0 or page.locator('text=Confirmar tu identidad').count() > 0:
                     logger.warning("Google Identity Verification (2FA) detected.")
                     page.screenshot(path=f"{screenshot_dir}/identity_verification_error.png")
-                    next_btn = page.locator('button:has-text("Siguiente"), button:has-text("Next")')
+                    dialog = page.locator(
+                        'tp-yt-paper-dialog, ytcp-dialog, ytcp-confirmation-dialog, [role="dialog"]'
+                    ).filter(has_text=re.compile(r"Verifica tu identidad|Confirmar tu identidad|Verify your identity", re.I))
+                    modal_btn = dialog.locator('#confirm-button button, ytcp-button:has-text("Siguiente") button, button:has-text("Siguiente"), button:has-text("Next"), #confirm-button')
+                    if modal_btn.count() > 0:
+                        next_btn = modal_btn.first
+                    else:
+                        next_btn = page.locator('#confirm-button button, ytcp-button:has-text("Siguiente") button, button:has-text("Siguiente"), button:has-text("Next")').last
+
                     if next_btn.count() > 0:
                         logger.info("Clicking 'Siguiente' on Identity Verification modal to trigger 2FA notification...")
-                        next_btn.first.click()
-                        page.wait_for_timeout(5000)
+                        global _LAST_2FA_ALERT_TIME
+                        _now = time.time()
+                        if _now - _LAST_2FA_ALERT_TIME > _2FA_ALERT_COOLDOWN_SECONDS:
+                            _LAST_2FA_ALERT_TIME = _now
+                            try:
+                                from review.telegram_bot import send_telegram_message
+                                send_telegram_message(
+                                    "⚠️ *Google solicita verificación 2FA para publicar vía sesión web (Playwright).* "
+                                    "Por favor confirma en tu teléfono ahora."
+                                )
+                            except Exception:
+                                pass
+                        
+                        popup_holder = []
+                        context.on("page", lambda new_p: popup_holder.append(new_p))
+                        next_btn.click()
+                        page.wait_for_timeout(4000)
                         page.screenshot(path=f"{screenshot_dir}/identity_verification_challenge.png")
-                        try:
-                            from review.telegram_bot import send_telegram_message
-                            send_telegram_message("⚠️ *Google solicita verificación 2FA para publicar.* Revisa tu teléfono y confirma la notificación para continuar.")
-                        except Exception:
-                            pass
-                        # Wait up to 60s for user to verify on phone
+                        
+                        # Check if popup was opened
+                        popup_page = popup_holder[0] if popup_holder else (context.pages[1] if len(context.pages) > 1 else None)
+                        if popup_page:
+                            try:
+                                popup_page.wait_for_load_state("domcontentloaded", timeout=10000)
+                                popup_page.screenshot(path=f"{screenshot_dir}/popup_auth_challenge.png")
+                            except Exception:
+                                pass
+
+                        # Wait up to 180s (3 minutes) for user to verify on phone
                         verified = False
-                        for _ in range(12):
+                        for wait_iter in range(36):
                             page.wait_for_timeout(5000)
+                            # Check if modal is gone or if any dialog is closed
                             if page.locator('text=Verifica tu identidad').count() == 0 and page.locator('text=Confirmar tu identidad').count() == 0:
                                 verified = True
-                                logger.info("2FA Verification passed successfully!")
+                                logger.info("2FA Verification passed successfully! Proceeding with upload...")
                                 break
+                            if popup_page and popup_page.is_closed():
+                                page.wait_for_timeout(3000)
+                                if page.locator('text=Verifica tu identidad').count() == 0 and page.locator('text=Confirmar tu identidad').count() == 0:
+                                    verified = True
+                                    logger.info("2FA Popup closed and modal cleared! Proceeding with upload...")
+                                    break
+                            if wait_iter % 6 == 0:
+                                logger.info("Still waiting for 2FA phone confirmation... (%d/180s elapsed)", wait_iter * 5)
                         if not verified:
-                            raise RuntimeError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
+                            raise PlaywrightPrePublishError("Google Identity Verification (2FA) blocked the upload. Timeout waiting for phone confirmation.")
                     else:
-                        raise RuntimeError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
+                        raise PlaywrightPrePublishError("Google Identity Verification (2FA) blocked the upload. Please verify on your phone or try again later.")
 
                 # 3. Fill Metadata
                 logger.info("Filling metadata...")
@@ -874,6 +1008,7 @@ def upload_video_via_playwright(
                     
                 # 9. Click done
                 click_done(page, logger)
+                video_published = True
                 page.wait_for_timeout(10000)
                 page.screenshot(path=f"{screenshot_dir}/8_published.png")
                 
@@ -894,6 +1029,17 @@ def upload_video_via_playwright(
                     "url": video_url,
                     "verified": False,
                 }
+            except Exception as upload_exc:
+                if not video_published:
+                    logger.warning(
+                        "Playwright upload error occurred before publish confirmation: %s",
+                        upload_exc,
+                    )
+                    if not isinstance(upload_exc, PlaywrightPrePublishError):
+                        raise PlaywrightPrePublishError(
+                            f"Playwright pre-publish failed: {upload_exc}"
+                        ) from upload_exc
+                raise
             finally:
                 if page:
                     try:
@@ -901,6 +1047,19 @@ def upload_video_via_playwright(
                     except Exception as page_err:
                         logger.warning(f"Error closing page: {page_err}")
                 if context:
+                    try:
+                        if cookies_path and os.path.exists(cookies_path):
+                            rotated = context.cookies()
+                            if rotated:
+                                from src.core.cookies import save_cookies_to_file
+                                save_cookies_to_file(rotated, cookies_path)
+                                logger.info(
+                                    "Persisted %d rotated session cookies back to %s",
+                                    len(rotated),
+                                    cookies_path,
+                                )
+                    except Exception as save_err:
+                        logger.debug("Failed to persist rotated cookies: %s", save_err)
                     try:
                         context.close()
                     except Exception as ctx_err:
@@ -1141,6 +1300,7 @@ def upload_video(
             )
         )
 
+    api_quota_error: Optional[YouTubeQuotaExceededError] = None
     if not dry_run and os.path.isfile(effective_token):
         try:
             result = upload_video_via_api(
@@ -1152,6 +1312,7 @@ def upload_video(
                 token_path=effective_token,
                 channel=channel_key,
                 expected_channel_id=settings.expected_youtube_channel_id,
+                on_video_id=on_video_id,
             )
             return _finalize_result(
                 _normalize_upload_result(
@@ -1162,6 +1323,42 @@ def upload_video(
                     description=effective_description,
                 )
             )
+        except YouTubeUploadLimitError as limit_err:
+            logger.warning(
+                "YouTube daily upload limit reached for channel %s: %s",
+                channel_key,
+                limit_err,
+            )
+            return {
+                "status": "WAITING_YOUTUBE_LIMIT",
+                "method": "API",
+                "reason": str(limit_err),
+                "retry_after_seconds": 14400,
+                "verified": False,
+            }
+        except YouTubeQuotaExceededError as quota_err:
+            api_quota_error = quota_err
+            if not api_only and os.path.isfile(effective_cookies):
+                logger.info(
+                    "YouTube API quota exceeded for channel %s; falling back to Playwright session upload: %s",
+                    channel_key,
+                    quota_err,
+                )
+            else:
+                logger.warning(
+                    "YouTube API quota exceeded for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
+                    channel_key,
+                    api_only,
+                    os.path.isfile(effective_cookies),
+                    quota_err,
+                )
+                return {
+                    "status": "WAITING_YOUTUBE_LIMIT",
+                    "method": "API",
+                    "reason": str(quota_err),
+                    "retry_after_seconds": 3600,
+                    "verified": False,
+                }
         except Exception as api_error:
             logger.error(
                 "YouTube API upload failed; refusing Playwright fallback to avoid duplicates: %s",
@@ -1185,7 +1382,7 @@ def upload_video(
                 cookies_path=effective_cookies,
                 dry_run=dry_run,
                 thumbnail_path=thumbnail_path,
-                expected_identity=f"{settings.public_name}|{settings.handle}|{settings.expected_youtube_channel_id}",
+                expected_identity=f"{settings.public_name}|{settings.handle}|{settings.expected_youtube_channel_id}|dilemas|dilemamoralyt",
             )
             if dry_run:
                 return {"status": "DRY_RUN", "method": "PLAYWRIGHT"}
@@ -1200,8 +1397,13 @@ def upload_video(
             )
         except Exception as exc:
             playwright_error = exc
+            logger.error("Playwright upload execution failed: %s", exc, exc_info=True)
 
     if playwright_error and not _safe_preupload_failure(playwright_error):
+        logger.error(
+            "Playwright failure considered unconfirmed/ambiguous: %s",
+            playwright_error,
+        )
         return {
             "status": "UPLOAD_UNCONFIRMED",
             "method": "PLAYWRIGHT",
@@ -1214,6 +1416,19 @@ def upload_video(
     if dry_run:
         return {"status": "DRY_RUN", "method": "NONE"}
     if playwright_error:
+        if api_quota_error is not None:
+            logger.warning(
+                "YouTube API quota was exceeded and Playwright fallback failed before upload for channel %s (%s); deferring until quota reset",
+                channel_key,
+                playwright_error,
+            )
+            return {
+                "status": "WAITING_YOUTUBE_LIMIT",
+                "method": "API",
+                "reason": f"Quota exceeded and Playwright fallback unavailable: {playwright_error}",
+                "retry_after_seconds": 3600,
+                "verified": False,
+            }
         raise RuntimeError(
             "Playwright falló y no hay token API válido; los artefactos se preservan"
         ) from playwright_error

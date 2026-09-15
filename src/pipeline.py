@@ -30,6 +30,8 @@ from src.core.domain import (
     ManualInterventionRequired,
     ProviderTimeoutError,
     QuotaError,
+    YouTubeQuotaExceededError,
+    YouTubeUploadLimitError,
     canonical_channel,
 )
 from src.core.profiling import CanonicalStage, PipelineProfiler
@@ -763,6 +765,13 @@ def _stage_06_duration_alignment(ctx: RunContext) -> None:
             )
             _reprocess_script(raw, "re-condensación")
             if float(ctx.audio["duration_sec"]) > float(ctx.lane.duration_max_sec):
+                cur_words = ctx.clean_script.split()
+                ratio = max(0.5, (float(ctx.lane.duration_max_sec) - 10.0) / float(ctx.audio["duration_sec"]))
+                target_count = max(int(ctx.lane.words_min), int(len(cur_words) * ratio))
+                from src.llm import _trim_script_to_max_words
+                trimmed = _trim_script_to_max_words(ctx.clean_script, target_count)
+                _reprocess_script(trimmed, "re-condensación")
+            if float(ctx.audio["duration_sec"]) > float(ctx.lane.duration_max_sec):
                 raise ValueError(
                     f"La duración de audio ({ctx.audio['duration_sec']} s) excede el máximo {ctx.lane.duration_max_sec} s del carril {ctx.lane.id} tras re-condensación"
                 )
@@ -1321,6 +1330,32 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                 job_id=ctx.story_id, version=review_job.version,
             )
             ctx.repository.record_provider_attempt(ctx.run_id, "youtube", "upload_and_verify", outcome=str(result.get("status") or "unknown").lower())
+        except (YouTubeUploadLimitError, YouTubeQuotaExceededError) as exc:
+            retry_delay = 14400 if isinstance(exc, YouTubeUploadLimitError) else 3600
+            retry_at = int(time.time()) + retry_delay
+            ctx.repository.record_provider_attempt(
+                ctx.run_id, "youtube", "upload_and_verify",
+                outcome="limit_exceeded" if isinstance(exc, YouTubeUploadLimitError) else "quota_exceeded",
+                error_code=exc.code,
+                error_detail=str(exc),
+            )
+            if not ctx.set_owned_status(
+                JobStatus.WAITING_YOUTUBE_LIMIT,
+                error_code=exc.code,
+                error_detail=str(exc),
+                retry_at=retry_at,
+            ):
+                return ctx.lease_lost_result()
+            _marker(ctx.work_dir, ctx.run_id, active=False)
+            return {
+                "status": JobStatus.WAITING_YOUTUBE_LIMIT.value,
+                "story_id": ctx.story_id,
+                "run_id": ctx.run_id,
+                "channel": ctx.channel_name,
+                "work_dir": str(ctx.work_dir),
+                "retry_at": retry_at,
+                "profiling": ctx.profiler.to_dict(),
+            }
         except Exception as exc:
             ctx.repository.record_provider_attempt(ctx.run_id, "youtube", "upload_and_verify", outcome="failed", error_code=getattr(exc, "code", "youtube_error"), error_detail=str(exc))
             if ctx.directed:
@@ -1330,8 +1365,35 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                 return {"status": JobStatus.UPLOAD_UNCONFIRMED.value, "story_id": ctx.story_id, "run_id": ctx.run_id, "channel": ctx.channel_name, "work_dir": str(ctx.work_dir), "profiling": ctx.profiler.to_dict()}
             raise
 
+        if result.get("status") == "WAITING_YOUTUBE_LIMIT" or result.get("status") == JobStatus.WAITING_YOUTUBE_LIMIT.value:
+            retry_delay = int(result.get("retry_after_seconds") or 14400)
+            retry_at = int(time.time()) + retry_delay
+            if not ctx.set_owned_status(
+                JobStatus.WAITING_YOUTUBE_LIMIT,
+                error_code="youtube_upload_limit",
+                error_detail=str(result.get("reason") or "Límite diario de YouTube alcanzado"),
+                retry_at=retry_at,
+            ):
+                return ctx.lease_lost_result()
+            _marker(ctx.work_dir, ctx.run_id, active=False)
+            return {
+                "status": JobStatus.WAITING_YOUTUBE_LIMIT.value,
+                "story_id": ctx.story_id,
+                "run_id": ctx.run_id,
+                "channel": ctx.channel_name,
+                "work_dir": str(ctx.work_dir),
+                "retry_at": retry_at,
+                "profiling": ctx.profiler.to_dict(),
+            }
+
         if result.get("status") == "UPLOAD_UNCONFIRMED":
-            if not ctx.set_owned_status(JobStatus.UPLOAD_UNCONFIRMED, error_code="youtube_unconfirmed", error_detail=str(result.get("reason") or "respuesta ambigua")):
+            retry_at = int(time.time()) + 14400
+            if not ctx.set_owned_status(
+                JobStatus.UPLOAD_UNCONFIRMED,
+                error_code="youtube_unconfirmed",
+                error_detail=str(result.get("reason") or "respuesta ambigua"),
+                retry_at=retry_at,
+            ):
                 return ctx.lease_lost_result()
             _marker(ctx.work_dir, ctx.run_id, active=False)
             return {"status": JobStatus.UPLOAD_UNCONFIRMED.value, "story_id": ctx.story_id, "run_id": ctx.run_id, "channel": ctx.channel_name, "work_dir": str(ctx.work_dir), "profiling": ctx.profiler.to_dict()}
@@ -1420,6 +1482,8 @@ def _handle_pipeline_exception(
         "story_id": ctx.story_id,
         "run_id": ctx.run_id,
         "reason": str(exc),
+        "error": str(exc),
+        "error_msg": str(exc),
         "profiling": ctx.profiler.to_dict(),
     }
 
@@ -1597,6 +1661,10 @@ def run_pipeline_once(
         return _handle_pipeline_exception(exc, code=getattr(exc, "code", "ManualInterventionRequired"), status=JobStatus.RETRYABLE_FAILED, ctx=ctx)
     except (AuthenticationError, ProviderTimeoutError, OSError, ValueError) as exc:
         code = getattr(exc, "code", type(exc).__name__)
+        exc_str = str(exc)
+        if "Artefactos duplicados" in exc_str or "contenido demasiado similar" in exc_str:
+            logger.warning("Pipeline execution permanently failed due to unrecoverable content error (%s): %s", code, exc)
+            return _handle_pipeline_exception(exc, code="unrecoverable_content", status=JobStatus.PERMANENT_FAILED, ctx=ctx)
         logger.warning("Pipeline execution failed with retryable error (%s): %s", code, exc, exc_info=True)
         return _handle_pipeline_exception(exc, code=getattr(exc, "code", "pipeline_validation"), status=JobStatus.RETRYABLE_FAILED, retry_delay=900, ctx=ctx)
     except Exception as exc:

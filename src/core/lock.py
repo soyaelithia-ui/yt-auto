@@ -48,6 +48,37 @@ class ChannelLockError(RuntimeError):
     pass
 
 
+def _is_file_locked(path: str) -> tuple[bool, str]:
+    """Check non-blockingly if a lock file is held by fcntl.flock."""
+    if not os.path.exists(path):
+        return False, ""
+    f = None
+    try:
+        f = open(path, "r+", encoding="utf-8")
+    except (IOError, OSError):
+        try:
+            f = open(path, "r", encoding="utf-8")
+        except (IOError, OSError):
+            return True, "?"
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+        return False, ""
+    except (IOError, OSError):
+        holder_pid = "?"
+        try:
+            f.seek(0)
+            holder_pid = f.read().strip() or "?"
+        except Exception:
+            pass
+        try:
+            f.close()
+        except Exception:
+            pass
+        return True, holder_pid
+
+
 class ChannelLock:
     """
     Context manager for atomic per-channel file locking with optional timeout.
@@ -70,22 +101,26 @@ class ChannelLock:
         self._file_handle: Optional[Any] = None
         self._acquired: bool = False
         self._is_reentrant: bool = False
+        self._lock_file_path = lock_file_path
+        self._lock_dir = lock_dir
 
-        # Path Resolution Cascade
-        if lock_file_path is not None:
-            base_lock = str(lock_file_path)
-            self.lock_file = base_lock if self.channel_name in ("global", None, "") else f"{base_lock}.{self.channel_name}"
-        elif lock_dir is not None:
-            dir_path = Path(lock_dir)
-            filename = "youtube_automation.lock" if self.channel_name in ("global", None, "") else f"youtube_automation.lock.{self.channel_name}"
-            self.lock_file = str(dir_path / filename)
+        self.lock_file = self._resolve_lock_path(self.channel_name)
+
+    def _resolve_lock_path(self, name: str) -> str:
+        if self._lock_file_path is not None:
+            base_lock = str(self._lock_file_path)
+            return base_lock if name in ("global", None, "") else f"{base_lock}.{name}"
+        elif self._lock_dir is not None:
+            dir_path = Path(self._lock_dir)
+            filename = "youtube_automation.lock" if name in ("global", None, "") else f"youtube_automation.lock.{name}"
+            return str(dir_path / filename)
         elif "YT_LOCK_DIR" in os.environ:
             dir_path = Path(os.environ["YT_LOCK_DIR"])
-            filename = "youtube_automation.lock" if self.channel_name in ("global", None, "") else f"youtube_automation.lock.{self.channel_name}"
-            self.lock_file = str(dir_path / filename)
+            filename = "youtube_automation.lock" if name in ("global", None, "") else f"youtube_automation.lock.{name}"
+            return str(dir_path / filename)
         else:
             base_lock = _get_default_lock_path()
-            self.lock_file = str(base_lock) if self.channel_name in ("global", None, "") else f"{base_lock}.{self.channel_name}"
+            return str(base_lock) if name in ("global", None, "") else f"{base_lock}.{name}"
 
     @property
     def is_acquired(self) -> bool:
@@ -127,6 +162,42 @@ class ChannelLock:
         deadline = (time.monotonic() + max(0.0, float(effective_timeout))) if effective_timeout is not None else None
 
         while True:
+            # Hierarchy Conflict Check
+            conflict_ch = None
+            conflict_pid = None
+
+            if self.channel_name == "all":
+                from src.core.channel_profile import ChannelProfileRegistry
+                try:
+                    cids = ChannelProfileRegistry.list_active_channel_ids()
+                except Exception:
+                    cids = []
+                if not cids:
+                    cids = ["moku", "aelithia"]
+                for cid in cids:
+                    ch_path = self._resolve_lock_path(cid)
+                    is_locked, holder = _is_file_locked(ch_path)
+                    if is_locked:
+                        conflict_ch = cid
+                        conflict_pid = holder
+                        break
+            elif self.channel_name not in ("global", None, ""):
+                all_path = self._resolve_lock_path("all")
+                is_locked, holder = _is_file_locked(all_path)
+                if is_locked:
+                    conflict_ch = "all"
+                    conflict_pid = holder
+
+            if conflict_ch is not None:
+                if deadline is not None and time.monotonic() < deadline:
+                    time.sleep(min(effective_poll, max(0.05, deadline - time.monotonic())))
+                    continue
+                timeout_suffix = f" tras esperar {effective_timeout}s" if effective_timeout is not None else ""
+                raise ChannelLockError(
+                    f"Error: Another instance of the YouTube Automation script for channel [{conflict_ch}] "
+                    f"is already running (pid={conflict_pid}){timeout_suffix}."
+                )
+
             f = None
             try:
                 os.makedirs(os.path.dirname(os.path.abspath(self.lock_file)), exist_ok=True)
@@ -254,7 +325,7 @@ def acquire_lock(
 def release_lock(channel_name: str | None = None) -> None:
     """Legacy compatibility function for releasing a lock."""
     global _legacy_active_channel
-    if channel_name in ("all", None, ""):
+    if channel_name is None or channel_name == "":
         channels_to_release = list(_active_locks.keys())
         if not channels_to_release and _legacy_active_channel:
             channels_to_release = [_legacy_active_channel]
