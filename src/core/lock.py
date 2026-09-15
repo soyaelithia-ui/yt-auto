@@ -55,9 +55,13 @@ def _is_file_locked(path: str) -> tuple[bool, str]:
     f = None
     try:
         f = open(path, "r+", encoding="utf-8")
+    except FileNotFoundError:
+        return False, ""
     except (IOError, OSError):
         try:
             f = open(path, "r", encoding="utf-8")
+        except FileNotFoundError:
+            return False, ""
         except (IOError, OSError):
             return True, "?"
     try:
@@ -167,14 +171,30 @@ class ChannelLock:
             conflict_pid = None
 
             if self.channel_name == "all":
-                from src.core.channel_profile import ChannelProfileRegistry
+                cids: set[str] = set()
                 try:
-                    cids = ChannelProfileRegistry.list_active_channel_ids()
+                    from src.core.channel_profile import ChannelProfileRegistry
+                    cids.update(ChannelProfileRegistry.list_active_channel_ids())
                 except Exception:
-                    cids = []
-                if not cids:
-                    cids = ["moku", "aelithia"]
-                for cid in cids:
+                    pass
+                try:
+                    from src.core.lanes import load_lanes
+                    cids.update(lane.channel for lane in load_lanes())
+                except Exception:
+                    pass
+                try:
+                    lock_dir_path = Path(self.lock_file).parent
+                    dummy_name = Path(self._resolve_lock_path("___probe___")).name
+                    prefix = dummy_name.replace("___probe___", "")
+                    if lock_dir_path.exists():
+                        for p in lock_dir_path.glob(f"{prefix}*"):
+                            cand = p.name[len(prefix):]
+                            if cand and cand != "all":
+                                cids.add(cand)
+                except Exception:
+                    pass
+
+                for cid in sorted(cids):
                     ch_path = self._resolve_lock_path(cid)
                     is_locked, holder = _is_file_locked(ch_path)
                     if is_locked:

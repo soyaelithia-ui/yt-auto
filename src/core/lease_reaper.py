@@ -193,7 +193,7 @@ class LeaseReaper:
             # 1. Check leases table
             try:
                 if target_ch:
-                    rows = conn.execute("SELECT * FROM leases WHERE channel = ?", (target_ch,)).fetchall()
+                    rows = conn.execute("SELECT * FROM leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
                 else:
                     rows = conn.execute("SELECT * FROM leases").fetchall()
             except sqlite3.OperationalError:
@@ -293,7 +293,7 @@ class LeaseReaper:
             # 2. Check lane_leases table
             try:
                 if target_ch:
-                    lane_rows = conn.execute("SELECT * FROM lane_leases WHERE channel = ?", (target_ch,)).fetchall()
+                    lane_rows = conn.execute("SELECT * FROM lane_leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
                 else:
                     lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
             except sqlite3.OperationalError:
@@ -382,14 +382,18 @@ class LeaseReaper:
         return reaped_count
 
 
-def start_reaper_daemon(interval_seconds: float = 30.0, db_path: Optional[Union[str, Path]] = None) -> threading.Thread:
+def start_reaper_daemon(
+    interval_seconds: float = 30.0,
+    db_path: Optional[Union[str, Path]] = None,
+    channel: Optional[str] = None,
+) -> threading.Thread:
     """Start background daemon thread executing periodic reaper sweeps."""
     reaper = LeaseReaper(db_path=db_path)
 
     def _loop():
         while True:
             try:
-                reaper.reap_once()
+                reaper.reap_once(channel=channel)
             except Exception as exc:
                 logger.error("Error in lease reaper sweep: %s", exc)
             time.sleep(interval_seconds)

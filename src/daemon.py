@@ -333,6 +333,10 @@ def _release_telegram_poller_lock() -> None:
         _TELEGRAM_POLLER_LOCK_HANDLE = None
 
 
+import atexit as _atexit
+_atexit.register(_release_telegram_poller_lock)
+
+
 def _start_telegram_callback_poller() -> bool:
     """Start the review callback listener only in the production daemon."""
     if os.environ.get("ENABLE_TELEGRAM_CALLBACK_POLLING", "1") != "1":
@@ -508,6 +512,7 @@ def _collect_futures_responsive(
     database: str,
     tick: float = 5.0,
     touch_heartbeat: bool | None = None,
+    channel: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Drain a batch of lane futures without an unbounded ``result()`` wait."""
     from concurrent.futures import wait, FIRST_COMPLETED
@@ -530,7 +535,7 @@ def _collect_futures_responsive(
                 logger.debug("daemon liveness touch failed", exc_info=True)
             if time.monotonic() - last_sweep_time >= 30.0:
                 last_sweep_time = time.monotonic()
-                _run_auto_publish_sweep()
+                _run_auto_publish_sweep(channel=channel)
         if is_shutdown_requested():
             break
         remaining = deadline - time.monotonic()
@@ -1097,6 +1102,7 @@ def start_daemon_lanes(
                     timeout=_turn_timeout_seconds(),
                     database=database,
                     tick=_watchdog_tick_seconds(),
+                    channel=target_channel,
                 )
             )
             active_jobs.clear()

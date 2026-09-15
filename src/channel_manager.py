@@ -37,6 +37,16 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
             fallback[cid] = {"name": name, "status": "ACTIVE", "reason": None}
         return fallback
 
+    def _safe_public_name(cid: str) -> str:
+        try:
+            return get_channel_settings(cid).public_name
+        except Exception:
+            try:
+                from src.core.channel_profile import ChannelProfileRegistry
+                return ChannelProfileRegistry.get_channel(cid).editorial.public_name
+            except Exception:
+                return cid.capitalize()
+
     migrate_database(target_path)
     with connect(target_path, read_only=True) as conn:
         rows = conn.execute(
@@ -44,7 +54,7 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
         ).fetchall()
     statuses = {
         str(row["channel"]): {
-            "name": get_channel_settings(str(row["channel"])).public_name,
+            "name": _safe_public_name(str(row["channel"])),
             "status": "SUSPENDED" if row["paused"] else "ACTIVE",
             "reason": row["reason"],
             "updated_at": row["updated_at"],
@@ -55,12 +65,8 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
 
     for cid in ChannelProfileRegistry.list_active_channel_ids():
         if cid not in statuses:
-            try:
-                name = ChannelProfileRegistry.get(cid).editorial.public_name
-            except Exception:
-                name = get_channel_settings(cid).public_name
             statuses[cid] = {
-                "name": name,
+                "name": _safe_public_name(cid),
                 "status": "ACTIVE",
                 "reason": None,
                 "updated_at": None,

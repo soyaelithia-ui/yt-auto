@@ -1661,10 +1661,6 @@ def run_pipeline_once(
         return _handle_pipeline_exception(exc, code=getattr(exc, "code", "ManualInterventionRequired"), status=JobStatus.RETRYABLE_FAILED, ctx=ctx)
     except (AuthenticationError, ProviderTimeoutError, OSError, ValueError) as exc:
         code = getattr(exc, "code", type(exc).__name__)
-        exc_str = str(exc)
-        if "Artefactos duplicados" in exc_str or "contenido demasiado similar" in exc_str:
-            logger.warning("Pipeline execution permanently failed due to unrecoverable content error (%s): %s", code, exc)
-            return _handle_pipeline_exception(exc, code="unrecoverable_content", status=JobStatus.PERMANENT_FAILED, ctx=ctx)
         logger.warning("Pipeline execution failed with retryable error (%s): %s", code, exc, exc_info=True)
         return _handle_pipeline_exception(exc, code=getattr(exc, "code", "pipeline_validation"), status=JobStatus.RETRYABLE_FAILED, retry_delay=900, ctx=ctx)
     except Exception as exc:

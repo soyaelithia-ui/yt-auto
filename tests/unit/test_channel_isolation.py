@@ -387,3 +387,80 @@ def test_start_daemon_continues_when_one_channel_disk_paused(tmp_path, monkeypat
     # Crucial invariant: start_daemon did NOT break! It continued to aelithia!
     assert "aelithia" in runs
     assert results[1]["status"] == "SUCCESS"
+
+
+def test_lease_reaper_startup_preserves_alive_workers_without_channel_filter(tmp_path):
+    """LeaseReaper(startup=True, channel=None) preserves alive workers across all channels."""
+    db_file = tmp_path / "reaper_all_channels.db"
+    cur_host = socket.gethostname()
+    alive_pid = os.getpid()
+    dead_pid = 999999
+    now_ts = int(time.time())
+
+    with sqlite3.connect(str(db_file)) as conn:
+        conn.execute("CREATE TABLE stories (story_id TEXT PRIMARY KEY, status TEXT, run_id TEXT, error_msg TEXT)")
+        conn.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, status TEXT, finished_at TEXT, error_code TEXT)")
+        conn.execute("CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+        conn.execute("CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
+
+        # Alive workers on multiple distinct channels
+        conn.execute("INSERT INTO stories VALUES ('s_moku_alive', 'PROCESSING', 'r_moku_alive', NULL), ('s_ael_alive', 'PROCESSING', 'r_ael_alive', NULL)")
+        conn.execute("INSERT INTO runs VALUES ('r_moku_alive', 'PROCESSING', NULL, NULL), ('r_ael_alive', 'PROCESSING', NULL, NULL)")
+        conn.execute(
+            "INSERT INTO leases VALUES ('s_moku_alive', 'moku', ?, 'r_moku_alive', ?, ?, ?)",
+            (f"worker:{cur_host}:{alive_pid}", now_ts - 10, now_ts - 2, now_ts + 900),
+        )
+        conn.execute(
+            "INSERT INTO lane_leases VALUES ('ael-lane-1', 'aelithia', ?, 'r_ael_alive', ?, ?, ?)",
+            (f"worker:{cur_host}:{alive_pid}", now_ts - 10, now_ts - 2, now_ts + 900),
+        )
+
+        # Dead worker on a third channel
+        conn.execute("INSERT INTO stories VALUES ('s_scifi_dead', 'PROCESSING', 'r_scifi_dead', NULL)")
+        conn.execute("INSERT INTO runs VALUES ('r_scifi_dead', 'PROCESSING', NULL, NULL)")
+        conn.execute(
+            "INSERT INTO leases VALUES ('s_scifi_dead', 'scifi', ?, 'r_scifi_dead', ?, ?, ?)",
+            (f"worker:{cur_host}:{dead_pid}", now_ts - 60, now_ts - 10, now_ts + 900),
+        )
+        conn.commit()
+
+    reaper = LeaseReaper(db_path=db_file)
+    reaped = reaper.reap_once(startup=True, channel=None)
+    assert reaped == 1  # Only dead scifi worker is reaped!
+
+    with sqlite3.connect(str(db_file)) as conn:
+        # Alive leases still exist
+        assert conn.execute("SELECT 1 FROM leases WHERE channel = 'moku'").fetchone() is not None
+        assert conn.execute("SELECT 1 FROM lane_leases WHERE channel = 'aelithia'").fetchone() is not None
+        # Dead lease reaped
+        assert conn.execute("SELECT 1 FROM leases WHERE channel = 'scifi'").fetchone() is None
+
+
+def test_lock_hierarchy_detects_custom_channel_without_hardcoding(tmp_path):
+    """ChannelLock('all') dynamically detects custom channels not in the default registry."""
+    lock_custom = ChannelLock("custom_brand_unregistered", lock_dir=tmp_path, timeout=0.2)
+    lock_all = ChannelLock("all", lock_dir=tmp_path, timeout=0.2)
+
+    with lock_custom:
+        assert lock_custom.is_acquired
+        # 'all' must dynamically discover custom_brand_unregistered via lock dir inspection and raise ChannelLockError
+        with pytest.raises(ChannelLockError) as exc_info:
+            lock_all.acquire(timeout=0.1)
+        assert "custom_brand_unregistered" in str(exc_info.value)
+
+    # After custom lock is released, 'all' acquires cleanly
+    with lock_all:
+        assert lock_all.is_acquired
+
+
+def test_start_reaper_daemon_channel_scoped(tmp_path):
+    """start_reaper_daemon passes channel parameter correctly to background loop."""
+    from src.core.lease_reaper import start_reaper_daemon
+
+    sweeps = []
+    with patch.object(LeaseReaper, "reap_once", side_effect=lambda **kw: sweeps.append(kw.get("channel")) or 0):
+        th = start_reaper_daemon(interval_seconds=0.05, db_path=str(tmp_path / "dummy.db"), channel="moku")
+        time.sleep(0.12)
+        assert len(sweeps) >= 1
+        assert sweeps[0] == "moku"
+

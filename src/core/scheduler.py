@@ -67,7 +67,11 @@ class PersistentScheduler:
                 ctrl_rows = conn.execute("SELECT channel FROM channel_controls").fetchall()
                 active_ids = [str(r["channel"]) for r in ctrl_rows]
             if not active_ids:
-                active_ids = ["moku"]
+                try:
+                    from src.core.lanes import load_lanes
+                    active_ids = list({lane.channel for lane in load_lanes()})
+                except Exception:
+                    active_ids = []
 
             candidates: list[Any] = []
             for cid in active_ids:
@@ -79,7 +83,8 @@ class PersistentScheduler:
                     if cid not in candidates:
                         candidates.append(cid)
             if not candidates:
-                candidates = [CanonicalChannel.MOKU]
+                conn.rollback()
+                return None
 
             try:
                 pref_chan = canonical_channel(pref_raw)
