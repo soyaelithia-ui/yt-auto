@@ -63,6 +63,8 @@ x-yt-base: &yt-base
     DRIVE_PUBLISHED_FOLDER_ID: ${DRIVE_PUBLISHED_FOLDER_ID:-}
     DRIVE_REJECTED_FOLDER_ID: ${DRIVE_REJECTED_FOLDER_ID:-}
     DRIVE_ARCHIVE_FOLDER_ID: ${DRIVE_ARCHIVE_FOLDER_ID:-}
+    MIN_FREE_BYTES: ${MIN_FREE_BYTES:-2147483648}
+    YT_MIN_FREE_DISK_GB: ${YT_MIN_FREE_DISK_GB:-2.0}
   volumes:
     - yt_data:/app/data
     - yt_work:/app/work
@@ -85,25 +87,27 @@ x-yt-base: &yt-base
   stop_grace_period: 2m
 
 services:
+  # Primary unified multi-channel daemon (default: handles all active channels)
+  yt-automation:
+    <<: *yt-base
+    container_name: yt-automation
+    hostname: yt-automation
+    command: ["python", "main.py", "daemon", "--channel", "all", "--interval", "60"]
+
+  # Isolated split-channel daemons (profile: split-channels)
   yt-moku:
     <<: *yt-base
     container_name: yt-moku
     hostname: yt-moku
+    profiles: ["split-channels"]
     command: ["python", "main.py", "daemon", "--channel", "moku", "--interval", "60"]
 
   yt-aelithia:
     <<: *yt-base
     container_name: yt-aelithia
     hostname: yt-aelithia
+    profiles: ["split-channels"]
     command: ["python", "main.py", "daemon", "--channel", "aelithia", "--interval", "60"]
-
-  # Monolithic fallback daemon (profile: all-in-one)
-  yt-automation:
-    <<: *yt-base
-    container_name: yt-automation
-    hostname: yt-automation
-    profiles: ["all-in-one"]
-    command: ["python", "main.py", "daemon", "--channel", "all", "--interval", "60"]
 
   telegram-bot-api:
     profiles: ["local-telegram"]
