@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -40,6 +41,7 @@ def to_unsigned_64(val: int | None) -> int:
     return int(val) & 0xFFFFFFFFFFFFFFFF
 
 
+@functools.lru_cache(maxsize=2048)
 def compute_simhash_64(text: str | None) -> int:
     """Compute a 64-bit SimHash over normalized text with word weights and bigrams."""
     if not text:
@@ -75,6 +77,9 @@ def compute_simhash_64(text: str | None) -> int:
 def simhash_hamming_distance(h1: int | None, h2: int | None) -> int:
     """Compute Hamming distance (differing bits) between two 64-bit integers."""
     return (to_unsigned_64(h1) ^ to_unsigned_64(h2)).bit_count()
+
+
+hamming_distance_64 = simhash_hamming_distance
 
 
 def is_simhash_duplicate(h1: int | None, h2: int | None, max_distance: int = 3) -> bool:

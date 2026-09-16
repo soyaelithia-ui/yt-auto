@@ -90,24 +90,34 @@ def clean_title(title: str, channel: Optional[str] = None) -> str:
 def is_spanish_text(text: str) -> bool:
     """
     Check if a text is primarily in Spanish by examining frequency of common Spanish words.
+    Excludes English-ambiguous short homographs ('no', 'mi', 'me') from naive match counts.
     """
-    from src.config import is_test_environment
-    if is_test_environment():
-        return True
     if not text or not isinstance(text, str):
         return False
     words = [w.lower() for w in re.findall(r'[a-zA-ZáéíóúñÁÉÍÓÚÑ]+', text)]
     if not words:
         return False
+
+    has_spanish_diacritics = any(c in text for c in "áéíóúÁÉÍÓÚñÑ¿¡")
+    if has_spanish_diacritics:
+        return True
+
     spanish_stop_words = {
         "el", "la", "los", "las", "un", "una", "unos", "unas", "que", "de", "en", "para",
-        "por", "con", "no", "es", "se", "su", "sus", "al", "del", "como", "mas", "pero",
-        "mi", "mis", "tu", "tus", "habia", "había", "estaba", "cuando", "dijo", "hacer",
-        "hizo", "tenia", "tenía", "todo", "toda", "todos", "todas", "otra", "otro", "muy"
+        "por", "con", "es", "se", "su", "sus", "al", "del", "como", "mas", "pero",
+        "mis", "tu", "tus", "habia", "había", "estaba", "cuando", "dijo", "hacer",
+        "hizo", "tenia", "tenía", "todo", "toda", "todos", "todas", "otra", "otro", "muy",
+        "este", "esta", "estos", "estas", "porque", "quien", "donde", "sobre", "entre"
     }
     match_count = sum(1 for w in words if w in spanish_stop_words)
     ratio = match_count / len(words)
-    return ratio >= 0.02 or match_count >= 3
+
+    # For short titles/phrases (< 8 words), require at least 1 unambiguous stopword and ratio >= 0.20
+    if len(words) < 8:
+        return match_count >= 1 and ratio >= 0.20
+
+    # For longer texts, require significant density
+    return ratio >= 0.05 and match_count >= 2
 
 
 def _curate_with_regex(raw_text: str, title: str, channel: str = "moku", max_words: Optional[int] = None, min_words: int = 180) -> str:

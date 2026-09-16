@@ -137,10 +137,10 @@ def upload_to_drive_verified(
     raw_key = idempotency_key or f"{folder_id}:{name}:{target.stat().st_size}"
     stable_key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     property_name = "yt_backup_key"
+    escaped_folder = folder_id.replace("'", "\\'")
+    escaped_key = stable_key.replace("'", "\\'")
 
     def _search_existing() -> list[dict[str, Any]]:
-        escaped_folder = folder_id.replace("'", "\\'")
-        escaped_key = stable_key.replace("'", "\\'")
         response = (
             service.files()
             .list(
@@ -175,8 +175,8 @@ def upload_to_drive_verified(
                     if item.get("id") == str(remote.get("id") or ""):
                         parents = item.get("parents") or []
                         break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Drive _proof parent verification query failed: %s", exc)
         remote_name = str(remote.get("name") or "")
         proof = DriveProof(
             file_id=str(remote.get("id") or ""),

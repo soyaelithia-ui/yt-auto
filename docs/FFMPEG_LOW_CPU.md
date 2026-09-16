@@ -14,7 +14,7 @@ Helpers: `src/media/encode_defaults.py` (`default_render_preset`, `default_rende
 
 ## Rules
 
-1. **Horizontal beats / loop** (`LoopVideoEngine`): prefer `-c:v copy` when orientation is horizontal and subtitles are not burned. Pipeline already sets `stream_copy=True` in that case.
+1. **Stream-Copy en loops (`LoopVideoEngine`)**: Prioriza `-c:v copy` cuando los subtítulos no se incrustan en el video. Tanto `lib/video.py` como `LoopVideoEngine.ensure_h264_main_profile` admiten perfiles H.264 `Main` y `High` de forma nativa sin forzar re-codificación con `libx264`, permitiendo completar la composición en $\le 3$ segundos con uso mínimo de CPU.
 2. **Re-encode paths** (vertical + libass, hybrid zoompan, multi-scene master): use `veryfast` + CRF 21 — **not** `slow` (CPU disaster) and **not** blind `ultrafast` on final delivers.
 3. **Pillow / rawvideo frame loops**: Permanently purged from the video pipeline. Composition relies exclusively on pre-rendered assets and FFmpeg native filters (`zoompan` for Ken Burns).
 4. **Catalog loop segments** (`LoopVideoEngine`): stream-copy trim (`-c:v copy`) via concat demuxer when `loop_matches_target_geometry` matches target resolution and no subtitles are burned.

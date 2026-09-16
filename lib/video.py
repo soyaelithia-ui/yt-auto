@@ -196,7 +196,7 @@ def _is_mastering_folded() -> bool:
 
 # EQ cut + loudnorm applied inline on the narration branch when mastering is
 # folded into the mux (identical chain to lib.tts.master_voice_audio).
-_MASTERING_PREFIX = "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-16:TP=-1.5:LRA=11,"
+_MASTERING_PREFIX = "equalizer=f=120:t=q:w=1:g=-2,loudnorm=I=-14.0:TP=-1.5:LRA=11,"
 
 
 def _compute_T_trans(img_durations: list[float]) -> float:
@@ -354,8 +354,8 @@ def validate_video_format(
         )
     if not _resolve("is_test_environment", is_test_environment)():
         profile = str(video.get("profile", "") or "").lower()
-        if profile and profile != "main":
-            raise ValueError(f"Invalid video profile: {video.get('profile')} (expected Main)")
+        if profile and profile not in ("main", "high"):
+            raise ValueError(f"Invalid video profile: {video.get('profile')} (expected Main or High)")
     if audio.get("codec_name") not in ("aac", None):
         raise ValueError(f"Invalid audio codec: {audio.get('codec_name')} (expected aac)")
     try:

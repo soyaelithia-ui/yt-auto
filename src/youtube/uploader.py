@@ -343,14 +343,33 @@ def upload_video_via_api(
         thumbnail_confirmed = True
     except Exception as exc:
         logger.warning("YouTube custom thumbnail setting failed: %s", exc)
-        thumbnail_confirmed = False
-    item = _verify_uploaded_video(
-        youtube,
-        video_id=video_id,
-        expected_channel_id=expected_channel_id,
-        expected_title=title,
-        expected_description=description,
-    )
+    try:
+        item = _verify_uploaded_video(
+            youtube,
+            video_id=video_id,
+            expected_channel_id=expected_channel_id,
+            expected_title=title,
+            expected_description=description,
+        )
+    except RuntimeError as verify_err:
+        logger.warning(
+            "Video %s was uploaded to YouTube, but verification timed out or could not be fully confirmed: %s",
+            video_id,
+            verify_err,
+        )
+        return {
+            "status": "UPLOAD_UNCONFIRMED",
+            "method": "API",
+            "video_id": video_id,
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "channel": str(kwargs.get("channel") or ""),
+            "thumbnail_confirmed": thumbnail_confirmed,
+            "verified": False,
+            "reason": str(verify_err),
+            "publication_sequence": (
+                "videos.insert(public)->persist video_id->verification_timeout"
+            ),
+        }
     snippet = item.get("snippet") or {}
     status = item.get("status") or {}
     if not thumbnail_confirmed and (snippet.get("thumbnails") or {}).get("default"):
@@ -657,27 +676,28 @@ def upload_video_via_playwright(
     if cookies_path and not Path(cookies_path).is_file():
         raise FileNotFoundError(f"Cookies file not found: {cookies_path}")
 
-    try:
-        return upload_video_via_playwright_ts(
-            video_path,
-            title,
-            description,
-            tags=tags,
-            cookies_path=cookies_path,
-            dry_run=dry_run,
-            thumbnail_path=thumbnail_path,
-            expected_identity=expected_identity,
-            user_data_dir=user_data_dir,
-        )
-    except FileNotFoundError as ts_err:
-        logger.warning(
-            "TypeScript Playwright uploader is unavailable (%s); using Python",
-            ts_err,
-        )
-    except Exception:
-        # The TypeScript flow may already have selected a file or created a draft.
-        # Retrying in another browser would risk a duplicate.
-        raise
+    if (BASE_DIR / "ts_services").is_dir():
+        try:
+            return upload_video_via_playwright_ts(
+                video_path,
+                title,
+                description,
+                tags=tags,
+                cookies_path=cookies_path,
+                dry_run=dry_run,
+                thumbnail_path=thumbnail_path,
+                expected_identity=expected_identity,
+                user_data_dir=user_data_dir,
+            )
+        except FileNotFoundError as ts_err:
+            logger.warning(
+                "TypeScript Playwright uploader is unavailable (%s); using Python",
+                ts_err,
+            )
+        except Exception:
+            # The TypeScript flow may already have selected a file or created a draft.
+            # Retrying in another browser would risk a duplicate.
+            raise
 
 
     if not video_path or not os.path.exists(video_path):

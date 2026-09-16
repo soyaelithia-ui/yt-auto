@@ -36,46 +36,10 @@ _RENDER_SEMAPHORE = _LONG_RENDER_SEMAPHORE
 _SYNTHESIS_SEMAPHORE = threading.Semaphore(2)
 
 
-def compute_simhash_64(text: str | None) -> int:
-    """Computes a 64-bit SimHash fingerprint using token and bigram frequency weights."""
-    import hashlib
-    import re
-    from collections import Counter
-
-    if not text:
-        return 0
-    tokens = re.findall(r"\w+", str(text).lower())
-    if not tokens:
-        return 0
-
-    features: list[str] = list(tokens)
-    for i in range(len(tokens) - 1):
-        features.append(f"{tokens[i]}_{tokens[i+1]}")
-
-    counts = Counter(features)
-    v = [0.0] * 64
-
-    for feat, weight in counts.items():
-        h_bytes = hashlib.md5(feat.encode("utf-8")).digest()[:8]
-        h = int.from_bytes(h_bytes, byteorder="big")
-        for i in range(64):
-            bit = (h >> i) & 1
-            v[i] += weight if bit else -weight
-
-    fingerprint = 0
-    for i in range(64):
-        if v[i] > 0:
-            fingerprint |= 1 << i
-
-    return fingerprint
-
-
-def hamming_distance_64(h1: int | None, h2: int | None) -> int:
-    """Computes Hamming distance between two 64-bit integers."""
-    v1 = int(h1 or 0) & 0xFFFFFFFFFFFFFFFF
-    v2 = int(h2 or 0) & 0xFFFFFFFFFFFFFFFF
-    xor = v1 ^ v2
-    return bin(xor).count("1")
+from src.core.repository import (
+    compute_simhash_64,
+    hamming_distance_64,
+)
 
 
 def evaluate_script_simhash(

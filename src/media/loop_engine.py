@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import wave
 from pathlib import Path
@@ -209,25 +210,35 @@ CATEGORY_ALIASES: dict[str, str] = {
 }
 
 _ROTATION_STATE_FILE = (BASE_DIR / "data" / "loop_rotation_state.json").resolve()
+_ROTATION_STATE_LOCK = threading.RLock()
 
 
 def _load_rotation_state() -> dict[str, int]:
-    try:
-        if _ROTATION_STATE_FILE.is_file():
-            data = json.loads(_ROTATION_STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return {str(k): int(v) for k, v in data.items() if isinstance(v, (int, float))}
-    except Exception:
-        pass
-    return {}
+    with _ROTATION_STATE_LOCK:
+        try:
+            if _ROTATION_STATE_FILE.is_file():
+                data = json.loads(_ROTATION_STATE_FILE.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return {str(k): int(v) for k, v in data.items() if isinstance(v, (int, float))}
+        except Exception:
+            pass
+        return {}
 
 
 def _save_rotation_state(state: dict[str, int]) -> None:
-    try:
-        _ROTATION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _ROTATION_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    with _ROTATION_STATE_LOCK:
+        try:
+            _ROTATION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            temp_fd, temp_path = tempfile.mkstemp(
+                dir=str(_ROTATION_STATE_FILE.parent),
+                prefix="rotation_state_",
+                suffix=".tmp",
+            )
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            os.replace(temp_path, str(_ROTATION_STATE_FILE))
+        except Exception:
+            pass
 
 
 class LoopVideoEngine(BaseVideoCompositor):
@@ -363,19 +374,20 @@ class LoopVideoEngine(BaseVideoCompositor):
         """Determines next rotation index, using disk-backed state in production or in-memory in tests."""
         from src.config import is_test_environment
         should_persist = (not is_test_environment()) if persist is None else bool(persist)
-        if should_persist:
-            state = _load_rotation_state()
-            curr = state.get(mode, cls._rotation_indices.get(mode, 0))
-            idx = curr % total_files
-            next_idx = idx + 1
-            cls._rotation_indices[mode] = next_idx
-            state[mode] = next_idx
-            _save_rotation_state(state)
-            return idx
-        else:
-            idx = cls._rotation_indices.get(mode, 0) % total_files
-            cls._rotation_indices[mode] = idx + 1
-            return idx
+        with _ROTATION_STATE_LOCK:
+            if should_persist:
+                state = _load_rotation_state()
+                curr = state.get(mode, cls._rotation_indices.get(mode, 0))
+                idx = curr % total_files
+                next_idx = idx + 1
+                cls._rotation_indices[mode] = next_idx
+                state[mode] = next_idx
+                _save_rotation_state(state)
+                return idx
+            else:
+                idx = cls._rotation_indices.get(mode, 0) % total_files
+                cls._rotation_indices[mode] = idx + 1
+                return idx
 
     @classmethod
     def reset_rotation_state(cls, mode: str | None = None) -> None:
@@ -1076,7 +1088,7 @@ class LoopVideoEngine(BaseVideoCompositor):
         ducking_release_ms: float = 350.0,
         lowpass_freq: int = 12000,
         master_loudness: bool = True,
-        target_lufs: float = -16.0,
+        target_lufs: float = -14.0,
         max_tp: float = -1.5,
         lra: float = 11.0,
     ) -> str:
@@ -1377,8 +1389,8 @@ class LoopVideoEngine(BaseVideoCompositor):
                 if s.get("codec_type") == "video":
                     profile = str(s.get("profile") or "")
                     break
-        normalized = profile.strip().lower().replace(" ", "")
-        if normalized in {"main", "baseline", "constrainedbaseline", "constrained_baseline"}:
+        normalized = profile.strip().lower().replace(" ", "").replace("_", "")
+        if normalized in {"main", "high", "baseline", "constrainedbaseline"}:
             return target
         out_tmp = target.with_name(target.stem + ".main" + target.suffix)
         crf_v = default_render_crf() if crf is None else crf
@@ -1464,7 +1476,7 @@ class LoopVideoEngine(BaseVideoCompositor):
             # Always loudnorm narration-only delivers (YouTube-consistent LUFS)
             # without paying a video re-encode (-c:v copy remains).
             if kwargs.get("master_loudness", True):
-                target_lufs = kwargs.get("target_lufs", -16.0)
+                target_lufs = kwargs.get("target_lufs", -14.0)
                 max_tp = kwargs.get("max_tp", -1.5)
                 lra = kwargs.get("lra", 11.0)
                 audio_filter = (

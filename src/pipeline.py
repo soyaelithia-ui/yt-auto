@@ -693,6 +693,20 @@ def _stage_05_tts_synthesis(ctx: RunContext) -> None:
     with ctx.profiler.phase(CanonicalStage.TTS_SYNTHESIS):
         from lib.tts import generate_audio
 
+        # WPM feasibility pre-check (approx 130-150 words/min)
+        # If words exceed lane maximum words by > 15%, trim before first TTS synthesis to save CPU and network cycles
+        max_allowed_words = getattr(ctx.lane, "words_max", None) or getattr(ctx.lane, "words_recondense_max", None)
+        if max_allowed_words and ctx.lane.orientation == "vertical":
+            cur_words = ctx.clean_script.split()
+            if len(cur_words) > int(max_allowed_words * 1.15):
+                from src.llm import _trim_script_to_max_words
+                logger.info(
+                    "Guion preliminar (%d palabras) excede presupuesto del carril (%d palabras); pre-recortando antes de TTS",
+                    len(cur_words), max_allowed_words,
+                )
+                ctx.clean_script = _trim_script_to_max_words(ctx.clean_script, max_allowed_words)
+                ctx.script_path.write_text(ctx.clean_script, encoding="utf-8")
+
         target_audio_sec = float(ctx.lane.duration_target_sec)
         audio = generate_audio(
             ctx.clean_script,
@@ -900,58 +914,36 @@ def _stage_04_mood_theme(ctx: RunContext) -> None:
         from src.core.scenic_detector import detect_adaptive_theme
 
         ctx.loop_engine = LoopVideoEngine()
-        if ctx.is_multiscene_mode:
-            curator = CinematicScriptCuratorAgent()
-            art = ArtDirectorMoodAgent()
-            planner = ScenePlannerCompositorAgent()
-            target_fmt = "short" if ctx.lane.orientation == "vertical" else "longform"
-            ctx.script_payload = curator.curate(raw_text=ctx.clean_script, title=ctx.title, channel_lane=ctx.lane.id, target_format=target_fmt)
-            (ctx.work_dir / "cinematic_script.json").write_text(json.dumps(ctx.script_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            plan_cat = ctx.loop_category or getattr(ctx.lane, "loop_category", None) or getattr(ctx.lane, "story_type", None) or ("cosmic_horror" if ctx.channel_name == "moku" else "dark_ambient")
-            ctx.visual_plan_payload = art.plan_visuals(cinematic_script=ctx.script_payload, theme_lane=plan_cat)
-            ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            ctx.manifest_payload = planner.plan_manifest(
-                script=ctx.script_payload, visual_plan=ctx.visual_plan_payload, story_id=ctx.story_id,
-                narration_path=str(ctx.audio_path), music_path="", lane_id=ctx.lane.id, channel_name=ctx.channel_name,
-                resolution=list(ctx.lane.expected_resolution), fps=ctx.lane.fps, actual_audio_duration=float(ctx.audio.get("duration_sec", 0.0) or 0.0),
-            )
-            ctx.scene_manifest_path.write_text(json.dumps(ctx.manifest_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            ctx.scene_bg_list, ctx.shot_durations, ctx.target_category = _catalog_shots_from_manifest(
-                ctx.manifest_payload, ctx.loop_engine, ctx.lane.orientation, channel=ctx.channel_name,
-            )
-            if ctx.scene_bg_list and ctx.shot_durations:
-                ctx.resolved_loop_path = ctx.scene_bg_list[0]
-        else:
-            # Continuous single-loop composition engine:
-            # Resolves loop from assets/videos/shorts/ (vertical) or assets/videos/longs/ (horizontal).
-            # Neutral round-robin rotation, repeats single continuous clip for full audio duration.
-            from src.config import is_test_environment
-            total_audio_sec = float(ctx.audio.get("duration_sec", 15.0) or 15.0) if isinstance(ctx.audio, dict) else 15.0
-            ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
-                orientation=ctx.lane.orientation,
-                allow_test_mock=is_test_environment(),
-            )
-            ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
-            ctx.shot_durations = [total_audio_sec]
-            ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
-            scenes_plan = [{
-                "duration": total_audio_sec,
-                "source": str(ctx.resolved_loop_path),
-                "category": str(ctx.target_category),
-                "shot_index": 0,
-            }]
-            ctx.visual_plan_payload = {
-                "video_engine": "loop",
-                "loop": True,
-                "mode": "loop",
-                "category": str(ctx.target_category),
-                "scenes": scenes_plan,
-                "covered_seconds": total_audio_sec,
-                "black_fallbacks": 0,
-                "shot_durations": ctx.shot_durations,
-            }
-            ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            logger.info("Continuous single-loop composition: %s (duration: %.1fs)", ctx.resolved_loop_path, total_audio_sec)
+        # Continuous single-loop composition engine:
+        # Resolves loop from assets/videos/shorts/ (vertical) or assets/videos/longs/ (horizontal).
+        # Neutral round-robin rotation, repeats single continuous clip for full audio duration.
+        from src.config import is_test_environment
+        total_audio_sec = float(ctx.audio.get("duration_sec", 15.0) or 15.0) if isinstance(ctx.audio, dict) else 15.0
+        ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
+            orientation=ctx.lane.orientation,
+            allow_test_mock=is_test_environment(),
+        )
+        ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
+        ctx.shot_durations = [total_audio_sec]
+        ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
+        scenes_plan = [{
+            "duration": total_audio_sec,
+            "source": str(ctx.resolved_loop_path),
+            "category": str(ctx.target_category),
+            "shot_index": 0,
+        }]
+        ctx.visual_plan_payload = {
+            "video_engine": "loop",
+            "loop": True,
+            "mode": "loop",
+            "category": str(ctx.target_category),
+            "scenes": scenes_plan,
+            "covered_seconds": total_audio_sec,
+            "black_fallbacks": 0,
+            "shot_durations": ctx.shot_durations,
+        }
+        ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info("Continuous single-loop composition: %s (duration: %.1fs)", ctx.resolved_loop_path, total_audio_sec)
 
 
 def _stage_08_loop_scene(ctx: RunContext) -> None:
@@ -1244,6 +1236,7 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                     subtitle_path=str(ctx.srt_path) if ctx.srt_path.is_file() else None,
                     thumbnail_path=str(ctx.thumbnail_path) if ctx.thumbnail_path.is_file() else None,
                     story_id=ctx.story_id, run_id=ctx.run_id, channel=ctx.channel_name, video_mode="long" if ctx.is_long_lane else "short",
+                    precomputed_visual=ctx.visual_integrity_report,
                 )
                 verdict_passed = getattr(verdict, "passed", getattr(verdict, "approved", False))
                 from dataclasses import asdict, is_dataclass
