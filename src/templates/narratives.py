@@ -1256,14 +1256,20 @@ def get_fallback_story(
 ) -> str:
     """Returns an authentic channel-specific fallback story for offline or fallback operation.
 
-    Horror/creepypasta/SCP for Moku; human dilemma/drama for Aelithia.
+    Horror/creepypasta/SCP for Moku; human dilemma/drama for Aelithia; Sci-Fi for Singularidad.
     """
     ch = (channel or "moku").strip().lower()
-    if ch in ("aelithia", "drama", "aita"):
+    canon_ch = resolve_channel_key(ch)
+    if canon_ch == "aelithia" or ch in ("aelithia", "drama", "aita"):
         default_topic = topic or "la herencia familiar y el límite del perdón"
         if is_short:
             return build_aelithia_short_narrative(default_topic, channel="aelithia", **kwargs)
         return build_aelithia_longform_narrative(default_topic, channel="aelithia", target_duration_minutes=10.5, **kwargs)
+    elif canon_ch == "scifi" or ch in ("scifi", "singularidad", "sci_fi"):
+        default_topic = topic or "el horizonte de sucesos y la paradoja del tiempo"
+        if is_short:
+            return build_scifi_short_narrative(default_topic, channel="scifi", **kwargs)
+        return build_scifi_longform_narrative(default_topic, channel="scifi", target_duration_minutes=10.5, **kwargs)
 
     default_topic = topic or "SCP-087 y la escalera del silencio"
     if is_short:

@@ -54,30 +54,33 @@ class ChannelBranding:
 
     def generate_title(self, raw_title: str) -> str:
         """
-        Formats a raw translated title into a high-CTR Spanish title format.
-        Ensures the final title never exceeds YouTube's 100-character limit and respects word boundaries.
+        Formats a raw translated title into a clean, engaging Spanish title.
+        Ensures the final title never exceeds YouTube's 100-character limit, respects word boundaries,
+        and contains no hardcoded channel or brand leaks.
         """
         clean_t = (raw_title or "").strip()
         if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
             clean_t = self.default_title_fallback
 
-        if self.channel_key == "aelithia":
-            suffix = f" | Historias Reales en {self.display_name}" if (not clean_t.startswith("¿") and not clean_t.startswith("[")) else f" | {self.display_name}"
-            full = f"{clean_t}{suffix}"
-            if len(full) > 100:
-                max_clean_len = max(1, 100 - len(suffix))
-                clean_t = truncate_at_word_boundary(clean_t, max_clean_len)
-                full = f"{clean_t}{suffix}"
-            return full
-        else:
-            prefix = "[RELATO DE TERROR] " if (not clean_t.startswith("[") and self.channel_key == "moku") else ""
-            suffix = f" | {self.display_name}"
-            full = f"{prefix}{clean_t}{suffix}"
-            if len(full) > 100:
-                max_clean_len = max(1, 100 - len(prefix) - len(suffix))
-                clean_t = truncate_at_word_boundary(clean_t, max_clean_len)
-                full = f"{prefix}{clean_t}{suffix}"
-            return full
+        # Strip any legacy brand prefix if present
+        if clean_t.startswith("[RELATO DE TERROR] "):
+            clean_t = clean_t[len("[RELATO DE TERROR] "):].strip()
+
+        # Strip any trailing channel brand suffixes if present
+        for suffix_to_strip in (
+            f" | Historias Reales en {self.display_name}",
+            f" | {self.display_name}",
+            " | Moku",
+            " | Aelithia",
+            " | Singularidad Sci-Fi",
+        ):
+            if clean_t.endswith(suffix_to_strip):
+                clean_t = clean_t[:-len(suffix_to_strip)].strip()
+
+        if len(clean_t) > 100:
+            clean_t = truncate_at_word_boundary(clean_t, 100)
+
+        return clean_t
 
 
     def generate_description(self, title: str, summary: Optional[str] = None) -> str:

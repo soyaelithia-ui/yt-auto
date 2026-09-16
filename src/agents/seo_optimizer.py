@@ -214,13 +214,13 @@ class SeoOptimizerAgent:
                 "0:00 Introducción y Hook\n"
                 "0:15 El Gran Descubrimiento\n"
                 "0:45 Conclusión y Llamado a la Acción\n\n"
-                f"#{slug} #YouTubeAuto #Viral"
+                f"#{slug} #Historias #Relatos #Viral"
             )
             tags = [
                 clean_topic.lower(),
                 f"{clean_topic.lower()} explicacion",
                 "curiosidades",
-                "youtube automation",
+                "historias",
                 "datos fascinantes",
                 niche.lower(),
                 target_format,

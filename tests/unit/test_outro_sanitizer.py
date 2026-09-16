@@ -52,3 +52,38 @@ class TestOutroSanitizer:
         cleaned, _ = repair_forbidden_editorial(clean_narrative)
         assert "archivo confidencial" in cleaned
         assert "estación" in cleaned
+
+    def test_drops_meta_channel_and_video_references(self):
+        dirty_meta = (
+            "La puerta blindada cedió lentamente en la oscuridad. "
+            "En este video veremos los testimonios más oscuros de nuestro canal. "
+            "El silencio se apoderó de los pasillos."
+        )
+        cleaned, removed = repair_forbidden_editorial(dirty_meta)
+        assert "este video" not in cleaned.lower()
+        assert "nuestro canal" not in cleaned.lower()
+        assert "La puerta blindada cedió lentamente" in cleaned
+        assert "El silencio se apoderó de los pasillos" in cleaned
+        assert len(removed) == 1
+
+    def test_drops_channel_brand_names_and_contextual_intros(self):
+        texts_to_clean = [
+            ("Soy Aelithia y hoy les contaré la historia de mi familia.", "Aelithia"),
+            ("Bienvenidos a Singularidad Sci-Fi para explorar el cosmos.", "Singularidad Sci-Fi"),
+            ("Todos los casos documentados en Moku permanecen sellados.", "Moku"),
+        ]
+        for text, brand in texts_to_clean:
+            cleaned, removed = repair_forbidden_editorial(text)
+            assert brand not in cleaned
+            assert len(removed) >= 1
+
+    def test_preserves_scientific_common_nouns_like_singularidad(self):
+        scientific_script = (
+            "La sonda espacial atravesó el disco de acreción sin sufrir daños estructurales. "
+            "Al aproximarse a la singularidad del agujero negro, las ecuaciones físicas colapsaron. "
+            "El horizonte de sucesos distorsionó la luz de las estrellas circundantes."
+        )
+        cleaned, removed = repair_forbidden_editorial(scientific_script)
+        assert "singularidad del agujero negro" in cleaned
+        assert len(removed) == 0
+        assert cleaned == scientific_script

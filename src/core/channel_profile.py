@@ -200,7 +200,7 @@ class ChannelProfileRegistry:
             public_name=public_name,
             handle=handle,
             channel_url=channel_url,
-            title_suffix=f" | {public_name}" if profile.editorial.title_suffix.startswith(" | ") else profile.editorial.title_suffix,
+            title_suffix=profile.editorial.title_suffix,
             description_summary_template=f"Una impactante narración en {public_name}." if "{public_name}" not in profile.editorial.description_summary_template else profile.editorial.description_summary_template,
         )
         new_visual = replace(
@@ -287,7 +287,7 @@ class ChannelProfileRegistry:
             language=ed_data.get("language", "es"),
             category_id=ed_data.get("category_id", "24"),
             title_prefix=ed_data.get("title_prefix", ""),
-            title_suffix=ed_data.get("title_suffix", f" | {public_name}"),
+            title_suffix=ed_data.get("title_suffix", ""),
             default_title_fallback=ed_data.get("default_title_fallback", "Relato"),
             description_summary_template=ed_data.get("description_summary_template", f"Una impactante narración en {public_name}."),
             community_question=ed_data.get("community_question", "¿Qué opinas? Déjanos tu comentario."),

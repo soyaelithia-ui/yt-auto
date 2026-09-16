@@ -17,12 +17,26 @@ def sanitize_text(text: str) -> str:
     return sanitize_llm_script(text, mode="short")
 
 
-def clean_title(title: str) -> str:
+def _default_title_fallback(channel: Optional[str] = None) -> str:
+    """Resolve a profile-aware default title fallback or return generic default."""
+    ch = channel or os.environ.get("CHANNEL_KEY")
+    if ch:
+        try:
+            from src.core.channel_profile import ChannelProfileRegistry
+            prof = ChannelProfileRegistry.get_channel(ch)
+            if prof and prof.editorial and prof.editorial.default_title_fallback:
+                return prof.editorial.default_title_fallback
+        except Exception:
+            pass
+    return "Relato Enigmático"
+
+
+def clean_title(title: str, channel: Optional[str] = None) -> str:
     """
     Sanitize and format a title, stripping LLM chatter, quotes, reddit markers.
     """
     if not title or not isinstance(title, str):
-        return "Historia de Terror"
+        return _default_title_fallback(channel)
 
     t = title.strip()
 
@@ -63,7 +77,7 @@ def clean_title(title: str) -> str:
         return "Memorias del Olvido"
 
     t = re.sub(r"\s+", " ", t).strip(" .:-_")
-    return t if t else "Historia de Terror"
+    return t if t else _default_title_fallback(channel)
 
 
 def is_spanish_text(text: str) -> bool:
@@ -314,7 +328,7 @@ def _expand_narrative_to_target_words(
     return main_content
 
 
-def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
+def ensure_spanish_source(story_text: str, title: str, channel: Optional[str] = None) -> Tuple[str, str]:
     """
     Ensure raw story content and title are in Spanish before curation.
     Detects non-Spanish content and executes a single translation pass prior to script curation.
@@ -323,7 +337,7 @@ def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
     from src.config import is_test_environment
     from src.core.quality import is_spanish_neutral
 
-    clean_t = clean_title(title) if title else "Historia de Terror"
+    clean_t = clean_title(title) if title else _default_title_fallback(channel)
     content = (story_text or "").strip()
 
     is_content_es = is_spanish_neutral(content) if len(content.split()) >= 20 else is_spanish_text(content)
@@ -805,14 +819,18 @@ def translate_title(
     title: str,
     provider: str = "A",
     client: Optional[Any] = None,
+    channel: Optional[str] = None,
 ) -> str:
     """
     Translates a title to Spanish using local formatting rules without external API calls.
     """
     if not title or not str(title).strip():
-        return "Historia de Terror"
+        return _default_title_fallback(channel)
 
-    clean_t = clean_title(title)
+    try:
+        clean_t = clean_title(title, channel=channel)
+    except TypeError:
+        clean_t = clean_title(title)
 
     # Prefer an injected client before the test-env Spanish short-circuit so
     # duck-typed clients remain observable under YT_PROFILE=test.

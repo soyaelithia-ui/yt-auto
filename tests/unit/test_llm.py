@@ -35,8 +35,8 @@ class TestLLMScriptCuration(unittest.TestCase):
 
     def test_clean_title_edge_cases(self):
         """Test clean_title strips chatter, quotes, reddit markers, and corrupt titles."""
-        self.assertEqual(clean_title(None), "Historia de Terror")
-        self.assertEqual(clean_title(""), "Historia de Terror")
+        self.assertEqual(clean_title(None), "Relato Enigmático")
+        self.assertEqual(clean_title(""), "Relato Enigmático")
         self.assertEqual(clean_title('"El Bosque Oscuro"'), "El Bosque Oscuro")
         self.assertEqual(clean_title("Aquí tienes el título: El Susurro"), "El Susurro")
         self.assertEqual(clean_title("The Haunted House [OC] (Part 1)"), "The Haunted House")
@@ -96,8 +96,8 @@ class TestLLMScriptCuration(unittest.TestCase):
 
     def test_translate_title_empty(self):
         """Test translate_title with empty or whitespace input."""
-        self.assertEqual(translate_title(""), "Historia de Terror")
-        self.assertEqual(translate_title("   "), "Historia de Terror")
+        self.assertEqual(translate_title(""), "Relato Enigmático")
+        self.assertEqual(translate_title("   "), "Relato Enigmático")
 
     def test_multi_story_compilation_under_target_words(self):
         """Test multi-story compilation joining stories when word count < min_words."""

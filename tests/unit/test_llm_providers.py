@@ -185,4 +185,4 @@ class TestEnsureSpanishSource:
     def test_empty_inputs_handled_safely(self):
         content, title = ensure_spanish_source("", "")
         assert content == ""
-        assert title == "Historia de Terror"
+        assert title == "Relato Enigmático"

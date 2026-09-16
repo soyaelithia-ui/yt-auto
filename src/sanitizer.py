@@ -337,6 +337,9 @@ FORBIDDEN_EDITORIAL_PATTERNS = [
     r'(?i)\b(?:HISTORIA\s+DE\s+TERROR|VIDEO\s+DE\s+MIEDO|ALGO\s+ATERRADOR)\b',
     r'(?i)\b(?:todos\s+los\s+)?(?:expedientes|archivos|relatos)\s+(?:y\s+(?:archivos|grabaciones)\s+)?(?:se\s+encuentran|permanecen\s+archivados)\s+(?:bajo\s+estricta\s+custodia\s+)?en\s+@?[\w\-.]+\b',
     r'(?i)\b(?:permanecen\s+archivados|se\s+encuentran\s+archivados)\s+bajo\s+estricta\s+custodia\b',
+    r'(?i)\b(?:este|nuestro)\s+canal\b',
+    r'(?i)\b(?:este|el)\s+v[íi]deo\b',
+    r'(?i)\bel\s+episodio\s+de\s+hoy\b',
     r'(?i)@[\w\-.]+\b',
     r'(?i)\b\w+\s+Reddit\b',
 ]
@@ -366,17 +369,33 @@ def _editorial_patterns() -> list:
         _FILE_RULES_CACHE = file_rules
 
     dynamic_channel_patterns: list = []
+    distinctive_proper_nouns = {"moku", "aelithia", "singularidad sci-fi"}
     try:
         from src.core.channel_profile import ChannelProfileRegistry
-        for ch in ChannelProfileRegistry.list_active_channels():
-            name = ch.editorial.public_name
-            handle = ch.editorial.handle.lstrip("@")
+        ChannelProfileRegistry._ensure_loaded()
+        channels = list(ChannelProfileRegistry._cache.values()) if hasattr(ChannelProfileRegistry, "_cache") and ChannelProfileRegistry._cache else ChannelProfileRegistry.list_active_channels()
+        for ch in channels:
+            name = ch.editorial.public_name.strip() if ch.editorial and ch.editorial.public_name else ""
+            handle = ch.editorial.handle.lstrip("@").strip() if ch.editorial and ch.editorial.handle else ""
             if name:
                 dynamic_channel_patterns.append(rf'(?i)\b{re.escape(name)}\s*Reddit\b')
+                # Contextual channel name filtering
+                dynamic_channel_patterns.append(rf'(?i)\b(?:en|de|del|por|canal|bienvenidos\s+a)\s+{re.escape(name)}\b')
+                dynamic_channel_patterns.append(rf'(?i)\bsoy\s+{re.escape(name)}\b')
+                # Match bare channel names ONLY for distinctive brand proper nouns
+                if name.lower() in distinctive_proper_nouns:
+                    dynamic_channel_patterns.append(rf'(?i)\b{re.escape(name)}\b')
             if handle:
                 dynamic_channel_patterns.append(rf'(?i)@{re.escape(handle)}\b')
     except Exception:
         pass
+
+    if not dynamic_channel_patterns:
+        for brand in ("Moku", "Aelithia", "Singularidad Sci-Fi"):
+            dynamic_channel_patterns.append(rf'(?i)\b{re.escape(brand)}\s*Reddit\b')
+            dynamic_channel_patterns.append(rf'(?i)\b(?:en|de|del|por|canal|bienvenidos\s+a)\s+{re.escape(brand)}\b')
+            dynamic_channel_patterns.append(rf'(?i)\bsoy\s+{re.escape(brand)}\b')
+            dynamic_channel_patterns.append(rf'(?i)\b{re.escape(brand)}\b')
 
     return FORBIDDEN_EDITORIAL_PATTERNS + _FILE_RULES_CACHE + dynamic_channel_patterns
 
