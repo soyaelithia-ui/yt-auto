@@ -101,3 +101,17 @@ def test_small_compose_override_caps_memory():
     small = (REPO_ROOT / "docker-compose.small.yml").read_text(encoding="utf-8")
     assert "mem_limit: 2g" in small
     assert "cpus: 2" in small
+    assert "yt-moku:" in small
+    assert "yt-aelithia:" in small
+
+
+def test_compose_defines_independent_channel_services():
+    compose = _compose()
+    assert "yt-moku:" in compose
+    assert "container_name: yt-moku" in compose
+    assert '"--channel", "moku"' in compose or "'--channel', 'moku'" in compose or "--channel\n      - moku" in compose
+    assert "yt-aelithia:" in compose
+    assert "container_name: yt-aelithia" in compose
+    assert '"--channel", "aelithia"' in compose or "'--channel', 'aelithia'" in compose or "--channel\n      - aelithia" in compose
+    assert "YT_LOCK_DIR: /app/data/locks" in compose
+

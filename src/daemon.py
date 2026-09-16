@@ -251,6 +251,7 @@ def is_shutdown_requested() -> bool:
 
 
 _TELEGRAM_POLLER_LOCK_HANDLE: Any = None
+_TELEGRAM_POLLER_STARTED: bool = False
 
 
 def _acquire_telegram_poller_lock() -> bool:
@@ -286,7 +287,8 @@ def _acquire_telegram_poller_lock() -> bool:
 
 def _release_telegram_poller_lock() -> None:
     """Release the Telegram callback poller singleton lock."""
-    global _TELEGRAM_POLLER_LOCK_HANDLE
+    global _TELEGRAM_POLLER_LOCK_HANDLE, _TELEGRAM_POLLER_STARTED
+    _TELEGRAM_POLLER_STARTED = False
     if _TELEGRAM_POLLER_LOCK_HANDLE is not None:
         import fcntl
         try:
@@ -303,6 +305,9 @@ _atexit.register(_release_telegram_poller_lock)
 
 def _start_telegram_callback_poller() -> bool:
     """Start the review callback listener only in the production daemon."""
+    global _TELEGRAM_POLLER_STARTED
+    if _TELEGRAM_POLLER_STARTED:
+        return True
     if os.environ.get("ENABLE_TELEGRAM_CALLBACK_POLLING", "1") != "1":
         return False
     from src.config import is_test_environment
@@ -311,7 +316,7 @@ def _start_telegram_callback_poller() -> bool:
         return False
 
     if not _acquire_telegram_poller_lock():
-        logger.info(
+        logger.debug(
             "Telegram callback poller already active in another daemon process; skipping in this instance."
         )
         return False
@@ -329,6 +334,7 @@ def _start_telegram_callback_poller() -> bool:
         name="telegram-callback-poller",
         daemon=True,
     ).start()
+    _TELEGRAM_POLLER_STARTED = True
     logger.info("Telegram callback polling enabled")
     return True
 
@@ -663,6 +669,8 @@ def start_daemon(
         _reap_zombies_safe()
         if not is_test_environment():
             _run_auto_publish_sweep(channel=ch_arg)
+            if max_runs is None and not _TELEGRAM_POLLER_STARTED:
+                _start_telegram_callback_poller()
         try:
             touch_daemon_liveness(database)
         except Exception:
@@ -964,6 +972,8 @@ def start_daemon_lanes(
                 pass
             if not is_test_environment():
                 _run_auto_publish_sweep(channel=target_channel)
+                if max_parallel is None and not _TELEGRAM_POLLER_STARTED:
+                    _start_telegram_callback_poller()
                 if ticks % 360 == 0:
                     try:
                         from src.cleaner import (

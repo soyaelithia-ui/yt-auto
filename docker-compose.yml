@@ -1,90 +1,108 @@
+x-yt-base: &yt-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: yt-automation:local
+  restart: unless-stopped
+  init: true
+  environment:
+    TINI_SUBREAPER: "1"
+    YT_PROFILE: prod
+    FFMPEG_THREADS: "4"
+    # R9: align effective encode quality with .env.example (CRF 21) while
+    # keeping the veryfast preset; stream compose stderr to disk (R5).
+    RENDER_CRF: "19"
+    RENDER_PRESET: "veryfast"
+    YT_COMPOSE_STREAM_STDERR: "1"
+    BOT_HOME: /home/appuser
+    HOME: /home/appuser
+    ANTIGRAVITY_CLI_HOME: /home/appuser/.gemini
+    ANTIGRAVITY_AGENTS_APP_DATA_DIR: /home/appuser/.gemini/antigravity-cli
+    AGY_BIN: /usr/local/bin/agy
+    LOCK_FILE_PATH: /app/data/locks/youtube_automation.lock
+    YT_LOCK_DIR: /app/data/locks
+    YOUTUBE_AUTOMATION_DB: /app/data/shorts_queue.db
+    VIDEO_REVIEW_DB_PATH: /app/data/review_state.db
+    WORK_ROOT: /app/work
+    ARTIFACT_ROOT: /app/artifacts
+    SECRETS_DIR: /run/secrets
+    COOKIES_PATH: /run/secrets/cookies.json
+    AELITHIA_COOKIES_PATH: /run/secrets/cookies_aelithia.json
+    MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/moku.json
+    AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/aelithia.json
+    MOKU_YOUTUBE_CHANNEL_ID: ${MOKU_YOUTUBE_CHANNEL_ID:-}
+    AELITHIA_YOUTUBE_CHANNEL_ID: ${AELITHIA_YOUTUBE_CHANNEL_ID:-}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    TELEGRAM_ALLOWED_USER_ID: ${TELEGRAM_ALLOWED_USER_ID:-}
+    TELEGRAM_ALLOWED_CHAT_ID: ${TELEGRAM_ALLOWED_CHAT_ID:-}
+    TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
+    TELEGRAM_REQUEST_TIMEOUT_SECONDS: ${TELEGRAM_REQUEST_TIMEOUT_SECONDS:-60}
+    TELEGRAM_MEDIA_TIMEOUT_SECONDS: ${TELEGRAM_MEDIA_TIMEOUT_SECONDS:-1800}
+    TELEGRAM_MAX_FILE_SIZE_MB: ${TELEGRAM_MAX_FILE_SIZE_MB:-2000}
+    TELEGRAM_USE_LOCAL_FILES: "1"
+    PYTHONUNBUFFERED: "1"
+    YT_MAX_PARALLEL_LANES: "3"
+    TEST_MODE: "0"
+    AUTO_APPROVE: ${AUTO_APPROVE:-1}
+    ENABLE_AUTO_PUBLISH_SWEEP: ${ENABLE_AUTO_PUBLISH_SWEEP:-1}
+    AUTO_PUBLISH_TIMEOUT_HOURS: ${AUTO_PUBLISH_TIMEOUT_HOURS:-2}
+    ENABLE_TELEGRAM_CALLBACK_POLLING: "1"
+    DRIVE_KEY_PATH: /run/secrets/drive_key.json
+    AGY_MODEL: gemini-3.8-flash-high
+    GEMINI_MODEL: gemini-3.8-flash-high
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    AGY_TIMEOUT_SECONDS: "600"
+    AGY_CREDITS_DISABLED_CONFIRMED: ${AGY_CREDITS_DISABLED_CONFIRMED:-0}
+    DRIVE_FOLDER_ID: ${DRIVE_FOLDER_ID:-}
+    DRIVE_ROOT_FOLDER_ID: ${DRIVE_ROOT_FOLDER_ID:-}
+    DRIVE_APPROVED_FOLDER_ID: ${DRIVE_APPROVED_FOLDER_ID:-}
+    DRIVE_APPROVED_VIDEO_FOLDER_ID: ${DRIVE_APPROVED_VIDEO_FOLDER_ID:-}
+    DRIVE_APPROVED_COVER_FOLDER_ID: ${DRIVE_APPROVED_COVER_FOLDER_ID:-}
+    DRIVE_METADATA_FOLDER_ID: ${DRIVE_METADATA_FOLDER_ID:-}
+    DRIVE_PUBLISHED_FOLDER_ID: ${DRIVE_PUBLISHED_FOLDER_ID:-}
+    DRIVE_REJECTED_FOLDER_ID: ${DRIVE_REJECTED_FOLDER_ID:-}
+    DRIVE_ARCHIVE_FOLDER_ID: ${DRIVE_ARCHIVE_FOLDER_ID:-}
+  volumes:
+    - yt_data:/app/data
+    - yt_work:/app/work
+    - yt_artifacts:/app/artifacts
+    - yt_logs:/app/logs
+    - yt_output:/app/output
+    - yt_agy_home:/home/appuser/.gemini
+    - ./secrets:/run/secrets:ro
+  tmpfs:
+    - /tmp:size=2g,mode=1777
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  mem_limit: 3g
+  cpus: 2.0
+  shm_size: 512m
+  stop_grace_period: 2m
+
 services:
+  yt-moku:
+    <<: *yt-base
+    container_name: yt-moku
+    hostname: yt-moku
+    command: ["python", "main.py", "daemon", "--channel", "moku", "--interval", "60"]
+
+  yt-aelithia:
+    <<: *yt-base
+    container_name: yt-aelithia
+    hostname: yt-aelithia
+    command: ["python", "main.py", "daemon", "--channel", "aelithia", "--interval", "60"]
+
+  # Monolithic fallback daemon (profile: all-in-one)
   yt-automation:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: yt-automation:local
+    <<: *yt-base
     container_name: yt-automation
-    restart: unless-stopped
-    init: true
     hostname: yt-automation
-    environment:
-      TINI_SUBREAPER: "1"
-      YT_PROFILE: prod
-      FFMPEG_THREADS: "4"
-      # R9: align effective encode quality with .env.example (CRF 21) while
-      # keeping the veryfast preset; stream compose stderr to disk (R5).
-      RENDER_CRF: "19"
-      RENDER_PRESET: "veryfast"
-      YT_COMPOSE_STREAM_STDERR: "1"
-      BOT_HOME: /home/appuser
-      HOME: /home/appuser
-      ANTIGRAVITY_CLI_HOME: /home/appuser/.gemini
-      ANTIGRAVITY_AGENTS_APP_DATA_DIR: /home/appuser/.gemini/antigravity-cli
-      AGY_BIN: /usr/local/bin/agy
-      LOCK_FILE_PATH: /tmp/youtube_automation.lock
-      YOUTUBE_AUTOMATION_DB: /app/data/shorts_queue.db
-      VIDEO_REVIEW_DB_PATH: /app/data/review_state.db
-      WORK_ROOT: /app/work
-      ARTIFACT_ROOT: /app/artifacts
-      SECRETS_DIR: /run/secrets
-      COOKIES_PATH: /run/secrets/cookies.json
-      AELITHIA_COOKIES_PATH: /run/secrets/cookies_aelithia.json
-      MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/moku.json
-      AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/aelithia.json
-      MOKU_YOUTUBE_CHANNEL_ID: ${MOKU_YOUTUBE_CHANNEL_ID:-}
-      AELITHIA_YOUTUBE_CHANNEL_ID: ${AELITHIA_YOUTUBE_CHANNEL_ID:-}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      TELEGRAM_ALLOWED_USER_ID: ${TELEGRAM_ALLOWED_USER_ID:-}
-      TELEGRAM_ALLOWED_CHAT_ID: ${TELEGRAM_ALLOWED_CHAT_ID:-}
-      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
-      TELEGRAM_REQUEST_TIMEOUT_SECONDS: ${TELEGRAM_REQUEST_TIMEOUT_SECONDS:-60}
-      TELEGRAM_MEDIA_TIMEOUT_SECONDS: ${TELEGRAM_MEDIA_TIMEOUT_SECONDS:-1800}
-      TELEGRAM_MAX_FILE_SIZE_MB: ${TELEGRAM_MAX_FILE_SIZE_MB:-2000}
-      TELEGRAM_USE_LOCAL_FILES: "1"
-      PYTHONUNBUFFERED: "1"
-      YT_MAX_PARALLEL_LANES: "3"
-      TEST_MODE: "0"
-      AUTO_APPROVE: ${AUTO_APPROVE:-1}
-      ENABLE_AUTO_PUBLISH_SWEEP: ${ENABLE_AUTO_PUBLISH_SWEEP:-1}
-      AUTO_PUBLISH_TIMEOUT_HOURS: ${AUTO_PUBLISH_TIMEOUT_HOURS:-2}
-      ENABLE_TELEGRAM_CALLBACK_POLLING: "1"
-      DRIVE_KEY_PATH: /run/secrets/drive_key.json
-      AGY_MODEL: gemini-3.8-flash-high
-      GEMINI_MODEL: gemini-3.8-flash-high
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      AGY_TIMEOUT_SECONDS: "600"
-      AGY_CREDITS_DISABLED_CONFIRMED: ${AGY_CREDITS_DISABLED_CONFIRMED:-0}
-      DRIVE_FOLDER_ID: ${DRIVE_FOLDER_ID:-}
-      DRIVE_ROOT_FOLDER_ID: ${DRIVE_ROOT_FOLDER_ID:-}
-      DRIVE_APPROVED_FOLDER_ID: ${DRIVE_APPROVED_FOLDER_ID:-}
-      DRIVE_APPROVED_VIDEO_FOLDER_ID: ${DRIVE_APPROVED_VIDEO_FOLDER_ID:-}
-      DRIVE_APPROVED_COVER_FOLDER_ID: ${DRIVE_APPROVED_COVER_FOLDER_ID:-}
-      DRIVE_METADATA_FOLDER_ID: ${DRIVE_METADATA_FOLDER_ID:-}
-      DRIVE_PUBLISHED_FOLDER_ID: ${DRIVE_PUBLISHED_FOLDER_ID:-}
-      DRIVE_REJECTED_FOLDER_ID: ${DRIVE_REJECTED_FOLDER_ID:-}
-      DRIVE_ARCHIVE_FOLDER_ID: ${DRIVE_ARCHIVE_FOLDER_ID:-}
-    volumes:
-      - yt_data:/app/data
-      - yt_work:/app/work
-      - yt_artifacts:/app/artifacts
-      - yt_logs:/app/logs
-      - yt_output:/app/output
-      - yt_agy_home:/home/appuser/.gemini
-      - ./secrets:/run/secrets:ro
-    tmpfs:
-      - /tmp:size=2g,mode=1777
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 512
-    mem_limit: 6g
-    cpus: 4.0
-    shm_size: 1g
-    stop_grace_period: 2m
+    profiles: ["all-in-one"]
     command: ["python", "main.py", "daemon", "--channel", "all", "--interval", "60"]
 
   telegram-bot-api:
