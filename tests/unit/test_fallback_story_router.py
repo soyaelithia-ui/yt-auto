@@ -33,3 +33,20 @@ def test_get_fallback_story_scifi_aliases():
         story = get_fallback_story(alias, is_short=True)
         assert any(token in story for token in ("horizonte de sucesos", "relatividad", "espacio-tiempo"))
         assert "SCP" not in story
+
+
+def test_script_curator_agent_scifi_fallback_routing():
+    from src.agents.script_curator import CinematicScriptCuratorAgent
+
+    curator = CinematicScriptCuratorAgent()
+    short_fallback = curator._generate_fallback_narrative("Paradoja Cuántica", "scifi-shorts", "")
+    long_fallback = curator._generate_fallback_narrative("Agujero Negro", "scifi-long", "")
+
+    # Assert scifi fallback does NOT fall through to horror or SCP
+    assert "SCP" not in short_fallback
+    assert "SCP" not in long_fallback
+    assert "bosque" not in short_fallback
+    assert "bosque" not in long_fallback
+    assert any(w in short_fallback for w in ("horizonte de sucesos", "relatividad", "espacio", "tiempo", "astrofísica", "gravitacional"))
+    assert any(w in long_fallback for w in ("horizonte de sucesos", "radiación", "cosmos", "astrofísica", "gravitacional", "cuántico"))
+

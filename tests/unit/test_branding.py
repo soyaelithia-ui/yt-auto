@@ -165,6 +165,33 @@ class TestBrandingEngine(unittest.TestCase):
         self.assertNotIn("apartamento h...", res2)
         self.assertNotIn("Aelithia", res2)
 
+    def test_generate_title_strips_case_insensitive_suffixes_and_prefixes(self):
+        b_moku = get_channel_branding("moku")
+        b_aelithia = get_channel_branding("aelithia")
+        b_scifi = get_channel_branding("scifi")
+
+        # Uppercase suffix
+        self.assertEqual(b_moku.generate_title("La Cabaña del Bosque | MOKU"), "La Cabaña del Bosque")
+        # Hyphen separator
+        self.assertEqual(b_moku.generate_title("La Cabaña del Bosque - Moku"), "La Cabaña del Bosque")
+        # Colon separator
+        self.assertEqual(b_aelithia.generate_title("Traición Familiar : Aelithia"), "Traición Familiar")
+        # Singularidad variants
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad"), "Paradoja del Tiempo")
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad SciFi"), "Paradoja del Tiempo")
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad Sci Fi"), "Paradoja del Tiempo")
+        # Prefix stripping
+        self.assertEqual(b_moku.generate_title("[MOKU] La Cabaña del Bosque"), "La Cabaña del Bosque")
+        self.assertEqual(b_moku.generate_title("[RELATOS DE TERROR] La Cabaña"), "La Cabaña")
+        self.assertEqual(b_moku.generate_title("[REGISTRO CLASIFICADO] SCP-087"), "SCP-087")
+        self.assertEqual(b_aelithia.generate_title("[CONFESIÓN] Mi Hermana Arruinó Todo"), "Mi Hermana Arruinó Todo")
+
+    def test_generate_shorts_metadata_strips_brand_from_title(self):
+        b_moku = get_channel_branding("moku")
+        shorts = b_moku.generate_shorts_metadata("El Susurro Prohibido | Moku")
+        self.assertEqual(shorts["title"], "El Susurro Prohibido #Shorts")
+        self.assertNotIn("| Moku", shorts["title"])
+
 
 if __name__ == "__main__":
     unittest.main()

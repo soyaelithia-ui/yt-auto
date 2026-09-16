@@ -87,3 +87,29 @@ class TestOutroSanitizer:
         assert "singularidad del agujero negro" in cleaned
         assert len(removed) == 0
         assert cleaned == scientific_script
+
+    def test_drops_mi_canal_and_mi_video_meta_phrases(self):
+        meta_script = (
+            "El frío invadía la cabaña abandonada. "
+            "En mi canal comparto relatos siniestros y en mi video anterior lo expliqué todo. "
+            "La criatura permanecía agazapada tras los árboles."
+        )
+        cleaned, removed = repair_forbidden_editorial(meta_script)
+        assert "mi canal" not in cleaned.lower()
+        assert "mi video" not in cleaned.lower()
+        assert "El frío invadía la cabaña" in cleaned
+        assert "La criatura permanecía agazapada" in cleaned
+        assert len(removed) == 1
+
+    def test_drops_bare_handles_and_sci_fi_spelling_variants(self):
+        cases = [
+            ("Esto fue documentado en Singularidad SciFi.", "Singularidad SciFi"),
+            ("Un nuevo informe de Singularidad Sci Fi.", "Singularidad Sci Fi"),
+            ("Todos los datos están en MokuRedit hoy.", "MokuRedit"),
+            ("Bienvenidos a Singularidad para observar los astros.", "Singularidad"),
+        ]
+        for text, token in cases:
+            cleaned, removed = repair_forbidden_editorial(text)
+            assert token not in cleaned
+            assert len(removed) >= 1
+

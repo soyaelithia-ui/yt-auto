@@ -416,9 +416,10 @@ class CinematicScriptCuratorAgent:
         lane_key, lane_cfg = self._resolve_lane_config(channel_lane, target_format)
         target_fmt = lane_cfg["target_format"]
         wpm = float(words_per_minute or lane_cfg["default_wpm"])
+        channel = lane_cfg.get("channel", "moku")
 
         # Sanitize raw text
-        clean_text = self._sanitize_text(raw_text)
+        clean_text = self._sanitize_text(raw_text, channel=channel)
 
         # Fallback synthesis if input text is empty or minimal (<25 words)
         words = clean_text.split()
@@ -835,6 +836,8 @@ class CinematicScriptCuratorAgent:
                 build_aelithia_short_narrative,
                 build_moku_longform_narrative,
                 build_moku_short_narrative,
+                build_scifi_longform_narrative,
+                build_scifi_short_narrative,
             )
 
             is_short = "short" in lane_key
@@ -844,6 +847,10 @@ class CinematicScriptCuratorAgent:
                 if is_short:
                     return build_aelithia_short_narrative(topic=title or "el límite personal frente a la familia", channel="aelithia")
                 return build_aelithia_longform_narrative(topic=title or "el conflicto de herencia familiar", channel="aelithia")
+            elif "scifi" in lane_key or "singularidad" in lane_key or "sci_fi" in lane_key:
+                if is_short:
+                    return build_scifi_short_narrative(topic=title or "el horizonte de sucesos y la paradoja del tiempo", channel="scifi")
+                return build_scifi_longform_narrative(topic=title or "el horizonte de sucesos y la paradoja del tiempo", channel="scifi")
             else:
                 if is_short:
                     return build_moku_short_narrative(topic=title or "la anomalía del bosque", channel="moku")
@@ -875,6 +882,18 @@ class CinematicScriptCuratorAgent:
                 "Contraté asesoría legal independiente para proteger mi patrimonio y establecí un distanciamiento tajante frente a las presiones y chantajes emocionales. "
                 "Meses después, compruebo que mantener la firmeza en mis convicciones fue la única decisión que me permitió preservar mi paz interior y mi dignidad personal."
             )
+        elif "scifi" in lane_key or "singularidad" in lane_key or "sci_fi" in lane_key:
+            return (
+                f"La misión de exploración cósmica hacia {clean_title or 'el horizonte de sucesos'} marcó un punto de inflexión en la investigación astrofísica. "
+                "Al aproximarse al sector anómalo del espacio profundo, los sensores de navegación registraron intensas fluctuaciones gravitacionales "
+                "que desafiaban las predicciones de la relatividad general. La tripulación científica observó anomalías en los relojes atómicos "
+                "de la nave a medida que la dilatación temporal se hacía más pronunciada en las inmediaciones del disco de acreción. "
+                "Las sondas automatizadas enviadas hacia el perímetro transmitieron datos espectroscópicos de alta energía antes de que "
+                "sus señales fueran absorbidas por la intensa curvatura del espacio-tiempo. Los análisis térmicos confirmaron la emisión "
+                "constante de radiación teórica, corroborando la existencia de fenómenos cuánticos a escala macroscópica. "
+                "Ante la inminencia de sobrepasar el radio de no retorno, el comando de vuelo ordenó una maniobra de escape con propulsión máxima, "
+                "preservando los valiosos registros telemétricos para el avance del conocimiento humano."
+            )
         else: # horror
             return (
                 f"Una advertencia sobre la investigación de {clean_title or 'la señal no identificada'}. "
@@ -886,13 +905,13 @@ class CinematicScriptCuratorAgent:
                 "Aunque hoy resido lejos de aquel valle solitario, la certeza de que esa frecuencia continúa activa en la noche me acompaña permanentemente."
             )
 
-    def _sanitize_text(self, text: str) -> str:
+    def _sanitize_text(self, text: str, channel: str = "moku") -> str:
         """Sanitizes text, removing markdown headers, meta chatter, emojis, clichés, and artifacts."""
         if not text:
             return ""
         try:
             from src.sanitizer import sanitize_script_text
-            t = sanitize_script_text(text, channel="moku")
+            t = sanitize_script_text(text, channel=channel)
         except Exception:
             t = text
         t = re.sub(r"#+\s*", "", t)

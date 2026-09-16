@@ -69,6 +69,13 @@ def clean_title(title: str, channel: Optional[str] = None) -> str:
     t = re.sub(r"\[(?:OC|UPDATE|REPOST|DELETED|REMOVED)\]", "", t, flags=re.IGNORECASE)
     t = re.sub(r"\((?:Part|Parte)\s*\d+\)", "", t, flags=re.IGNORECASE)
 
+    # Strip channel and brand prefixes / suffixes
+    try:
+        from src.branding import strip_brand_metadata_from_title
+        t = strip_brand_metadata_from_title(t)
+    except Exception:
+        pass
+
     # Check for corrupt titles
     if (
         re.search(r"\bcookies?\b|error\s*5\d\d|server\s*error|that'?s\s*an\s*error|there\s*was\s*an\s*error|404\s*not\s*found|bad\s*gateway", t, flags=re.IGNORECASE)
@@ -586,6 +593,11 @@ _ADAPTATION_PERSONAS: Dict[str, str] = {
         "conflicto personal con carga emocional cruda y mantienes el diálogo "
         "directo presente en la historia original (réplicas textuales entre "
         "comillas) tal como fue escrito."
+    ),
+    "scifi": (
+        "Eres un narrador analítico de ciencia ficción dura y astrofísica especulativa. "
+        "Tono riguroso, sobrecogedor y reflexivo: exploras los límites de la física, "
+        "el cosmos y las paradojas del espacio-tiempo."
     ),
 }
 

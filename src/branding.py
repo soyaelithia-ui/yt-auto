@@ -4,12 +4,45 @@ Handles channel identities, handle references, high-CTR Spanish title/descriptio
 voice mappings, and tag generation for YouTube upload pipeline.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from src.core.domain import CanonicalChannel, CHANNEL_ALIASES, canonical_channel
 from src.log import get_logger
 
 logger = get_logger("branding")
+
+RE_BRAND_PREFIX = re.compile(
+    r"^(?:\[(?:RELATOS?\s+DE\s+TERROR|HISTORIAS?\s+DE\s+TERROR|CONFESI[ÓO]N(?:ES)?|"
+    r"REGISTRO\s+(?:CLASIFICADO|ESTELAR|AN[ÓO]MALO)|EXPEDIENTE\s+CLASIFICADO|"
+    r"MOKU|AELITHIA|SCIFI|SCI-FI|SINGULARIDAD(?:\s*SCI[-\s]?FI)?|DRAMA|AITA)\]\s*|"
+    r"(?:Moku|Aelithia|Singularidad(?:\s*Sci[-\s]?Fi)?|Sci-?Fi)\s*[:—–-]\s*)+",
+    re.IGNORECASE,
+)
+
+RE_BRAND_SUFFIX = re.compile(
+    r"\s*(?:\||-|–|—|:)\s*(?:historias\s+reales\s+en\s+)?"
+    r"(?:moku(?:reddit|redit)?|aelithia(?:-c1f)?|singularidad(?:\s*sci[-\s]?fi)?|scifi)\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_brand_metadata_from_title(title: str, display_name: Optional[str] = None) -> str:
+    """Removes hardcoded channel names, brand prefixes, and brand suffixes from a title."""
+    clean_t = (title or "").strip()
+    clean_t = RE_BRAND_PREFIX.sub("", clean_t).strip()
+    while True:
+        prev = clean_t
+        clean_t = RE_BRAND_SUFFIX.sub("", clean_t).strip()
+        if display_name:
+            dyn_suffix = re.compile(
+                rf"\s*(?:\||-|–|—|:)\s*(?:historias\s+reales\s+en\s+)?{re.escape(display_name)}\s*$",
+                re.IGNORECASE,
+            )
+            clean_t = dyn_suffix.sub("", clean_t).strip()
+        if clean_t == prev:
+            break
+    return clean_t
 
 
 def truncate_at_word_boundary(text: str, max_len: int, trailer: str = "...") -> str:
@@ -62,20 +95,10 @@ class ChannelBranding:
         if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
             clean_t = self.default_title_fallback
 
-        # Strip any legacy brand prefix if present
-        if clean_t.startswith("[RELATO DE TERROR] "):
-            clean_t = clean_t[len("[RELATO DE TERROR] "):].strip()
+        clean_t = strip_brand_metadata_from_title(clean_t, self.display_name)
 
-        # Strip any trailing channel brand suffixes if present
-        for suffix_to_strip in (
-            f" | Historias Reales en {self.display_name}",
-            f" | {self.display_name}",
-            " | Moku",
-            " | Aelithia",
-            " | Singularidad Sci-Fi",
-        ):
-            if clean_t.endswith(suffix_to_strip):
-                clean_t = clean_t[:-len(suffix_to_strip)].strip()
+        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
+            clean_t = self.default_title_fallback
 
         if len(clean_t) > 100:
             clean_t = truncate_at_word_boundary(clean_t, 100)
@@ -137,9 +160,7 @@ class ChannelBranding:
         """
         Generates Shorts-optimized title (<60 chars), description with mandatory hashtags (#Shorts), and tags list.
         """
-        clean_t = (raw_title or "").strip()
-        if not clean_t:
-            clean_t = self.default_title_fallback
+        clean_t = self.generate_title(raw_title)
 
         # High-CTR punchy title under 60 chars strictly at word boundaries
         if len(clean_t) > 55:

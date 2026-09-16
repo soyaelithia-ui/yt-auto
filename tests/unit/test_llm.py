@@ -40,6 +40,10 @@ class TestLLMScriptCuration(unittest.TestCase):
         self.assertEqual(clean_title('"El Bosque Oscuro"'), "El Bosque Oscuro")
         self.assertEqual(clean_title("Aquí tienes el título: El Susurro"), "El Susurro")
         self.assertEqual(clean_title("The Haunted House [OC] (Part 1)"), "The Haunted House")
+        self.assertEqual(clean_title("[RELATO DE TERROR] El Susurro | Moku"), "El Susurro")
+        self.assertEqual(clean_title("[CONFESIÓN] La Boda Arruinada | Aelithia"), "La Boda Arruinada")
+        self.assertEqual(clean_title("[REGISTRO ESTELAR] Paradoja Cuántica | Singularidad Sci-Fi"), "Paradoja Cuántica")
+        self.assertEqual(clean_title("[MOKU] La Cabaña Abandonada"), "La Cabaña Abandonada")
         self.assertEqual(clean_title("Cookies!"), "Memorias del Olvido")
         self.assertEqual(clean_title("untitled"), "Memorias del Olvido")
 
