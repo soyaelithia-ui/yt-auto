@@ -27,8 +27,8 @@ class TestLoopEngineBankDefaultsAndSecurity:
         catalog_file = BASE_DIR / "data" / "loop_catalog.db"
         engine = LoopVideoEngine()
         if catalog_file.is_file():
-            assert engine.db_path == str(catalog_file)
-            assert engine.catalog.db_path == str(catalog_file)
+            assert Path(engine.db_path).resolve() == catalog_file.resolve()
+            assert Path(engine.catalog.db_path).resolve() == catalog_file.resolve()
         else:
             assert engine.db_path == DEFAULT_DB_PATH
 

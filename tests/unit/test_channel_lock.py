@@ -42,7 +42,7 @@ class TestChannelLock(unittest.TestCase):
     def test_channel_lock_collision_rejection(self):
         """Scenario 5: Concurrent acquisition on the same channel raises ChannelLockError."""
         lock1 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path)
-        lock2 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path)
+        lock2 = ChannelLock(channel_name="moku", lock_file_path=self.base_lock_path, timeout=0.05, poll_interval=0.01)
 
         with lock1:
             with self.assertRaises(ChannelLockError) as cm:

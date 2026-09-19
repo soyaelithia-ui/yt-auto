@@ -28,6 +28,7 @@ def _render_fixture(monkeypatch, tmp_path):
 
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", _mock_loop_render)
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.resolve_loop_video", lambda *args, **kwargs: str(tmp_path / "fake_loop.mp4"))
+    monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.resolve_continuous_loop", lambda *args, **kwargs: tmp_path / "fake_loop.mp4")
     monkeypatch.setattr("lib.video.create_video_thumbnail", lambda *args, **kwargs: _image(args[2]))
     manager = MagicMock()
     monkeypatch.setattr("src.asset_manager.get_asset_manager", lambda: _assets(tmp_path))
