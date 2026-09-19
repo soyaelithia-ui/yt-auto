@@ -5,6 +5,7 @@ from src.cli.handlers.clean import handle_clean
 from src.cli.handlers.daemon import handle_daemon
 from src.cli.handlers.lanes import handle_lanes
 from src.cli.handlers.loop import handle_loop
+from src.cli.handlers.mcp import handle_mcp
 from src.cli.handlers.migrate import handle_migrate
 from src.cli.handlers.profile import handle_profile
 from src.cli.handlers.queue import handle_queue
@@ -27,5 +28,6 @@ __all__ = [
     "handle_loop",
     "handle_profile",
     "handle_test",
+    "handle_mcp",
 ]
 

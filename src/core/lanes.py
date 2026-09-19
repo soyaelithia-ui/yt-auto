@@ -438,11 +438,22 @@ def resolve_lane_for_run(
     """
     channel_key = canonical_channel(channel)
     channel_str = getattr(channel_key, "value", str(channel_key))
+    wanted = str(lane_id or "").strip()
+    if wanted == "scifi-chronicles-shorts":
+        wanted = "scifi-singularity-shorts"
+
     available = lanes_for_channel(channel_key, path=path)
     if not available:
-        raise ValueError(f"Sin carriles configurados para el canal {channel_str!r}")
+        disabled = tuple(
+            lane
+            for lane in load_lanes(path, include_disabled=True)
+            if getattr(lane.channel, "value", str(lane.channel)) == channel_str
+        )
+        if wanted and disabled:
+            available = disabled
+        else:
+            raise ValueError(f"Sin carriles configurados para el canal {channel_str!r}")
 
-    wanted = str(lane_id or "").strip()
     if wanted:
         if any(char in wanted for char in (";", "&", "|", "`", "$", ">", "<", "\n", "\r")):
             raise ValueError(f"Identificador de carril inválido o sospechoso: {wanted!r}")

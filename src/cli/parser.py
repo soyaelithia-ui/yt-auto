@@ -19,6 +19,7 @@ from src.cli.handlers import (
     handle_daemon,
     handle_lanes,
     handle_loop,
+    handle_mcp,
     handle_migrate,
     handle_profile,
     handle_queue,
@@ -46,6 +47,7 @@ CANONICAL_SUBCOMMANDS = {
     "profile",
     "benchmark",
     "test",
+    "mcp",
 }
 
 
@@ -624,6 +626,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ejecutar la suite integral de pruebas y auditoría de integridad (scripts/test.sh)",
     )
 
+    # 14. mcp (Model Context Protocol Server)
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        parents=[subparser_parent],
+        help="Iniciar el servidor Model Context Protocol (MCP)",
+    )
+    mcp_parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
+        help="Transporte de comunicación ('stdio' o 'sse', default: 'stdio')",
+    )
+    mcp_parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Dirección de escucha para transporte SSE (default: 127.0.0.1)",
+    )
+    mcp_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Puerto de escucha para transporte SSE (default: 8000)",
+    )
+
     return parser
 
 
@@ -894,6 +921,8 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_profile(args, parser)
     if subcommand == "test":
         return handle_test(args, parser)
+    if subcommand == "mcp":
+        return handle_mcp(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

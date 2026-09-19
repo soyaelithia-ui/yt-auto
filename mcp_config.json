@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "yt-auto": {
+      "command": ".venv/bin/python3",
+      "args": [
+        "-m",
+        "src.mcp"
+      ],
+      "env": {
+        "PYTHONPATH": ".",
+        "YT_PROFILE": "cli"
+      }
+    }
+  }
+}

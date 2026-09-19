@@ -1,84 +1,81 @@
-# Project: 16:9 Long-Form Video Pipeline Optimization & Thematic Loop Rotation
+# Project: yt-auto MCP Server Implementation & SSOT Synchronization
 
 ## Architecture
-- **Pipeline & Composition Engine (`src/pipeline.py`, `src/media/loop_engine.py`)**:
-  - Single continuous loop composition: single clip (10s vertical 9:16 for shorts from `assets/videos/shorts/`, 30s horizontal 16:9 for longs from `assets/videos/longs/`) repeated seamlessly across narration duration.
-  - Zero-reencode stream-copy (`-c:v copy`) via concat demuxer (<2s execution, near-zero CPU/RAM).
-  - Multichannel neutrality: round-robin rotation across available `.mp4` files without channel coupling.
-  - Fail-Fast safeguard: raises `CatalogAssetNotFoundError` if video directories are empty.
-  - Prompt-driven real-time thumbnails: Chiaroscuro high-CTR style with 3-5 word viral hooks.
-- **Locking & Concurrency (`src/core/lock.py`, `src/orchestrator/pipeline.py`)**:
-  - Non-blocking/timed `ChannelLock` with polling timeout and reentrancy registration in `_active_locks`.
-- **Review Delivery & Telegram Bot (`review/telegram_bot.py`, `src/telegram/approval.py`)**:
-  - Size preflight check against 50 MB Telegram cloud limit.
-  - Mandatory 2-hour rejection window for human veto/approval (`AUTO_PUBLISH_TIMEOUT_HOURS = 2`).
-  - Automatic publish sweep after 2 hours without human action (fail-open programmed).
-  - Post-publication local cleanup (`delete_local_post_publication`): unlinks local `.mp4` and TTS audios, archiving permanently to Google Drive.
-- **Governance & CI (`./scripts/verify_integrity.sh`, `.githooks/pre-commit`)**:
-  - Zero-Browser policy in media/pipeline.
-  - Zero-Secrets policy across git and memory.
-  - 100% HEALTHY state verified via `./scripts/verify_integrity.sh`.
+- **Framework**: Official Python MCP SDK (`mcp` v2.2.0) utilizing `from mcp.server.mcpserver import MCPServer` (or `from mcp.server import MCPServer`).
+- **Transports**: Primary `stdio` transport via `server.run_stdio_async()` (with OS file descriptor diversion) and modular SSE readiness (`server.sse_app`).
+- **Core Package**: `src/mcp/` containing:
+  - `server.py`: `MCPServer` factory and entrypoint.
+  - `tools.py`: 8 core tools (`system_preflight`, `list_lanes`, `get_lane_info`, `query_loop_catalog`, `audit_loop_catalog`, `run_pipeline_dry_run`, `get_system_status`, `manage_queue`) + `verify_integrity`.
+  - `resources.py`: 3 resources (`channels://{channel_name}/config`, `lanes://catalog`, `system://health`).
+  - `prompts.py`: 3 operational prompts (`preflight_diagnostics`, `channel_incident_analysis`, `video_qa_review`).
+  - `sanitizer.py`: Recursive output sanitization enforcing `[REDACTED]` and zero secret leaks.
+  - `__main__.py`: Module entrypoint enabling `python3 -m src.mcp`.
+- **CLI Integration**: Subcommand `mcp` in `main.py` delegating to `src.cli.handlers.mcp`.
+- **Automated Drift Verification**: `scripts/verify_mcp_sync.py` integrated into `./scripts/verify_integrity.sh` as Check #9.
+- **SSOT Documentation**: `docs/MCP.md` (standalone technical guide), updated `README.md`, `docs/OPERACION.md`, and client configurations (`mcp_config.json`, `.mcp.json.example`).
 
 ## Feature Inventory
-| # | Feature ID | Feature | Description | Milestone | Source |
-|---|------------|---------|-------------|-----------|--------|
-| 1 | F01 | Stream-Copy Concat Slicing | `ffconcat version 1.0` with `duration <shot_dur>` per entry in `LoopVideoEngine.compose()` | M1 | Survey (Explorer 1) |
-| 2 | F02 | Elimination of Re-encoding Bottlenecks | Use `-c:v copy` for all 1080p Main master loops; eliminate redundant `libx264` re-encoding | M1 | Survey (Explorer 1) |
-| 3 | F03 | Lock Hardening & Anti-Deadlock | Add polling timeout and `_active_locks` registration to `ChannelLock` to eliminate self-collisions | M1 | Survey (Explorer 1) |
-| 4 | F04 | Catalog Candidate Pool Fallback | Allow seeded rotation across distinct channel-compatible loops when subcategory count == 1 | M2 | Survey (Explorer 3) |
-| 5 | F05 | Thematic Loop Rotation & Channel Isolation | Alternating scene background rotation per channel theme (dark/horror for Moku, cosmos/tech for SciFi) | M2 | Survey (Explorer 2) |
-| 6 | F06 | 16:9 Aspect Ratio Preservation | Preserve exact 1920x1080 dimensions without distortion across all master loop transitions | M2 | Survey (Explorer 2) |
-| 7 | F07 | Long-Form Test Generation (Moku & SciFi) | Generate test 16:9 longform videos for `moku-horror-long` and `scifi-singularity-long` | M3 | User Request (R3) |
-| 8 | F08 | Telegram Proxy Generation (<= 50MB) | Ensure longform videos are adaptively compressed to <= 50MB for Telegram review delivery | M3 | Survey (Explorer 3) |
-| 9 | F09 | Telegram Delivery Verification | Send test video review to chat `8266399903`, verifying HTTP 200 and `ok: true` | M3 | User Request (R3) |
-| 10 | F10 | Secret Hygiene Remediation | Redact plain-text Telegram token in `ORIGINAL_REQUEST.md` to pass `.githooks/pre-commit` | M4 | Survey (Explorer 3) |
-| 11 | F11 | Invariant & Governance Verification | Verify `./scripts/verify_integrity.sh` 100% HEALTHY, zero-browser, and zero-secrets | M4 | User Request (R4) |
-| 12 | F12 | Git Branch Integration & Push | Pull/rebase remote commits, create semantic commits, and push to `origin/verify_vps_github_status` | M4 | User Request (R4) |
-| 13 | F13 | E2E Test Suite Creation | Requirements-driven opaque-box test suite (Tiers 1-4) published via `TEST_READY.md` | E2E Track | Project Pattern |
-| 14 | F14 | Live Director Shot Mix | Majority settled background reuse with minority designed in-moment grades | Pipeline | PR #69 |
-| 15 | F15 | Precomputed QA Metrics Gate | `bank_manifest.json` visual metrics avoid double full-file decode in prepublication QA | Pipeline | PR #69 |
-| 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Moku, Aelithia, and SciFi (Shorts + Longform) | Pipeline | PR #69 |
-| 17 | F17 | Permanent 6 Master Loops Catalog | Purge 66 unbranded atomic clips & Sci-Fi loops; exactly 6 certified brand master loops | Pipeline | v3.2 Restructure |
-| 18 | F18 | Production Cadence Calibration | 12 shorts/h (1 short c/5m: 6 Moku + 6 Aelithia) and 2 longs/h (1 long c/30m: 1 Moku + 1 Aelithia); interleaved initial offsets | Pipeline | Cadence Sync |
-| 19 | F19 | Telegram 2h Rejection Window | All generated videos sent to Telegram in PENDING_REVIEW; 2h operator veto window before auto-publish | Review | v3.2 Restructure |
-| 20 | F20 | Post-Publish Local Reclamation | Unlink local .mp4 and TTS audio files post-publish, retaining 100% video archive on Google Drive | Storage | v3.2 Restructure |
-| 21 | F21 | Dynamic Procedural Narrative Synthesis | Eradication of 44s shortcuts and static hardcoded stories; procedural synthesis calibrated to 180-320 words (Shorts) and >=2,600 words (Longform) | Narrative | Cadence Sync |
-| 22 | F22 | Narration Channel-Sanitization | Complete removal of spoken channel names, `@` handles, and self-referential promos; 100% immersive narration | Narrative | Audio Purity |
-| 23 | F23 | Low-Resource Fast Composition & Zero Artificial Duration Cap | Concat demuxer stream-copy (`-c:v copy`) sub-second assembly, enabling 5m cadence with zero CPU saturation and natural narrative duration | Media | Pipeline SLA |
+| # | Feature | Description | Milestone | Source |
+|---|---------|-------------|-----------|--------|
+| 1 | MCP Server Core & Lifecycle | `MCPServer` instantiation with name, version, instructions, and stdio/SSE runner | M1 | Survey |
+| 2 | Tool: system_preflight | Preflight environment, disk, binary, and token checks with fail-closed errors | M1 | Survey |
+| 3 | Tool: list_lanes | Production lane listing with scheduling state and resolved voice profile | M1 | Survey |
+| 4 | Tool: get_lane_info | Deep lane specification, cadence, duration, and visual pipeline specs | M1 | Survey |
+| 5 | Tool: query_loop_catalog | Filter video loop records by category, orientation, and channel compatibility | M1 | Survey |
+| 6 | Tool: audit_loop_catalog | Audit physical MP4 files vs SQLite DB and verify bank_manifest.json metrics | M1 | Survey |
+| 7 | Tool: run_pipeline_dry_run | Synthetic dry run (--lane -t) with zero API quota and stream-copy | M1 | Survey |
+| 8 | Tool: get_system_status | System health, queue counts, process locks, and recent failure logs | M1 | Survey |
+| 9 | Tool: manage_queue | Story queue listing, review pending inspection, channel pause/resume, auto-publish sweep | M1 | Survey |
+| 10 | Tool: verify_integrity | Execute repository integrity script and anti-regression suite | M1 | Survey |
+| 11 | Resource: channels://{channel_name}/config | Sanitized channel profile via `public_dict()`, no secret paths leaked | M1 | Survey |
+| 12 | Resource: lanes://catalog | Expose canonical production lane specifications (config/lanes.json) | M1 | Survey |
+| 13 | Resource: system://health | Real-time health metrics, disk headroom, and lock status | M1 | Survey |
+| 14 | Prompt: preflight_diagnostics | Step-by-step preflight diagnosis and GO/NO-GO workflow | M1 | Survey |
+| 15 | Prompt: channel_incident_analysis | Guided triage workflow for channel failures, error spikes, and paused lanes | M1 | Survey |
+| 16 | Prompt: video_qa_review | In-depth QA review checklist against 10-stage pipeline gatekeeper | M1 | Survey |
+| 17 | Security: Credential Sanitizer | Mask secrets with `[REDACTED]`, sanitize exceptions and output payloads | M1 | Survey |
+| 18 | Drift Detection: verify_mcp_sync.py | Script verifying parity between MCPServer registrations, client configs, and docs | M2 | Survey |
+| 19 | Integrity Integration: verify_integrity.sh | Check #9 in verify_integrity.sh running verify_mcp_sync.py | M2 | Survey |
+| 20 | SSOT Documentation: docs/MCP.md | Comprehensive technical guide for tools, resources, prompts, and governance | M3 | Survey |
+| 21 | Client Configs: mcp_config.json | Ready-to-use client config for Antigravity, Claude Desktop, and CLI | M3 | Survey |
+| 22 | Docs SSOT Updates & Line Budget | Update README.md, docs/OPERACION.md with pruning to keep active docs <= 1000 lines | M3 | Survey |
+| 23 | E2E Opaque-Box Test Suite | Tier 1-4 tests in tests/unit/test_mcp_server.py testing full protocol | E2E-Track | Survey |
+| 24 | Final Verification & Quality Gate | 100% E2E tests passing, drift verification, and verify_integrity.sh exit 0 | M4 | Survey |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Stream-Copy Concat & Lock Hardening | `src/media/loop_engine.py`, `src/core/lock.py`, `src/pipeline.py` | none | DONE |
-| M2 | Catalog Candidate Pool & Thematic Rotation | `src/core/catalog.py`, `tests/unit/test_loop_catalog.py` | none | DONE |
-| M3 | Long-Form Generation & Telegram Delivery | `src/orchestrator/pipeline.py`, `review/telegram_bot.py`, generation CLI | M1, M2 | DONE |
-| M4 | E2E Validation & Governance | E2E test pass, secret redaction, `./scripts/verify_integrity.sh`, git push | M3, E2E Track | DONE |
-| M5 | 6 Loops Catalog, Cadence, 2h Telegram Window & Post-Publish Clean | `assets/loops/`, `config/lanes.json`, `src/pipeline.py`, `src/telegram/approval.py`, `src/cleaner.py` | M1-M4 | DONE |
-| M6 | Cadence Synchronization, Dynamic Narratives & Narration Sanitization | `config/lanes.json`, `src/core/lanes.py`, `src/core/repository.py`, `src/templates/narratives.py`, `src/curators/`, `src/agents/` | M1-M5 | DONE |
+| E2E | E2E Testing Track | Requirement-driven test suite (Tiers 1-4) in `tests/unit/test_mcp_server.py`, TEST_INFRA.md & TEST_READY.md | none | IN_PROGRESS |
+| 1 | MCP Core Server & Capability Layer | `src/mcp/` package with 9 tools, 3 resources, 3 prompts, sanitizer, CLI handler | none | IN_PROGRESS |
+| 2 | Automated Sync & Drift Detection | `scripts/verify_mcp_sync.py` and integration into `scripts/verify_integrity.sh` Check #9 | M1 | PENDING |
+| 3 | SSOT Policy, Docs & Client Configs | `docs/MCP.md`, `mcp_config.json`, `.mcp.json.example`, updates to `README.md` & `docs/OPERACION.md` adhering to line budget | M1, M2 | PENDING |
+| 4 | Final Milestone: E2E & Hardening | Phase 1 (100% E2E tests pass) + Phase 2 (Adversarial coverage hardening & full integrity audit) | E2E, M1, M2, M3 | PENDING |
 
 ## Interface Contracts
-### LoopVideoEngine ↔ FFmpeg Concat Demuxer
-- Input: `loop_concat_list.txt` formatted with `ffconcat version 1.0`, followed by alternating `file '<path>'` and `duration <dur_sec>` lines.
-- FFmpeg Command: `ffmpeg -y -f concat -safe 0 -i loop_concat_list.txt -i speech.wav -i bgm.mp3 -filter_complex <ducking_filter> -c:v copy -c:a aac -movflags +faststart <output.mp4>`.
-- Guarantees: Zero video re-encoding, sub-second composition, exact 1920x1080 16:9 output.
+### `src.mcp.server:create_mcp_server() -> MCPServer`
+- Creates, configures, and registers all tools, resources, and prompts on an `MCPServer` instance.
+- Canonical name: `"yt-auto"`, version: `"2.2.0"`.
 
-### LoopCatalogRepository ↔ Pipeline
-- Signature: `get_best_loop(category: str, orientation: str = "horizontal", seed: Optional[int] = None, channel: Optional[str] = None) -> LoopMetadata`
-- Semantics:
-  - If `channel` is provided, candidate pool is filtered strictly by `CHANNEL_THEMES[channel]`.
-  - If matching category has <= 1 record, fallback to all distinct channel records to allow seeded rotation.
-  - Returns `LoopMetadata` with verified physical path in `assets/loops/horizontal/`.
+### `src.mcp.sanitizer:sanitize_payload(data: Any) -> Any`
+- Recursively inspects data structures (dicts, lists, strings) and replaces any tokens matching secret patterns with `"[REDACTED]"`.
+- Replaces secret path fields (`cookies_path`, `youtube_token_path`) with boolean flags.
 
-### TelegramReviewBot ↔ Telegram Bot API
-- Target: `https://api.telegram.org/bot[REDACTED]/sendVideo`
-- Payload: multipart/form-data with `chat_id=8266399903`, `video=<proxy_file>`, `supports_streaming=true`.
-- Output: `DeliveryResult(ok=True, message_id=<int>)` on HTTP 200.
+### `scripts.verify_mcp_sync:main() -> int`
+- Imports `create_mcp_server()`, extracts registered tool names, resource URI patterns, and prompt names.
+- Parses `docs/MCP.md` and validates 100% bidirectional parity.
+- Validates `mcp_config.json` and `.mcp.json.example`.
+- Exits 0 on success, 1 on drift.
 
 ## Code Layout
-- `src/media/loop_engine.py`: Concat demuxer writing, stream-copy composition, audio filtergraph.
-- `src/core/lock.py`: File locking mechanism (`ChannelLock`).
-- `src/core/catalog.py`: Loop catalog repository, channel themes, seeded candidate rotation.
-- `src/pipeline.py`: Main pipeline execution, shot planning, audio generation.
-- `src/orchestrator/pipeline.py`: Channel orchestration, topic story creation, telegram review trigger.
-- `review/telegram_bot.py`: Telegram review bot, preflight size check, proxy builder.
-- `tests/e2e/`: E2E test suites covering loop stream-copy, rotation, locks, and delivery.
+- `src/mcp/__init__.py`: Package export `create_mcp_server`.
+- `src/mcp/server.py`: MCPServer factory and transport runners (`run_stdio`, `run_sse`).
+- `src/mcp/tools.py`: Tool definitions and handlers wrapping core subsystems.
+- `src/mcp/resources.py`: Resource definitions for channels, lanes, and system health.
+- `src/mcp/prompts.py`: Prompt templates and operational diagnostic guides.
+- `src/mcp/sanitizer.py`: Interceptor and redaction helper functions.
+- `src/mcp/__main__.py`: Direct CLI execution entrypoint (`python3 -m src.mcp`).
+- `src/cli/handlers/mcp.py`: CLI command handler for `main.py mcp`.
+- `scripts/verify_mcp_sync.py`: Automated parity validator.
+- `docs/MCP.md`: Complete MCP documentation and tool reference.
+- `mcp_config.json` / `.mcp.json.example`: Client configuration files.
+- `tests/unit/test_mcp_server.py`: Complete E2E and unit test suite.
