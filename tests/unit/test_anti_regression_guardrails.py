@@ -314,35 +314,162 @@ class TestFFmpeg61LibassPathGuardrails:
 class TestLoopHotPathNoBurnGuardrails:
     """Product path is catalog loop + -c:v copy + mov_text mux. Burn/Chromium must not return."""
 
-    def test_reg13_pipeline_never_burns_captions(self) -> None:
-        text = (SRC_DIR / "pipeline.py").read_text(encoding="utf-8")
-        assert "burn_subtitles" not in text, (
-            "REG-13 VIOLATION: src/pipeline.py reintroduced caption burn"
-        )
-        assert "stream_copy_mode = True" in text
-        assert "subtitles_active = False" in text
-        assert "FORCE_MULTISCENE" in text
-        assert "is_multiscene_mode = False" in text
-        assert "ScenePlannerCompositorAgent" in text
-        assert "CinematicScriptCuratorAgent" in text
+    def test_reg13_pipeline_never_burns_captions(self, tmp_path: Path) -> None:
+        """Assert pipeline stages enforce stream-copy and soft muxing without subtitle burn."""
+        from unittest.mock import MagicMock, patch
+        from src.pipeline.stages.stage_08_loop import stage_08_loop_scene
+        from src.pipeline.stages.stage_09_render import stage_09_video_rendering
 
-    def test_reg13_stream_copy_cmd_muxes_not_libass(self) -> None:
-        text = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
-        start = text.find("def build_stream_copy_composition_cmd")
-        end = text.find("\n    def compose(", start)
-        assert start != -1 and end != -1
-        body = text[start:end]
-        assert "ass=" not in body, (
-            "REG-13 VIOLATION: stream-copy cmd builds a libass burn filter"
-        )
-        assert "libx264" not in body
-        assert "subtitle_mux_ffmpeg_parts" in body
-        assert '"copy"' in body or "'copy'" in body
+        # 1. Verify stage 08 configures stream-copy mode and soft muxing
+        ctx8 = MagicMock()
+        ctx8.profiler.phase.return_value.__enter__ = MagicMock()
+        ctx8.profiler.phase.return_value.__exit__ = MagicMock()
+        ctx8.subtitles_active = True
+        sub_file = tmp_path / "test.ass"
+        sub_file.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+        ctx8.ass_path = sub_file
+        ctx8.is_multiscene_mode = False
+        ctx8.work_dir = tmp_path
+        ctx8.story = {}
+        ctx8.channel_name = "test_channel"
+        ctx8.title = "Test Story"
+        ctx8.audio_path = tmp_path / "audio.wav"
+        ctx8.music_track_path = None
+        ctx8.audio = {"duration_sec": 10.0}
+        ctx8.scene_bg_list = []
+        with patch("src.scene_manifest.build_scene_manifest", return_value=tmp_path / "manifest.json"):
+            stage_08_loop_scene(ctx8)
 
-    def test_reg13_compose_does_not_disable_copy_when_captions_active(self) -> None:
-        text = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
-        assert "bool(stream_copy) and (not subs_active)" not in text
-        assert "is_stream_copy = (not subs_active)" not in text
+        assert ctx8.stream_copy_mode is True, "REG-13 VIOLATION: stage_08 did not enable stream_copy_mode"
+        assert ctx8.mux_subtitles is True, "REG-13 VIOLATION: stage_08 did not enable mux_subtitles"
+
+        # 2. Verify stage 09 passes stream_copy=True and soft muxing to loop engine without burn_subtitles
+        ctx9 = MagicMock()
+        ctx9.profiler.phase.return_value.__enter__ = MagicMock()
+        ctx9.profiler.phase.return_value.__exit__ = MagicMock()
+        ctx9.is_long_lane = False
+        ctx9.is_multiscene_mode = False
+        ctx9.stream_copy_mode = True
+        ctx9.mux_subtitles = True
+        ctx9.manifest_path = tmp_path / "manifest.json"
+        video_out = tmp_path / "video.mp4"
+        video_out.write_bytes(b"dummy_video")
+        ctx9.video_path = video_out
+        ctx9.audio_path = tmp_path / "audio.wav"
+        ctx9.ass_path = sub_file
+        ctx9.resolved_loop_path = tmp_path / "loop.mp4"
+        ctx9.music_track_path = None
+        ctx9.bg_volume = 0.04
+        ctx9.audio = {"duration_sec": 10.0}
+        ctx9.target_category = "dark_ambient"
+        ctx9.channel_name = "test_channel"
+        ctx9.run_id = "test_run_reg13"
+        ctx9.lane.orientation = "vertical"
+        ctx9.lane.target_duration_sec = 10.0
+
+        stage_09_video_rendering(ctx9)
+
+        assert ctx9.loop_engine.render.called, "REG-13 VIOLATION: loop_engine.render was not invoked"
+        call_kwargs = ctx9.loop_engine.render.call_args[1]
+        assert call_kwargs.get("stream_copy") is True, (
+            "REG-13 VIOLATION: loop render did not enable stream_copy"
+        )
+        assert call_kwargs.get("include_subtitles") is True
+        assert "burn_subtitles" not in call_kwargs, (
+            "REG-13 VIOLATION: burn_subtitles parameter reintroduced in render invocation"
+        )
+
+    def test_reg13_stream_copy_cmd_muxes_not_libass(self, tmp_path: Path) -> None:
+        """Assert stream-copy FFmpeg command uses -c:v copy and mov_text muxing, never libass burn."""
+        from src.media.loop_engine import LoopVideoEngine
+
+        engine = LoopVideoEngine()
+        sub_file = tmp_path / "subs.ass"
+        sub_file.write_text(
+            "[Script Info]\nTitle: Test\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Caption test\n",
+            encoding="utf-8",
+        )
+        concat_list = tmp_path / "concat.txt"
+        concat_list.write_text("ffconcat version 1.0\nfile 'loop.mp4'\n", encoding="utf-8")
+        audio_file = tmp_path / "audio.wav"
+        audio_file.write_bytes(b"RIFF" + b"\x00" * 40)
+        out_video = tmp_path / "output.mp4"
+
+        cmd = engine.build_stream_copy_composition_cmd(
+            concat_list_path=concat_list,
+            audio_path=audio_file,
+            bgm_path=None,
+            duration_sec=10.0,
+            output_video_path=out_video,
+            subtitle_path=sub_file,
+        )
+
+        cmd_str = " ".join(cmd)
+        # 1. Video stream is copied without re-encoding
+        assert "-c:v" in cmd, "REG-13 VIOLATION: -c:v missing from stream-copy command"
+        assert cmd[cmd.index("-c:v") + 1] == "copy", (
+            f"REG-13 VIOLATION: video codec is {cmd[cmd.index('-c:v') + 1]!r}, expected 'copy'"
+        )
+        assert "libx264" not in cmd, "REG-13 VIOLATION: libx264 re-encode found on stream-copy path"
+
+        # 2. Subtitles are muxed via mov_text, never burned with libass
+        assert "-c:s" in cmd, "REG-13 VIOLATION: subtitle codec -c:s missing"
+        assert cmd[cmd.index("-c:s") + 1] == "mov_text", (
+            f"REG-13 VIOLATION: subtitle codec is {cmd[cmd.index('-c:s') + 1]!r}, expected 'mov_text'"
+        )
+        assert "ass=" not in cmd_str, "REG-13 VIOLATION: stream-copy cmd injects libass burn filter"
+        assert "subtitles=" not in cmd_str, "REG-13 VIOLATION: stream-copy cmd injects subtitles burn filter"
+        assert str(sub_file) in cmd, "REG-13 VIOLATION: subtitle file not included as input for muxing"
+
+    def test_reg13_compose_does_not_disable_copy_when_captions_active(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Assert LoopVideoEngine.compose preserves stream-copy when captions are active."""
+        from src.media.loop_engine import LoopVideoEngine
+        from unittest.mock import MagicMock
+
+        engine = LoopVideoEngine()
+        sub_file = tmp_path / "subs.ass"
+        sub_file.write_text(
+            "[Script Info]\nTitle: Test\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Hello world\n",
+            encoding="utf-8",
+        )
+        audio_file = tmp_path / "audio.wav"
+        audio_file.write_bytes(b"RIFF" + b"\x00" * 40)
+        out_video = tmp_path / "output.mp4"
+
+        stream_copy_flow_called: list[tuple[Any, dict[str, Any]]] = []
+
+        def spy_stream_copy_flow(*args: Any, **kwargs: Any) -> str:
+            stream_copy_flow_called.append((args, kwargs))
+            out_video.write_bytes(b"dummy_mp4")
+            return str(out_video)
+
+        monkeypatch.setattr(engine, "_try_stream_copy_flow", spy_stream_copy_flow)
+        monkeypatch.setattr(
+            "src.media.loop.stream_copy._probe_media",
+            lambda p: MagicMock(duration=10.0, video_streams=[MagicMock(width=1080, height=1920)]),
+        )
+        monkeypatch.setattr(engine, "resolve_continuous_loop", lambda **kw: tmp_path / "loop.mp4")
+
+        result = engine.compose(
+            audio_path=audio_file,
+            output_video_path=out_video,
+            subtitle_path=sub_file,
+            include_subtitles=True,
+            stream_copy=True,
+            orientation="vertical",
+            duration_sec=10.0,
+        )
+
+        assert len(stream_copy_flow_called) == 1, (
+            "REG-13 VIOLATION: _try_stream_copy_flow was not called when captions were active"
+        )
+        call_kwargs = stream_copy_flow_called[0][1]
+        assert call_kwargs.get("mux_path") == sub_file, (
+            "REG-13 VIOLATION: mux_path was not forwarded to stream-copy flow"
+        )
+        assert result == str(out_video)
 
 
 class TestResourceTargetGovernanceGuardrails:

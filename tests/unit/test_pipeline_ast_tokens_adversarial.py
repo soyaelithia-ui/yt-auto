@@ -46,40 +46,53 @@ def pipeline_ast(pipeline_code: str) -> ast.Module:
 class TestMandatoryStringTokens:
     """Stress-test that all mandatory tokens are present in executable contexts."""
 
-    MANDATORY_TOKENS = [
-        "stream_copy_mode = True",
+    PIPELINE_MANDATORY_TOKENS = [
         "subtitles_active = False",
         "FORCE_MULTISCENE",
         "is_multiscene_mode = False",
-        "ScenePlannerCompositorAgent",
-        "CinematicScriptCuratorAgent",
-        "default_render_preset()",
-        "stream_copy=stream_copy_mode",
-        "include_subtitles=mux_subtitles",
         "# Scene asset lineage (outside stage-9 timer — SQLite I/O is not render)",
         "SceneAssetTracker(repository=repository)",
     ]
 
-    @pytest.mark.parametrize("token", MANDATORY_TOKENS)
+    STAGE_MANDATORY_TOKENS = [
+        ("stage_08_loop.py", "stream_copy_mode = True"),
+        ("stage_04_mood.py", "ScenePlannerCompositorAgent"),
+        ("stage_04_mood.py", "CinematicScriptCuratorAgent"),
+        ("stage_09_render.py", "default_render_preset()"),
+        ("stage_09_render.py", "stream_copy=stream_copy_mode"),
+        ("stage_09_render.py", "include_subtitles=mux_subtitles"),
+    ]
+
+    @pytest.mark.parametrize("token", PIPELINE_MANDATORY_TOKENS)
     def test_mandatory_token_present(self, pipeline_code: str, token: str) -> None:
         """Assert each mandatory token appears in src/pipeline.py."""
         assert token in pipeline_code, f"Mandatory token {token!r} missing from src/pipeline.py"
+
+    @pytest.mark.parametrize("stage_file,token", STAGE_MANDATORY_TOKENS)
+    def test_stage_mandatory_token_present(self, stage_file: str, token: str) -> None:
+        """Assert each mandatory token appears in its corresponding modular stage module."""
+        path = REPO_ROOT / "src" / "pipeline" / "stages" / stage_file
+        assert path.is_file(), f"Missing stage file: {stage_file}"
+        code = path.read_text(encoding="utf-8")
+        assert token in code, f"Mandatory token {token!r} missing from {stage_file}"
 
     def test_coercing_video_engine_token_present(self, pipeline_code: str) -> None:
         """Assert 'Coercing video_engine=' token is present in src/pipeline.py."""
         assert "Coercing video_engine=" in pipeline_code
 
-    def test_stream_copy_mode_ast_assignment(self, pipeline_ast: ast.Module) -> None:
-        """Assert stream_copy_mode = True is an AST Assign node with True constant."""
+    def test_stream_copy_mode_ast_assignment(self) -> None:
+        """Assert stream_copy_mode = True is an AST Assign node with True constant in stage_08_loop."""
+        path = REPO_ROOT / "src" / "pipeline" / "stages" / "stage_08_loop.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         found = False
-        for node in ast.walk(pipeline_ast):
+        for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
                 for target in node.targets:
                     if isinstance(target, ast.Name) and target.id == "stream_copy_mode":
                         if isinstance(node.value, ast.Constant) and node.value.value is True:
                             found = True
                             break
-        assert found, "AST Assignment 'stream_copy_mode = True' not found"
+        assert found, "AST Assignment 'stream_copy_mode = True' not found in stage_08_loop.py"
 
     def test_is_multiscene_mode_ast_assignment(self, pipeline_ast: ast.Module) -> None:
         """Assert is_multiscene_mode = False is an AST Assign node with False constant."""
@@ -227,17 +240,31 @@ class TestStageHelpersAST:
         for num, fn_name, _ in self.EXPECTED_STAGES:
             assert fn_name in funcs, f"Missing stage helper function: {fn_name}"
 
-    def test_stage_helpers_canonical_phase_association(self, pipeline_ast: ast.Module) -> None:
-        """Assert each stage helper invokes profiler.phase with its matching CanonicalStage."""
-        funcs = {
-            node.name: node
-            for node in ast.walk(pipeline_ast)
-            if isinstance(node, ast.FunctionDef)
-        }
-        for num, fn_name, canonical_attr in self.EXPECTED_STAGES:
-            fn_node = funcs[fn_name]
+    STAGE_MODULE_MAPPING = [
+        ("01", "stage_01_lease.py", "CLAIM_LEASE"),
+        ("02", "stage_02_ingest.py", "INGEST_TRANSLATE"),
+        ("03", "stage_03_editorial.py", "EDITORIAL_BARRIER"),
+        ("04", "stage_04_mood.py", "MOOD_THEME"),
+        ("05", "stage_05_tts.py", "TTS_SYNTHESIS"),
+        ("06", "stage_06_alignment.py", "DURATION_ALIGNMENT"),
+        ("07", "stage_07_subtitles.py", "SUBTITLE_GENERATION"),
+        ("08", "stage_08_loop.py", "LOOP_SCENE"),
+        ("09", "stage_09_render.py", "VIDEO_RENDERING"),
+        ("10", "stage_10_qa.py", "QA_GATING"),
+        ("11", "stage_11_metadata.py", "THUMBNAIL_METADATA"),
+        ("12", "stage_12_simhash.py", "DEDUP_SIMHASH"),
+        ("13", "stage_13_publish.py", "BACKUP_PUBLISH"),
+    ]
+
+    def test_stage_helpers_canonical_phase_association(self) -> None:
+        """Assert each stage module associates with its matching CanonicalStage in stages/."""
+        stages_dir = REPO_ROOT / "src" / "pipeline" / "stages"
+        for num, mod_name, canonical_attr in self.STAGE_MODULE_MAPPING:
+            path = stages_dir / mod_name
+            assert path.is_file(), f"Missing stage module: {mod_name}"
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             canon_refs = []
-            for n in ast.walk(fn_node):
+            for n in ast.walk(tree):
                 if (
                     isinstance(n, ast.Attribute)
                     and isinstance(n.value, ast.Name)
@@ -245,7 +272,7 @@ class TestStageHelpersAST:
                 ):
                     canon_refs.append(n.attr)
             assert canonical_attr in canon_refs, (
-                f"{fn_name} does not reference CanonicalStage.{canonical_attr}; found: {canon_refs}"
+                f"{mod_name} does not reference CanonicalStage.{canonical_attr}; found: {canon_refs}"
             )
 
     def test_run_context_parameter_in_stages(self, pipeline_ast: ast.Module) -> None:
