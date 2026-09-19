@@ -232,8 +232,10 @@ def compile_stories_to_target_words(
         connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
 
         idx = 0
+        from src.core.contracts import StoryRecord
+
         for story in additional_stories:
-            if not isinstance(story, dict):
+            if not isinstance(story, (dict, StoryRecord)):
                 continue
             story_title = str(story.get("title") or "").strip()
             story_content = str(story.get("content") or "").strip()

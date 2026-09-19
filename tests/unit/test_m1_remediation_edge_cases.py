@@ -35,7 +35,7 @@ class TestM1RemediationEdgeCases(unittest.TestCase):
 
         input_story_none_title = [{"title": None, "content": None}]
         result_none_title = curate_script(input_story_none_title)
-        self.assertIn("Título: Historia de Terror.", result_none_title)
+        self.assertIn("Título: Relato Enigmático.", result_none_title)
 
     def test_2_llm_footnote_regex_truncation_defect(self):
         """2. Tighten footnote regex so sentence containing 'edit' (e.g. 'I tried to edit my journal') is not truncated."""
