@@ -1,14 +1,13 @@
-"""src/sanitizer.py - Script Sanitizer & System Prompt Leak Cleaner Engine for YTShort.
+"""src/sanitizer - Modular Script Sanitizer & System Prompt Leak Cleaner Engine.
 
-Backward-compatible facade delegating execution to the modular src.sanitizer package.
+Backward-compatible package re-exporting all sanitizer modules and contracts.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
-from src.sanitizer import (
+from src.sanitizer.editorial import (
     _COMPILED_EDITORIAL_CACHE,
     _FILE_RULES_CACHE,
     _SENTENCE_SPLIT,
@@ -16,10 +15,40 @@ from src.sanitizer import (
     FORBIDDEN_EDITORIAL_PATTERNS,
     LEGACY_BRANDING_PATTERNS,
     MARKDOWN_HEADER_PREAMBLE,
-    ORDINAL_OR_ROMAN,
     POSTAMBLE_PATTERNS,
     PREAMBLE_PATTERN,
+    _editorial_patterns,
+    _get_compiled_editorial_patterns,
+    check_forbidden_editorial_elements,
+    repair_forbidden_editorial,
+    sanitize_llm_script,
+    sanitize_script_text,
+    suppress_title_repetition,
+)
+from src.sanitizer.filesystem import sanitize_filename
+from src.sanitizer.hashing import (
+    compute_simhash_64,
+    evaluate_script_simhash,
+    hamming_distance_64,
+)
+from src.sanitizer.linguistic import (
+    SPANGLISH_REPLACEMENTS,
+    TextSanitizer,
+    filter_orphan_english_blocks,
+    normalize_spanglish_terms,
+    sanitize_html_entities,
+    sanitize_text,
+)
+from src.sanitizer.security import (
     PROMPT_LEAK_PATTERNS,
+    TABOO_BARRIER_PATTERNS,
+    PromptLeakError,
+    extract_script_from_reasoning,
+    strip_llm_prompt_leaks,
+    validate_semantic_barrier,
+)
+from src.sanitizer.tts import (
+    ORDINAL_OR_ROMAN,
     RE_ACT_CHAPTER_LABELS,
     RE_ACT_CHAPTER_LINE,
     RE_ASS_TAGS,
@@ -41,37 +70,16 @@ from src.sanitizer import (
     RE_TITLE_INLINE,
     RE_TITLE_PREFIX,
     RE_URLS,
-    SPANGLISH_REPLACEMENTS,
-    TABOO_BARRIER_PATTERNS,
-    PromptLeakError,
-    TextSanitizer,
-    _editorial_patterns,
-    _get_compiled_editorial_patterns,
-    check_forbidden_editorial_elements,
-    compute_simhash_64,
-    evaluate_script_simhash,
-    extract_script_from_reasoning,
-    filter_orphan_english_blocks,
-    hamming_distance_64,
     limpiar_texto_para_tts,
-    logger,
-    normalize_spanglish_terms,
-    repair_forbidden_editorial,
-    sanitize_filename,
-    sanitize_html_entities,
-    sanitize_llm_script,
     sanitize_scp_acronyms_for_tts,
-    sanitize_script_text,
-    sanitize_text,
     standardize_timestamp_format,
     strip_act_chapter_headers,
     strip_ass_tags,
-    strip_llm_prompt_leaks,
-    suppress_title_repetition,
     validate_beat_format,
     validate_pre_tts_script,
-    validate_semantic_barrier,
 )
+
+logger = logging.getLogger("sanitizer")
 
 __all__ = [
     "logger",

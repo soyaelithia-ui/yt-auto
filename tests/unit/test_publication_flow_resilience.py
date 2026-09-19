@@ -447,3 +447,31 @@ def test_10_telegram_message_send_failure(temp_environment):
     updated = env["store"].get_job(job_id, version)
     assert updated.status == ReviewStatus.PUBLISHED.value
     assert updated.published_id == "YT_VID_10"
+
+
+def test_review_adapter_main_isatty_guard(monkeypatch, capsys):
+    """Ensure review_adapter.main() exits cleanly with usage error if stdin is interactive."""
+    import sys
+    from src.review_adapter import main
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code = main()
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "interactive TTY" in err
+    assert "Usage: python3 -m src.review_adapter" in err
+
+
+def test_review_adapter_main_invalid_json(monkeypatch, capsys):
+    """Ensure review_adapter.main() exits cleanly with code 1 if stdin contains invalid JSON."""
+    import io
+    import sys
+    from src.review_adapter import main
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("invalid json {"))
+    code = main()
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "Invalid JSON payload" in err
+

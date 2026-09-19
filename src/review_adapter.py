@@ -240,7 +240,17 @@ def publish(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def main() -> int:
-    payload = json.load(sys.stdin)
+    if sys.stdin.isatty():
+        sys.stderr.write(
+            "Error: Expected JSON payload via stdin pipe, but stdin is an interactive TTY.\n"
+            "Usage: python3 -m src.review_adapter < payload.json\n"
+        )
+        return 1
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError as err:
+        sys.stderr.write(f"Error: Invalid JSON payload on stdin: {err}\n")
+        return 1
     result = publish(payload)
     if not isinstance(result, dict):
         raise TypeError("Publication adapter must return a JSON object")
