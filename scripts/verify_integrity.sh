@@ -148,6 +148,27 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# 9. Verify MCP Server, Documentation, and Client Config Synchronization
+echo "⏳ Verifying Model Context Protocol (MCP) synchronization & drift detection..."
+PYTHON_BIN=""
+if [ -x "$REPO_ROOT/.venv/bin/python3" ]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/bin/python3"
+elif command -v python3 > /dev/null 2>&1; then
+    PYTHON_BIN="python3"
+fi
+
+if [ -f "scripts/verify_mcp_sync.py" ]; then
+    if [ -n "$PYTHON_BIN" ] && "$PYTHON_BIN" scripts/verify_mcp_sync.py; then
+        echo "✅ [PASS] MCP Synchronization: 100% bidirectional parity across tools, resources, prompts, configs & docs."
+    else
+        echo "❌ [FAIL] MCP Server drift detected! Run scripts/verify_mcp_sync.py for diagnostics."
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    echo "❌ [FAIL] Missing required synchronization script: scripts/verify_mcp_sync.py"
+    FAILURES=$((FAILURES + 1))
+fi
+
 echo "======================================================================"
 if [ "$FAILURES" -gt 0 ]; then
     echo "🛑 [REFUSAL TRIGGERED] $FAILURES integrity checks failed!"

@@ -26,6 +26,7 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 | **`migrate`** | Migraciones de esquema SQLite. | `-d` (dry-run), `-j` (salida JSON) | `python3 main.py migrate -d` |
 | **`service`** | Control de servicios Systemd y logs. | `build`, `start`, `stop`, `restart`, `logs` | `python3 main.py service logs` |
 | **`loop`** | Administración e indexación de bucles de video (catálogo de videos pre-renderizados MP4 y stream-copy). | `list`, `generate`, `preview`, `audit`, `daemon`, `-c` (categoría), `-o` (orientación), `-n` (cantidad), `-j` (JSON) | `python3 main.py loop list`<br>`python3 main.py loop generate -c cosmic_horror -o vertical`<br>`python3 main.py loop audit` |
+| **`mcp`** | Servidor Model Context Protocol oficial (stdio / SSE) para orquestación e inspección por IA. | `--transport {stdio,sse}`, `--port` | `python3 main.py mcp`<br>`python3 -m src.mcp` |
 
 
 ### Opciones Globales (heredables antes o después del subcomando)
@@ -34,7 +35,6 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 - `-y`, `--yes`: Confirmación automática de operaciones críticas sobre perfiles de producción.
 
 ---
-
 
 ## Auto-approve / Autopilot (HITL)
 
@@ -73,6 +73,8 @@ Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en 
 | **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados e iniciados (`yt-moku` + `yt-aelithia`). |
 | **7** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-moku` + `yt-aelithia` (+ opcional sidecar) healthy/up. |
 | **8** | Logs por canal: `… logs --follow yt-moku` / `… logs --follow yt-aelithia` | Daemons autónomos desacoplados en intervalo. |
+
+Preferir overlay low-RAM (`2g` / `2` CPU, `shm 256m`, tmpfs `/tmp` 512m): `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d`. Defaults: `AUTO_APPROVE: "0"`, `ENABLE_AUTO_PUBLISH_SWEEP: "0"`.
 
 **Gestión Independiente de Canales:**
 - Levantar un solo canal: `docker compose up -d yt-moku` (o `docker compose up -d yt-aelithia`)
@@ -123,29 +125,22 @@ python3 main.py backup && python3 main.py queue sweep
 
 ### Instalar fuera de `/srv/projects/yt-auto`
 
-No editar a mano el unit copiado: usar drop-in para mantener `WorkingDirectory`, `ExecStart`, `EnvironmentFile` y `YT_AUTO_ROOT` alineados.
-
-```bash
-sudo systemctl edit yt-lanes-daemon.service
-# [Service]
-# EnvironmentFile=-/opt/yt-auto/.env
-# Environment=YT_AUTO_ROOT=/opt/yt-auto
-# WorkingDirectory=/opt/yt-auto
-# Environment=YOUTUBE_AUTOMATION_DB=/opt/yt-auto/data/shorts_queue.db
-# Environment=VIDEO_REVIEW_DB_PATH=/opt/yt-auto/data/review_state.db
-# ExecStart=/opt/yt-auto/.venv/bin/python main.py daemon --interval 60
-
-sudo systemctl edit yt-review-bot.service
-# [Service]
-# EnvironmentFile=-/opt/yt-auto/.env
-# Environment=YT_AUTO_ROOT=/opt/yt-auto
-# WorkingDirectory=/opt/yt-auto
-# ExecStart=/opt/yt-auto/.venv/bin/python deploy/tmux_review_bot.py
-```
+Usar drop-in de systemd (`sudo systemctl edit yt-lanes-daemon.service`) para ajustar `WorkingDirectory`, `ExecStart`, `EnvironmentFile` y `YT_AUTO_ROOT` a la ruta destino personalizada sin alterar los units oficiales.
 
 ---
 
-## 4. Gestión de Worktrees Concurrentes y Aprovisionamiento de Assets
+## 4. Servidor MCP Oficial (`main.py mcp`)
+
+Inicia el servidor Model Context Protocol sobre transporte stdio (por defecto) o SSE:
+```bash
+python3 main.py mcp                     # stdio (Antigravity / Claude Desktop)
+python3 main.py mcp --transport sse     # SSE (HTTP en puerto 8000)
+```
+Manual técnico completo, catálogo de herramientas y configuración de clientes en [docs/MCP.md](MCP.md).
+
+---
+
+## 5. Gestión de Worktrees Concurrentes y Aprovisionamiento de Assets
 
 Flujos multi-agente concurrentes y aislamiento de ramas de desarrollo sin colisiones:
 
