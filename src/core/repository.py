@@ -1868,8 +1868,16 @@ class QueueRepository:
     def pause(self, channel: str | CanonicalChannel, reason: str | None = None) -> None:
         self._set_paused(channel, True, reason)
 
-    def resume(self, channel: str | CanonicalChannel) -> None:
+    def resume(self, channel: str | CanonicalChannel, *, resume_lanes: bool = True) -> None:
         self._set_paused(channel, False, None)
+        if resume_lanes:
+            channel_key = canonical_channel(channel).value
+            with connect(self.db_path) as conn:
+                conn.execute(
+                    "UPDATE scheduler_lane_state SET paused = 0, pause_reason = NULL, updated_at = ? WHERE lane_id LIKE ?",
+                    (_utc_now(), f"{channel_key}-%"),
+                )
+                conn.commit()
 
     def _set_paused(
         self,
@@ -1913,6 +1921,14 @@ class QueueRepository:
                 )
             ]
         return {"counts": counts, "leases": leases, "controls": controls}
+
+    def is_channel_paused(self, channel: str | CanonicalChannel) -> bool:
+        channel_key = canonical_channel(channel).value
+        with connect(self.db_path, read_only=True) as conn:
+            row = conn.execute(
+                "SELECT paused FROM channel_controls WHERE channel = ?", (channel_key,)
+            ).fetchone()
+        return bool(row and row["paused"])
 
     def record_scene_assets(
         self,
@@ -2301,8 +2317,15 @@ class QueueRepository:
 
     def set_lane_paused(self, lane_id: str, paused: bool, reason: str | None = None) -> None:
         self._execute_write(
-            "UPDATE scheduler_lane_state SET paused = ?, pause_reason = ?, updated_at = ? WHERE lane_id = ?",
-            (1 if paused else 0, reason, _utc_now(), lane_id),
+            """
+            INSERT INTO scheduler_lane_state(lane_id, next_due_at, consecutive_empty, paused, pause_reason, updated_at)
+            VALUES (?, 0, 0, ?, ?, ?)
+            ON CONFLICT(lane_id) DO UPDATE SET
+                paused = excluded.paused,
+                pause_reason = excluded.pause_reason,
+                updated_at = excluded.updated_at
+            """,
+            (lane_id, 1 if paused else 0, reason, _utc_now()),
         )
 
     def get_lane_state(self, lane_id: str) -> dict[str, Any] | None:

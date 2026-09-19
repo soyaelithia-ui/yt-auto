@@ -1075,14 +1075,24 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
         thumb_hook = getattr(ctx.lane, "hook_text", None) or (ctx.story.get("hook_text") if isinstance(ctx.story, dict) else None)
         if not thumb_hook and motifs_for_thumb:
             motif_hooks = {
-                "carnival": "¿QUÉ HABÍA EN LA FERIA?", "morgue": "¿QUÉ HABÍA EN LA CAMILLA?",
-                "asylum": "¿QUÉ HABÍA EN EL PASILLO?", "cabin": "¿QUÉ HABÍA EN LA CABAÑA?",
-                "cemetery": "¿QUÉ HABÍA EN LA TUMBA?", "diner": "¿QUÉ PASÓ A LAS 3 AM?",
-                "bakery": "¿QUÉ HABÍA EN EL HORNO?", "mar": "¿QUÉ HABÍA EN EL FARO?",
-                "boda": "¿ARRUINÉ SU BODA?", "hermano": "¿TRAICIÓN FAMILIAR?",
-                "apartamento": "¿EXIGEN MI HERENCIA?", "deudas": "¿PAGAR SUS DEUDAS?",
+                "carnival": ["¿QUÉ HABÍA EN LA FERIA?", "FERIA MALDITA ⚠️", "EL CIRCO PROHIBIDO"],
+                "morgue": ["¿QUÉ HABÍA EN LA CAMILLA?", "LA AUTOPSIA OCULTA 🚨", "NO ESTABA MUERTO"],
+                "asylum": ["¿QUÉ HABÍA EN EL PASILLO?", "PABELLÓN CLAUSURADO 👁️", "EL GRITO EN LA CELDA"],
+                "cabin": ["¿QUÉ HABÍA EN LA CABAÑA?", "NUNCA ENTRES AL BOSQUE 🌲", "EL REFUGIO PERDIDO"],
+                "cemetery": ["¿QUÉ HABÍA EN LA TUMBA?", "LA CRIPTA ABIERTA ⚠️", "NO DEBÍ ABRIRLA"],
+                "diner": ["¿QUÉ PASÓ A LAS 3 AM?", "TURNO DE NOCHE FATAL ❌", "EL CLIENTE EN SOMBRAS"],
+                "bakery": ["¿QUÉ HABÍA EN EL HORNO?", "TURNO DE MADRUGADA ⚠️", "EL SECRETO DEL OBRADOR"],
+                "mar": ["¿QUÉ HABÍA EN EL FARO?", "ABISMO SUBMARINO 🌊", "EL ECO DE LA FOSA"],
+                "boda": ["¿ARRUINÉ SU BODA? 💥", "EXIGENCIAS IMPOSIBLES ⚖️", "NO PAGARÉ SU BODA 🚫", "TRAICIÓN EN EL ALTAR 💔"],
+                "hermano": ["¿TRAICIÓN FAMILIAR? ⚡", "MI HERMANO ME ENGAÑÓ ❌", "DESENMASCARADO ANTE TODOS ⚖️"],
+                "apartamento": ["¿EXIGEN MI HERENCIA? 🏠", "QUISIERON QUITARME TODO 🚫", "LA CASA ES MÍA 💥"],
+                "deudas": ["¿PAGAR SUS DEUDAS? 💸", "NO SOY SU BANCO 🚫", "ESTAFA INTRAFAMILIAR ⚠️"],
             }
-            thumb_hook = motif_hooks.get(motifs_for_thumb[0])
+            cand_hooks = motif_hooks.get(motifs_for_thumb[0])
+            if cand_hooks:
+                import hashlib
+                seed = int(hashlib.md5((ctx.spanish_title or ctx.title or "").encode("utf-8")).hexdigest()[:6], 16)
+                thumb_hook = cand_hooks[seed % len(cand_hooks)]
 
         # Prompt-driven real-time thumbnail generation (Chiaroscuro high-CTR style, 3-5 word viral hook, mysterious focal subject)
         from src.agents.seo_optimizer import SeoOptimizerAgent
@@ -1095,7 +1105,7 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
             use_agent=bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes")),
         )
         thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
-        thumb_hook = thumb_concept.get("big_headline") or thumb_hook or "¡EXPEDIENTE SECRETO PROHIBIDO!"
+        thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
         thumb_prompt = thumb_concept.get("visual_layout") or "Chiaroscuro high-CTR dramatic lighting mysterious focal subject"
         palette = thumb_concept.get("color_palette")
         accent_color = palette[0] if palette and isinstance(palette, list) else None
@@ -1106,7 +1116,12 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
             video_mode=target_fmt, video_path=str(ctx.video_path),
             bg_image_path=None, manifest_path=str(ctx.scene_manifest_path), hook_text=thumb_hook,
             cover_prompt=thumb_prompt, accent_color=accent_color,
-            metadata={"prompt": thumb_prompt, "visual_layout": thumb_prompt, "big_headline": thumb_hook},
+            metadata={
+                "prompt": thumb_prompt,
+                "visual_layout": thumb_prompt,
+                "big_headline": thumb_hook,
+                "prefer_video_climax": True,
+            },
         )
         ctx.metadata_path.write_text(json.dumps({
             "channel": ctx.channel_name, "title": ctx.youtube_title, "description": ctx.youtube_description,

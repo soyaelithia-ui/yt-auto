@@ -803,6 +803,10 @@ from src.templates.longform_stories_ext import (
     build_moku_asylum,
     build_moku_observatory,
     build_moku_saltmine,
+    build_aelithia_secret_inheritance,
+    build_aelithia_fake_fundraiser,
+    build_aelithia_property_usurpation,
+    build_aelithia_adoption_extortion,
 )
 
 MOKU_STORIES: List[Callable[..., str]] = [
@@ -817,10 +821,14 @@ MOKU_STORIES: List[Callable[..., str]] = [
 ]
 
 AELITHIA_STORIES: List[Callable[..., str]] = [
-    build_aelithia_family_debt,       # Story 0: Birthday loan & sibling fraud (existing)
-    build_aelithia_wedding_house,     # Story 1: Wedding & house down payment extortion
-    build_aelithia_business_betrayal, # Story 2: Business partnership & patent theft
-    build_aelithia_eldercare_will,    # Story 3: Eldercare abandonment & estate vultures
+    build_aelithia_family_debt,          # Story 0: Birthday loan & sibling fraud (existing)
+    build_aelithia_wedding_house,        # Story 1: Wedding & house down payment extortion
+    build_aelithia_business_betrayal,    # Story 2: Business partnership & patent theft
+    build_aelithia_eldercare_will,       # Story 3: Eldercare abandonment & estate vultures
+    build_aelithia_secret_inheritance,   # Story 4: Secret inheritance & disloyal executor
+    build_aelithia_fake_fundraiser,      # Story 5: Medical charity fraud exposed
+    build_aelithia_property_usurpation,  # Story 6: Family squatting & eviction lawsuit
+    build_aelithia_adoption_extortion,   # Story 7: Child custody & biological extortion
 ]
 
 
@@ -864,6 +872,30 @@ def get_moku_longform_story(topic: str, index: int | None = None, **kwargs: Any)
             min_sim = max_sim
             best_story = candidate
 
+    # Combinatorial modular synthesis fallback if all individual base stories collide:
+    if recent_texts and min_sim >= 0.70:
+        for combo in range(len(MOKU_STORIES)):
+            idx_a = (start_idx + combo) % len(MOKU_STORIES)
+            idx_b = (start_idx + combo + 2) % len(MOKU_STORIES)
+            idx_c = (start_idx + combo + 4) % len(MOKU_STORIES)
+            pa = [p.strip() for p in MOKU_STORIES[idx_a](topic, **kwargs).split("\n\n") if p.strip()]
+            pb = [p.strip() for p in MOKU_STORIES[idx_b](topic, **kwargs).split("\n\n") if p.strip()]
+            pc = [p.strip() for p in MOKU_STORIES[idx_c](topic, **kwargs).split("\n\n") if p.strip()]
+            min_len = min(len(pa), len(pb), len(pc))
+            if min_len >= 8:
+                hybrid = []
+                for p_idx in range(min_len):
+                    if p_idx % 3 == 0:
+                        hybrid.append(pa[p_idx])
+                    elif p_idx % 3 == 1:
+                        hybrid.append(pb[p_idx])
+                    else:
+                        hybrid.append(pc[p_idx])
+                hybrid_story = "\n\n".join(hybrid)
+                max_sim = max((text_similarity(hybrid_story, prev) for prev in recent_texts), default=0.0)
+                if max_sim < 0.68:
+                    return hybrid_story
+
     return best_story or MOKU_STORIES[start_idx](topic, **kwargs)
 
 
@@ -906,5 +938,29 @@ def get_aelithia_longform_story(topic: str, index: int | None = None, **kwargs: 
         if max_sim < min_sim:
             min_sim = max_sim
             best_story = candidate
+
+    # Combinatorial modular synthesis fallback if all individual base stories collide:
+    if recent_texts and min_sim >= 0.70:
+        for combo in range(len(AELITHIA_STORIES)):
+            idx_a = (start_idx + combo) % len(AELITHIA_STORIES)
+            idx_b = (start_idx + combo + 2) % len(AELITHIA_STORIES)
+            idx_c = (start_idx + combo + 4) % len(AELITHIA_STORIES)
+            pa = [p.strip() for p in AELITHIA_STORIES[idx_a](topic, **kwargs).split("\n\n") if p.strip()]
+            pb = [p.strip() for p in AELITHIA_STORIES[idx_b](topic, **kwargs).split("\n\n") if p.strip()]
+            pc = [p.strip() for p in AELITHIA_STORIES[idx_c](topic, **kwargs).split("\n\n") if p.strip()]
+            min_len = min(len(pa), len(pb), len(pc))
+            if min_len >= 8:
+                hybrid = []
+                for p_idx in range(min_len):
+                    if p_idx % 3 == 0:
+                        hybrid.append(pa[p_idx])
+                    elif p_idx % 3 == 1:
+                        hybrid.append(pb[p_idx])
+                    else:
+                        hybrid.append(pc[p_idx])
+                hybrid_story = "\n\n".join(hybrid)
+                max_sim = max((text_similarity(hybrid_story, prev) for prev in recent_texts), default=0.0)
+                if max_sim < 0.68:
+                    return hybrid_story
 
     return best_story or AELITHIA_STORIES[start_idx](topic, **kwargs)

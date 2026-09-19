@@ -113,6 +113,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         explicit_path: Optional[Union[str, Path]] = None,
         video_path: Optional[Union[str, Path]] = None,
         manifest_path: Optional[Union[str, Path]] = None,
+        prefer_video_climax: bool = False,
     ) -> Image.Image:
         w, h = target_size
 
@@ -127,6 +128,37 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                     return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
                 except Exception as exc:
                     logger.warning("Tier 1 resolution failed loading %s: %s", p, exc)
+
+        def _try_climax_extraction() -> Optional[Image.Image]:
+            if video_path and Path(video_path).is_file():
+                v_p = Path(video_path)
+                try:
+                    extractor = ClimaxFrameExtractor()
+                    climax_t = extractor.resolve_climax_timestamp(
+                        manifest_path=Path(manifest_path) if manifest_path else None
+                    )
+                    with tempfile.TemporaryDirectory(prefix="thumb_cands_") as tmp_dir_str:
+                        tmp_dir = Path(tmp_dir_str)
+                        cand_frames = extractor.extract_candidate_frames(
+                            video_path=v_p,
+                            center_timestamp=climax_t,
+                            output_dir=tmp_dir,
+                            count=3,
+                        )
+                        best_frame = extractor.select_best_frame(cand_frames)
+                        if best_frame and best_frame.is_file():
+                            with Image.open(best_frame) as raw_frame:
+                                raw_rgb = raw_frame.convert("RGB")
+                                return ImageOps.fit(raw_rgb, (w, h), method=Image.Resampling.LANCZOS)
+                except Exception as exc:
+                    logger.warning("Video climax extraction failed: %s", exc)
+            return None
+
+        # When prefer_video_climax is requested or a rendered video is available, try climax frame first
+        if prefer_video_climax or (video_path and Path(video_path).is_file()):
+            climax_img = _try_climax_extraction()
+            if climax_img is not None:
+                return climax_img
 
         # ---------------------------------------------------------
         # Tier 2: Curated Local Asset Bank (Archetype-specific)
@@ -154,7 +186,9 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                     candidates = sorted(t_dir.glob(ext))
                     if candidates:
                         try:
-                            img = Image.open(candidates[0]).convert("RGB")
+                            cand_seed = abs(hash(f"{channel_id}_{archetype}_{manifest_path or video_path or ''}"))
+                            selected_cand = candidates[cand_seed % len(candidates)]
+                            img = Image.open(selected_cand).convert("RGB")
                             return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
                         except Exception as exc:
                             logger.warning("Failed loading template backdrop from %s: %s", candidates[0], exc)
@@ -163,28 +197,10 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         # Tier 3: Climax Keyframe Fallback from Video
         # (Prioritized when archetype has no curated template bank)
         # ---------------------------------------------------------
-        if video_path and Path(video_path).is_file():
-            v_p = Path(video_path)
-            try:
-                extractor = ClimaxFrameExtractor()
-                climax_t = extractor.resolve_climax_timestamp(
-                    manifest_path=Path(manifest_path) if manifest_path else None
-                )
-                with tempfile.TemporaryDirectory(prefix="thumb_cands_") as tmp_dir_str:
-                    tmp_dir = Path(tmp_dir_str)
-                    cand_frames = extractor.extract_candidate_frames(
-                        video_path=v_p,
-                        center_timestamp=climax_t,
-                        output_dir=tmp_dir,
-                        count=3,
-                    )
-                    best_frame = extractor.select_best_frame(cand_frames)
-                    if best_frame and best_frame.is_file():
-                        with Image.open(best_frame) as raw_frame:
-                            raw_rgb = raw_frame.convert("RGB")
-                            return ImageOps.fit(raw_rgb, (w, h), method=Image.Resampling.LANCZOS)
-            except Exception as exc:
-                logger.warning("Tier 3 video climax extraction failed: %s", exc)
+        if not prefer_video_climax:
+            climax_img = _try_climax_extraction()
+            if climax_img is not None:
+                return climax_img
 
         # ---------------------------------------------------------
         # Tier 2 (Fallback): Curated Channel Defaults / Visual Bank

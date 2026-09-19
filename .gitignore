@@ -13,6 +13,7 @@ data/*.sqlite3
 data/queue.db
 data/queue.db-*
 data/backups/
+backups/
 data/cli/
 data/dev
 data/prod/

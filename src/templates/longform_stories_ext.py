@@ -450,3 +450,336 @@ def build_moku_saltmine(topic: str, **kwargs: Any) -> str:
         ),
     ]
     return "\n\n".join(p.strip() for p in paragraphs)
+
+
+def build_aelithia_secret_inheritance(topic: str, **kwargs: Any) -> str:
+    """Story 4: Secret Inheritance, Disloyal Executor and Notarial Restitution."""
+    paragraphs = [
+        (
+            f"El descubrimiento fortuito de un testamento ológrafo puede derrumbar la fachada de armonía en cualquier clan familiar, y hoy analizamos los sucesos desgarradores de {topic} donde la codicia de un albacea desleal destrozó la lealtad fraterna para siempre. "
+            "Cuando mi tío abuelo falleció tras una prolongada convalecencia en su residencia campestre, su hermano menor y albacea testamentario convocó a la familia para anunciar que el difunto había muerto en la insolvencia total. "
+            "Aseguró ante todos los herederos que las cuentas corrientes habían sido consumidas por los costes médicos y que la finca histórica debía liquidarse urgentemente a precio de saldo para saldar supuestas deudas con prestamistas privados. "
+            "Sin embargo, durante las labores de limpieza del despacho del viejo cortijo, encontré oculto tras una moldura de caoba un cuaderno notarial sellado con lacre donde mi tío abuelo detallaba cada uno de sus activos financieros reales. "
+            "El documento revelaba la existencia de una cartera de valores con títulos nominativos por valor de cientos de miles de euros y señalaba que yo era la legataria universal del tercio de libre disposición. "
+            "Aquel hallazgo inesperado no solo desmentía de forma categórica la supuesta ruina familiar, sino que demostraba que mi tío albacea había diseñado un plan deliberado para apropiarse en exclusiva del patrimonio sucesorio."
+        ),
+        (
+            "Al solicitar formalmente una copia de los estados de posición bancaria a fecha del fallecimiento, el albacea reaccionó con una furia desmedida que evidenció su nerviosismo. "
+            "Me acusó en presencia de primos y tías de ser una oportunista sin escrúpulos que intentaba manchar la memoria del difunto con sospechas infundadas. "
+            "'Tu tío abuelo gastó hasta su último céntimo en medicinas experimentales en el extranjero', afirmó a viva voz durante una cena familiar donde intentó humillarme públicamente. "
+            "'Tú eras solo una sobrina nieta que venía a visitarlo de vez en cuando; yo me ocupé de gestionar sus papeles y las decisiones difíciles, así que respeta el dolor de la familia y deja de revolver cajones privados'. "
+            "Sus palabras no lograron amedrentarme, pues la caligrafía del cuaderno era inequívoca y mencionaba depósitos a plazo fijo en entidades financieras de las que el albacea jamás había informado en el inventario provisional. "
+            "Comprendí de inmediato que cualquier intento de resolución amistosa sería interpretado como debilidad y que debía blindar jurídicamente el proceso sucesorio antes de que los fondos fueran desviados a cuentas opacas."
+        ),
+        (
+            "Contraté los servicios de una abogada especialista en derecho sucesorio y peritaje caligráfico forense para iniciar las acciones legales pertinentes ante el juzgado de primera instancia. "
+            "Presentamos una solicitud formal de diligencias preliminares exigiendo la exhibición judicial de todos los extractos bancarios de los últimos cinco años y el bloqueo preventivo de las cuentas del causante. "
+            "La respuesta del tribunal fue inmediata: el magistrado ordenó al albacea la rendición exhaustiva de cuentas bajo apercibimiento de incurrir en delito de desobediencia judicial grave. "
+            "Cuando la entidad bancaria principal remitió los extractos certificados al juzgado, la verdad emergió con la crudeza de una bofetada: apenas cuarenta y ocho horas después del deceso, se habían realizado transferencias masivas hacia cuentas particulares del albacea. "
+            "Más de cuatrocientos mil euros habían sido transferidos mediante órdenes electrónicas firmadas póstumamente con claves digitales que el albacea había sustraído del teléfono del difunto. "
+            "El pánico se apoderó de mi pariente cuando su propio letrado le advirtió de que se enfrentaba a una acusación por estafa agravada, apropiación indebida y falsedad documental."
+        ),
+        (
+            "La investigación forense ordenada por el juzgado profundizó aún más en los movimientos mercantiles y descubrió un entramado societario creado ad hoc por el albacea para blanquear el capital expoliado. "
+            "A través de una sociedad limitada unipersonal constituida apenas tres meses antes de la muerte del anciano, el infractor había intentado traspasar la titularidad fiduciaria de varias parcelas rústicas de gran valor cinegético y forestal. "
+            "Los extractos periciales revelaron que incluso los pagos de dividendos de fondos de inversión garantizados habían sido desviados a una cuenta bancaria abierta a nombre de su cónyuge en una sucursal foránea. "
+            "El perito judicial contable acreditó sin género de dudas que el albacea se había aprovechado del progresivo deterioro cognitivo de su hermano en sus últimas semanas de vida para forzarle a rubricar poderes notariales con facultades dispositivas desproporcionadas. "
+            "Ante la contundencia del informe pericial de más de ochenta páginas, el juez instructor decretó de inmediato el embargo preventivo y la prohibición absoluta de disponer sobre todos los bienes muebles e inmuebles vinculados a dicha mercantil instrumental."
+        ),
+        (
+            "La noticia del auto de imputación judicial cayó como una bomba en el seno de la familia, dividiendo a los parientes en dos posturas diametralmente opuestas. "
+            "Varios tíos comenzaron a llamarme a horas intempestivas para rogarme que retirara la querella penal 'por el bien del apellido y para no mandar a prisión a un anciano'. "
+            "Mi propia madre recibió visitas intimidatorias donde le reprochaban haber criado a una hija desapegada capaz de llevar a juicio a su propia sangre por dinero. "
+            "'Los trapos sucios se lavan en casa', argumentaban en los grupos de mensajería mientras justificaban la apropiación alegando que el albacea había pasado muchas noches en vela cuidando al anciano. "
+            "Sin embargo, yo conservaba los registros de asistencia médica que demostraban que mi tío abuelo había estado atendido por cuidadores profesionales contratados con sus propios fondos, a quienes el albacea ni siquiera había liquidado sus finiquitos laborales. "
+            "La hipocresía colectiva de quienes preferían encubrir un delito flagrante antes que incomodar al estafador fortaleció mi determinación de exigir justicia hasta las últimas consecuencias."
+        ),
+        (
+            "El día de la audiencia previa en sede judicial, el albacea compareció escoltado por sus hijos, exhibiendo un aspecto desmejorado en un intento evidente de despertar compasión ante el tribunal. "
+            "Su defensa propuso un acuerdo transaccional mediante el cual devolvería un tercio de las cantidades sustraídas a cambio de que yo renunciara a toda reclamación futura y retirara los cargos penales. "
+            "Mi abogada rechazó la propuesta sin vacilar: exigimos la restitución íntegra del caudal hereditario, el pago de los intereses devengados y la remoción inmediata del albacea por dolo manifiesto en el ejercicio de su cargo. "
+            "El juez fue inflexible y dictaminó la nulidad total de las transferencias póstumas, ordenando el embargo de bienes inmuebles propios del albacea para garantizar el reintegro de cada euro desviado. "
+            "Asimismo, la sentencia reconoció la plena validez legal del cuaderno notarial ológrafo, confirmando mi condición de legataria principal y encomendándome la administración judicial de la masa hereditaria. "
+            "Al escuchar el veredicto, mi tío albacea bajó la cabeza derrotado mientras sus hijos abandonaban la sala en silencio, incapaces de sostener la mirada ante las evidencias periciales irrefutables."
+        ),
+        (
+            "Durante la fase de ejecución de sentencia penal, las tensiones entre los propios hijos del albacea estallaron en recriminaciones mutuas en los pasillos de los juzgados. "
+            "El hijo menor reconoció bajo declaración jurada que su padre les había prometido una vivienda a cada uno financiada con el dinero 'que el viejo chocho ya no iba a necesitar en el otro mundo'. "
+            "Esa confesión desgarradora desarmó por completo el recurso de apelación interpuesto por la defensa y obligó a la familia del albacea a malvender su propio piso en la capital para afrontar las indemnizaciones por daños morales y costas procesales. "
+            "La codicia ciega que pretendía dejarme sin un solo recuerdo de mi tío abuelo terminó por arruinar económicamente a quienes orquestaron el saqueo y expuso su catadura moral ante toda la comarca rural. "
+            "El tribunal advirtió formalmente a los descendientes del albacea de que cualquier hostigamiento o contacto intimidatorio hacia mi persona conllevaría órdenes de alejamiento inmediatas con penas privativas de libertad efectivas."
+        ),
+        (
+            "Con la ejecución de la sentencia y la restitución de los fondos a la cuenta judicial de la herencia, procedí a liquidar en primer lugar las deudas pendientes con los cuidadores del anciano, garantizando que recibieran las indemnizaciones que por justicia les correspondían. "
+            "La finca campestre fue preservada y restaurada con cargo a los fondos recuperados, transformando el cortijo en un espacio de memoria y tranquilidad en honor al hombre que confió en mí antes de partir. "
+            "Muchos de los parientes que en su momento me vilipendiaron intentaron luego acercarse con sonrisas hipócritas, preguntando si el remanente de la herencia alcanzaría para repartir dividendos entre los sobrinos restantes. "
+            "Mi respuesta fue tajante: cerré las puertas a quienes habían preferido apoyar el engaño y compartí los beneficios exclusivamente con quienes mantuvieron la integridad moral intacta durante los momentos más difíciles. "
+            "El dinero fácil no construye el respeto ni devuelve la tranquilidad perdida, pero la firmeza en la defensa de la verdad sirve como un cortafuegos indispensable frente a la impunidad de los depredadores intrafamiliares."
+        ),
+        (
+            "Decidí destinar una fracción importante del caudal hereditario saneado a la creación de una fundación comarcal para la defensa jurídica y el bienestar de los adultos mayores en situación de soledad no deseada. "
+            "Esta iniciativa, bautizada con el nombre de mi tío abuelo, ofrece asesoramiento notarial gratuito para evitar que ancianos indefensos sean expoliados por familiares directos que codician sus ahorros mientras aún respiran en sus lechos de convalecencia. "
+            "El cortijo histórico, antes escenario de disputas mezquinas, acoge hoy encuentros comunitarios, talleres de memoria y actividades al aire libre para jubilados del municipio que encuentran allí un espacio digno de compañía y afecto genuino. "
+            "Ver cómo el patrimonio que la codicia quiso saquear se convertía en una fuente viva de auxilio y dignidad social representó el homenaje más hermoso y reparador que pude rendir a la memoria de mi tío abuelo. "
+            "El bien común demostró ser infinitamente más poderoso y perdurable que la bajeza de quienes conciben a la familia como una cartera de valores lista para ser asaltada."
+        ),
+        (
+            "A nivel personal, superar este agotador litigio de más de dos años supuso una metamorfosis completa en mi forma de entender las relaciones humanas y los límites emocionales. "
+            "Aprendí a despojarme de la culpa paralizante que a menudo sienten las víctimas de abusos intrafamiliares cuando deciden recurrir a los tribunales para hacer valer la legalidad frente al chantaje de la sangre. "
+            "La verdadera serenidad no nace de complacer a parientes tóxicos ni de resignarse al atropello para evitar malas caras en las celebraciones navideñas, sino de cultivar un auto-respeto inquebrantable basado en la coherencia ética. "
+            "Las cicatrices emocionales que dejaron las calumnias y las miradas acusatorias se transformaron en un escudo de sabiduría que hoy guía cada uno de mis pasos en el ámbito profesional y familiar. "
+            "Rodearse de personas auténticas que celebran tus logros y respetan tu espacio es el mayor tesoro vital que ninguna herencia material puede igualar jamás."
+        ),
+        (
+            "Este conflicto sucesorio me enseñó que la consanguinidad es un hecho biológico fortuito, mientras que la lealtad y el honor son elecciones morales que se demuestran con hechos cotidianos inquebrantables. "
+            "Ceder ante el chantaje emocional bajo el pretexto de 'mantener unida a la familia' solo sirve para alimentar la codicia de quienes no dudan en pisotear tus derechos en cuanto surge la oportunidad. "
+            "Defender tu patrimonio y honrar la última voluntad de quien te valoró no es un acto de egoísmo ni de venganza, sino un deber de dignidad personal que nadie tiene derecho a arrebatarte. "
+            "Hoy miro hacia atrás con la satisfacción de haber actuado con serenidad y justicia, sabiendo que la paz mental no se negocia con quienes anteponen la avaricia al respeto fraternal."
+        ),
+    ]
+    return "\n\n".join(p.strip() for p in paragraphs)
+
+
+def build_aelithia_fake_fundraiser(topic: str, **kwargs: Any) -> str:
+    """Story 5: Medical Charity Fraud, Fabricated Clinical Reports and Legal Retribution."""
+    paragraphs = [
+        (
+            f"El uso deshonesto de la compasión y la solidaridad familiar para lucrarse mediante engaños representa una de las mayores bajezas morales, y hoy analizamos el drama de {topic} donde una falsa tragedia médica fracturó la confianza de un hogar para siempre. "
+            "Todo comenzó cuando mi cuñada convocó a una reunión urgente entre lágrimas para anunciarnos que a su hijo de ocho años le habían diagnosticado una patología degenerativa extremadamente infrecuente. "
+            "Afirmó que el tratamiento solo podía realizarse en una clínica privada de prestigio en Suiza y que el coste superaba los ochenta mil euros de desembolso inicial para poder incluirlo en el ensayo clínico. "
+            "Conmovida por el sufrimiento de mi sobrino y la desesperación aparente de mi hermano, decidí donar de inmediato quince mil euros de mis ahorros destinados a la entrada de mi vivienda y organicé una colecta digital entre amigos y compañeros de trabajo. "
+            "La campaña comunitaria recaudó en pocas semanas más de setenta mil euros gracias a la empatía de decenas de personas que aportaron sus ahorros para salvar al pequeño. "
+            "Sin embargo, a medida que se aproximaba la fecha programada para el supuesto viaje a Zúrich, una serie de incongruencias en los informes médicos despertaron en mí una profunda inquietud."
+        ),
+        (
+            "Cuando me ofrecí a acompañar a mi cuñada a una consulta previa en el hospital provincial para gestionar los visados sanitarios, su actitud cambió de la noche a la mañana: "
+            "'Los médicos suizos exigen total confidencialidad en el protocolo y no quieren interferencias de parientes ajenos al núcleo materno', me espetó con frialdad y evidente molestia. "
+            "Sospechando que algo no encajaba, revisé con detenimiento las copias digitales de los informes que ella había compartido en la plataforma de micro-mecenazgo para justificar los donativos. "
+            "Al analizar el membrete del hospital clínico con una herramienta de contraste fotográfico, descubrí que el número de colegiado del facultativo firmante pertenecía a un médico jubilado hacía más de ocho años y que la firma había sido superpuesta digitalmente mediante un programa de edición gráfica. "
+            "El impacto de aquel descubrimiento fue devastador: mi cuñada había falsificado documentación clínica oficial para orquestar una estafa masiva utilizando la imagen y la salud de su propio hijo como cebo emocional."
+        ),
+        (
+            "Acudí de inmediato a entrevistarme con el pediatra habitual del niño en el centro de salud de atención primaria para verificar el historial médico real del menor. "
+            "El facultativo me confirmó con total rotundidad que mi sobrino gozaba de una salud excelente y que jamás había sido derivado a neurología ni a ninguna unidad de enfermedades raras. "
+            "Con las pruebas en la mano, confronté a mi cuñada y a mi hermano en su domicilio particular, exigiéndoles una explicación verídica sobre el destino de los más de setenta mil euros recaudados en la colecta. "
+            "En lugar de mostrar arrepentimiento, mi cuñada reaccionó con una agresividad insólita: "
+            "'Teníamos deudas bancarias atrasadas que amenazaban con quitarnos el coche y la hipoteca; no íbamos a dejar que nuestros hijos se quedaran en la calle por tus escrúpulos morales de niña rica'. "
+            "La frialdad con la que justificaba haber engañado a donantes humildes y expuesto a su hijo a una farsa semejante me produjo un profundo rechazo que quebró cualquier lazo de afecto restante."
+        ),
+        (
+            "El shock psicológico al constatar la ausencia total de empatía en mi hermano fue casi insoportable, pero supe que mi prioridad absoluta debía ser la protección psicológica de mi sobrino. "
+            "El niño, de apenas ocho años, vivía aterrorizado creyendo de verdad que padecía una dolencia mortal inminente porque sus propios progenitores le habían instruido para fingir debilidad física y desmayos ante las cámaras de los reportajes locales. "
+            "Consulté de urgencia con una psicóloga infantil especializada en traumas y alienación parental para saber cómo abordar la verdad con el pequeño sin generarle un colapso emocional devastador. "
+            "La terapeuta me advirtió con firmeza de que someter a un infante a la simulación de una enfermedad terminal constituye una forma atroz de maltrato psicológico que deja huellas imborrables en su desarrollo si no se corta de raíz. "
+            "Armada con el informe pericial preliminar de la especialista, comprendí que la indulgencia familiar no solo sería inmoral, sino una complicidad criminal en la destrucción psíquica de un ser inocente."
+        ),
+        (
+            "Ante su negativa rotunda a reembolsar los donativos a las personas que de buena fe habían colaborado en la colecta, tomé la decisión más difícil y coherente de mi vida: acudí a la fiscalía para denunciar la estafa. "
+            "Aporté los informes médicos manipulados, las conversaciones grabadas donde reconocían el desvío de fondos y el listado de transferencias bancarias de la campaña de recaudación digital. "
+            "La investigación penal avanzó con celeridad: la policía judicial rastreó las cuentas y descubrió que el dinero había sido destinado al pago de préstamos personales de juego, compras en tiendas de lujo y reformas estéticas en el domicilio de los progenitores. "
+            "El juzgado decretó el bloqueo cautelar de las cuentas y dictó auto de apertura de juicio oral contra mi hermano y mi cuñada por los delitos de estafa continuada en masa y falsedad en documento privado. "
+            "La indignación pública al publicarse la noticia en los medios locales fue abrumadora y la presión social recayó con todo su peso sobre los responsables del fraude."
+        ),
+        (
+            "La plataforma de micro-mecenazgo, al ser notificada por la orden del juzgado instructor, intervino de forma fulminante congelando los fondos remanentes que aún no habían sido transferidos a las cuentas personales de los imputados. "
+            "Decenas de vecinos jubilados, profesores del colegio y compañeros de mi empresa prestaron testimonio en sede judicial, relatando el esfuerzo y la ilusión con que habían aportado sus modestos ahorros para costear el supuesto tratamiento suizo. "
+            "Uno de los testimonios más sobrecogedores fue el de una anciana del barrio que había donado la mitad de su pensión de viudedad porque su propio nieto había fallecido años atrás de una dolencia similar. "
+            "La frialdad con la que mi cuñada escuchaba los testimonios de dolor y desengaño en el estrado terminó por convencer al tribunal de que se encontraba ante personalidades narcisistas desprovistas de cualquier vestigio de remordimiento moral. "
+            "El ministerio público elevó su petición de penas solicitando prisión incondicional por considerar que la estafa había vulnerado la fe pública y perjudicado gravemente a colectivos vulnerables."
+        ),
+        (
+            "Durante los meses previos a la vista oral, una parte de la familia me sometió a un asedio psicológico asfixiante, tachándome de traidora por haber llevado a la policía hasta la puerta de mi hermano. "
+            "Me acusaban de haber destruido el futuro de los niños por no permitir que la mentira se apagara con el tiempo una vez que las deudas estuvieran pagadas. "
+            "Yo respondí con la serenidad de quien actúa en defensa de la justicia: encubrir una estafa no es proteger a una familia, sino convertirse en cómplice necesario de un delito repugnante que daña la credibilidad de quienes realmente necesitan ayuda solidaria para salvar vidas. "
+            "El tribunal dictó una sentencia ejemplar condenando a ambos a penas de prisión suspendidas bajo la condición ineludible de indemnizar hasta el último céntimo a los cientos de donantes estafados. "
+            "Asimismo, los servicios sociales asumieron la supervisión tutelar del menor para garantizar que su integridad emocional no volviera a ser vulnerada por la irresponsabilidad de sus progenitores."
+        ),
+        (
+            "Con la mediación de la comisión judicial de restitución, pude coordinar la devolución íntegra de los quince mil euros que yo había aportado y de los fondos transferidos por mis amigos y compañeros de trabajo. "
+            "El coste emocional de este proceso fue altísimo y supuso la ruptura definitiva de la relación con mi hermano, pero la recompensa de saber que actué con rectitud moral superó cualquier dolor transitorio. "
+            "La solidaridad comunitaria es uno de los mayores tesoros de nuestra sociedad y quienes la pervierten para fines mezquinos merecen el rechazo más contundente tanto de la justicia como de su entorno social. "
+            "Quien no respeta la salud de sus propios hijos ni la buena fe de los demás no puede pretender escudarse en el afecto familiar para exigir complicidad en el engaño."
+        ),
+        (
+            "El proceso de recuperación psicológica de mi sobrino requirió más de un año de terapia intensiva para liberarlo de la pesada carga de culpa y temor inducida por sus padres. "
+            "Hoy el niño juega, sonríe y progresa académicamente con la alegría propia de su edad, viviendo bajo la custodia tutelar de nuestros tíos maternos que le proporcionan un hogar sereno y libre de manipulaciones. "
+            "Poder abrazarlo los fines de semana y ver el brillo genuino en sus ojos mientras corretea por el parque es la confirmación definitiva de que soportar la tormenta judicial fue el acto de amor más puro y necesario que pude ofrecerle. "
+            "Los niños no son propiedad de sus padres ni herramientas para solventar descalabros financieros; son seres humanos con derechos inviolables que la ley y la sociedad tienen la obligación inexcusable de custodiar. "
+            "Cualquier silencio cobarde en situaciones como esta equivale a entregar el alma de un inocente a la codicia de quienes no merecen llamarse educadores ni protectores."
+        ),
+        (
+            "A raíz de esta dolorosa experiencia, promoví junto a varios de los donantes afectados la creación de una guía ciudadana para la verificación de campañas benéficas y la prevención de fraudes solidarios en redes sociales. "
+            "Trabajamos en coordinación con asociaciones de pacientes de enfermedades raras para enseñar al público cómo exigir certificados médicos verificables y números de expediente hospitalario antes de realizar aportaciones económicas. "
+            "Convertir la indignación inicial en una herramienta pedagógica que proteja a verdaderas causas humanitarias fue el mejor antídoto para sanar el desencanto y la rabia que el engaño familiar nos había dejado en el corazón. "
+            "La generosidad de la gente buena es un bien sagrado que merece ser protegido con el máximo rigor y transparencia para que ninguna familia sin escrúpulos pueda apagar el fuego de la compasión colectiva. "
+            "La verdad siempre deja una estela de luz y esperanza, mientras que el engaño solo construye prisiones de soledad y desprecio para quienes lo practican."
+        ),
+        (
+            "Como reflexión final para nuestra comunidad, este caso demuestra que la verdadera empatía no consiste en tragar con cualquier abuso bajo la excusa del parentesco, sino en tener el coraje cívico de denunciar la vileza cuando se disfraza de necesidad. "
+            "Proteger a los inocentes exige a veces enfrentar la hostilidad de tu propio círculo íntimo y soportar la soledad del escarnio temporal. "
+            "La verdad siempre termina abriéndose paso por encima de cualquier artimaña y la conciencia tranquila es el único refugio que ningún fraude ni ninguna sentencia judicial pueden arrebatarte jamás."
+        ),
+    ]
+    return "\n\n".join(p.strip() for p in paragraphs)
+
+
+def build_aelithia_property_usurpation(topic: str, **kwargs: Any) -> str:
+    """Story 6: Family Property Usurpation, Squatting Abuse and Eviction Lawsuit."""
+    paragraphs = [
+        (
+            f"El abuso de hospitalidad y la ocupación de propiedades familiares sin consentimiento revelan hasta qué punto el derecho adquirido malentendido puede destruir la convivencia, y hoy analizamos el impactante dilema de {topic}. "
+            "Tras varios años de esfuerzo trabajando como ingeniera en el extranjero, logré comprar y restaurar una pequeña casa rural con terreno en mi pueblo natal, pensada como refugio de descanso y como inversión para mi futura jubilación. "
+            "Cuando mi prima y su esposo atravesaron dificultades laborales temporales, accedí de buena fe a permitirles instalarse en la vivienda durante seis meses de forma gratuita para que pudieran estabilizar su economía y ahorrar para una fianza de alquiler. "
+            "Firmamos un contrato de precario con cláusula de finalización improrrogable, acordando que ellos asumirían únicamente los consumos de luz y agua mientras yo seguía pagando el seguro, los impuestos municipales y la hipoteca de la finca. "
+            "Sin embargo, al cumplirse el plazo pactado, lo que parecía un favor temporal se convirtió en una pesadilla de desfachatez, arrogancia y apropiación indebida de mi patrimonio personal."
+        ),
+        (
+            "Cuando regresé al pueblo para organizar unas semanas de vacaciones en mi casa, descubrí que mi prima había cambiado los bombines de todas las cerraduras de acceso a la finca y al portal principal. "
+            "Al llamar a la puerta, su marido salió a atenderme con una actitud chulesca y desafiante, negándose a permitirme el paso al interior de mi propia vivienda: "
+            "'Hemos hecho mejoras en el jardín y en la cocina con nuestro propio dinero, así que esta casa ya no es solo tuya', me dijo sin pestañear mientras cerraba la cancela en mi cara. "
+            "'Tú vives cómodamente en la ciudad y ganas un sueldo holgado; no necesitas esta casa para nada, mientras que nosotros tenemos niños pequeños y no tenemos a dónde ir, así que no pienses que nos vamos a marchar'. "
+            "La estupefacción ante semejante falta de respeto fue total: habían usurpado mi propiedad, alterado los accesos y pretendían imponer su voluntad mediante el chantaje emocional y la coacción patrimonial más descarnada."
+        ),
+        (
+            "La escalada de provocaciones no se detuvo ahí: descubrí que mi prima había acudido al ayuntamiento local para empadronar a varios amigos suyos en mi vivienda sin mi consentimiento, aportando recibos de suministros manipulados. "
+            "Los vecinos colindantes de la parcela me alertaron de que el marido de mi prima estaba talando almendros centenarios de la finca para vender leña a granel y organizando fiestas nocturnas con cobro de entrada en el patio trasero. "
+            "Cuando la policía local acudió a una de las quejas vecinales, los ocupantes presentaron el contrato de precario caducado alegando falsamente que yo les había concedido un usufructo vitalicio por vía oral a cambio del cuidado de los árboles. "
+            "El descaro con el que intentaban despojarme de mi condición de dueña y adueñarse de cada rincón de la propiedad me demostró que cualquier diálogo pacífico era una pérdida de tiempo frente a personalidades tan profundamente parasitarias. "
+            "Era indispensable recurrir al ordenamiento jurídico con la máxima contundencia para recuperar el control legal de mi patrimonio antes de que causaran daños irreparables en la estructura del inmueble."
+        ),
+        (
+            "Intenté mediar con mis tíos para que hicieran entrar en razón a su hija y evitar un conflicto judicial desagradable que avergonzaría a toda la familia en la localidad. "
+            "Para mi sorpresa, mis tíos se alinearon de forma incondicional con los ocupantes ilegítimos, acusándome a mí de ser una egoísta sin corazón por pretender echar a la calle a mis propios sobrinos segundos: "
+            "'Tienes varias propiedades y una carrera brillante; deberías alegrarte de que tu prima cuide de la casa en lugar de querer desahuciarla como si fueras una usurera extranjera', me reprocharon en una acalorada discusión telefónica. "
+            "Comprobé además que los recibos de agua y electricidad acumulaban meses de impago a mi nombre y que las empresas suministradoras me amenazaban con incluirme en registros de morosidad por culpa de los inquilinos ilegales. "
+            "Comprendí que la diplomacia familiar era inútil frente a personas que confundían la generosidad con sumisión y contraté de inmediato a un procurador para interponer una demanda de desahucio por precario ante los tribunales civiles."
+        ),
+        (
+            "El proceso judicial de desahucio se tramitó con la contundencia de las pruebas documentales aportadas: el título de propiedad registral a mi nombre, las facturas hipotecarias y el contrato de precario vencido. "
+            "Los demandados intentaron retrasar el procedimiento alegando que existía un contrato de arrendamiento verbal y que habían invertido más de veinte mil euros en obras de rehabilitación que debían serles compensadas. "
+            "Mi abogado desmontó su estratagema en la vista judicial demostrando que las supuestas 'mejoras' no contaban con licencias municipales de obras ni facturas de profesionales, sino que habían consistido en talas indiscriminadas de árboles centenarios y reformas chapuceras que depreciaban la finca. "
+            "El juez de primera instancia dictó una sentencia demoledora ordenando el desalojo inmediato de los ocupantes en el plazo improrrogable de veinte días, con apercibimiento expreso de lanzamiento con auxilio de la fuerza pública en caso de resistencia. "
+            "Asimismo, la resolución condenó a los demandados al pago de todas las costas judiciales y de las deudas pendientes de suministros básicos acumuladas durante la ocupación."
+        ),
+        (
+            "Los demandados intentaron un último recurso de apelación ante la Audiencia Provincial con el único propósito de dilatar el desalojo forzoso durante unos meses más. "
+            "Sin embargo, el tribunal de segunda instancia confirmó íntegramente la sentencia en apenas dos meses, condenándolos en costas por temeridad procesal al apreciar que el recurso carecía de todo fundamento jurídico serio. "
+            "Los ocupantes trataron de presentarse como víctimas ante los medios de comunicación comunitarios del municipio, intentando montar un piquete antidesahucios a las puertas de la vivienda. "
+            "Pero los propios vecinos del pueblo, hartos de los ruidos nocturnos, la suciedad en las lindes y la actitud prepotente de la pareja, desmontaron el bulo públicamente testificando ante los medios que la dueña legítima solo les había tendido la mano para ayudarles en un mal momento. "
+            "El rechazo popular en el pueblo fue tan unánime que el piquete se disolvió antes de comenzar, dejando a los usurpadores completamente desprovistos de apoyos sociales o morales."
+        ),
+        (
+            "El día fijado para el alzamiento judicial acudí a la propiedad acompañada de la comisión del juzgado, un cerrajero forense y dos agentes de la guardia civil para supervisar la toma de posesión formal. "
+            "El espectáculo al acceder al interior fue desolador: los ocupantes habían arrancado los electrodomésticos empotrados, destrozado los azulejos del baño principal y pintado grafitis injuriosos en las paredes del salón como represalia por la sentencia judicial. "
+            "A pesar del daño material evidente, no me dejé vencer por el desaliento: levantamos acta notarial exhaustiva con reportaje fotográfico pericial de cada uno de los destrozos para interponer de inmediato una querella penal por el delito de daños agravados y usurpación patrimonial. "
+            "La fiscalía solicitó para el matrimonio penas de prisión y la retención judicial de sus nóminas laborales hasta cubrir los costes de reconstrucción y reparación integral del inmueble. "
+            "Al verse acorralados por el procedimiento penal, comprendieron que su intento de expolio solo les había traído deudas millonarias, embargos salariales y el desprecio de toda la comunidad local."
+        ),
+        (
+            "Con la posesión legal recuperada, dediqué los meses siguientes a reconstruir la casa con la ayuda de profesionales locales honrados, instalando sistemas modernos de seguridad perimetral y cámaras de vigilancia conectadas a central receptora. "
+            "La experiencia me sirvió como un aprendizaje vital indeleble sobre la necesidad de no mezclar jamás los favores familiares con la cesión desprotegida de bienes inmuebles o patrimoniales. "
+            "Los parientes que se atrevieron a defender la ocupación fueron apartados irrevocablemente de mi círculo personal, pues quien aplaude el expolio ajeno no merece compartir un solo minuto de tu tiempo ni de tu confianza. "
+            "Recuperar tu espacio legítimo no es solo una victoria jurídica sobre la picaresca intrafamiliar, sino un acto imprescindible de dignidad y auto-respeto personal frente a la cultura del abuso impune."
+        ),
+        (
+            "Meses después, los embargos decretados por el juzgado de lo penal comenzaron a surtir efecto sobre los sueldos de mi prima y su marido, obligándoles a transferir mes a mes las indemnizaciones por las obras de reparación. "
+            "Mis tíos intentaron volver a contactar conmigo por carta manuscrita pidiéndome clemencia económica, alegando que sus hijos 'ya habían aprendido la lección y no podían llegar a fin de mes'. "
+            "Mi contestación fue remitirles la liquidación pericial de los desperfectos sellada por el juzgado, recordándoles que las consecuencias de los delitos cometidos no se evaporan con disculpas tardías ni lágrimas de cocodrilo. "
+            "La justicia restaurativa exige que quien destruye deliberadamente el fruto del esfuerzo ajeno repare hasta el último céntimo antes de pretender volver a mirar a la cara a las personas decentes. "
+            "La firmeza en el cobro de la deuda no era por revancha económica, sino para fijar un precedente imborrable que enseñara a toda la familia extendida que los abusos contra mi persona tienen un coste real e ineludible."
+        ),
+        (
+            "Hoy la casa rural luce más bella y luminosa que nunca, rodeada de nuevos olivos y árboles frutales que planté con mis propias manos para sanar las heridas dejadas por la infamia. "
+            "La propiedad funciona ahora como un alojamiento de turismo rural que acoge a familias trabajadoras y respetuosas de todos los rincones del país, generando empleo y vida en el pueblo sin intermediarios parasitarios. "
+            "Sentarme en el porche al atardecer escuchando el rumor del viento entre los árboles me llena de una paz profunda y de la certeza de que ninguna mezquindad intrafamiliar tiene el poder de arrebatarnos nuestros sueños si sabemos defenderlos con gallardía. "
+            "Aprender a decir 'no' y respaldar ese 'no' con la ley en la mano es la mayor herramienta de emancipación y madurez que cualquier mujer independiente puede forjar en su trayectoria vital. "
+            "Nuestra paz no se mendiga ni se pone a subasta para complacer a quienes solo saben vivir de la caridad ajena convertida en derecho adquirido por la fuerza."
+        ),
+        (
+            "Este conflicto evidencia que los límites firmes no dividen a las familias sanas, sino que las protegen del parasitismo de quienes creen tener derechos sobre el sudor de los demás. "
+            "Jamás sientas culpa por acudir a los tribunales para salvaguardar lo que has construido con sacrificio individual frente a quienes intentan chantajearte con falsas lealtades de sangre. "
+            "La hospitalidad es un regalo voluntario que se agradece con respeto y prudencia, nunca una obligación impuesta que pueda transformarse en usurpación sin consecuencias legales implacables."
+        ),
+    ]
+    return "\n\n".join(p.strip() for p in paragraphs)
+
+
+def build_aelithia_adoption_extortion(topic: str, **kwargs: Any) -> str:
+    """Story 7: Custody Extortion, Biological Revelation and Forensic Custody Protection."""
+    paragraphs = [
+        (
+            f"El uso de la filiación infantil como instrumento de chantaje económico representa una de las mayores bajezas morales en los conflictos de familia, y hoy analizamos los sucesos de {topic}. "
+            "Durante doce años crié a mi hija con devoción absoluta, asumiendo su educación, su bienestar emocional y todas sus necesidades materiales desde el primer día de su nacimiento. "
+            "Cuando me separé de su madre biológica tras descubrir una relación extramatrimonial prolongada, acordamos un régimen de custodia compartida equitativo y ratificado judicialmente sin mayores fricciones iniciales. "
+            "Sin embargo, al cabo de dos años de divorcio, cuando rehice mi vida sentimental y decidí adquirir una nueva vivienda con mi actual pareja, la madre de la niña inició una campaña de hostigamiento sistemático. "
+            "Comenzó exigiéndome que le comprara un vehículo nuevo y le transfiriera una mensualidad extraordinaria bajo la amenaza velada de que, si no lo hacía, me retiraría el derecho a ver a mi hija los fines de semana. "
+            "Lo peor estaba aún por llegar: en una discusión acalorada delante de testigos, lanzó una bomba emocional destinada a destruir mi cordura: "
+            "'Tú no tienes ningún derecho sobre la niña porque biológicamente ni siquiera es tuya; si no me pagas lo que te pido, presentaré una impugnación de paternidad y no la volverás a ver en tu vida'."
+        ),
+        (
+            "El golpe fue atroz y amenazó con quebrar por completo mis cimientos emocionales, pero en medio del dolor supe que debía mantener la mente fría para proteger a la pequeña de semejante vileza. "
+            "Acudí de urgencia a un despacho especializado en derecho de familia y tutela del menor para diseñar una estrategia de defensa que priorizara el interés superior de la niña por encima de cualquier otra consideración. "
+            "Mi abogada me explicó con claridad meridiana los preceptos consolidados de la jurisprudencia civil sobre la posesión de estado y la paternidad socioafectiva: "
+            "Haber actuado como padre incondicional durante doce años, constar como tal en el registro civil y ostentar el vínculo afectivo consolidado con la menor me otorgaba una protección jurídica inexpugnable frente a cualquier prueba biológica sobrevenida. "
+            "La ley no permite que un progenitor utilice la verdad genética como moneda de cambio o arma de extorsión cuando ha consentido y fomentado la relación paterno-filial durante más de una década."
+        ),
+        (
+            "Inmediatamente comenzamos la recopilación sistemática de todo el archivo documental y testimonial que acreditaba doce años de dedicación paternal intachable. "
+            "Aportamos certificados de las tutorías escolares donde yo constaba como el único progenitor que asistía periódicamente a las reuniones pedagógicas y de seguimiento curricular de la menor. "
+            "Presentamos facturas de los tratamientos de ortodoncia, informes del pediatra que demostraban que yo había acudido a cada una de las consultas de urgencia durante sus episodios de asma infantil y testimonios jurados de los entrenadores de su equipo de voleibol. "
+            "Asimismo, incorporamos actas notariales de los mensajes y grabaciones de audio donde la madre condicionaba la paternidad a la entrega de cheques en efectivo con expresiones tan explícitas como 'si pagas lo pactado, seguirás siendo su padre; si no pagas, le diré quién es su padre biológico para que te odie'. "
+            "Ese acopio probatorio no dejaba resquicio para la duda: no estábamos ante un conflicto biológico legítimo, sino ante una extorsión económica continuada en la que una madre utilizaba la estabilidad psíquica de su hija como rehén patrimonial."
+        ),
+        (
+            "Interpusimos de inmediato una demanda ante el juzgado de familia solicitando la atribución exclusiva de la custodia de la menor y una orden de alejamiento civil contra la madre por violencia vicaria e instrumentalización infantil. "
+            "Aportamos las grabaciones de las llamadas telefónicas donde ella condicionaba el régimen de visitas al cobro de sumas dinerarias y los mensajes de texto donde amenazaba con causarle un trauma psicológico irreversible a la niña revelándole información sensible sin acompañamiento terapéutico. "
+            "El juzgado acordó medidas cautelares urgentes de forma fulminante: suspendió provisionalmente la custodia compartida y me otorgó la custodia completa exclusiva de mi hija, prohibiendo a la madre cualquier contacto directo no supervisado por el punto de encuentro familiar. "
+            "Asimismo, el magistrado ordenó una pericial psicosocial forense integral a cargo de psicólogos adscritos a los juzgados de familia para evaluar el entorno emocional de la menor y el impacto de las manipulaciones maternas."
+        ),
+        (
+            "Desesperada al ver que las medidas cautelares le retiraban la custodia provisional, la madre intentó presentar en el juzgado a un supuesto padre biológico para reclamar la filiación sobrevenida. "
+            "Sin embargo, la maniobra se derrumbó con estrépito durante el interrogatorio judicial cuando el letrado del presunto progenitor admitió bajo juramento que su representado había sido contactado semanas antes por la madre con la promesa de repartirse una compensación económica. "
+            "El fiscal de menores intervino de manera demoledora, calificando el intento como una confabulación fraudulenta y un abuso procesal intolerable que vulneraba de forma flagrante los derechos humanos más elementales de la menor. "
+            "El juez instructor rechazó de plano la admisión a trámite de la demanda de paternidad sobrevenida, aplicando la doctrina del Tribunal Supremo sobre la consolidación de la posesión de estado y el interés superior del menor. "
+            "El intento de dinamitar nuestra familia a través de terceros cómplices solo sirvió para evidenciar ante el tribunal la catadura moral de quien anteponía su rencor personal a la salud de su propia descendencia."
+        ),
+        (
+            "El informe emitido por el equipo psicosocial de los juzgados de familia fue contundente y demoledor para la pretensión de mi expareja: "
+            "Los peritos certificaron que la niña identificaba en mí a su referente paterno indiscutible de seguridad, apego y estabilidad emocional, y señalaron que la madre presentaba un patrón de instrumentalización perversa incompatible con el cuidado adecuado de un menor. "
+            "En la vista de juicio ordinario, el fiscal de menores intervino con firmeza, solicitando que se desestimara de plano cualquier petición de impugnación de paternidad por ser contraria al principio fundamental del favor filii y constituir un fraude de ley manifiesto. "
+            "El juez dictó sentencia definitiva ratificando la custodia exclusiva a mi favor, privando a la madre de la patria potestad temporalmente y condenándola al pago de una pensión alimenticia calculada sobre sus ingresos reales. "
+            "El veredicto dejó establecido con fuerza de cosa juzgada que la paternidad legítima reside en el cuidado diario, la protección y el amor incondicional, y no en la fría coincidencia de cadenas genéticas usadas como chantaje patrimonial."
+        ),
+        (
+            "Con la sentencia firme en la mano y el respaldo judicial garantizado, inicié junto a un equipo de terapeutas infantiles especializados un proceso de acompañamiento psicológico progresivo y respetuoso para mi hija. "
+            "Cuando la niña tuvo la madurez suficiente para comprender su historia, mantuvimos una conversación íntima y serena donde le transmití con total honestidad que nada en este mundo podría cambiar jamás el hecho de que ella es mi hija y yo soy su padre. "
+            "Su respuesta fue un abrazo sincero bañado en lágrimas de alivio que borró de un plumazo todos los meses de angustia judicial y me confirmó que cada batalla librada en los tribunales había valido la pena. "
+            "Hoy en día nuestra relación es más sólida y transparente que nunca, construida sobre la certeza indestructible de que la verdadera familia se forja con presencia, ternura y respeto recíproco constante."
+        ),
+        (
+            "La madre de la menor intentó recurrir la sentencia en instancias superiores, pero la audiencia provincial confirmó el fallo en todos sus términos, imponiéndole las costas procesales por temeridad y mala fe manifiesta. "
+            "Aislada por su propia codicia y desprovista de cualquier herramienta de manipulación legal, tuvo que asumir el cumplimiento estricto del régimen de visitas tutelado si deseaba mantener algún contacto con la menor. "
+            "Este desenlace demuestra que el sistema judicial no tolera que se vulnere la inocencia de los hijos para saciar rencores económicos o ambiciones materiales desmedidas. "
+            "Quien ama de verdad a un hijo jamás utilizará su bienestar como moneda de cambio para hacer daño al otro progenitor."
+        ),
+        (
+            "Con el transcurrir de los meses, la niña floreció emocional y académicamente en un entorno hogareño tranquilo, seguro y libre de la sombra de las extorsiones cotidianas. "
+            "Destacó en sus estudios de secundaria con calificaciones excelentes y fue elegida capitana de su equipo deportivo, demostrando una madurez y una resiliencia admirables que llenan de orgullo a cuantos la rodeamos. "
+            "Nuestra vida familiar cotidiana recuperó la alegría de los desayunos compartidos, las caminatas de los domingos por la sierra y las charlas nocturnas sobre sus ilusiones y proyectos universitarios de futuro. "
+            "Comprobé con emoción que el amor verdadero, cuando se entrega sin condiciones ni reservas egoístas, tiene una fuerza sanadora inmensa capaz de cicatrizar las heridas más profundas causadas por la manipulación ajena. "
+            "Ningún ADN puede competir jamás con doce años de abrazos nocturnos, de cuidados en la fiebre y de miradas cómplices que sellan una alianza de amor indestructible entre un padre y su hija."
+        ),
+        (
+            "Como testimonio de gratitud hacia los profesionales que nos auxiliaron en los momentos más oscuros, colaboro hoy activamente como voluntario en una asociación de padres y tutores socioafectivos que defienden los derechos de la infancia en procesos de divorcio contencioso. "
+            "Ofrecemos asesoría y apoyo emocional a hombres y mujeres que se enfrentan a amenazas de alienación parental o chantajes biológicos, compartiendo pautas jurídicas y psicológicas para defender a los menores con calma y determinación. "
+            "Transmitir a otros progenitores angustiados la certeza de que la ley protege el apego real y no permite la extorsión con los hijos es una misión reconfortante que da un sentido constructivo al dolor que en su día tuvimos que soportar. "
+            "La protección de la infancia es una responsabilidad moral colectiva que exige valentía frente a los abusos y una fe inquebrantable en la justicia cuando se actúa con el corazón limpio."
+        ),
+        (
+            "Como conclusión para nuestra audiencia, este testimonio es un homenaje a todos los padres y madres de corazón que sostienen a sus familias con sacrificio honesto frente a las adversidades más crueles. "
+            "Ser padre es una vocación moral que se revalida cada día en el desayuno, en las noches de fiebre y en los consejos compartidos a lo largo de los años, no un simple dato administrativo que pueda comprarse o venderse. "
+            "Nunca tengas miedo de acudir a la ley para blindar a tus hijos de la mezquindad ajena: cuando la causa es justa y se defiende con la verdad por delante, la justicia termina siendo el escudo más poderoso para la paz de tu hogar."
+        ),
+    ]
+    return "\n\n".join(p.strip() for p in paragraphs)
+

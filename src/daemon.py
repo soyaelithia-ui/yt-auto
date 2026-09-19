@@ -344,42 +344,57 @@ def _register_turn_failure(
     channel_value: str,
     breaker: ConsecutiveFailureBreaker,
     error_text: str | None,
+    lane_id: str | None = None,
 ) -> None:
-    """Feed the consecutive-failure breaker; pause channel when it trips."""
+    """Feed the consecutive-failure breaker; pause lane or channel when it trips."""
+    breaker_key = lane_id or channel_value
     try:
-        tripped = breaker.record_failure(channel_value)
+        tripped = breaker.record_failure(breaker_key)
     except Exception:
         logger.debug("breaker accounting failed", exc_info=True)
         return
     if not tripped:
         return
-    count = breaker.counts.get(channel_value, 0)
+    count = breaker.counts.get(breaker_key, 0)
+    target_type = f"carril {lane_id}" if lane_id else f"canal {channel_value}"
     message = (
-        f"{count} fallos consecutivos en canal {channel_value}. "
-        f"Último error: {error_text or 'desconocido'}. Canal pausado automáticamente; "
-        "revisa main.py --errors y ejecuta manage.py resume para reactivar."
+        f"{count} fallos consecutivos en {target_type}. "
+        f"Último error: {error_text or 'desconocido'}. {target_type.capitalize()} pausado automáticamente; "
+        "revisa main.py --errors y ejecuta main.py queue resume para reactivar."
     )
     emit_event(
         "guard_triggered",
         level="ERROR",
         error_code="consecutive_failures_pause",
         message=message,
-        details={"consecutive_failures": count},
+        details={"consecutive_failures": count, "lane_id": lane_id},
         db_path=database,
         channel=channel_value,
         component="resource_guard",
     )
     logger.error("%s", message)
-    try:
-        QueueRepository(database).pause(
-            channel_value, reason="consecutive_failures"
+    if lane_id:
+        try:
+            QueueRepository(database).set_lane_paused(
+                lane_id, True, reason="consecutive_failures"
+            )
+        except Exception:
+            logger.debug("lane pause failed", exc_info=True)
+        send_operational_alert(
+            f"Carril {lane_id} pausado por fallos repetidos",
+            message,
         )
-    except Exception:
-        logger.debug("channel pause failed", exc_info=True)
-    send_operational_alert(
-        f"Canal {channel_value} pausado por fallos repetidos",
-        message,
-    )
+    else:
+        try:
+            QueueRepository(database).pause(
+                channel_value, reason="consecutive_failures"
+            )
+        except Exception:
+            logger.debug("channel pause failed", exc_info=True)
+        send_operational_alert(
+            f"Canal {channel_value} pausado por fallos repetidos",
+            message,
+        )
 
 
 def _responsive_sleep(seconds: float, tick: float = 1.0) -> bool:
@@ -876,11 +891,12 @@ def _execute_lane_pick(
     if status_value in {"PUBLISHED", "COMPLETED", "RENDERED", "PENDING_REVIEW", "UPLOAD_UNCONFIRMED", "WAITING_YOUTUBE_LIMIT"}:
         scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
         breaker.record_success(pick.channel.value)
+        breaker.record_success(pick.lane_id)
     else:
         scheduler_commit_empty(pick)
         if status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED", "WAITING_LLM_QUOTA"}:
             err_detail = result.get("error") or result.get("reason") or result.get("error_msg")
-            _register_turn_failure(database, pick.channel.value, breaker, err_detail)
+            _register_turn_failure(database, pick.channel.value, breaker, err_detail, lane_id=pick.lane_id)
         elif status_value in {"STORY_NOT_CLAIMABLE", "NO_PENDING_STORIES"} and job:
             try:
                 repository.finish_lane_run(job["run_id"], JobStatus.RETRYABLE_FAILED, owner=owner)

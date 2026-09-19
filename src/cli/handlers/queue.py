@@ -62,14 +62,25 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return 0
 
     target_channel = getattr(args, "target_channel", None) or getattr(args, "channel", None)
+    target_lane = getattr(args, "lane", None)
 
     if action == "pause":
+        from src.core.repository import QueueRepository
+        repository = QueueRepository(db_path)
+        repository.initialize()
+        if target_lane:
+            repository.set_lane_paused(target_lane, True, "pausa solicitada por terminal")
+            if getattr(args, "json", False):
+                print(json.dumps({"lane": target_lane, "paused": True}, indent=2))
+            else:
+                print(f"Carril '{target_lane}' pausado.")
+            return 0
+
         if not target_channel:
-            print("Error: Especifique el canal a pausar (ej. 'queue pause moku' o '-c moku')", file=sys.stderr)
+            print("Error: Especifique el canal o --lane a pausar (ej. 'queue pause moku' o '--lane moku-horror-long')", file=sys.stderr)
             return 2
         from src.core.channel_profile import ChannelProfileRegistry
         from src.core.domain import canonical_channel
-        from src.core.repository import QueueRepository
 
         try:
             ch = canonical_channel(target_channel)
@@ -80,10 +91,8 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
                 parser.error(msg)
             else:
                 print(f"Error: {msg}", file=sys.stderr)
-                return 2
+            return 2
 
-        repository = QueueRepository(db_path)
-        repository.initialize()
         repository.pause(ch, "pausa solicitada por terminal")
         ch_val = ch.value if hasattr(ch, "value") else str(ch)
         if getattr(args, "json", False):
@@ -93,12 +102,22 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return 0
 
     if action == "resume":
+        from src.core.repository import QueueRepository
+        repository = QueueRepository(db_path)
+        repository.initialize()
+        if target_lane:
+            repository.set_lane_paused(target_lane, False, None)
+            if getattr(args, "json", False):
+                print(json.dumps({"lane": target_lane, "paused": False}, indent=2))
+            else:
+                print(f"Carril '{target_lane}' reanudado.")
+            return 0
+
         if not target_channel:
-            print("Error: Especifique el canal a reanudar (ej. 'queue resume moku' o '-c moku')", file=sys.stderr)
+            print("Error: Especifique el canal o --lane a reanudar (ej. 'queue resume moku' o '--lane moku-horror-long')", file=sys.stderr)
             return 2
         from src.core.channel_profile import ChannelProfileRegistry
         from src.core.domain import canonical_channel
-        from src.core.repository import QueueRepository
 
         try:
             ch = canonical_channel(target_channel)
@@ -109,10 +128,8 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
                 parser.error(msg)
             else:
                 print(f"Error: {msg}", file=sys.stderr)
-                return 2
+            return 2
 
-        repository = QueueRepository(db_path)
-        repository.initialize()
         repository.resume(ch)
         ch_val = ch.value if hasattr(ch, "value") else str(ch)
         if getattr(args, "json", False):

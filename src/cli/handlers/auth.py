@@ -92,9 +92,9 @@ def handle_auth(args: argparse.Namespace, parser: argparse.ArgumentParser | None
         print(f"Exchanging authorization code for channel '{target_channel}' ({target_path})...")
         try:
             try:
-                exchange_code_fn(str(code_val).strip(), "urn:ietf:wg:oauth:2.0:oob", token_path=target_path)
-            except Exception:
                 exchange_code_fn(str(code_val).strip(), "http://localhost:8585/", token_path=target_path)
+            except Exception:
+                exchange_code_fn(str(code_val).strip(), "urn:ietf:wg:oauth:2.0:oob", token_path=target_path)
             print(f"YouTube OAuth Token successfully saved to {target_path}!")
             return 0
         except Exception as exc:

@@ -129,6 +129,12 @@ class ThumbnailEngine:
 
         if base_img is None:
             try:
+                prefer_climax = False
+                if config.metadata and isinstance(config.metadata, dict):
+                    prefer_climax = bool(config.metadata.get("prefer_video_climax", False))
+                elif getattr(config, "prefer_video_climax", False):
+                    prefer_climax = True
+
                 base_img = ThematicAssetResolver.resolve_base_image(
                     channel_id=eff_channel,
                     archetype=eff_archetype,
@@ -136,6 +142,7 @@ class ThumbnailEngine:
                     explicit_path=None,
                     video_path=video_path,
                     manifest_path=manifest_path,
+                    prefer_video_climax=prefer_climax,
                 )
             except Exception as exc:
                 logger.warning("ThematicAssetResolver resolution failed: %s", exc)

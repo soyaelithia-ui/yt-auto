@@ -856,7 +856,7 @@ def upload_video_via_playwright(
                 # 2. Upload video
                 logger.info("Uploading video file...")
                 page.wait_for_selector('input[type="file"]', state="attached", timeout=30000)
-                file_input = page.locator('input[type="file"]')
+                file_input = page.locator('input[type="file"]').first
                 file_input.set_input_files(video_path)
                 page.wait_for_timeout(5000)
                 page.screenshot(path=f"{screenshot_dir}/2_uploaded.png")
@@ -1321,6 +1321,7 @@ def upload_video(
         )
 
     api_quota_error: Optional[YouTubeQuotaExceededError] = None
+    api_auth_error: Optional[Exception] = None
     if not dry_run and os.path.isfile(effective_token):
         try:
             result = upload_video_via_api(
@@ -1380,16 +1381,51 @@ def upload_video(
                     "verified": False,
                 }
         except Exception as api_error:
-            logger.error(
-                "YouTube API upload failed; refusing Playwright fallback to avoid duplicates: %s",
-                api_error,
+            from google.auth.exceptions import GoogleAuthError
+            from src.core.domain import AuthenticationError
+
+            err_str = str(api_error).lower()
+            is_auth_error = (
+                isinstance(api_error, (AuthenticationError, GoogleAuthError))
+                or "invalid_grant" in err_str
+                or "token has been expired" in err_str
+                or "token oauth no pertenece" in err_str
+                or "token api explícito" in err_str
             )
-            return {
-                "status": "UPLOAD_UNCONFIRMED",
-                "method": "API",
-                "reason": "YouTube API upload failed; manual reconciliation required",
-                "verified": False,
-            }
+            if is_auth_error:
+                api_auth_error = api_error
+                if not api_only and os.path.isfile(effective_cookies):
+                    logger.info(
+                        "YouTube API authentication failed for channel %s (%s); falling back to Playwright session upload",
+                        channel_key,
+                        api_error,
+                    )
+                else:
+                    logger.warning(
+                        "YouTube API authentication failed for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
+                        channel_key,
+                        api_only,
+                        os.path.isfile(effective_cookies),
+                        api_error,
+                    )
+                    return {
+                        "status": "WAITING_YOUTUBE_LIMIT",
+                        "method": "API",
+                        "reason": f"YouTube API auth failed: {api_error}",
+                        "retry_after_seconds": 3600,
+                        "verified": False,
+                    }
+            else:
+                logger.error(
+                    "YouTube API upload failed; refusing Playwright fallback to avoid duplicates: %s",
+                    api_error,
+                )
+                return {
+                    "status": "UPLOAD_UNCONFIRMED",
+                    "method": "API",
+                    "reason": "YouTube API upload failed; manual reconciliation required",
+                    "verified": False,
+                }
 
     playwright_error: Exception | None = None
     if os.path.isfile(effective_cookies):
@@ -1436,16 +1472,18 @@ def upload_video(
     if dry_run:
         return {"status": "DRY_RUN", "method": "NONE"}
     if playwright_error:
-        if api_quota_error is not None:
+        if api_quota_error is not None or api_auth_error is not None:
+            trigger_err = api_quota_error or api_auth_error
             logger.warning(
-                "YouTube API quota was exceeded and Playwright fallback failed before upload for channel %s (%s); deferring until quota reset",
+                "YouTube API unavailable (%s) and Playwright fallback failed before upload for channel %s (%s); deferring until reset",
+                trigger_err,
                 channel_key,
                 playwright_error,
             )
             return {
                 "status": "WAITING_YOUTUBE_LIMIT",
                 "method": "API",
-                "reason": f"Quota exceeded and Playwright fallback unavailable: {playwright_error}",
+                "reason": f"API unavailable ({trigger_err}) and Playwright fallback unavailable: {playwright_error}",
                 "retry_after_seconds": 3600,
                 "verified": False,
             }
