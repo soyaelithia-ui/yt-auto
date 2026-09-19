@@ -168,10 +168,19 @@ class LeaseReaper:
         raw_path = db_path if db_path else DEFAULT_DB_PATH
         self.db_path = Path(validate_db_path(raw_path))
 
-    def reap_once(self, startup: bool = False) -> int:
+    def reap_once(self, startup: bool = False, channel: Optional[str] = None) -> int:
         """Scan leases and lane_leases; delete expired leases and those owned by dead local processes."""
         if not self.db_path.exists():
             return 0
+
+        target_ch: Optional[str] = None
+        if channel:
+            from src.core.domain import canonical_channel
+            try:
+                can = canonical_channel(channel)
+                target_ch = can.value if hasattr(can, "value") else str(can)
+            except Exception:
+                target_ch = str(channel)
 
         reaped_count = 0
         now_ts = int(time.time())
@@ -183,7 +192,10 @@ class LeaseReaper:
 
             # 1. Check leases table
             try:
-                rows = conn.execute("SELECT * FROM leases").fetchall()
+                if target_ch:
+                    rows = conn.execute("SELECT * FROM leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
+                else:
+                    rows = conn.execute("SELECT * FROM leases").fetchall()
             except sqlite3.OperationalError:
                 rows = []
 
@@ -221,7 +233,7 @@ class LeaseReaper:
                     is_expired = expires_at is not None and expires_at <= effective_now
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
-                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner))
+                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner)) and (pid is None or not is_pid_alive(pid))
                     is_orphan_remote = not is_local_hostname(owner) and (
                         not is_multi_node
                         or is_stale_heartbeat
@@ -280,7 +292,10 @@ class LeaseReaper:
 
             # 2. Check lane_leases table
             try:
-                lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
+                if target_ch:
+                    lane_rows = conn.execute("SELECT * FROM lane_leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
+                else:
+                    lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
             except sqlite3.OperationalError:
                 lane_rows = []
 
@@ -307,7 +322,7 @@ class LeaseReaper:
                     is_expired = expires_at is not None and expires_at <= effective_now
                     is_dead_process = pid is not None and is_local_hostname(owner) and not is_pid_alive(pid)
                     is_stale_heartbeat = heartbeat_at is not None and (now_ts - heartbeat_at > timeout_sec)
-                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner))
+                    is_startup_orphan = startup and (not is_multi_node or is_local_hostname(owner)) and (pid is None or not is_pid_alive(pid))
                     is_orphan_remote = not is_local_hostname(owner) and (
                         not is_multi_node
                         or is_stale_heartbeat
@@ -367,14 +382,18 @@ class LeaseReaper:
         return reaped_count
 
 
-def start_reaper_daemon(interval_seconds: float = 30.0, db_path: Optional[Union[str, Path]] = None) -> threading.Thread:
+def start_reaper_daemon(
+    interval_seconds: float = 30.0,
+    db_path: Optional[Union[str, Path]] = None,
+    channel: Optional[str] = None,
+) -> threading.Thread:
     """Start background daemon thread executing periodic reaper sweeps."""
     reaper = LeaseReaper(db_path=db_path)
 
     def _loop():
         while True:
             try:
-                reaper.reap_once()
+                reaper.reap_once(channel=channel)
             except Exception as exc:
                 logger.error("Error in lease reaper sweep: %s", exc)
             time.sleep(interval_seconds)

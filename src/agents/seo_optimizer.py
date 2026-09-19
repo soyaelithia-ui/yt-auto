@@ -8,6 +8,7 @@ Validates output against schemas/seo_metadata.schema.json.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -186,16 +187,25 @@ class SeoOptimizerAgent:
             ]
             hashtags = [f"#{slug}", "#SCPFoundation", "#Misterio", "#Viral"]
             pinned_comment = f"👇 ¿Crees que la Fundación tomó la decisión correcta con {clean_topic}? ¡Debatamos en los comentarios!"
+            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
+            horror_headlines = [
+                "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
+                "NUNCA ENTRES A SOLAS 🧬",
+                "EL ARCHIVO CONFIDENCIAL ❌",
+                "NO DEBIERON ABRIRLO 🚨",
+                "LA PESADILLA OCULTA 👁️",
+                "EXPEDIENTE CLASIFICADO ⚠️",
+            ]
             thumbnail_concepts = [
                 {
                     "visual_layout": "Estilo Claroscuro de alto CTR: iluminación volumétrica lateral dramática, sombras profundas, sujeto focal misterioso en penumbra con silueta recortada",
-                    "big_headline": "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
+                    "big_headline": horror_headlines[seed_hash % len(horror_headlines)],
                     "color_palette": ["#FF0000", "#111827", "#F59E0B", "#FFFFFF"],
                     "facial_expression": "Silueta misteriosa en sombras con mirada fija",
                 },
                 {
                     "visual_layout": "Claroscuro de máximo contraste: luz de contorno verde cian sobre fondo negro abisal, sujeto focal misterioso emergiendo",
-                    "big_headline": "NUNCA ENTRES A SOLAS 🧬",
+                    "big_headline": horror_headlines[(seed_hash + 1) % len(horror_headlines)],
                     "color_palette": ["#00FF66", "#040A08", "#D8FFE6"],
                     "facial_expression": "Sujeto en penumbra de espaldas al abismo",
                 },
@@ -214,29 +224,38 @@ class SeoOptimizerAgent:
                 "0:00 Introducción y Hook\n"
                 "0:15 El Gran Descubrimiento\n"
                 "0:45 Conclusión y Llamado a la Acción\n\n"
-                f"#{slug} #YouTubeAuto #Viral"
+                f"#{slug} #Historias #Relatos #Viral"
             )
             tags = [
                 clean_topic.lower(),
                 f"{clean_topic.lower()} explicacion",
                 "curiosidades",
-                "youtube automation",
+                "historias",
                 "datos fascinantes",
                 niche.lower(),
                 target_format,
             ]
             hashtags = [f"#{slug}", "#Curiosidades", "#YouTubeShorts" if target_format == "short" else "#YouTube", "#Viral"]
             pinned_comment = f"👇 ¿Cuál fue el dato que más te sorprendió sobre {clean_topic}? ¡Déjalo abajo!"
+            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
+            drama_headlines = [
+                "¡NO COMETAS ESTE ERROR! 🚨",
+                "EL SECRETO MEJOR GUARDADO ❌",
+                "TRAICIÓN AL DESCUBIERTO ⚡",
+                "LA VERDAD QUE OCULTABAN 💥",
+                "DESENMASCARADO ANTE TODOS ⚖️",
+                "TODO FUE UNA MENTIRA 💔",
+            ]
             thumbnail_concepts = [
                 {
                     "visual_layout": "Estilo Claroscuro de alto CTR: iluminación de recorte volumétrica de alto impacto, sujeto focal misterioso en primer plano sobre fondo oscuro",
-                    "big_headline": "¡NO COMETAS ESTE ERROR! 🚨",
+                    "big_headline": drama_headlines[seed_hash % len(drama_headlines)],
                     "color_palette": ["#FF0000", "#FFFFFF", "#000000", "#FFD700"],
                     "facial_expression": "Expresión de impacto y mirada directa intrigante",
                 },
                 {
                     "visual_layout": "Composición Claroscuro de tensión: fondo oscuro minimalista con resplandor neón dorado y sujeto focal intrigante recortado",
-                    "big_headline": "EL SECRETO MEJOR GUARDADO ❌",
+                    "big_headline": drama_headlines[(seed_hash + 1) % len(drama_headlines)],
                     "color_palette": ["#00FF88", "#111827", "#F59E0B"],
                     "facial_expression": "Sujeto focal en sombra señalando hacia el misterio",
                 },

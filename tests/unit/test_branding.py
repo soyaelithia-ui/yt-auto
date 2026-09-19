@@ -45,8 +45,9 @@ class TestBrandingEngine(unittest.TestCase):
     def test_generate_title_and_description_moku(self):
         b = get_channel_branding("terror")
         title = b.generate_title("La Casa Embrujada")
-        self.assertIn("[RELATO DE TERROR]", title)
-        self.assertIn("Moku", title)
+        self.assertNotIn("[RELATO DE TERROR]", title)
+        self.assertNotIn("Moku", title)
+        self.assertEqual(title, "La Casa Embrujada")
 
         desc = b.generate_description("La Casa Embrujada", "Resumen de prueba")
         self.assertIn("Moku", desc)
@@ -57,7 +58,8 @@ class TestBrandingEngine(unittest.TestCase):
     def test_generate_title_and_description_aelithia(self):
         b = get_channel_branding("aelithia")
         title = b.generate_title("¿Soy el malo por irme?")
-        self.assertIn("Aelithia", title)
+        self.assertNotIn("Aelithia", title)
+        self.assertEqual(title, "¿Soy el malo por irme?")
 
         desc = b.generate_description("¿Soy el malo por irme?", "Resumen drama")
         self.assertIn("Aelithia", desc)
@@ -106,8 +108,9 @@ class TestBrandingEngine(unittest.TestCase):
     def test_generate_title_and_description_scifi_generic_channel(self):
         b_scifi = get_channel_branding("scifi")
         title = b_scifi.generate_title("Paradoja Temporal")
-        self.assertIn("Singularidad Sci-Fi", title)
+        self.assertNotIn("Singularidad Sci-Fi", title)
         self.assertNotIn("Moku", title)
+        self.assertEqual(title, "Paradoja Temporal")
 
         desc = b_scifi.generate_description("Paradoja Temporal", "Exploración del horizonte de sucesos")
         self.assertIn("Singularidad Sci-Fi", desc)
@@ -123,7 +126,8 @@ class TestBrandingEngine(unittest.TestCase):
             ChannelProfileRegistry._ensure_loaded(force_reload=True)
             b = get_channel_branding("moku")
             title = b.generate_title("Historia Fantasmal")
-            self.assertIn("MokuNuevo", title)
+            self.assertNotIn("MokuNuevo", title)
+            self.assertEqual(title, "Historia Fantasmal")
             desc = b.generate_description("Historia Fantasmal")
             self.assertIn("MokuNuevo", desc)
             self.assertIn("@MokuCustomDev", desc)
@@ -152,14 +156,41 @@ class TestBrandingEngine(unittest.TestCase):
         t1 = "¿Soy la mala por negarme a ir a la boda de mi hermana porque invitó a mi agresor y arruinó la relación familiar para siempre?"
         res1 = b.generate_title(t1)
         self.assertLessEqual(len(res1), 100)
-        self.assertIn("Aelithia", res1)
-        self.assertTrue(res1.endswith("Aelithia"))
+        self.assertNotIn("Aelithia", res1)
         self.assertNotIn("hermana p...", res1)
 
         t2 = "¿Soy la mala por negarme a vender mi apartamento heredado para pagar las deudas de mi hermano?"
         res2 = b.generate_title(t2)
         self.assertLessEqual(len(res2), 100)
         self.assertNotIn("apartamento h...", res2)
+        self.assertNotIn("Aelithia", res2)
+
+    def test_generate_title_strips_case_insensitive_suffixes_and_prefixes(self):
+        b_moku = get_channel_branding("moku")
+        b_aelithia = get_channel_branding("aelithia")
+        b_scifi = get_channel_branding("scifi")
+
+        # Uppercase suffix
+        self.assertEqual(b_moku.generate_title("La Cabaña del Bosque | MOKU"), "La Cabaña del Bosque")
+        # Hyphen separator
+        self.assertEqual(b_moku.generate_title("La Cabaña del Bosque - Moku"), "La Cabaña del Bosque")
+        # Colon separator
+        self.assertEqual(b_aelithia.generate_title("Traición Familiar : Aelithia"), "Traición Familiar")
+        # Singularidad variants
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad"), "Paradoja del Tiempo")
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad SciFi"), "Paradoja del Tiempo")
+        self.assertEqual(b_scifi.generate_title("Paradoja del Tiempo | Singularidad Sci Fi"), "Paradoja del Tiempo")
+        # Prefix stripping
+        self.assertEqual(b_moku.generate_title("[MOKU] La Cabaña del Bosque"), "La Cabaña del Bosque")
+        self.assertEqual(b_moku.generate_title("[RELATOS DE TERROR] La Cabaña"), "La Cabaña")
+        self.assertEqual(b_moku.generate_title("[REGISTRO CLASIFICADO] SCP-087"), "SCP-087")
+        self.assertEqual(b_aelithia.generate_title("[CONFESIÓN] Mi Hermana Arruinó Todo"), "Mi Hermana Arruinó Todo")
+
+    def test_generate_shorts_metadata_strips_brand_from_title(self):
+        b_moku = get_channel_branding("moku")
+        shorts = b_moku.generate_shorts_metadata("El Susurro Prohibido | Moku")
+        self.assertEqual(shorts["title"], "El Susurro Prohibido #Shorts")
+        self.assertNotIn("| Moku", shorts["title"])
 
 
 if __name__ == "__main__":

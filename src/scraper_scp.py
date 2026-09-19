@@ -508,13 +508,17 @@ async def async_fetch_top_scp_from_crom(
     """Query Crom API GraphQL endpoint asynchronously for top-rated SCP articles."""
     query = """
     query GetTopSCPs($limit: Int!, $minRating: Int!) {
-      articles(
+      pages(
         filter: {
-          wikidotId: 1
-          tags: ["scp"]
-          rating: { gte: $minRating }
+          wikidotInfo: {
+            tags: { eq: "scp" }
+            rating: { gte: $minRating }
+          }
         }
-        sort: { rating: DESC }
+        sort: {
+          key: RATING
+          order: DESC
+        }
         first: $limit
       ) {
         edges {
@@ -596,8 +600,12 @@ async def async_fetch_top_scp_from_crom(
 
     articles: List[Dict[str, Any]] = []
     data_section = data.get("data") if isinstance(data, dict) else None
-    articles_section = data_section.get("articles") if isinstance(data_section, dict) else None
-    edges = articles_section.get("edges", []) if isinstance(articles_section, dict) else []
+    pages_section = (
+        data_section.get("pages") or data_section.get("articles")
+        if isinstance(data_section, dict)
+        else None
+    )
+    edges = pages_section.get("edges", []) if isinstance(pages_section, dict) else []
     if not isinstance(edges, list):
         return []
 
@@ -620,6 +628,12 @@ async def async_fetch_top_scp_from_crom(
             author = wikidot_info.get("createdBy", {}).get("name", "SCP Community")
 
             if url:
+                if url.startswith("http://"):
+                    url = "https://" + url[7:]
+                if "scp-wiki.wikidot.com/scp-" not in url:
+                    continue
+                if any(bad in url for bad in ("-j", "-ex", "-d", "archived")):
+                    continue
                 try:
                     if _is_mocked_requests_get():
                         page_resp = await asyncio.to_thread(
@@ -753,27 +767,32 @@ async def async_fetch_top_scp_articles(
     try:
         # Tier 1: Attempt Crom GraphQL API
         articles = await async_fetch_top_scp_from_crom(
-            limit=limit, min_rating=min_rating, session=active_session, max_retries=max_retries
+            limit=max(limit * 2, 30), min_rating=min_rating, session=active_session, max_retries=max_retries
         )
+        existing_ids = {a["id"] for a in articles}
+
+        # Tier 2: Supplement or fallback by fetching individual high-priority items directly
+        if len(articles) < limit:
+            common_items = [
+                "SCP-173", "SCP-096", "SCP-049", "SCP-682", "SCP-3008",
+                "SCP-087", "SCP-106", "SCP-999", "SCP-055", "SCP-079",
+                "SCP-093", "SCP-105", "SCP-140", "SCP-500", "SCP-610",
+                "SCP-914", "SCP-939", "SCP-1000", "SCP-1048", "SCP-1171",
+                "SCP-1981", "SCP-2000", "SCP-2316", "SCP-2521", "SCP-3000",
+                "SCP-3999", "SCP-4999", "SCP-5000",
+            ]
+            for item in common_items:
+                if item in existing_ids:
+                    continue
+                art = await async_fetch_scp_by_item(item, session=active_session, max_retries=max_retries)
+                if art:
+                    articles.append(art)
+                    existing_ids.add(item)
+                if len(articles) >= limit:
+                    break
+
         if articles:
             return articles[:limit]
-
-        # Tier 2: Attempt fetching individual high-priority items directly
-        common_items = [
-            "SCP-173", "SCP-096", "SCP-049", "SCP-682", "SCP-3008",
-            "SCP-087", "SCP-106", "SCP-999",
-        ]
-        fetched_direct: List[Dict[str, Any]] = []
-        for item in common_items[:limit]:
-            art = await async_fetch_scp_by_item(item, session=active_session, max_retries=max_retries)
-            if art:
-                fetched_direct.append(art)
-            if len(fetched_direct) >= limit:
-                break
-
-        if fetched_direct:
-            logger.info(f"Direct SCP fetch returned {len(fetched_direct)} articles")
-            return fetched_direct
 
         # Tier 3: Fallback to canonical built-in database
         logger.info("Using canonical built-in SCP dataset as fail-safe fallback")
@@ -804,10 +823,12 @@ async def async_scrape_and_enqueue_scp(
     from src.db import enqueue_story, is_story_duplicate, is_story_processed
 
     path = db_path or DEFAULT_DB_PATH
-    articles = await async_fetch_top_scp_articles(limit=limit, session=session)
+    articles = await async_fetch_top_scp_articles(limit=max(limit * 4, 100), session=session)
     enqueued = 0
 
     for art in articles:
+        if enqueued >= limit:
+            break
         story_id = art["id"]
         title = art["title"]
         content = art["content"]

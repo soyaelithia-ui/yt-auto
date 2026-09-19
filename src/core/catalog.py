@@ -180,7 +180,8 @@ class LoopRecord:
         ch = self.generator_params.get("channel") if self.generator_params else None
         if ch:
             return ch
-        for c in ("moku", "aelithia", "scifi"):
+        from src.core.channel_profile import ChannelProfileRegistry
+        for c in ChannelProfileRegistry.list_active_channel_ids():
             if c in self.theme_tags or f"channel:{c}" in self.theme_tags:
                 return c
             stem = Path(self.file_path).stem.lower()
@@ -445,7 +446,8 @@ class LoopCatalogRepository:
 
                 # Channel attribution
                 channel = None
-                for ch in ("moku", "aelithia", "scifi"):
+                from src.core.channel_profile import ChannelProfileRegistry
+                for ch in ChannelProfileRegistry.list_active_channel_ids():
                     if stem.startswith(f"{ch}_") or ch in rel.parts:
                         channel = ch
                         break

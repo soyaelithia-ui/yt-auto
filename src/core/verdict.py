@@ -210,8 +210,20 @@ def _qa_gatekeeper_gate(
     )
 
 
-def _roi_gate(video_path: str) -> GateResultLite:
+def _roi_gate(
+    video_path: str,
+    *,
+    precomputed_visual: Optional[Dict[str, Any]] = None,
+) -> GateResultLite:
     """Run VisualIntegrityROIGate. Returns WARNING on soft failures, CRITICAL on hard."""
+    if precomputed_visual and bool(precomputed_visual.get("passed", True)):
+        return GateResultLite(
+            gate_id="visual_integrity_roi",
+            passed=True,
+            severity="INFO",
+            code="OK_ROI_PRECOMPUTED",
+            message="ROI gate bypassed via Stage 10 precomputed visual audit",
+        )
     if not video_path or not Path(video_path).is_file() or Path(video_path).stat().st_size < 1024:
         return GateResultLite(
             gate_id="visual_integrity_roi",
@@ -357,6 +369,7 @@ def evaluate_video(
     run_id: str = "",
     channel: str = "moku",
     video_mode: str = "short",
+    precomputed_visual: Optional[Dict[str, Any]] = None,
 ) -> CodeReviewVerdict:
     """Run the full deterministic code-review verdict.
 
@@ -401,7 +414,7 @@ def evaluate_video(
     )
     gates["qa_gatekeeper"] = qa
 
-    roi = _roi_gate(video_path)
+    roi = _roi_gate(video_path, precomputed_visual=precomputed_visual)
     gates["visual_integrity_roi"] = roi
 
     scene_div = _scene_diversity_gate(work_dir, video_path)

@@ -36,46 +36,10 @@ _RENDER_SEMAPHORE = _LONG_RENDER_SEMAPHORE
 _SYNTHESIS_SEMAPHORE = threading.Semaphore(2)
 
 
-def compute_simhash_64(text: str | None) -> int:
-    """Computes a 64-bit SimHash fingerprint using token and bigram frequency weights."""
-    import hashlib
-    import re
-    from collections import Counter
-
-    if not text:
-        return 0
-    tokens = re.findall(r"\w+", str(text).lower())
-    if not tokens:
-        return 0
-
-    features: list[str] = list(tokens)
-    for i in range(len(tokens) - 1):
-        features.append(f"{tokens[i]}_{tokens[i+1]}")
-
-    counts = Counter(features)
-    v = [0.0] * 64
-
-    for feat, weight in counts.items():
-        h_bytes = hashlib.md5(feat.encode("utf-8")).digest()[:8]
-        h = int.from_bytes(h_bytes, byteorder="big")
-        for i in range(64):
-            bit = (h >> i) & 1
-            v[i] += weight if bit else -weight
-
-    fingerprint = 0
-    for i in range(64):
-        if v[i] > 0:
-            fingerprint |= 1 << i
-
-    return fingerprint
-
-
-def hamming_distance_64(h1: int | None, h2: int | None) -> int:
-    """Computes Hamming distance between two 64-bit integers."""
-    v1 = int(h1 or 0) & 0xFFFFFFFFFFFFFFFF
-    v2 = int(h2 or 0) & 0xFFFFFFFFFFFFFFFF
-    xor = v1 ^ v2
-    return bin(xor).count("1")
+from src.core.repository import (
+    compute_simhash_64,
+    hamming_distance_64,
+)
 
 
 def evaluate_script_simhash(
@@ -108,7 +72,9 @@ def evaluate_script_simhash(
     return True
 
 
-def _startup_incident_check(database: str, interval_seconds: int) -> None:
+def _startup_incident_check(
+    database: str, interval_seconds: int, channel: Optional[str] = None
+) -> None:
     """Detect an unclean previous stop (crash/OOM) and alert with its cause."""
     threshold = int(
         os.environ.get("YT_LIVENESS_STALE_SEC", str(max(600, 2 * interval_seconds)))
@@ -119,14 +85,29 @@ def _startup_incident_check(database: str, interval_seconds: int) -> None:
     if not heartbeat or (_time.time() - heartbeat) <= threshold:
         return  # fresh install or heartbeat still fresh
 
+    target_ch: Optional[str] = None
+    if channel:
+        from src.core.domain import canonical_channel
+
+        try:
+            can = canonical_channel(channel)
+            target_ch = can.value if hasattr(can, "value") else str(can)
+        except Exception:
+            target_ch = str(channel)
+
     repository = QueueRepository(database)
     try:
         orphans = [
             row
             for row in repository.recent_failed_runs(limit=10)
             if row.get("status") == "PROCESSING"
+            and (target_ch is None or row.get("channel") == target_ch)
         ]
-        last_failed = repository.recent_failed_runs(limit=1)
+        last_failed = [
+            row
+            for row in repository.recent_failed_runs(limit=1)
+            if target_ch is None or row.get("channel") == target_ch
+        ]
     except Exception:
         logger.debug("incident inspection failed", exc_info=True)
         return
@@ -256,6 +237,7 @@ def request_shutdown() -> None:
     global _SHUTDOWN_REQUESTED
     _SHUTDOWN_REQUESTED = True
     _SHUTDOWN_EVENT.set()
+    _release_telegram_poller_lock()
 
 
 def reset_shutdown() -> None:
@@ -268,28 +250,93 @@ def is_shutdown_requested() -> bool:
     return _SHUTDOWN_EVENT.is_set() or _SHUTDOWN_REQUESTED
 
 
-def _start_telegram_callback_poller() -> None:
+_TELEGRAM_POLLER_LOCK_HANDLE: Any = None
+_TELEGRAM_POLLER_STARTED: bool = False
+
+
+def _acquire_telegram_poller_lock() -> bool:
+    """Acquire a non-blocking process-wide singleton lock for Telegram callback poller."""
+    global _TELEGRAM_POLLER_LOCK_HANDLE
+    if _TELEGRAM_POLLER_LOCK_HANDLE is not None:
+        return True
+    import fcntl
+    from pathlib import Path
+    from src.core.lock import _get_default_lock_path
+
+    base_dir = Path(os.environ.get("YT_LOCK_DIR", Path(_get_default_lock_path()).parent))
+    base_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = base_dir / "telegram_callback_poller.lock"
+    f = None
+    try:
+        f = open(lock_file, "a+", encoding="utf-8")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        f.seek(0)
+        f.truncate()
+        f.write(f"{os.getpid()}\n")
+        f.flush()
+        _TELEGRAM_POLLER_LOCK_HANDLE = f
+        return True
+    except (IOError, OSError):
+        if f is not None:
+            try:
+                f.close()
+            except Exception:
+                pass
+        return False
+
+
+def _release_telegram_poller_lock() -> None:
+    """Release the Telegram callback poller singleton lock."""
+    global _TELEGRAM_POLLER_LOCK_HANDLE, _TELEGRAM_POLLER_STARTED
+    _TELEGRAM_POLLER_STARTED = False
+    if _TELEGRAM_POLLER_LOCK_HANDLE is not None:
+        import fcntl
+        try:
+            fcntl.flock(_TELEGRAM_POLLER_LOCK_HANDLE, fcntl.LOCK_UN)
+            _TELEGRAM_POLLER_LOCK_HANDLE.close()
+        except Exception:
+            pass
+        _TELEGRAM_POLLER_LOCK_HANDLE = None
+
+
+import atexit as _atexit
+_atexit.register(_release_telegram_poller_lock)
+
+
+def _start_telegram_callback_poller() -> bool:
     """Start the review callback listener only in the production daemon."""
+    global _TELEGRAM_POLLER_STARTED
+    if _TELEGRAM_POLLER_STARTED:
+        return True
     if os.environ.get("ENABLE_TELEGRAM_CALLBACK_POLLING", "1") != "1":
-        return
+        return False
     from src.config import is_test_environment
 
     if is_test_environment():
-        return
+        return False
+
+    if not _acquire_telegram_poller_lock():
+        logger.debug(
+            "Telegram callback poller already active in another daemon process; skipping in this instance."
+        )
+        return False
+
     from src.telegram.callbacks import poll_callbacks
     from review.telegram_bot import TelegramReviewBot
 
     bot = TelegramReviewBot()
     if not bot.token or not bot.chat_id:
         logger.warning("Telegram callback polling disabled: credentials are not configured")
-        return
+        return False
     threading.Thread(
         target=poll_callbacks,
         args=(bot, is_shutdown_requested),
         name="telegram-callback-poller",
         daemon=True,
     ).start()
+    _TELEGRAM_POLLER_STARTED = True
     logger.info("Telegram callback polling enabled")
+    return True
 
 
 def _register_turn_failure(
@@ -297,42 +344,57 @@ def _register_turn_failure(
     channel_value: str,
     breaker: ConsecutiveFailureBreaker,
     error_text: str | None,
+    lane_id: str | None = None,
 ) -> None:
-    """Feed the consecutive-failure breaker; pause channel when it trips."""
+    """Feed the consecutive-failure breaker; pause lane or channel when it trips."""
+    breaker_key = lane_id or channel_value
     try:
-        tripped = breaker.record_failure(channel_value)
+        tripped = breaker.record_failure(breaker_key)
     except Exception:
         logger.debug("breaker accounting failed", exc_info=True)
         return
     if not tripped:
         return
-    count = breaker.counts.get(channel_value, 0)
+    count = breaker.counts.get(breaker_key, 0)
+    target_type = f"carril {lane_id}" if lane_id else f"canal {channel_value}"
     message = (
-        f"{count} fallos consecutivos en canal {channel_value}. "
-        f"Último error: {error_text or 'desconocido'}. Canal pausado automáticamente; "
-        "revisa main.py --errors y ejecuta manage.py resume para reactivar."
+        f"{count} fallos consecutivos en {target_type}. "
+        f"Último error: {error_text or 'desconocido'}. {target_type.capitalize()} pausado automáticamente; "
+        "revisa main.py --errors y ejecuta main.py queue resume para reactivar."
     )
     emit_event(
         "guard_triggered",
         level="ERROR",
         error_code="consecutive_failures_pause",
         message=message,
-        details={"consecutive_failures": count},
+        details={"consecutive_failures": count, "lane_id": lane_id},
         db_path=database,
         channel=channel_value,
         component="resource_guard",
     )
     logger.error("%s", message)
-    try:
-        QueueRepository(database).pause(
-            channel_value, reason="consecutive_failures"
+    if lane_id:
+        try:
+            QueueRepository(database).set_lane_paused(
+                lane_id, True, reason="consecutive_failures"
+            )
+        except Exception:
+            logger.debug("lane pause failed", exc_info=True)
+        send_operational_alert(
+            f"Carril {lane_id} pausado por fallos repetidos",
+            message,
         )
-    except Exception:
-        logger.debug("channel pause failed", exc_info=True)
-    send_operational_alert(
-        f"Canal {channel_value} pausado por fallos repetidos",
-        message,
-    )
+    else:
+        try:
+            QueueRepository(database).pause(
+                channel_value, reason="consecutive_failures"
+            )
+        except Exception:
+            logger.debug("channel pause failed", exc_info=True)
+        send_operational_alert(
+            f"Canal {channel_value} pausado por fallos repetidos",
+            message,
+        )
 
 
 def _responsive_sleep(seconds: float, tick: float = 1.0) -> bool:
@@ -435,6 +497,7 @@ def _collect_futures_responsive(
     database: str,
     tick: float = 5.0,
     touch_heartbeat: bool | None = None,
+    channel: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Drain a batch of lane futures without an unbounded ``result()`` wait."""
     from concurrent.futures import wait, FIRST_COMPLETED
@@ -457,7 +520,7 @@ def _collect_futures_responsive(
                 logger.debug("daemon liveness touch failed", exc_info=True)
             if time.monotonic() - last_sweep_time >= 30.0:
                 last_sweep_time = time.monotonic()
-                _run_auto_publish_sweep()
+                _run_auto_publish_sweep(channel=channel)
         if is_shutdown_requested():
             break
         remaining = deadline - time.monotonic()
@@ -528,14 +591,14 @@ def _run_turn_responsive(fn, *, timeout: float, database: str, tick: float | Non
         pool.shutdown(wait=not timed_out, cancel_futures=True)
 
 
-def _run_auto_publish_sweep() -> None:
+def _run_auto_publish_sweep(channel: Optional[str] = None) -> None:
     """Publish pending reviews whose approval window (AUTO_PUBLISH_TIMEOUT_HOURS, default 24h) has elapsed."""
     if os.environ.get("ENABLE_AUTO_PUBLISH_SWEEP") != "1":
         return
     try:
-        from src.telegram import check_pending_approvals
+        from src.telegram.approval import check_pending_approvals
 
-        check_pending_approvals()
+        check_pending_approvals(channel=channel)
     except Exception as exc:  # pragma: no cover - operational guard
         logger.warning("auto-publish sweep failed: %s", exc, exc_info=True)
 
@@ -559,8 +622,10 @@ def start_daemon(
     scheduler.initialize()
     from src.config import is_test_environment as _ite
 
+    ch_arg: str | None = channels[0] if (channels and len(channels) == 1) else None
+
     if not _ite():
-        _startup_incident_check(database, interval_seconds)
+        _startup_incident_check(database, interval_seconds, channel=ch_arg)
         try:
             pruned = QueueRepository(database).prune_system_events(
                 retention_days=int(os.environ.get("YT_EVENTS_RETENTION_DAYS", "30"))
@@ -584,10 +649,12 @@ def start_daemon(
                 from src.cleaner import (
                     clean_expired_failed_runs,
                     clean_untracked_temp_files,
+                    clean_tts_cache,
                 )
 
                 expired = clean_expired_failed_runs()
                 orphans = clean_untracked_temp_files()
+                clean_tts_cache(max_size_bytes=500 * 1024 * 1024)
                 if expired["freed_bytes"] or orphans["freed_bytes"]:
                     logger.info(
                         "startup cleanup: %d run dirs (%d bytes), %d temp files (%d bytes)",
@@ -599,10 +666,12 @@ def start_daemon(
             except Exception:
                 logger.debug("startup cleanup skipped", exc_info=True)
     breaker = ConsecutiveFailureBreaker()
+    from src.core.channel_profile import ChannelProfileRegistry
+
     allowed = (
         {canonical_channel(value).value for value in channels}
         if channels
-        else {"moku", "aelithia"}
+        else set(ChannelProfileRegistry.list_active_channel_ids())
     )
     results: list[dict[str, Any]] = []
 
@@ -614,7 +683,9 @@ def start_daemon(
     while not _SHUTDOWN_REQUESTED and (max_runs is None or attempts < max_runs):
         _reap_zombies_safe()
         if not is_test_environment():
-            _run_auto_publish_sweep()
+            _run_auto_publish_sweep(channel=ch_arg)
+            if max_runs is None and not _TELEGRAM_POLLER_STARTED:
+                _start_telegram_callback_poller()
         try:
             touch_daemon_liveness(database)
         except Exception:
@@ -643,7 +714,7 @@ def start_daemon(
                     "error": "disk floor exceeded; channel paused",
                 }
             )
-            break
+            continue
         try:
             extra = {}
             if video_mode is not None:
@@ -660,16 +731,18 @@ def start_daemon(
             if timed_out:
                 result = dict(result or {})
                 result.setdefault("channel", decision.channel.value)
+                err_detail = result.get("error") or result.get("reason") or result.get("error_msg")
                 _register_turn_failure(
-                    database, decision.channel.value, breaker, result.get("error")
+                    database, decision.channel.value, breaker, err_detail
                 )
             else:
                 status_value = str(result.get("status", ""))
                 if status_value in {"PUBLISHED", "COMPLETED"}:
                     breaker.record_success(decision.channel.value)
                 elif status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED"}:
+                    err_detail = result.get("error") or result.get("reason") or result.get("error_msg")
                     _register_turn_failure(
-                        database, decision.channel.value, breaker, result.get("error")
+                        database, decision.channel.value, breaker, err_detail
                     )
         except QuotaError as exc:
             delay = backoff_with_jitter(
@@ -764,6 +837,8 @@ def _execute_lane_pick(
                 "lane": pick.lane_id,
                 "channel": pick.channel.value,
             }
+        if breaker.counts.get(pick.channel.value, 0) >= breaker.threshold:
+            breaker.reset(pick.channel.value)
         logger.info(
             "Lane %s reclamó historia %s (%s)", pick.lane_id, job["story_id"], mode
         )
@@ -813,13 +888,15 @@ def _execute_lane_pick(
         return {"status": "LANE_EMPTY", "lane": pick.lane_id, "channel": pick.channel.value}
 
     status_value = str(result.get("status", ""))
-    if status_value in {"PUBLISHED", "COMPLETED", "RENDERED", "PENDING_REVIEW", "UPLOAD_UNCONFIRMED"}:
+    if status_value in {"PUBLISHED", "COMPLETED", "RENDERED", "PENDING_REVIEW", "UPLOAD_UNCONFIRMED", "WAITING_YOUTUBE_LIMIT"}:
         scheduler_commit_fire(pick, run_id=job["run_id"] if job else None)
         breaker.record_success(pick.channel.value)
+        breaker.record_success(pick.lane_id)
     else:
         scheduler_commit_empty(pick)
         if status_value in {"RETRYABLE_FAILED", "FAILED", "PERMANENT_FAILED", "WAITING_LLM_QUOTA"}:
-            _register_turn_failure(database, pick.channel.value, breaker, result.get("error"))
+            err_detail = result.get("error") or result.get("reason") or result.get("error_msg")
+            _register_turn_failure(database, pick.channel.value, breaker, err_detail, lane_id=pick.lane_id)
         elif status_value in {"STORY_NOT_CLAIMABLE", "NO_PENDING_STORIES"} and job:
             try:
                 repository.finish_lane_run(job["run_id"], JobStatus.RETRYABLE_FAILED, owner=owner)
@@ -874,11 +951,14 @@ def start_daemon_lanes(
     scheduler_commit_fire = lane_scheduler.commit_fire
     scheduler_commit_empty = lane_scheduler.commit_empty
 
+    channel_set = {lane.channel for lane in active_lanes.values()}
+    target_channel = list(channel_set)[0] if len(channel_set) == 1 else None
+
     if not is_test_environment():
-        _startup_incident_check(database, interval_seconds)
+        _startup_incident_check(database, interval_seconds, channel=target_channel)
         try:
             from src.core.lease_reaper import LeaseReaper
-            LeaseReaper(db_path=database).reap_once(startup=True)
+            LeaseReaper(db_path=database).reap_once(startup=True, channel=target_channel)
         except Exception:
             logger.warning("Startup lease reap failed", exc_info=True)
         try:
@@ -903,19 +983,23 @@ def start_daemon_lanes(
             _reap_zombies_safe()
             try:
                 from src.core.lease_reaper import LeaseReaper
-                LeaseReaper(db_path=database).reap_once()
+                LeaseReaper(db_path=database).reap_once(channel=target_channel)
             except Exception:
                 pass
             if not is_test_environment():
-                _run_auto_publish_sweep()
+                _run_auto_publish_sweep(channel=target_channel)
+                if max_parallel is None and not _TELEGRAM_POLLER_STARTED:
+                    _start_telegram_callback_poller()
                 if ticks % 360 == 0:
                     try:
                         from src.cleaner import (
                             clean_expired_failed_runs,
                             clean_untracked_temp_files,
+                            clean_tts_cache,
                         )
                         clean_expired_failed_runs()
                         clean_untracked_temp_files()
+                        clean_tts_cache(max_size_bytes=500 * 1024 * 1024)
                     except Exception:
                         logger.debug("periodic background cleanup skipped", exc_info=True)
                 try:
@@ -1008,6 +1092,7 @@ def start_daemon_lanes(
                     timeout=_turn_timeout_seconds(),
                     database=database,
                     tick=_watchdog_tick_seconds(),
+                    channel=target_channel,
                 )
             )
             active_jobs.clear()

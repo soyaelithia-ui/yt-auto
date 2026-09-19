@@ -316,6 +316,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Límite de historias a mostrar (por defecto: 50)",
     )
     queue_parser.add_argument(
+        "--lane",
+        type=str,
+        default=None,
+        help="Carril específico para pause o resume (ej. moku-horror-long)",
+    )
+    queue_parser.add_argument(
         "-j",
         "--json",
         action="store_true",

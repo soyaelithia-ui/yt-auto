@@ -35,11 +35,15 @@ class TestLLMScriptCuration(unittest.TestCase):
 
     def test_clean_title_edge_cases(self):
         """Test clean_title strips chatter, quotes, reddit markers, and corrupt titles."""
-        self.assertEqual(clean_title(None), "Historia de Terror")
-        self.assertEqual(clean_title(""), "Historia de Terror")
+        self.assertEqual(clean_title(None), "Relato Enigmático")
+        self.assertEqual(clean_title(""), "Relato Enigmático")
         self.assertEqual(clean_title('"El Bosque Oscuro"'), "El Bosque Oscuro")
         self.assertEqual(clean_title("Aquí tienes el título: El Susurro"), "El Susurro")
         self.assertEqual(clean_title("The Haunted House [OC] (Part 1)"), "The Haunted House")
+        self.assertEqual(clean_title("[RELATO DE TERROR] El Susurro | Moku"), "El Susurro")
+        self.assertEqual(clean_title("[CONFESIÓN] La Boda Arruinada | Aelithia"), "La Boda Arruinada")
+        self.assertEqual(clean_title("[REGISTRO ESTELAR] Paradoja Cuántica | Singularidad Sci-Fi"), "Paradoja Cuántica")
+        self.assertEqual(clean_title("[MOKU] La Cabaña Abandonada"), "La Cabaña Abandonada")
         self.assertEqual(clean_title("Cookies!"), "Memorias del Olvido")
         self.assertEqual(clean_title("untitled"), "Memorias del Olvido")
 
@@ -96,8 +100,8 @@ class TestLLMScriptCuration(unittest.TestCase):
 
     def test_translate_title_empty(self):
         """Test translate_title with empty or whitespace input."""
-        self.assertEqual(translate_title(""), "Historia de Terror")
-        self.assertEqual(translate_title("   "), "Historia de Terror")
+        self.assertEqual(translate_title(""), "Relato Enigmático")
+        self.assertEqual(translate_title("   "), "Relato Enigmático")
 
     def test_multi_story_compilation_under_target_words(self):
         """Test multi-story compilation joining stories when word count < min_words."""
@@ -172,6 +176,25 @@ class TestLLMScriptCuration(unittest.TestCase):
         self.assertIn("observador a través", script)
         self.assertNotIn("Edit:", script)
         self.assertFalse(script.startswith("Título:"))
+
+    def test_expand_narrative_to_target_words_scp(self):
+        from src.llm import _expand_narrative_to_target_words
+        short_text = "SCP-096 es una criatura peligrosa en contención."
+        expanded = _expand_narrative_to_target_words(
+            main_title="SCP-096",
+            main_content=short_text,
+            min_words=180,
+            max_words=250,
+            channel="moku",
+        )
+        self.assertGreaterEqual(len(expanded.split()), 180)
+        self.assertTrue(expanded.startswith(short_text))
+
+    def test_expand_narrative_to_target_words_already_long(self):
+        from src.llm import _expand_narrative_to_target_words
+        text = " ".join(["palabra"] * 210)
+        res = _expand_narrative_to_target_words("SCP-096", text, 200, 250, "moku")
+        self.assertEqual(res, text)
 
 
 if __name__ == "__main__":

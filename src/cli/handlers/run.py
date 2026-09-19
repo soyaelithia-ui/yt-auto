@@ -26,7 +26,8 @@ def _get_active_channels(db_path: str | None = None) -> list[str]:
 
     func = getattr(cm, "get_active_channels", None)
     if func is None:
-        return ["moku", "aelithia", "scifi"]
+        from src.core.channel_profile import ChannelProfileRegistry
+        return ChannelProfileRegistry.list_active_channel_ids()
     try:
         return list(func(db_path))
     except TypeError:
@@ -138,24 +139,31 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
     target_story = getattr(args, "topic", None) or getattr(args, "story_id", None)
     channel = getattr(args, "channel", "all") or "all"
     if target_story and channel == "all":
+        from src.core.channel_profile import ChannelProfileRegistry
+        valid_opts = " o ".join(f"--channel {c}" for c in ChannelProfileRegistry.list_active_channel_ids())
+        msg = f"--topic o --story-id requiere {valid_opts}"
         if parser is not None:
-            parser.error("--topic o --story-id requiere --channel moku, --channel aelithia o --channel scifi")
+            parser.error(msg)
         else:
-            print("Error: --topic o --story-id requiere --channel moku, --channel aelithia o --channel scifi", file=sys.stderr)
+            print(f"Error: {msg}", file=sys.stderr)
             return 2
 
     lane_id = getattr(args, "lane", None)
     if channel == "all" and lane_id:
-        for prefix in ("moku", "aelithia", "scifi"):
-            if lane_id.startswith(prefix):
-                channel = prefix
+        from src.core.lanes import load_lanes
+        for lane in load_lanes():
+            if lane.id == lane_id or lane_id.startswith(lane.channel):
+                channel = lane.channel
                 break
 
     if channel != "all":
         try:
             ch = _resolve_channel_key(channel)
         except (ValueError, KeyError):
-            msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: 'moku', 'aelithia', 'scifi', 'all'"
+            from src.core.channel_profile import ChannelProfileRegistry
+            valid_list = ChannelProfileRegistry.list_active_channel_ids() + ["all"]
+            valid_str = ", ".join(repr(c) for c in valid_list)
+            msg = f"Canal desconocido o inválido: {channel!r}. Canales válidos: {valid_str}"
             if parser is not None:
                 parser.error(msg)
             else:

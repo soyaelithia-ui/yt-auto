@@ -41,7 +41,7 @@ def get_auth_url(
         scopes=scopes or DEFAULT_SCOPES,
         redirect_uri=redirect_uri,
     )
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         prompt="consent",
         access_type="offline",
         include_granted_scopes="true",
@@ -56,6 +56,8 @@ def get_auth_url(
                 except Exception:
                     verifiers = {}
             verifiers[redirect_uri] = flow.code_verifier
+            if state:
+                verifiers[state] = flow.code_verifier
             verifier_path.write_text(json.dumps(verifiers), encoding="utf-8")
             os.chmod(verifier_path, 0o600)
         except Exception:
@@ -78,6 +80,17 @@ def exchange_code(
         )
     target_path = token_path or TOKEN_PATH
 
+    code = code.strip()
+    extracted_state = None
+    if "code=" in code:
+        from urllib.parse import parse_qs, urlparse
+        query = urlparse(code).query or code
+        parsed = parse_qs(query)
+        if "code" in parsed:
+            code = parsed["code"][0]
+        if "state" in parsed:
+            extracted_state = parsed["state"][0]
+
     verifier_path = BASE_DIR / "secrets" / ".oauth_pkce_verifier.json"
     verifiers = {}
     if verifier_path.is_file():
@@ -86,7 +99,11 @@ def exchange_code(
         except Exception:
             pass
 
-    code_verifier = verifiers.get(redirect_uri) or verifiers.get(_DEFAULT_REDIRECT)
+    code_verifier = (
+        (verifiers.get(extracted_state) if extracted_state else None)
+        or verifiers.get(redirect_uri)
+        or verifiers.get(_DEFAULT_REDIRECT)
+    )
 
     flow = create_oauth_flow(
         client_id=client_id,

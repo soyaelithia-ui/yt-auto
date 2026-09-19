@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -40,6 +41,7 @@ def to_unsigned_64(val: int | None) -> int:
     return int(val) & 0xFFFFFFFFFFFFFFFF
 
 
+@functools.lru_cache(maxsize=2048)
 def compute_simhash_64(text: str | None) -> int:
     """Compute a 64-bit SimHash over normalized text with word weights and bigrams."""
     if not text:
@@ -75,6 +77,9 @@ def compute_simhash_64(text: str | None) -> int:
 def simhash_hamming_distance(h1: int | None, h2: int | None) -> int:
     """Compute Hamming distance (differing bits) between two 64-bit integers."""
     return (to_unsigned_64(h1) ^ to_unsigned_64(h2)).bit_count()
+
+
+hamming_distance_64 = simhash_hamming_distance
 
 
 def is_simhash_duplicate(h1: int | None, h2: int | None, max_distance: int = 3) -> bool:
@@ -706,8 +711,9 @@ def migrate_database(
                     "VALUES (5, 'production_lanes', ?, ?)",
                     (m5_checksum, _utc_now()),
                 )
-                applied.append(5)
-            canonical_after = _count_channels(conn, ("moku", "aelithia"))
+            from src.core.channel_profile import ChannelProfileRegistry
+            active_channel_ids = tuple(ChannelProfileRegistry.list_active_channel_ids())
+            canonical_after = _count_channels(conn, active_channel_ids or ("moku", "aelithia"))
             quick_check = str(conn.execute("PRAGMA quick_check").fetchone()[0])
             if quick_check != "ok":
                 raise RuntimeError(f"SQLite quick_check falló: {quick_check}")
@@ -1862,8 +1868,16 @@ class QueueRepository:
     def pause(self, channel: str | CanonicalChannel, reason: str | None = None) -> None:
         self._set_paused(channel, True, reason)
 
-    def resume(self, channel: str | CanonicalChannel) -> None:
+    def resume(self, channel: str | CanonicalChannel, *, resume_lanes: bool = True) -> None:
         self._set_paused(channel, False, None)
+        if resume_lanes:
+            channel_key = canonical_channel(channel).value
+            with connect(self.db_path) as conn:
+                conn.execute(
+                    "UPDATE scheduler_lane_state SET paused = 0, pause_reason = NULL, updated_at = ? WHERE lane_id LIKE ?",
+                    (_utc_now(), f"{channel_key}-%"),
+                )
+                conn.commit()
 
     def _set_paused(
         self,
@@ -1907,6 +1921,14 @@ class QueueRepository:
                 )
             ]
         return {"counts": counts, "leases": leases, "controls": controls}
+
+    def is_channel_paused(self, channel: str | CanonicalChannel) -> bool:
+        channel_key = canonical_channel(channel).value
+        with connect(self.db_path, read_only=True) as conn:
+            row = conn.execute(
+                "SELECT paused FROM channel_controls WHERE channel = ?", (channel_key,)
+            ).fetchone()
+        return bool(row and row["paused"])
 
     def record_scene_assets(
         self,
@@ -2295,8 +2317,15 @@ class QueueRepository:
 
     def set_lane_paused(self, lane_id: str, paused: bool, reason: str | None = None) -> None:
         self._execute_write(
-            "UPDATE scheduler_lane_state SET paused = ?, pause_reason = ?, updated_at = ? WHERE lane_id = ?",
-            (1 if paused else 0, reason, _utc_now(), lane_id),
+            """
+            INSERT INTO scheduler_lane_state(lane_id, next_due_at, consecutive_empty, paused, pause_reason, updated_at)
+            VALUES (?, 0, 0, ?, ?, ?)
+            ON CONFLICT(lane_id) DO UPDATE SET
+                paused = excluded.paused,
+                pause_reason = excluded.pause_reason,
+                updated_at = excluded.updated_at
+            """,
+            (lane_id, 1 if paused else 0, reason, _utc_now()),
         )
 
     def get_lane_state(self, lane_id: str) -> dict[str, Any] | None:
@@ -2348,7 +2377,9 @@ class QueueRepository:
                   AND status IN (?, ?)
                   AND (lane_id IS NULL OR lane_id = ?)
                   AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-                ORDER BY CASE WHEN lane_id = ? THEN 0 ELSE 1 END, created_at, story_id
+                ORDER BY CASE WHEN lane_id = ? THEN 0 ELSE 1 END,
+                         CASE WHEN status = ? THEN 0 ELSE 1 END,
+                         created_at, story_id
                 LIMIT 1
                 """,
                 (
@@ -2358,6 +2389,7 @@ class QueueRepository:
                     lane_key,
                     current,
                     lane_key,
+                    JobStatus.PENDING.value,
                 ),
             ).fetchone()
             if not row:
@@ -2409,6 +2441,7 @@ class QueueRepository:
             JobStatus.RENDERED.value,
             JobStatus.DRIVE_BACKED_UP.value,
             JobStatus.UPLOAD_UNCONFIRMED.value,
+            JobStatus.WAITING_YOUTUBE_LIMIT.value,
         )
         placeholders = ",".join("?" for _ in resumable_states)
         with connect(self.db_path) as conn:

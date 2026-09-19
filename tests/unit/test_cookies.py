@@ -261,3 +261,25 @@ def test_safe_preupload_failure_classification():
     assert _safe_preupload_failure(err_incomplete) is True
     assert _safe_preupload_failure(err_invalid) is True
     assert _safe_preupload_failure(err_in_flight) is False
+
+
+def test_parse_raw_cookie_header(tmp_path):
+    from src.core.cookies import parse_raw_cookie_header, save_cookies_to_file
+    raw_str = "LOGIN_INFO=token123; SID=sid456; __Secure-3PSID=sec789; PREF=tz=UTC"
+    cookies = parse_raw_cookie_header(raw_str)
+    assert len(cookies) > 0
+    names = {c["name"] for c in cookies}
+    assert "LOGIN_INFO" in names
+    assert "SID" in names
+    # Dual domain check for SID
+    sid_domains = {c["domain"] for c in cookies if c["name"] == "SID"}
+    assert ".youtube.com" in sid_domains
+    assert ".google.com" in sid_domains
+
+    # Test file round-trip
+    target_file = tmp_path / "saved_cookies.json"
+    save_cookies_to_file(cookies, target_file)
+    assert target_file.is_file()
+    reloaded = parse_cookies_file(target_file)
+    assert len(reloaded) == len(cookies)
+

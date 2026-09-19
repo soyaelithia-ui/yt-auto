@@ -370,6 +370,25 @@ class TestDaemonSingletonLockBypass:
         env = dict(os.environ)
         env["PYTHON_BIN"] = sys.executable
 
+        # Check if already running to avoid killing active production daemon
+        status_before = subprocess.run(
+            ["bash", str(ctl_script), "status"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        if "RUNNING" in status_before.stdout:
+            # Active daemon detected: verify concurrent start skips gracefully and do not kill production
+            proc = subprocess.run(
+                ["bash", str(ctl_script), "start", "sched"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            assert proc.returncode == 0
+            assert "already running" in proc.stdout or "skip" in proc.stdout
+            return
+
         # Stop any previous instance
         subprocess.run(["bash", str(ctl_script), "stop", "sched"], capture_output=True, env=env)
 

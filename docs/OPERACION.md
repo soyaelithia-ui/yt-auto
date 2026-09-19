@@ -69,12 +69,17 @@ Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en 
 | **2** | Completar `.env`: Telegram (`TELEGRAM_*` + `TELEGRAM_ALLOWED_CHAT_ID`), Drive IDs (`DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`, …), channel IDs; `TELEGRAM_API_ID`/`HASH` para sidecar. | Placeholders secretos no vacíos en runtime. |
 | **3** | `./scripts/stage_agy.sh` | `build/agy` existe (gitignored). |
 | **4** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |
-| **5** | Preferir path low-RAM: `docker compose -f docker-compose.yml -f docker-compose.small.yml build` | Build OK. |
-| **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados. |
-| **7** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-automation` + `telegram-bot-api` healthy/up. |
-| **8** | Logs: `… logs --follow yt-automation` | Sin FAIL de preflight; daemon en intervalo. |
+| **5** | Preferir path low-RAM: `docker compose -f docker-compose.yml -f docker-compose.small.yml build` | Build OK (`yt-automation:local`). |
+| **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados e iniciados (`yt-moku` + `yt-aelithia`). |
+| **7** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-moku` + `yt-aelithia` (+ opcional sidecar) healthy/up. |
+| **8** | Logs por canal: `… logs --follow yt-moku` / `… logs --follow yt-aelithia` | Daemons autónomos desacoplados en intervalo. |
 
-Path pesado (6g/4 CPU) solo si hace falta reencode: `docker compose build && docker compose up -d`. Overlay small → `2g` / `2` CPU / `shm 256m` / tmpfs `/tmp` 512m. Defaults compose: `AUTO_APPROVE: "0"`, `ENABLE_AUTO_PUBLISH_SWEEP: "0"` (**no flippear** en el YAML).
+**Gestión Independiente de Canales:**
+- Levantar un solo canal: `docker compose up -d yt-moku` (o `docker compose up -d yt-aelithia`)
+- Detener un canal sin afectar al otro: `docker compose stop yt-moku` (`yt-aelithia` continúa procesando)
+- Monitorear logs individuales: `docker compose logs -f yt-moku`
+- Modo monolítico clásico: `docker compose --profile all-in-one up -d yt-automation`
+- Failover de Telegram Poller: Si el contenedor que sostiene el poller se detiene, el segundo canal asume automáticamente la escucha de callbacks.
 
 Si `build/agy: not found` → paso 3. Si uid 10001 no escribe → `docker compose down -v` y `up` de nuevo.
 

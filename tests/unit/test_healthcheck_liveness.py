@@ -299,3 +299,18 @@ def test_main_json_flag_emits_one_object(tmp_path, monkeypatch, capsys):
     assert code == 0
     assert payload["status"] == "OK"
     assert captured.out.endswith("\n")
+
+
+def test_temp_path_disk_thresholds():
+    tmp_p = Path("/tmp")
+    # Temp with 256 MB is degraded (warn), not critical
+    status = healthcheck._disk_status(256 * 1024**2, tmp_p)
+    assert status == "degraded"
+    # Temp with 600 MB is ok
+    assert healthcheck._disk_status(600 * 1024**2, tmp_p) == "ok"
+    # Temp below 64 MB fail floor is critical
+    assert healthcheck._disk_status(32 * 1024**2, tmp_p) == "critical"
+    # Non-temp path with 512 MB is critical (below 1 GB floor)
+    non_tmp = Path("/app/work")
+    assert healthcheck._disk_status(512 * 1024**2, non_tmp) == "critical"
+

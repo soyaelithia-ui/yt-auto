@@ -177,11 +177,27 @@ async def trigger_youtube_upload(video: Dict[str, Any]) -> Dict[str, Any]:
     return _trigger_youtube_upload_sync(video)
 
 
-def _run_sweep(max_age_seconds: int, db_conn: Optional[Any] = None) -> List[str]:
+def _run_sweep(
+    max_age_seconds: int,
+    db_conn: Optional[Any] = None,
+    channel: Optional[str] = None,
+) -> List[str]:
     """Core auto-publish sweep. Returns ids published in this pass."""
     expired = get_expired_pending_videos(
         cutoff_time=_cutoff_time(max_age_seconds), db_conn=db_conn
     )
+    if channel:
+        from src.core.domain import canonical_channel
+        try:
+            can = canonical_channel(channel)
+            target_ch = can.value if hasattr(can, "value") else str(can)
+        except Exception:
+            target_ch = str(channel)
+        target_lower = target_ch.lower()
+        expired = [
+            video for video in expired
+            if str(video.get("channel") or "").lower() == target_lower
+        ]
     published_ids: List[str] = []
     for video in expired:
         v_id = str(video.get("id") or video.get("job_id"))
@@ -200,13 +216,18 @@ def _run_sweep(max_age_seconds: int, db_conn: Optional[Any] = None) -> List[str]
     return published_ids
 
 
-async def process_approval_timeout(db_conn: Optional[Any] = None) -> List[str]:
+async def process_approval_timeout(
+    db_conn: Optional[Any] = None,
+    channel: Optional[str] = None,
+) -> List[str]:
     """Async entrypoint running the AUTO_PUBLISH_TIMEOUT_HOURS auto-publish sweep."""
-    return _run_sweep(int(AUTO_PUBLISH_TIMEOUT_HOURS * 3600), db_conn=db_conn)
+    return _run_sweep(int(AUTO_PUBLISH_TIMEOUT_HOURS * 3600), db_conn=db_conn, channel=channel)
 
 
 def check_pending_approvals(
-    db_conn: Optional[Any] = None, timeout_hours: int = AUTO_PUBLISH_TIMEOUT_HOURS
+    db_conn: Optional[Any] = None,
+    timeout_hours: int = AUTO_PUBLISH_TIMEOUT_HOURS,
+    channel: Optional[str] = None,
 ) -> List[str]:
     """Synchronously auto-publish pending reviews older than ``timeout_hours``."""
-    return _run_sweep(int(timeout_hours) * 3600, db_conn=db_conn)
+    return _run_sweep(int(timeout_hours) * 3600, db_conn=db_conn, channel=channel)

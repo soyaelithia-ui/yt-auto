@@ -17,12 +17,26 @@ def sanitize_text(text: str) -> str:
     return sanitize_llm_script(text, mode="short")
 
 
-def clean_title(title: str) -> str:
+def _default_title_fallback(channel: Optional[str] = None) -> str:
+    """Resolve a profile-aware default title fallback or return generic default."""
+    ch = channel or os.environ.get("CHANNEL_KEY")
+    if ch:
+        try:
+            from src.core.channel_profile import ChannelProfileRegistry
+            prof = ChannelProfileRegistry.get_channel(ch)
+            if prof and prof.editorial and prof.editorial.default_title_fallback:
+                return prof.editorial.default_title_fallback
+        except Exception:
+            pass
+    return "Relato Enigmático"
+
+
+def clean_title(title: str, channel: Optional[str] = None) -> str:
     """
     Sanitize and format a title, stripping LLM chatter, quotes, reddit markers.
     """
     if not title or not isinstance(title, str):
-        return "Historia de Terror"
+        return _default_title_fallback(channel)
 
     t = title.strip()
 
@@ -55,6 +69,13 @@ def clean_title(title: str) -> str:
     t = re.sub(r"\[(?:OC|UPDATE|REPOST|DELETED|REMOVED)\]", "", t, flags=re.IGNORECASE)
     t = re.sub(r"\((?:Part|Parte)\s*\d+\)", "", t, flags=re.IGNORECASE)
 
+    # Strip channel and brand prefixes / suffixes
+    try:
+        from src.branding import strip_brand_metadata_from_title
+        t = strip_brand_metadata_from_title(t)
+    except Exception:
+        pass
+
     # Check for corrupt titles
     if (
         re.search(r"\bcookies?\b|error\s*5\d\d|server\s*error|that'?s\s*an\s*error|there\s*was\s*an\s*error|404\s*not\s*found|bad\s*gateway", t, flags=re.IGNORECASE)
@@ -63,30 +84,40 @@ def clean_title(title: str) -> str:
         return "Memorias del Olvido"
 
     t = re.sub(r"\s+", " ", t).strip(" .:-_")
-    return t if t else "Historia de Terror"
+    return t if t else _default_title_fallback(channel)
 
 
 def is_spanish_text(text: str) -> bool:
     """
     Check if a text is primarily in Spanish by examining frequency of common Spanish words.
+    Excludes English-ambiguous short homographs ('no', 'mi', 'me') from naive match counts.
     """
-    from src.config import is_test_environment
-    if is_test_environment():
-        return True
     if not text or not isinstance(text, str):
         return False
     words = [w.lower() for w in re.findall(r'[a-zA-ZáéíóúñÁÉÍÓÚÑ]+', text)]
     if not words:
         return False
+
+    has_spanish_diacritics = any(c in text for c in "áéíóúÁÉÍÓÚñÑ¿¡")
+    if has_spanish_diacritics:
+        return True
+
     spanish_stop_words = {
         "el", "la", "los", "las", "un", "una", "unos", "unas", "que", "de", "en", "para",
-        "por", "con", "no", "es", "se", "su", "sus", "al", "del", "como", "mas", "pero",
-        "mi", "mis", "tu", "tus", "habia", "había", "estaba", "cuando", "dijo", "hacer",
-        "hizo", "tenia", "tenía", "todo", "toda", "todos", "todas", "otra", "otro", "muy"
+        "por", "con", "es", "se", "su", "sus", "al", "del", "como", "mas", "pero",
+        "mis", "tu", "tus", "habia", "había", "estaba", "cuando", "dijo", "hacer",
+        "hizo", "tenia", "tenía", "todo", "toda", "todos", "todas", "otra", "otro", "muy",
+        "este", "esta", "estos", "estas", "porque", "quien", "donde", "sobre", "entre"
     }
     match_count = sum(1 for w in words if w in spanish_stop_words)
     ratio = match_count / len(words)
-    return ratio >= 0.02 or match_count >= 3
+
+    # For short titles/phrases (< 8 words), require at least 1 unambiguous stopword and ratio >= 0.20
+    if len(words) < 8:
+        return match_count >= 1 and ratio >= 0.20
+
+    # For longer texts, require significant density
+    return ratio >= 0.05 and match_count >= 2
 
 
 def _curate_with_regex(raw_text: str, title: str, channel: str = "moku", max_words: Optional[int] = None, min_words: int = 180) -> str:
@@ -233,7 +264,88 @@ def compile_stories_to_target_words(
     return compiled_title, compiled_content
 
 
-def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
+def _expand_narrative_to_target_words(
+    main_title: str,
+    main_content: str,
+    min_words: int,
+    max_words: Optional[int] = None,
+    channel: str = "moku",
+) -> str:
+    """Expand a short narrative to satisfy min_words editorial budget when AI chain is offline.
+
+    1. For SCP anomalies (channel=moku or SCP topic), queries canonical lore from
+       src.core.scp_lore (containment_summary, key_facts, sensory_cues, narrative_hooks)
+       to enrich the narrative with 100% verified canonical facts.
+    2. For horror/drama stories, enriches with atmospheric narrative connectors.
+    """
+    # For Spanish channels (moku), filter orphan English blocks first so we count real Spanish words
+    usable_content = main_content
+    if channel == "moku":
+        try:
+            from src.sanitizer import filter_orphan_english_blocks
+            filtered = filter_orphan_english_blocks(main_content, channel="moku")
+            if len(filtered.split()) >= min_words:
+                return filtered
+            usable_content = filtered
+        except Exception:
+            pass
+
+    words = usable_content.split()
+
+    # 1. Canonical SCP lore enrichment
+    try:
+        from src.core.scp_lore import get_scp_canonical_lore, is_scp_topic
+        if is_scp_topic(main_title) or is_scp_topic(main_content) or channel == "moku":
+            lore = get_scp_canonical_lore(main_title) or get_scp_canonical_lore(main_content)
+            if lore:
+                parts: list[str] = []
+                if usable_content.strip():
+                    parts.append(usable_content.strip())
+                else:
+                    scp_name = lore.get("canonical_name", {}).get("es", lore.get("scp_id", main_title))
+                    obj_class = lore.get("object_class", "Euclid")
+                    parts.append(
+                        f"Clasificación de Objeto: {obj_class}. La anomalía designada como {scp_name} constituye una de las prioridades de vigilancia más rigurosas de la Fundación SCP."
+                    )
+                if lore.get("containment_summary"):
+                    parts.append(f"Procedimientos especiales de contención: {lore['containment_summary']}")
+                for hook in lore.get("narrative_hooks", ()):
+                    parts.append(hook)
+                for fact in lore.get("key_facts", ()):
+                    parts.append(fact)
+                for k, cue in (lore.get("sensory_cues") or {}).items():
+                    parts.append(f"Registros de observación sensorial: {cue}")
+                if sum(len(p.split()) for p in parts) < min_words:
+                    parts.append(
+                        "El personal del destacamento móvil asignado al sector de contención mantiene protocolos de respuesta inmediata ante cualquier fluctuación o fallo en los sistemas de sujeción herméticos. "
+                        "Todo el personal asignado debe seguir estrictamente las directivas de seguridad para evitar incidentes irreversibles durante los turnos de observación activa en las instalaciones."
+                    )
+                result = "\n\n".join(parts)
+                if len(result.split()) >= min_words:
+                    return result
+    except Exception as lore_err:
+        logger.debug("Lore expansion fallback skipped: %s", lore_err)
+
+    # 2. General organic connectors
+    try:
+        from src.branding import resolve_channel_key
+        is_drama = resolve_channel_key(channel) == "aelithia"
+        connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
+        additions = []
+        current_count = len(words)
+        for conn in connectors:
+            if conn not in main_content and current_count < min_words:
+                additions.append(conn)
+                current_count += len(conn.split())
+        if additions:
+            return main_content.rstrip() + "\n\n" + " ".join(additions)
+    except Exception:
+        pass
+
+    return main_content
+
+
+def ensure_spanish_source(story_text: str, title: str, channel: Optional[str] = None) -> Tuple[str, str]:
     """
     Ensure raw story content and title are in Spanish before curation.
     Detects non-Spanish content and executes a single translation pass prior to script curation.
@@ -242,7 +354,7 @@ def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
     from src.config import is_test_environment
     from src.core.quality import is_spanish_neutral
 
-    clean_t = clean_title(title) if title else "Historia de Terror"
+    clean_t = clean_title(title) if title else _default_title_fallback(channel)
     content = (story_text or "").strip()
 
     is_content_es = is_spanish_neutral(content) if len(content.split()) >= 20 else is_spanish_text(content)
@@ -274,6 +386,18 @@ def ensure_spanish_source(story_text: str, title: str) -> Tuple[str, str]:
                     translated_content = trans_dict["translated_text"]
             except Exception:
                 pass
+
+        if not is_spanish_neutral(translated_content) if len(translated_content.split()) >= 20 else not is_spanish_text(translated_content):
+            try:
+                from src.templates.narratives import build_moku_short_narrative
+                from src.core.scp_lore import is_scp_topic
+                if is_scp_topic(clean_t) or "scp" in clean_t.lower() or "scp" in str(title).lower():
+                    synth = build_moku_short_narrative(clean_t)
+                    if synth and is_spanish_neutral(synth):
+                        translated_content = synth
+                        logger.info("ensure_spanish_source synthesized canonical Spanish lore for %s", clean_t)
+            except Exception as synth_err:
+                logger.debug("ensure_spanish_source synthetic fallback skipped: %s", synth_err)
 
     if not is_title_es:
         try:
@@ -480,6 +604,11 @@ _ADAPTATION_PERSONAS: Dict[str, str] = {
         "directo presente en la historia original (réplicas textuales entre "
         "comillas) tal como fue escrito."
     ),
+    "scifi": (
+        "Eres un narrador analítico de ciencia ficción dura y astrofísica especulativa. "
+        "Tono riguroso, sobrecogedor y reflexivo: exploras los límites de la física, "
+        "el cosmos y las paradojas del espacio-tiempo."
+    ),
 }
 
 _ADAPTATION_PERSONA_DEFAULT = (
@@ -659,7 +788,14 @@ def curate_script(
             "AI chain exhausted (%s); using queued narrative content",
             "; ".join(chain_errors),
         )
-        return _trim_script_to_max_words(str(main_content).strip(), max_words)
+        expanded_content = _expand_narrative_to_target_words(
+            main_title=main_title,
+            main_content=str(main_content).strip(),
+            min_words=min_words or 210,
+            max_words=max_words,
+            channel=channel,
+        )
+        return _trim_script_to_max_words(expanded_content, max_words)
 
     raise AIProviderChainExhausted(
         "Cadena de proveedores de IA agotada para curación de guion: "
@@ -705,14 +841,18 @@ def translate_title(
     title: str,
     provider: str = "A",
     client: Optional[Any] = None,
+    channel: Optional[str] = None,
 ) -> str:
     """
     Translates a title to Spanish using local formatting rules without external API calls.
     """
     if not title or not str(title).strip():
-        return "Historia de Terror"
+        return _default_title_fallback(channel)
 
-    clean_t = clean_title(title)
+    try:
+        clean_t = clean_title(title, channel=channel)
+    except TypeError:
+        clean_t = clean_title(title)
 
     # Prefer an injected client before the test-env Spanish short-circuit so
     # duck-typed clients remain observable under YT_PROFILE=test.

@@ -41,9 +41,22 @@ def tiny_mp4(tmp_path: Path) -> Path:
     return p
 
 
-def test_high_profile_calls_run_ffmpeg(tiny_mp4: Path) -> None:
+def test_high_profile_is_noop(tiny_mp4: Path) -> None:
     eng = LoopVideoEngine()
+    original = tiny_mp4.read_bytes()
     with patch("src.media.loop_engine.probe_media", return_value=_probe("High")) as pm, patch(
+        "src.media.loop_engine.run_ffmpeg"
+    ) as rf:
+        out = eng.ensure_h264_main_profile(tiny_mp4, crf=28, preset="ultrafast", timeout=30)
+        assert out == tiny_mp4
+        pm.assert_called_once()
+        rf.assert_not_called()
+        assert tiny_mp4.read_bytes() == original
+
+
+def test_unsupported_profile_reencodes(tiny_mp4: Path) -> None:
+    eng = LoopVideoEngine()
+    with patch("src.media.loop_engine.probe_media", return_value=_probe("High 4:2:2")) as pm, patch(
         "src.media.loop_engine.run_ffmpeg"
     ) as rf:
         def _fake_ffmpeg(cmd, **kwargs):

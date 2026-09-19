@@ -31,6 +31,7 @@ from typing import Any, Callable, Iterable
 STALE_THRESHOLD_SECONDS = int(os.environ.get("DAEMON_STALE_THRESHOLD_SECONDS", "3600"))
 DISK_FAIL_BYTES = int(os.environ.get("HEALTHCHECK_DISK_FAIL_BYTES", str(1024**3)))
 DISK_WARN_BYTES = int(os.environ.get("HEALTHCHECK_DISK_WARN_BYTES", str(2 * 1024**3)))
+TMP_FAIL_BYTES = int(os.environ.get("HEALTHCHECK_TMP_FAIL_BYTES", str(64 * 1024**2)))
 TMP_WARN_BYTES = int(os.environ.get("HEALTHCHECK_TMP_WARN_BYTES", str(512 * 1024**2)))
 CHECK_TIMEOUT_SECONDS = float(os.environ.get("HEALTHCHECK_CHECK_TIMEOUT_SECONDS", "2"))
 BUDGET_SECONDS = float(os.environ.get("HEALTHCHECK_BUDGET_SECONDS", "8"))
@@ -72,7 +73,9 @@ class HealthReport:
 def disk_ok(path) -> bool:
     """At least the fail-floor free on the volume holding ``path``."""
     try:
-        return shutil.disk_usage(path).free >= DISK_FAIL_BYTES
+        p = Path(path)
+        floor = TMP_FAIL_BYTES if _is_temp_path(p) else DISK_FAIL_BYTES
+        return shutil.disk_usage(path).free >= floor
     except OSError:
         return False
 
@@ -144,9 +147,11 @@ def _is_temp_path(path: Path) -> bool:
 
 
 def _disk_status(free_bytes: int, path: Path | None = None) -> str:
-    if free_bytes < DISK_FAIL_BYTES:
+    is_tmp = path is not None and _is_temp_path(path)
+    fail = TMP_FAIL_BYTES if is_tmp else DISK_FAIL_BYTES
+    if free_bytes < fail:
         return "critical"
-    warn = TMP_WARN_BYTES if path is not None and _is_temp_path(path) else DISK_WARN_BYTES
+    warn = TMP_WARN_BYTES if is_tmp else DISK_WARN_BYTES
     if free_bytes < warn:
         return "degraded"
     return "ok"

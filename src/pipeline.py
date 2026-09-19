@@ -30,6 +30,8 @@ from src.core.domain import (
     ManualInterventionRequired,
     ProviderTimeoutError,
     QuotaError,
+    YouTubeQuotaExceededError,
+    YouTubeUploadLimitError,
     canonical_channel,
 )
 from src.core.profiling import CanonicalStage, PipelineProfiler
@@ -691,6 +693,20 @@ def _stage_05_tts_synthesis(ctx: RunContext) -> None:
     with ctx.profiler.phase(CanonicalStage.TTS_SYNTHESIS):
         from lib.tts import generate_audio
 
+        # WPM feasibility pre-check (approx 130-150 words/min)
+        # If words exceed lane maximum words by > 15%, trim before first TTS synthesis to save CPU and network cycles
+        max_allowed_words = getattr(ctx.lane, "words_max", None) or getattr(ctx.lane, "words_recondense_max", None)
+        if max_allowed_words and ctx.lane.orientation == "vertical":
+            cur_words = ctx.clean_script.split()
+            if len(cur_words) > int(max_allowed_words * 1.15):
+                from src.llm import _trim_script_to_max_words
+                logger.info(
+                    "Guion preliminar (%d palabras) excede presupuesto del carril (%d palabras); pre-recortando antes de TTS",
+                    len(cur_words), max_allowed_words,
+                )
+                ctx.clean_script = _trim_script_to_max_words(ctx.clean_script, max_allowed_words)
+                ctx.script_path.write_text(ctx.clean_script, encoding="utf-8")
+
         target_audio_sec = float(ctx.lane.duration_target_sec)
         audio = generate_audio(
             ctx.clean_script,
@@ -762,6 +778,13 @@ def _stage_06_duration_alignment(ctx: RunContext) -> None:
                 provider="C" if is_test_environment() else None, channel=ctx.channel_name, strict_single_story=True, max_words=ctx.lane.words_recondense_max,
             )
             _reprocess_script(raw, "re-condensación")
+            if float(ctx.audio["duration_sec"]) > float(ctx.lane.duration_max_sec):
+                cur_words = ctx.clean_script.split()
+                ratio = max(0.5, (float(ctx.lane.duration_max_sec) - 10.0) / float(ctx.audio["duration_sec"]))
+                target_count = max(int(ctx.lane.words_min), int(len(cur_words) * ratio))
+                from src.llm import _trim_script_to_max_words
+                trimmed = _trim_script_to_max_words(ctx.clean_script, target_count)
+                _reprocess_script(trimmed, "re-condensación")
             if float(ctx.audio["duration_sec"]) > float(ctx.lane.duration_max_sec):
                 raise ValueError(
                     f"La duración de audio ({ctx.audio['duration_sec']} s) excede el máximo {ctx.lane.duration_max_sec} s del carril {ctx.lane.id} tras re-condensación"
@@ -891,58 +914,36 @@ def _stage_04_mood_theme(ctx: RunContext) -> None:
         from src.core.scenic_detector import detect_adaptive_theme
 
         ctx.loop_engine = LoopVideoEngine()
-        if ctx.is_multiscene_mode:
-            curator = CinematicScriptCuratorAgent()
-            art = ArtDirectorMoodAgent()
-            planner = ScenePlannerCompositorAgent()
-            target_fmt = "short" if ctx.lane.orientation == "vertical" else "longform"
-            ctx.script_payload = curator.curate(raw_text=ctx.clean_script, title=ctx.title, channel_lane=ctx.lane.id, target_format=target_fmt)
-            (ctx.work_dir / "cinematic_script.json").write_text(json.dumps(ctx.script_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            plan_cat = ctx.loop_category or getattr(ctx.lane, "loop_category", None) or getattr(ctx.lane, "story_type", None) or ("cosmic_horror" if ctx.channel_name == "moku" else "dark_ambient")
-            ctx.visual_plan_payload = art.plan_visuals(cinematic_script=ctx.script_payload, theme_lane=plan_cat)
-            ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            ctx.manifest_payload = planner.plan_manifest(
-                script=ctx.script_payload, visual_plan=ctx.visual_plan_payload, story_id=ctx.story_id,
-                narration_path=str(ctx.audio_path), music_path="", lane_id=ctx.lane.id, channel_name=ctx.channel_name,
-                resolution=list(ctx.lane.expected_resolution), fps=ctx.lane.fps, actual_audio_duration=float(ctx.audio.get("duration_sec", 0.0) or 0.0),
-            )
-            ctx.scene_manifest_path.write_text(json.dumps(ctx.manifest_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            ctx.scene_bg_list, ctx.shot_durations, ctx.target_category = _catalog_shots_from_manifest(
-                ctx.manifest_payload, ctx.loop_engine, ctx.lane.orientation, channel=ctx.channel_name,
-            )
-            if ctx.scene_bg_list and ctx.shot_durations:
-                ctx.resolved_loop_path = ctx.scene_bg_list[0]
-        else:
-            # Continuous single-loop composition engine:
-            # Resolves loop from assets/videos/shorts/ (vertical) or assets/videos/longs/ (horizontal).
-            # Neutral round-robin rotation, repeats single continuous clip for full audio duration.
-            from src.config import is_test_environment
-            total_audio_sec = float(ctx.audio.get("duration_sec", 15.0) or 15.0) if isinstance(ctx.audio, dict) else 15.0
-            ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
-                orientation=ctx.lane.orientation,
-                allow_test_mock=is_test_environment(),
-            )
-            ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
-            ctx.shot_durations = [total_audio_sec]
-            ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
-            scenes_plan = [{
-                "duration": total_audio_sec,
-                "source": str(ctx.resolved_loop_path),
-                "category": str(ctx.target_category),
-                "shot_index": 0,
-            }]
-            ctx.visual_plan_payload = {
-                "video_engine": "loop",
-                "loop": True,
-                "mode": "loop",
-                "category": str(ctx.target_category),
-                "scenes": scenes_plan,
-                "covered_seconds": total_audio_sec,
-                "black_fallbacks": 0,
-                "shot_durations": ctx.shot_durations,
-            }
-            ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-            logger.info("Continuous single-loop composition: %s (duration: %.1fs)", ctx.resolved_loop_path, total_audio_sec)
+        # Continuous single-loop composition engine:
+        # Resolves loop from assets/videos/shorts/ (vertical) or assets/videos/longs/ (horizontal).
+        # Neutral round-robin rotation, repeats single continuous clip for full audio duration.
+        from src.config import is_test_environment
+        total_audio_sec = float(ctx.audio.get("duration_sec", 15.0) or 15.0) if isinstance(ctx.audio, dict) else 15.0
+        ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
+            orientation=ctx.lane.orientation,
+            allow_test_mock=is_test_environment(),
+        )
+        ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
+        ctx.shot_durations = [total_audio_sec]
+        ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
+        scenes_plan = [{
+            "duration": total_audio_sec,
+            "source": str(ctx.resolved_loop_path),
+            "category": str(ctx.target_category),
+            "shot_index": 0,
+        }]
+        ctx.visual_plan_payload = {
+            "video_engine": "loop",
+            "loop": True,
+            "mode": "loop",
+            "category": str(ctx.target_category),
+            "scenes": scenes_plan,
+            "covered_seconds": total_audio_sec,
+            "black_fallbacks": 0,
+            "shot_durations": ctx.shot_durations,
+        }
+        ctx.visual_plan_path.write_text(json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info("Continuous single-loop composition: %s (duration: %.1fs)", ctx.resolved_loop_path, total_audio_sec)
 
 
 def _stage_08_loop_scene(ctx: RunContext) -> None:
@@ -1074,14 +1075,24 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
         thumb_hook = getattr(ctx.lane, "hook_text", None) or (ctx.story.get("hook_text") if isinstance(ctx.story, dict) else None)
         if not thumb_hook and motifs_for_thumb:
             motif_hooks = {
-                "carnival": "¿QUÉ HABÍA EN LA FERIA?", "morgue": "¿QUÉ HABÍA EN LA CAMILLA?",
-                "asylum": "¿QUÉ HABÍA EN EL PASILLO?", "cabin": "¿QUÉ HABÍA EN LA CABAÑA?",
-                "cemetery": "¿QUÉ HABÍA EN LA TUMBA?", "diner": "¿QUÉ PASÓ A LAS 3 AM?",
-                "bakery": "¿QUÉ HABÍA EN EL HORNO?", "mar": "¿QUÉ HABÍA EN EL FARO?",
-                "boda": "¿ARRUINÉ SU BODA?", "hermano": "¿TRAICIÓN FAMILIAR?",
-                "apartamento": "¿EXIGEN MI HERENCIA?", "deudas": "¿PAGAR SUS DEUDAS?",
+                "carnival": ["¿QUÉ HABÍA EN LA FERIA?", "FERIA MALDITA ⚠️", "EL CIRCO PROHIBIDO"],
+                "morgue": ["¿QUÉ HABÍA EN LA CAMILLA?", "LA AUTOPSIA OCULTA 🚨", "NO ESTABA MUERTO"],
+                "asylum": ["¿QUÉ HABÍA EN EL PASILLO?", "PABELLÓN CLAUSURADO 👁️", "EL GRITO EN LA CELDA"],
+                "cabin": ["¿QUÉ HABÍA EN LA CABAÑA?", "NUNCA ENTRES AL BOSQUE 🌲", "EL REFUGIO PERDIDO"],
+                "cemetery": ["¿QUÉ HABÍA EN LA TUMBA?", "LA CRIPTA ABIERTA ⚠️", "NO DEBÍ ABRIRLA"],
+                "diner": ["¿QUÉ PASÓ A LAS 3 AM?", "TURNO DE NOCHE FATAL ❌", "EL CLIENTE EN SOMBRAS"],
+                "bakery": ["¿QUÉ HABÍA EN EL HORNO?", "TURNO DE MADRUGADA ⚠️", "EL SECRETO DEL OBRADOR"],
+                "mar": ["¿QUÉ HABÍA EN EL FARO?", "ABISMO SUBMARINO 🌊", "EL ECO DE LA FOSA"],
+                "boda": ["¿ARRUINÉ SU BODA? 💥", "EXIGENCIAS IMPOSIBLES ⚖️", "NO PAGARÉ SU BODA 🚫", "TRAICIÓN EN EL ALTAR 💔"],
+                "hermano": ["¿TRAICIÓN FAMILIAR? ⚡", "MI HERMANO ME ENGAÑÓ ❌", "DESENMASCARADO ANTE TODOS ⚖️"],
+                "apartamento": ["¿EXIGEN MI HERENCIA? 🏠", "QUISIERON QUITARME TODO 🚫", "LA CASA ES MÍA 💥"],
+                "deudas": ["¿PAGAR SUS DEUDAS? 💸", "NO SOY SU BANCO 🚫", "ESTAFA INTRAFAMILIAR ⚠️"],
             }
-            thumb_hook = motif_hooks.get(motifs_for_thumb[0])
+            cand_hooks = motif_hooks.get(motifs_for_thumb[0])
+            if cand_hooks:
+                import hashlib
+                seed = int(hashlib.md5((ctx.spanish_title or ctx.title or "").encode("utf-8")).hexdigest()[:6], 16)
+                thumb_hook = cand_hooks[seed % len(cand_hooks)]
 
         # Prompt-driven real-time thumbnail generation (Chiaroscuro high-CTR style, 3-5 word viral hook, mysterious focal subject)
         from src.agents.seo_optimizer import SeoOptimizerAgent
@@ -1094,7 +1105,7 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
             use_agent=bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes")),
         )
         thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
-        thumb_hook = thumb_concept.get("big_headline") or thumb_hook or "¡EXPEDIENTE SECRETO PROHIBIDO!"
+        thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
         thumb_prompt = thumb_concept.get("visual_layout") or "Chiaroscuro high-CTR dramatic lighting mysterious focal subject"
         palette = thumb_concept.get("color_palette")
         accent_color = palette[0] if palette and isinstance(palette, list) else None
@@ -1105,7 +1116,12 @@ def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
             video_mode=target_fmt, video_path=str(ctx.video_path),
             bg_image_path=None, manifest_path=str(ctx.scene_manifest_path), hook_text=thumb_hook,
             cover_prompt=thumb_prompt, accent_color=accent_color,
-            metadata={"prompt": thumb_prompt, "visual_layout": thumb_prompt, "big_headline": thumb_hook},
+            metadata={
+                "prompt": thumb_prompt,
+                "visual_layout": thumb_prompt,
+                "big_headline": thumb_hook,
+                "prefer_video_climax": True,
+            },
         )
         ctx.metadata_path.write_text(json.dumps({
             "channel": ctx.channel_name, "title": ctx.youtube_title, "description": ctx.youtube_description,
@@ -1235,6 +1251,7 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                     subtitle_path=str(ctx.srt_path) if ctx.srt_path.is_file() else None,
                     thumbnail_path=str(ctx.thumbnail_path) if ctx.thumbnail_path.is_file() else None,
                     story_id=ctx.story_id, run_id=ctx.run_id, channel=ctx.channel_name, video_mode="long" if ctx.is_long_lane else "short",
+                    precomputed_visual=ctx.visual_integrity_report,
                 )
                 verdict_passed = getattr(verdict, "passed", getattr(verdict, "approved", False))
                 from dataclasses import asdict, is_dataclass
@@ -1321,6 +1338,32 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                 job_id=ctx.story_id, version=review_job.version,
             )
             ctx.repository.record_provider_attempt(ctx.run_id, "youtube", "upload_and_verify", outcome=str(result.get("status") or "unknown").lower())
+        except (YouTubeUploadLimitError, YouTubeQuotaExceededError) as exc:
+            retry_delay = 14400 if isinstance(exc, YouTubeUploadLimitError) else 3600
+            retry_at = int(time.time()) + retry_delay
+            ctx.repository.record_provider_attempt(
+                ctx.run_id, "youtube", "upload_and_verify",
+                outcome="limit_exceeded" if isinstance(exc, YouTubeUploadLimitError) else "quota_exceeded",
+                error_code=exc.code,
+                error_detail=str(exc),
+            )
+            if not ctx.set_owned_status(
+                JobStatus.WAITING_YOUTUBE_LIMIT,
+                error_code=exc.code,
+                error_detail=str(exc),
+                retry_at=retry_at,
+            ):
+                return ctx.lease_lost_result()
+            _marker(ctx.work_dir, ctx.run_id, active=False)
+            return {
+                "status": JobStatus.WAITING_YOUTUBE_LIMIT.value,
+                "story_id": ctx.story_id,
+                "run_id": ctx.run_id,
+                "channel": ctx.channel_name,
+                "work_dir": str(ctx.work_dir),
+                "retry_at": retry_at,
+                "profiling": ctx.profiler.to_dict(),
+            }
         except Exception as exc:
             ctx.repository.record_provider_attempt(ctx.run_id, "youtube", "upload_and_verify", outcome="failed", error_code=getattr(exc, "code", "youtube_error"), error_detail=str(exc))
             if ctx.directed:
@@ -1330,8 +1373,35 @@ def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
                 return {"status": JobStatus.UPLOAD_UNCONFIRMED.value, "story_id": ctx.story_id, "run_id": ctx.run_id, "channel": ctx.channel_name, "work_dir": str(ctx.work_dir), "profiling": ctx.profiler.to_dict()}
             raise
 
+        if result.get("status") == "WAITING_YOUTUBE_LIMIT" or result.get("status") == JobStatus.WAITING_YOUTUBE_LIMIT.value:
+            retry_delay = int(result.get("retry_after_seconds") or 14400)
+            retry_at = int(time.time()) + retry_delay
+            if not ctx.set_owned_status(
+                JobStatus.WAITING_YOUTUBE_LIMIT,
+                error_code="youtube_upload_limit",
+                error_detail=str(result.get("reason") or "Límite diario de YouTube alcanzado"),
+                retry_at=retry_at,
+            ):
+                return ctx.lease_lost_result()
+            _marker(ctx.work_dir, ctx.run_id, active=False)
+            return {
+                "status": JobStatus.WAITING_YOUTUBE_LIMIT.value,
+                "story_id": ctx.story_id,
+                "run_id": ctx.run_id,
+                "channel": ctx.channel_name,
+                "work_dir": str(ctx.work_dir),
+                "retry_at": retry_at,
+                "profiling": ctx.profiler.to_dict(),
+            }
+
         if result.get("status") == "UPLOAD_UNCONFIRMED":
-            if not ctx.set_owned_status(JobStatus.UPLOAD_UNCONFIRMED, error_code="youtube_unconfirmed", error_detail=str(result.get("reason") or "respuesta ambigua")):
+            retry_at = int(time.time()) + 14400
+            if not ctx.set_owned_status(
+                JobStatus.UPLOAD_UNCONFIRMED,
+                error_code="youtube_unconfirmed",
+                error_detail=str(result.get("reason") or "respuesta ambigua"),
+                retry_at=retry_at,
+            ):
                 return ctx.lease_lost_result()
             _marker(ctx.work_dir, ctx.run_id, active=False)
             return {"status": JobStatus.UPLOAD_UNCONFIRMED.value, "story_id": ctx.story_id, "run_id": ctx.run_id, "channel": ctx.channel_name, "work_dir": str(ctx.work_dir), "profiling": ctx.profiler.to_dict()}
@@ -1420,6 +1490,8 @@ def _handle_pipeline_exception(
         "story_id": ctx.story_id,
         "run_id": ctx.run_id,
         "reason": str(exc),
+        "error": str(exc),
+        "error_msg": str(exc),
         "profiling": ctx.profiler.to_dict(),
     }
 

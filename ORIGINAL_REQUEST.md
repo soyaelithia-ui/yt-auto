@@ -281,3 +281,63 @@ Optimizar las fases de procesamiento para que la cadencia de videos largos alcan
 - Pruebas automatizadas del repositorio: `pytest`
 - Telemetría en vivo del sistema: Base de datos SQLite `/app/data/shorts_queue.db` (tablas `publications`, `runs`, `lane_leases`) y logs de Docker `yt-automation`.
 
+## 2026-09-19T00:32:27Z
+
+Implement an official Model Context Protocol (MCP) server for the `yt-auto` automation system, fully integrating system capabilities (tools, resources, prompts) and establishing an automated Single Source of Truth (SSOT) synchronization mechanism across code, policies, and documentation.
+
+Working directory: /home/moku/.gemini/antigravity-cli/worktrees/yt-auto/implement_mcp_server
+Integrity mode: development
+
+## Requirements
+
+### R1. MCP Server Architecture & Capability Exposure
+Design and implement a production-grade Model Context Protocol (MCP) server utilizing the official Python MCP SDK (`mcp` v2.2.0) with primary stdio transport (and modular SSE readiness). Expose the core system operations without duplicating business logic:
+- **Tools**:
+  - `system_preflight`: Execute system integrity, environment, and credential preflight validation.
+  - `list_lanes` & `get_lane_info`: Query configured production lanes and cadence parameters.
+  - `query_loop_catalog`: Search and filter master video loops by category, orientation, and channel compatibility.
+  - `audit_loop_catalog`: Audit physical assets against database catalog records.
+  - `run_pipeline_dry_run`: Execute fast synthetic test composition (`--lane <lane> -t`) with zero quota usage.
+  - `get_system_status`: Inspect overall health, queue depths, and locks.
+  - `manage_queue`: List pending review items or trigger auto-publish sweeps.
+  - `verify_integrity`: Run repository invariant checks and anti-regression validation.
+- **Resources**:
+  - `channels://{channel_name}/config`: Expose channel configurations (`config/channels/*.json`).
+  - `lanes://catalog`: Expose production lane specifications (`config/lanes.json`).
+  - `system://health`: Expose real-time health metrics.
+- **Prompts**: Standardized operational prompt workflows (preflight diagnostics, channel incident analysis, video QA review).
+Ensure strict input validation, fail-closed error handling, credential sanitization (`[REDACTED]`), and absolute zero Playwright/browser dependencies in pipeline and media paths.
+
+### R2. Policy & Documentation Unification (Single Source of Truth)
+Establish an explicit Single Source of Truth (SSOT) hierarchy for project policies, tool interfaces, and documentation:
+- Eliminate obsolete references, legacy rendering traces, or contradictory rules.
+- Update `README.md`, `PROJECT.md`, `docs/OPERACION.md`, and create comprehensive MCP documentation (`docs/MCP.md`) with usage guides, configuration examples (for Antigravity, Claude Desktop, and CLI clients), and API contracts.
+- Document governance and change management protocols for safely adding, modifying, or deprecating tools and resources.
+
+### R3. Automated Synchronization & Drift Detection
+Implement automated drift detection and synchronization validation:
+- Implement a verification script (`scripts/verify_mcp_sync.py` or equivalent) that validates parity between MCP registered tools, configuration schemas, CLI commands, and documentation.
+- Integrate the sync verification into `./scripts/verify_integrity.sh` or pre-commit hooks to fail fast if code and documentation diverge.
+
+### R4. Security, Invariant & Resource Constraints
+- Strictly adhere to the project resource ceiling: ≤ 2 CPU Cores and ≤ 2.0 GiB RAM peak usage.
+- All composition flows must use stream-copy (`-c:v copy`) where applicable.
+- Zero secrets in memory, logs, or MCP response payloads.
+- Strict project boundary isolation: no operations may read or write outside the `yt-auto` workspace.
+
+## Acceptance Criteria
+
+### MCP Server Compliance & Functionality
+- [ ] The MCP server starts cleanly via stdio transport and passes standard JSON-RPC protocol handshakes (`initialize`, `tools/list`, `resources/list`, `prompts/list`).
+- [ ] All exposed tools execute deterministically, returning structured results with error capture and zero exposed credentials.
+- [ ] Client configuration file template (`mcp_config.json` / `.mcp.json.example`) is provided and verified.
+
+### Automated Testing & Integrity
+- [ ] Automated test suite covering the MCP server, tool execution, resource reading, error handling, and security sanitization (`tests/unit/test_mcp_server.py` or similar) passes 100% via `pytest`.
+- [ ] Drift detection script (`scripts/verify_mcp_sync.py`) runs programmatically and confirms parity between code and documentation.
+- [ ] `./scripts/verify_integrity.sh` exits with code 0 (100% HEALTHY) with zero regressions across all 14 anti-regression tests and invariant checks.
+
+### Documentation & Governance
+- [ ] `docs/MCP.md` provides complete tool catalogs, resource schemas, prompt guides, and contribution rules.
+- [ ] `README.md` and `docs/OPERACION.md` link and describe the MCP server integration and CLI invocation methods.
+

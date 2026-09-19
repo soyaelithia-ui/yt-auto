@@ -160,9 +160,9 @@ def clean_expired_failed_runs(
             min_age_seconds = 0
         else:
             try:
-                min_age_seconds = int(os.environ.get("FAILED_RUN_RETENTION_SECONDS", "86400"))
+                min_age_seconds = int(os.environ.get("FAILED_RUN_RETENTION_SECONDS", "1800"))
             except ValueError:
-                min_age_seconds = 86400
+                min_age_seconds = 1800
     if min_age_seconds < 0:
         return report
     for run_dir in work_dir.iterdir():

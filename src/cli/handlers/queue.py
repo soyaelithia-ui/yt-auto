@@ -62,57 +62,80 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return 0
 
     target_channel = getattr(args, "target_channel", None) or getattr(args, "channel", None)
+    target_lane = getattr(args, "lane", None)
 
     if action == "pause":
-        if not target_channel:
-            print("Error: Especifique el canal a pausar (ej. 'queue pause moku' o '-c moku')", file=sys.stderr)
-            return 2
-        from src.core.domain import canonical_channel
         from src.core.repository import QueueRepository
+        repository = QueueRepository(db_path)
+        repository.initialize()
+        if target_lane:
+            repository.set_lane_paused(target_lane, True, "pausa solicitada por terminal")
+            if getattr(args, "json", False):
+                print(json.dumps({"lane": target_lane, "paused": True}, indent=2))
+            else:
+                print(f"Carril '{target_lane}' pausado.")
+            return 0
+
+        if not target_channel:
+            print("Error: Especifique el canal o --lane a pausar (ej. 'queue pause moku' o '--lane moku-horror-long')", file=sys.stderr)
+            return 2
+        from src.core.channel_profile import ChannelProfileRegistry
+        from src.core.domain import canonical_channel
 
         try:
             ch = canonical_channel(target_channel)
         except (ValueError, KeyError):
-            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: 'moku', 'aelithia'"
+            valid_str = ", ".join(repr(c) for c in ChannelProfileRegistry.list_active_channel_ids())
+            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: {valid_str}"
             if parser is not None:
                 parser.error(msg)
             else:
                 print(f"Error: {msg}", file=sys.stderr)
-                return 2
+            return 2
 
-        repository = QueueRepository(db_path)
-        repository.initialize()
         repository.pause(ch, "pausa solicitada por terminal")
+        ch_val = ch.value if hasattr(ch, "value") else str(ch)
         if getattr(args, "json", False):
-            print(json.dumps({"channel": ch.value, "paused": True}, indent=2))
+            print(json.dumps({"channel": ch_val, "paused": True}, indent=2))
         else:
-            print(f"Canal '{ch.value}' pausado.")
+            print(f"Canal '{ch_val}' pausado.")
         return 0
 
     if action == "resume":
-        if not target_channel:
-            print("Error: Especifique el canal a reanudar (ej. 'queue resume moku' o '-c moku')", file=sys.stderr)
-            return 2
-        from src.core.domain import canonical_channel
         from src.core.repository import QueueRepository
+        repository = QueueRepository(db_path)
+        repository.initialize()
+        if target_lane:
+            repository.set_lane_paused(target_lane, False, None)
+            if getattr(args, "json", False):
+                print(json.dumps({"lane": target_lane, "paused": False}, indent=2))
+            else:
+                print(f"Carril '{target_lane}' reanudado.")
+            return 0
+
+        if not target_channel:
+            print("Error: Especifique el canal o --lane a reanudar (ej. 'queue resume moku' o '--lane moku-horror-long')", file=sys.stderr)
+            return 2
+        from src.core.channel_profile import ChannelProfileRegistry
+        from src.core.domain import canonical_channel
 
         try:
             ch = canonical_channel(target_channel)
         except (ValueError, KeyError):
-            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: 'moku', 'aelithia'"
+            valid_str = ", ".join(repr(c) for c in ChannelProfileRegistry.list_active_channel_ids())
+            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: {valid_str}"
             if parser is not None:
                 parser.error(msg)
             else:
                 print(f"Error: {msg}", file=sys.stderr)
-                return 2
+            return 2
 
-        repository = QueueRepository(db_path)
-        repository.initialize()
         repository.resume(ch)
+        ch_val = ch.value if hasattr(ch, "value") else str(ch)
         if getattr(args, "json", False):
-            print(json.dumps({"channel": ch.value, "paused": False}, indent=2))
+            print(json.dumps({"channel": ch_val, "paused": False}, indent=2))
         else:
-            print(f"Canal '{ch.value}' reanudado.")
+            print(f"Canal '{ch_val}' reanudado.")
         return 0
 
     if action == "activate":
@@ -120,11 +143,13 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
             print("Error: Especifique el canal a activar (ej. 'queue activate moku' o '-c moku')", file=sys.stderr)
             return 2
         from src.channel_manager import activate_channel
+        from src.core.channel_profile import ChannelProfileRegistry
 
         try:
             res = activate_channel(target_channel)
         except (ValueError, KeyError):
-            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: 'moku', 'aelithia'"
+            valid_str = ", ".join(repr(c) for c in ChannelProfileRegistry.list_active_channel_ids())
+            msg = f"Canal desconocido o inválido: {target_channel!r}. Canales válidos: {valid_str}"
             if parser is not None:
                 parser.error(msg)
             else:
