@@ -12,6 +12,15 @@ echo "🔍 [INTEGRITY AUDIT] Checking Repository Invariants & Governance SLA"
 echo "======================================================================"
 
 FAILURES=0
+FAST_MODE=0
+for arg in "$@"; do
+    if [ "$arg" == "--fast" ]; then
+        FAST_MODE=1
+    fi
+done
+if [ "${INTEGRITY_FAST:-0}" == "1" ]; then
+    FAST_MODE=1
+fi
 
 # 1. Check Git Worktrees (Must have zero stale/prunable worktrees)
 git worktree prune
@@ -113,12 +122,16 @@ elif command -v pytest > /dev/null 2>&1; then
     PYTEST_CMD="pytest"
 fi
 
-echo "⏳ Checking test suite collectability across all modules..."
-if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" --collect-only -q > /dev/null 2>&1; then
-    echo "✅ [PASS] Test suite collectability: 100% collectable with zero import errors."
+if [ "$FAST_MODE" -eq 0 ]; then
+    echo "⏳ Checking test suite collectability across all modules..."
+    if [ -n "$PYTEST_CMD" ] && "$PYTEST_CMD" --collect-only -q > /dev/null 2>&1; then
+        echo "✅ [PASS] Test suite collectability: 100% collectable with zero import errors."
+    else
+        echo "❌ [FAIL] Pytest collection errors detected! Unimportable or broken test files present."
+        FAILURES=$((FAILURES + 1))
+    fi
 else
-    echo "❌ [FAIL] Pytest collection errors detected! Unimportable or broken test files present."
-    FAILURES=$((FAILURES + 1))
+    echo "⏩ [SKIP] Fast mode: skipping comprehensive test suite collection."
 fi
 
 echo "⏳ Running automated anti-regression test suite..."
