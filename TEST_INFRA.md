@@ -31,85 +31,85 @@ graph TD
 ```
 
 ### 2.1. Tier 1: Feature Coverage (>=5 tests per feature)
-- **Protocol Handshakes & Server Lifecycle**:
+- **Protocol Handshakes & Server Lifecycle (F01)**:
   - Server factory instantiation (`create_mcp_server()`).
   - Server metadata validation (`name == "yt-auto"`, `version == "2.2.0"`).
   - Tools listing handshake (`server.list_tools()`).
   - Resources listing handshake (`server.list_resources()` / `server.list_resource_templates()`).
   - Prompts listing handshake (`server.list_prompts()`).
-- **Tool 1: `system_preflight`**:
+- **Tool 1: `system_preflight` (F02)**:
   - Happy path preflight execution for channel `moku`.
   - Happy path preflight execution for channel `aelithia`.
   - Disk headroom inspection and reporting.
   - Return contract validation (`ok: bool`, `youtube: dict`, `drive: dict`, `cookies: dict`).
   - Strict absence of raw credential file paths in output.
-- **Tool 2: `list_lanes`**:
+- **Tool 2: `list_lanes` (F03)**:
   - Listing all configured production lanes (6 canonical lanes).
   - Filter by channel `moku`.
   - Filter by channel `aelithia`.
   - Enabled status and cadence structure presence.
   - Resolved voice profile and visual pipeline validation.
-- **Tool 3: `get_lane_info`**:
+- **Tool 3: `get_lane_info` (F04)**:
   - Query existing short lane `moku-scp-shorts`.
   - Query existing long lane `moku-horror-long`.
   - Query existing drama lane `aelithia-drama-shorts`.
   - Validation of duration bounds (`min_sec`, `target_sec`, `max_sec`).
   - Validation of word limits and background audio configuration.
-- **Tool 4: `query_loop_catalog`**:
+- **Tool 4: `query_loop_catalog` (F05)**:
   - Query loops without filter (returns up to limit).
   - Query loops filtered by orientation (`horizontal` vs `vertical`).
   - Query loops filtered by category (`horror`, `drama`, etc.).
   - Query loops filtered by channel compatibility.
   - Pagination / limit boundary enforcement.
-- **Tool 5: `audit_loop_catalog`**:
+- **Tool 5: `audit_loop_catalog` (F06)**:
   - Audit database loop records against filesystem.
   - Verified loops count returned.
   - Quality metrics validation (`longest_black_seconds`, `perceptual_luminance`).
   - Broken / missing loop detection and cleanup reporting.
   - Fail-closed reporting on database inconsistencies.
-- **Tool 6: `run_pipeline_dry_run`**:
+- **Tool 6: `run_pipeline_dry_run` (F07)**:
   - Execution with valid short lane and synthetic topic.
   - Execution with valid long lane and synthetic topic.
   - Verification of zero external quota consumption (`offline_provider_guard`).
   - Stream-copy validation flag verification.
   - Execution summary and timing result return.
-- **Tool 7: `get_system_status`**:
+- **Tool 7: `get_system_status` (F08)**:
   - Full system status retrieval.
   - Story queue counters (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`).
   - Lock status and daemon process inspection (`_is_daemon_running`).
   - Disk free headroom calculation.
   - Heartbeat age and log file size estimation.
-- **Tool 8: `manage_queue`**:
+- **Tool 8: `manage_queue` (F09)**:
   - Action `list` returns current stories queue.
   - Action `pause` on channel `moku` with reason.
   - Action `resume` on channel `moku`.
   - Action `sweep` triggers pending review approvals.
   - Return structure confirms status changes.
-- **Tool 9: `verify_integrity`**:
+- **Tool 9: `verify_integrity` (F10)**:
   - Execution in development mode returns health report.
   - Invariant checks summary (worktrees, docs, browser policy, anti-bloat).
   - Anti-regression test suite status.
   - Verification exit code evaluation.
   - Execution duration logging.
-- **Resource 1: `channels://{channel_name}/config`**:
+- **Resource 1: `channels://{channel_name}/config` (F11)**:
   - Read resource for channel `moku`.
   - Read resource for channel `aelithia`.
   - Verification of `ChannelConfig.public_dict()` schema.
   - Exclusion of `cookies_path` and `youtube_token_path`.
   - Inclusion of `cookies_available` and `youtube_token_available` booleans.
-- **Resource 2: `lanes://catalog`**:
+- **Resource 2: `lanes://catalog` (F12)**:
   - Read resource returns valid JSON.
   - Version specification present (`version == 1`).
   - Defaults present (`fps`, `language`).
   - Lanes list containing all 6 configured production lanes.
   - Content MIME type `application/json`.
-- **Resource 3: `system://health`**:
+- **Resource 3: `system://health` (F13)**:
   - Read resource returns system health metrics.
   - Disk headroom information.
   - Daemon status string.
   - Story queue depth summary.
   - Content MIME type `application/json`.
-- **Prompts (`preflight_diagnostics`, `channel_incident_analysis`, `video_qa_review`)**:
+- **Prompts (`preflight_diagnostics` (F14), `channel_incident_analysis` (F15), `video_qa_review` (F16))**:
   - Prompt listing contains all 3 canonical operational prompts.
   - `preflight_diagnostics` returns structured user prompt with diagnostic steps.
   - `channel_incident_analysis` incorporates target channel and error details.

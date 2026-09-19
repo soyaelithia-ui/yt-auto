@@ -15,25 +15,25 @@
 - **SSOT Documentation**: `docs/MCP.md` (standalone technical guide), updated `README.md`, `docs/OPERACION.md`, and client configurations (`mcp_config.json`, `.mcp.json.example`).
 
 ## Feature Inventory
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | MCP Server Core & Lifecycle | `MCPServer` instantiation with name, version, instructions, and stdio/SSE runner | M1 | Survey |
-| 2 | Tool: system_preflight | Preflight environment, disk, binary, and token checks with fail-closed errors | M1 | Survey |
-| 3 | Tool: list_lanes | Production lane listing with scheduling state and resolved voice profile | M1 | Survey |
-| 4 | Tool: get_lane_info | Deep lane specification, cadence, duration, and visual pipeline specs | M1 | Survey |
-| 5 | Tool: query_loop_catalog | Filter video loop records by category, orientation, and channel compatibility | M1 | Survey |
-| 6 | Tool: audit_loop_catalog | Audit physical MP4 files vs SQLite DB and verify bank_manifest.json metrics | M1 | Survey |
-| 7 | Tool: run_pipeline_dry_run | Synthetic dry run (--lane -t) with zero API quota and stream-copy | M1 | Survey |
-| 8 | Tool: get_system_status | System health, queue counts, process locks, and recent failure logs | M1 | Survey |
-| 9 | Tool: manage_queue | Story queue listing, review pending inspection, channel pause/resume, auto-publish sweep | M1 | Survey |
-| 10 | Tool: verify_integrity | Execute repository integrity script and anti-regression suite | M1 | Survey |
-| 11 | Resource: channels://{channel_name}/config | Sanitized channel profile via `public_dict()`, no secret paths leaked | M1 | Survey |
-| 12 | Resource: lanes://catalog | Expose canonical production lane specifications (config/lanes.json) | M1 | Survey |
-| 13 | Resource: system://health | Real-time health metrics, disk headroom, and lock status | M1 | Survey |
-| 14 | Prompt: preflight_diagnostics | Step-by-step preflight diagnosis and GO/NO-GO workflow | M1 | Survey |
-| 15 | Prompt: channel_incident_analysis | Guided triage workflow for channel failures, error spikes, and paused lanes | M1 | Survey |
-| 16 | Prompt: video_qa_review | In-depth QA review checklist against 10-stage pipeline gatekeeper | M1 | Survey |
-| 17 | Security: Credential Sanitizer | Mask secrets with `[REDACTED]`, sanitize exceptions and output payloads | M1 | Survey |
+| # | ID | Feature | Description | Milestone | Source |
+|---|----|---------|-------------|-----------|--------|
+| 1 | F01 | MCP Server Core & Lifecycle | `MCPServer` instantiation with name, version, instructions, and stdio/SSE runner | M1 | Survey |
+| 2 | F02 | Tool: system_preflight | Preflight environment, disk, binary, and token checks with fail-closed errors | M1 | Survey |
+| 3 | F03 | Tool: list_lanes | Production lane listing with scheduling state and resolved voice profile | M1 | Survey |
+| 4 | F04 | Tool: get_lane_info | Deep lane specification, cadence, duration, and visual pipeline specs | M1 | Survey |
+| 5 | F05 | Tool: query_loop_catalog | Filter video loop records by category, orientation, and channel compatibility | M1 | Survey |
+| 6 | F06 | Tool: audit_loop_catalog | Audit physical MP4 files vs SQLite DB and verify bank_manifest.json metrics | M1 | Survey |
+| 7 | F07 | Tool: run_pipeline_dry_run | Synthetic dry run (--lane -t) with zero API quota and stream-copy | M1 | Survey |
+| 8 | F08 | Tool: get_system_status | System health, queue counts, process locks, and recent failure logs | M1 | Survey |
+| 9 | F09 | Tool: manage_queue | Story queue listing, review pending inspection, channel pause/resume, auto-publish sweep | M1 | Survey |
+| 10 | F10 | Tool: verify_integrity | Execute repository integrity script and anti-regression suite | M1 | Survey |
+| 11 | F11 | Resource: channels://{channel_name}/config | Sanitized channel profile via `public_dict()`, no secret paths leaked | M1 | Survey |
+| 12 | F12 | Resource: lanes://catalog | Expose canonical production lane specifications (config/lanes.json) | M1 | Survey |
+| 13 | F13 | Resource: system://health | Real-time health metrics, disk headroom, and lock status | M1 | Survey |
+| 14 | F14 | Prompt: preflight_diagnostics | Step-by-step preflight diagnosis and GO/NO-GO workflow | M1 | Survey |
+| 15 | F15 | Prompt: channel_incident_analysis | Guided triage workflow for channel failures, error spikes, and paused lanes | M1 | Survey |
+| 16 | F16 | Prompt: video_qa_review | In-depth QA review checklist against 10-stage pipeline gatekeeper | M1 | Survey |
+| 17 | F17 | Security: Credential Sanitizer | Mask secrets with `[REDACTED]`, sanitize exceptions and output payloads | M1 | Survey |
 | 18 | Drift Detection: verify_mcp_sync.py | Script verifying parity between MCPServer registrations, client configs, and docs | M2 | Survey |
 | 19 | Integrity Integration: verify_integrity.sh | Check #9 in verify_integrity.sh running verify_mcp_sync.py | M2 | Survey |
 | 20 | SSOT Documentation: docs/MCP.md | Comprehensive technical guide for tools, resources, prompts, and governance | M3 | Survey |
