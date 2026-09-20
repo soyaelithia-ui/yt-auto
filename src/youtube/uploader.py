@@ -1042,6 +1042,8 @@ def upload_video_via_playwright(
                 from urllib.parse import parse_qs, urlparse
 
                 video_id = parse_qs(urlparse(video_url).query).get("v", [""])[0]
+                if not video_id and "youtu.be" in video_url:
+                    video_id = urlparse(video_url).path.strip("/").split("/")[0]
                 return {
                     "status": "UPLOAD_UNCONFIRMED",
                     "method": "PLAYWRIGHT",
@@ -1126,6 +1128,7 @@ def _normalize_upload_result(
 
     normalized = dict(result or {})
     normalized.setdefault("method", method)
+    normalized.setdefault("channel", channel)
     if normalized.get("status") in {"DRY_RUN", "TEST_MOCK"}:
         return normalized
     try:
