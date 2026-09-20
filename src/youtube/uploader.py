@@ -962,26 +962,45 @@ def upload_video_via_playwright(
                 
                 # 4. Select Not Made for Kids
                 logger.info("Selecting Not Made for Kids...")
-                kids_radio = None
-                selectors = [
+                kids_selectors = [
+                    'tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"] #radioContainer',
                     'tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"]',
-                    'tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MADE_FOR_KIDS"]',
+                    'tp-yt-paper-radio-button:has-text("No, no es contenido") #radioContainer',
                     'tp-yt-paper-radio-button:has-text("No, no es contenido")',
-                    'tp-yt-paper-radio-button:has-text("No, it\'s not made for kids")'
+                    'tp-yt-paper-radio-button:has-text("No, it\'s not made for kids")',
+                    'text="No, no es contenido creado para niños"',
+                    'text="No, it\'s not made for kids"',
                 ]
-                for sel in selectors:
+                selected_kids = False
+                for _k_iter in range(3):
+                    for sel in kids_selectors:
+                        try:
+                            loc = page.locator(sel)
+                            if loc.count() > 0:
+                                loc.first.scroll_into_view_if_needed()
+                                loc.first.click()
+                                page.wait_for_timeout(500)
+                                break
+                        except Exception as e:
+                            logger.debug(f"Kids radio selector '{sel}' failed: {e}")
+
                     try:
-                        loc = page.locator(sel)
-                        if loc.count() > 0:
-                            kids_radio = loc.first
-                            break
-                    except Exception as e:
-                        logger.debug(f"Radio button selector '{sel}' failed: {e}")
-                if not kids_radio:
-                    kids_radio = page.locator('tp-yt-paper-radio-button').nth(1)
-                    
-                kids_radio.scroll_into_view_if_needed()
-                kids_radio.click(force=True)
+                        radio = page.locator('tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"], tp-yt-paper-radio-button:has-text("No, no es contenido")')
+                        if radio.count() > 0:
+                            if radio.first.get_attribute("aria-checked") == "true":
+                                selected_kids = True
+                                logger.info("Not Made for Kids radio successfully verified as checked.")
+                                break
+                            # Evaluate native click inside page context
+                            radio.first.evaluate("el => { el.click(); const rc = el.querySelector('#radioContainer') || el.querySelector('#offRadio'); if (rc) rc.click(); }")
+                            page.wait_for_timeout(500)
+                            if radio.first.get_attribute("aria-checked") == "true":
+                                selected_kids = True
+                                logger.info("Not Made for Kids radio verified as checked via evaluate.")
+                                break
+                    except Exception as k_err:
+                        logger.debug("Kids check error: %s", k_err)
+
                 page.wait_for_timeout(1000)
                 page.screenshot(path=f"{screenshot_dir}/3_metadata.png")
                 
@@ -1002,24 +1021,34 @@ def upload_video_via_playwright(
                 
                 # 8. Select PUBLIC
                 logger.info("Selecting Visibility as PUBLIC...")
-                public_radio = None
-                selectors = [
+                public_selectors = [
+                    'tp-yt-paper-radio-button[name="PUBLIC"] #radioContainer',
                     'tp-yt-paper-radio-button[name="PUBLIC"]',
+                    'tp-yt-paper-radio-button:has-text("Público") #radioContainer',
                     'tp-yt-paper-radio-button:has-text("Público")',
-                    'tp-yt-paper-radio-button:has-text("Public")'
+                    'tp-yt-paper-radio-button:has-text("Public")',
+                    'text="Público"',
+                    'text="Public"',
                 ]
-                for sel in selectors:
+                for psel in public_selectors:
                     try:
-                        loc = page.locator(sel)
+                        loc = page.locator(psel)
                         if loc.count() > 0:
-                            public_radio = loc.first
+                            loc.first.scroll_into_view_if_needed()
+                            loc.first.click()
+                            page.wait_for_timeout(500)
                             break
                     except Exception as e:
-                        logger.debug(f"Public radio selector '{sel}' failed: {e}")
-                if not public_radio:
-                    public_radio = page.locator('tp-yt-paper-radio-button').first
-                    
-                public_radio.click(force=True)
+                        logger.debug(f"Public radio selector '{psel}' failed: {e}")
+
+                try:
+                    pradio = page.locator('tp-yt-paper-radio-button[name="PUBLIC"], tp-yt-paper-radio-button:has-text("Público")')
+                    if pradio.count() > 0 and pradio.first.get_attribute("aria-checked") != "true":
+                        pradio.first.evaluate("el => { el.click(); const rc = el.querySelector('#radioContainer') || el.querySelector('#offRadio'); if (rc) rc.click(); }")
+                        page.wait_for_timeout(500)
+                except Exception as p_err:
+                    logger.debug("Public evaluate click error: %s", p_err)
+
                 page.wait_for_timeout(1000)
                 page.screenshot(path=f"{screenshot_dir}/7_public_selected.png")
                 
