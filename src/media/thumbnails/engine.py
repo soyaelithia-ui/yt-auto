@@ -237,8 +237,8 @@ class ThumbnailEngine:
                 metadata=layout_metadata,
             )
 
-        # Save Final JPEG
-        final_thumb.save(str(out_path), "JPEG", quality=95)
+        # Save Final JPEG with Huffman table optimization for reduced file weight and fast upload
+        final_thumb.save(str(out_path), "JPEG", quality=90, optimize=True)
         logger.info("High-CTR Thumbnail successfully generated at: %s (%dx%d)", out_path, w, h)
         return out_path
 

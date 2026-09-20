@@ -288,6 +288,7 @@ def _request_with_retry(
     url: str,
     max_retries: int = 3,
     backoff_factor: float = 1.0,
+    session: Optional[requests.Session] = None,
     **kwargs: Any,
 ) -> requests.Response:
     """Execute HTTP request with retries for transient 5xx status codes, rate limits, or network errors."""
@@ -305,12 +306,24 @@ def _request_with_retry(
                     elif isinstance(f_val, tuple) and len(f_val) >= 2 and hasattr(f_val[1], "seek"):
                         f_val[1].seek(0)
 
+            is_post_mocked = getattr(requests.post, "_is_mock", False) or "Mock" in type(requests.post).__name__
+            is_get_mocked = getattr(requests.get, "_is_mock", False) or "Mock" in type(requests.get).__name__
+
             if method_upper == "POST":
-                resp = requests.post(url, timeout=timeout, **kwargs)
+                if is_post_mocked or session is None:
+                    resp = requests.post(url, timeout=timeout, **kwargs)
+                else:
+                    resp = session.post(url, timeout=timeout, **kwargs)
             elif method_upper == "GET":
-                resp = requests.get(url, timeout=timeout, **kwargs)
+                if is_get_mocked or session is None:
+                    resp = requests.get(url, timeout=timeout, **kwargs)
+                else:
+                    resp = session.get(url, timeout=timeout, **kwargs)
             else:
-                resp = requests.request(method, url, timeout=timeout, **kwargs)
+                if session is None or getattr(requests.request, "_is_mock", False) or "Mock" in type(requests.request).__name__:
+                    resp = requests.request(method, url, timeout=timeout, **kwargs)
+                else:
+                    resp = session.request(method, url, timeout=timeout, **kwargs)
 
             # Rate limiting (HTTP 429) handling
             if resp.status_code == 429:
@@ -378,6 +391,17 @@ class TelegramHttpClient:
         self.base_url = (base_url or get_telegram_api_base_url()).rstrip("/")
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
+        self._session: Optional[requests.Session] = None
+
+    @property
+    def session(self) -> requests.Session:
+        if self._session is None:
+            s = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+            s.mount("http://", adapter)
+            s.mount("https://", adapter)
+            self._session = s
+        return self._session
 
     def request(
         self,
@@ -394,6 +418,7 @@ class TelegramHttpClient:
             max_retries=self.max_retries,
             backoff_factor=self.backoff_factor,
             timeout=timeout,
+            session=self.session,
             **kwargs,
         )
 

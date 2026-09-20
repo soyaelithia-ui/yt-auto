@@ -415,6 +415,8 @@ def connect(db_path: str | os.PathLike[str], *, read_only: bool = False) -> Iter
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-8000")
     if not read_only:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -612,6 +614,18 @@ def _apply_v5_production_lanes(conn: sqlite3.Connection, applied: list[int]) -> 
         applied.append(5)
 
 
+def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
+    indexes = (
+        "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
+        "CREATE INDEX IF NOT EXISTS idx_runs_channel_status ON runs(channel, status)",
+        "CREATE INDEX IF NOT EXISTS idx_runs_story ON runs(story_id)",
+        "CREATE INDEX IF NOT EXISTS idx_leases_expires ON leases(expires_at)",
+        "CREATE INDEX IF NOT EXISTS idx_stage_logs_run ON stage_logs(run_id)",
+    )
+    for idx_sql in indexes:
+        conn.execute(idx_sql)
+
+
 def migrate_database(
     db_path: str | os.PathLike[str],
     *,
@@ -628,6 +642,7 @@ def migrate_database(
             _apply_v3_scene_assets(conn, applied)
             _apply_v4_observability(conn, applied)
             _apply_v5_production_lanes(conn, applied)
+            _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry
             active_channel_ids = tuple(ChannelProfileRegistry.list_active_channel_ids())
