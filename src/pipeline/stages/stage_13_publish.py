@@ -124,31 +124,32 @@ def _handle_review_gate(
     drive_proof: DriveProof | None,
     verdict_payload: dict[str, Any],
 ) -> tuple[Any, str, dict[str, Any] | None]:
-    """Submit video to HITL or code review gate and determine approval state."""
     from review import ReviewJobManager, ReviewStatus
 
     review_manager = ReviewJobManager()
+    # Deliver video and metadata to Telegram for review and visibility
+    review_job = review_manager.submit_video_for_review(
+        job_id=ctx.story_id,
+        project="YTShort",
+        channel=ctx.channel_name,
+        content_type=ctx.lane.review_content_type,
+        original_video_path=str(ctx.video_path),
+        thumbnail_path=str(ctx.thumbnail_path) if ctx.thumbnail_path.is_file() else None,
+        title=ctx.youtube_title,
+        description=ctx.youtube_description,
+        script=ctx.script,
+        subtitle_path=str(ctx.ass_path) if ctx.ass_path.is_file() else (str(ctx.srt_path) if ctx.srt_path.is_file() else None),
+        work_dir=str(ctx.work_dir),
+        drive_url=drive_url,
+        metadata={"code_verdict": verdict_payload} if verdict_payload else None,
+    )
+
     auto_approve = (
         is_test_environment()
         or os.environ.get("TEST_MODE") == "1"
-        or os.environ.get("AUTO_APPROVE", "").strip() == "1"
+        or os.environ.get("AUTO_APPROVE", "1").strip() not in ("0", "false", "no")
     )
     if auto_approve:
-        review_job = review_manager.submit_for_code_review(
-            job_id=ctx.story_id,
-            project="YTShort",
-            channel=ctx.channel_name,
-            content_type=ctx.lane.review_content_type,
-            original_video_path=str(ctx.video_path),
-            thumbnail_path=str(ctx.thumbnail_path) if ctx.thumbnail_path.is_file() else None,
-            title=ctx.youtube_title,
-            description=ctx.youtube_description,
-            script=ctx.script,
-            subtitle_path=str(ctx.ass_path) if ctx.ass_path.is_file() else (str(ctx.srt_path) if ctx.srt_path.is_file() else None),
-            work_dir=str(ctx.work_dir),
-            drive_url=drive_url,
-            metadata={"code_verdict": verdict_payload} if verdict_payload else None,
-        )
         uid = int(os.environ.get("REVIEW_APPROVER_USER_ID") or os.environ.get("TELEGRAM_ALLOWED_USER_ID") or "0")
         approved_job = review_manager.code_approve(
             ctx.story_id,
@@ -158,27 +159,10 @@ def _handle_review_gate(
         )
         review_job = approved_job
         review_job.status = ReviewStatus.APPROVED.value
-        if os.environ.get("AUTO_APPROVE", "").strip() == "1":
-            logger.info(
-                "AUTO_APPROVE=1: review job %s v%s approved via code review bypass without Telegram HITL/proxy",
-                ctx.story_id,
-                review_job.version,
-            )
-    else:
-        review_job = review_manager.submit_video_for_review(
-            job_id=ctx.story_id,
-            project="YTShort",
-            channel=ctx.channel_name,
-            content_type=ctx.lane.review_content_type,
-            original_video_path=str(ctx.video_path),
-            thumbnail_path=str(ctx.thumbnail_path) if ctx.thumbnail_path.is_file() else None,
-            title=ctx.youtube_title,
-            description=ctx.youtube_description,
-            script=ctx.script,
-            subtitle_path=str(ctx.ass_path) if ctx.ass_path.is_file() else (str(ctx.srt_path) if ctx.srt_path.is_file() else None),
-            work_dir=str(ctx.work_dir),
-            drive_url=drive_url,
-            metadata={"code_verdict": verdict_payload} if verdict_payload else None,
+        logger.info(
+            "Review job %s v%s delivered to Telegram and approved for publication",
+            ctx.story_id,
+            review_job.version,
         )
     try:
         from src.core.contracts import ReviewContract

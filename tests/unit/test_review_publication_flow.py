@@ -101,6 +101,53 @@ def test_pending_review_never_calls_drive_or_youtube(monkeypatch, tmp_path):
     youtube.assert_not_called()
 
 
+def test_auto_approve_delivers_to_telegram_and_publishes(monkeypatch, tmp_path):
+    repository, manager = _render_fixture(monkeypatch, tmp_path)
+    monkeypatch.setenv("TEST_MODE", "0")
+    monkeypatch.setenv("AUTO_APPROVE", "1")
+    monkeypatch.setattr("src.pipeline.is_test_environment", lambda: False)
+
+    job_mock = SimpleNamespace(status="PENDING_REVIEW", version=1, delivery_error=None)
+    approved_mock = SimpleNamespace(status="APPROVED", version=1, delivery_error=None)
+    manager.submit_video_for_review.return_value = job_mock
+    manager.code_approve.return_value = approved_mock
+    monkeypatch.setattr("review.ReviewJobManager", lambda: manager)
+
+    drive_proof = SimpleNamespace(
+        file_id="drive-123", name="vid.mp4", size_bytes=100, folder_id="fld", exists=True
+    )
+    drive = MagicMock(return_value=drive_proof)
+    def mock_upload(*args, **kwargs):
+        vid = "yt-test-id"
+        return {
+            "status": "PUBLISHED",
+            "video_id": vid,
+            "url": f"https://www.youtube.com/watch?v={vid}",
+            "method": "api",
+            "channel": "moku",
+            "visibility": "public",
+            "thumbnail_confirmed": True,
+            "verified": True,
+            "title": args[1] if len(args) > 1 else kwargs.get("title", "Titulo"),
+            "description": args[2] if len(args) > 2 else kwargs.get("description", "Descripcion"),
+        }
+    upload_mock = MagicMock(side_effect=mock_upload)
+    monkeypatch.setattr("src.drive.upload_to_drive_verified", drive)
+    monkeypatch.setattr("src.youtube.uploader.upload_video", upload_mock)
+
+    result = run_pipeline_once(
+        channel="moku", db_path=str(repository.db_path), story_id="review-job"
+    )
+
+    # 1. Video MUST be delivered to Telegram
+    manager.submit_video_for_review.assert_called_once()
+    # 2. Video MUST be approved
+    manager.code_approve.assert_called_once()
+    # 3. Video MUST be published to YouTube
+    upload_mock.assert_called_once()
+    assert result["status"] == "PUBLISHED"
+
+
 def test_generate_only_stops_at_rendered_without_remote_calls(monkeypatch, tmp_path):
     repository, manager = _render_fixture(monkeypatch, tmp_path)
     submit = MagicMock()

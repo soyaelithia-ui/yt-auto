@@ -41,7 +41,7 @@ DEFAULT_MEDIA_TIMEOUT_SECONDS = 1800                  # 30 minutes for large 2GB
 # Review-proxy encode knobs: the proxy is a review-only artifact, so a low
 # fps, ultrafast preset, and optimal thread scaling keep transcode latency low.
 PROXY_FPS = int(os.environ.get("TELEGRAM_PROXY_FPS", "15"))
-PROXY_THREADS = int(os.environ.get("TELEGRAM_PROXY_THREADS", "0"))
+PROXY_THREADS = int(os.environ.get("TELEGRAM_PROXY_THREADS", "2"))
 PROXY_PRESET = os.environ.get("TELEGRAM_PROXY_PRESET", "ultrafast")
 
 
