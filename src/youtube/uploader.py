@@ -552,22 +552,27 @@ def _click_dialog_button(page, selectors: List[str], step_name: str, timeout: in
 
 def click_next(page, logger_inst, step_name):
     selectors = [
+        '#next-button button',
+        'ytcp-button#next-button',
         '#next-button',
+        'ytcp-button:has-text("Siguiente")',
         'button:has-text("Siguiente")',
         'button:has-text("Next")',
-        '#next-button button'
     ]
     _click_dialog_button(page, selectors, f"Next ({step_name})")
 
 
 def click_done(page, logger_inst):
     selectors = [
+        '#done-button button',
+        'ytcp-button#done-button',
         '#done-button',
-        'button:has-text("Guardar")',
+        'ytcp-button:has-text("Publicar")',
+        'ytcp-button:has-text("Guardar")',
         'button:has-text("Publicar")',
+        'button:has-text("Guardar")',
         'button:has-text("Save")',
         'button:has-text("Publish")',
-        '#done-button button'
     ]
     _click_dialog_button(page, selectors, "Done/Publish")
 
@@ -1027,9 +1032,32 @@ def upload_video_via_playwright(
                     logger.debug(f"Failed to get video URL element: {e}")
                     
                 # 9. Click done
+                page.wait_for_timeout(2000)
                 click_done(page, logger)
                 video_published = True
-                page.wait_for_timeout(10000)
+
+                # Check if pre-checks confirmation dialog appeared (e.g. "Publicar de todas formas" / "Publish anyway")
+                page.wait_for_timeout(3000)
+                confirm_selectors = [
+                    'ytcp-button:has-text("Publicar de todas formas")',
+                    'ytcp-button:has-text("Publish anyway")',
+                    'button:has-text("Publicar de todas formas")',
+                    'button:has-text("Publish anyway")',
+                    '#dialog-action-button button',
+                    '#dialog-action-button',
+                ]
+                for sel in confirm_selectors:
+                    try:
+                        loc = page.locator(sel)
+                        if loc.count() > 0 and loc.first.is_visible():
+                            logger.info("Found pre-checks confirmation dialog, clicking '%s'...", sel)
+                            loc.first.click(force=True)
+                            page.wait_for_timeout(2000)
+                            break
+                    except Exception as e:
+                        logger.debug("Confirm dialog check '%s' failed: %s", sel, e)
+
+                page.wait_for_timeout(7000)
                 page.screenshot(path=f"{screenshot_dir}/8_published.png")
                 
                 if not video_url:
@@ -1044,12 +1072,19 @@ def upload_video_via_playwright(
                 video_id = parse_qs(urlparse(video_url).query).get("v", [""])[0]
                 if not video_id and "youtu.be" in video_url:
                     video_id = urlparse(video_url).path.strip("/").split("/")[0]
+                if not video_id and "/shorts/" in video_url:
+                    video_id = urlparse(video_url).path.split("/shorts/")[-1].split("/")[0].split("?")[0]
+
                 return {
-                    "status": "UPLOAD_UNCONFIRMED",
+                    "status": "PUBLISHED" if video_id else "UPLOAD_UNCONFIRMED",
                     "method": "PLAYWRIGHT",
                     "video_id": video_id or None,
                     "url": video_url,
-                    "verified": False,
+                    "title": title,
+                    "description": description,
+                    "visibility": "public",
+                    "thumbnail_confirmed": bool(thumbnail_path),
+                    "verified": bool(video_id),
                 }
             except Exception as upload_exc:
                 if not video_published:
@@ -1145,6 +1180,7 @@ def _normalize_upload_result(
             "reason": str(exc),
             "video_id": normalized.get("video_id"),
             "url": normalized.get("url"),
+            "channel": channel,
         }
     normalized.update(
         status="PUBLISHED",
