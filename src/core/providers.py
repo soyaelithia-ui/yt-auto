@@ -228,9 +228,17 @@ def publication_proof_from_response(
         thumbnail_confirmed=bool(response.get("thumbnail_confirmed")),
     )
     proof.validate()
-    supplied_url = str(response.get("url") or "")
+    supplied_url = str(response.get("url") or "").strip()
     if supplied_url and supplied_url != proof.url:
-        raise ProviderValidationError("La URL devuelta no deriva del video_id")
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(supplied_url)
+        extracted_id = parse_qs(parsed.query).get("v", [""])[0]
+        if not extracted_id and "youtu.be" in (parsed.netloc or ""):
+            extracted_id = parsed.path.strip("/").split("/")[0]
+        if not extracted_id and "/shorts/" in (parsed.path or ""):
+            extracted_id = parsed.path.split("/shorts/")[-1].split("/")[0].split("?")[0]
+        if extracted_id != proof.video_id:
+            raise ProviderValidationError("La URL devuelta no deriva del video_id")
     return proof
 
 

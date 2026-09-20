@@ -165,6 +165,35 @@ def test_publication_requires_every_confirmed_field(tmp_path):
             expected_description="Descripción",
         )
 
+    # Valid shorts URL with parameters
+    good_shorts = dict(
+        video_id="abc123XYZ",
+        url="https://youtube.com/shorts/abc123XYZ?feature=share",
+        channel="moku",
+        visibility="public",
+        title="Título",
+        description="Descripción",
+        thumbnail_confirmed=True,
+        verified=True,
+    )
+    proof_shorts = publication_proof_from_response(
+        good_shorts,
+        expected_channel="moku",
+        expected_title="Título",
+        expected_description="Descripción",
+    )
+    assert proof_shorts.video_id == "abc123XYZ"
+
+    # Mismatched URL video_id
+    bad_url = dict(good_shorts, url="https://youtube.com/shorts/otherVideoId")
+    with pytest.raises(ProviderValidationError):
+        publication_proof_from_response(
+            bad_url,
+            expected_channel="moku",
+            expected_title="Título",
+            expected_description="Descripción",
+        )
+
 
 def test_language_alias_and_similarity_gates():
     text = (

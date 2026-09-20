@@ -1150,7 +1150,7 @@ def upload_video_via_playwright(
                     "status": "PUBLISHED" if video_id else "UPLOAD_UNCONFIRMED",
                     "method": "PLAYWRIGHT",
                     "video_id": video_id or None,
-                    "url": f"https://youtube.com/shorts/{video_id}" if video_id and "/shorts/" in video_url else video_url,
+                    "url": f"https://www.youtube.com/watch?v={video_id}" if video_id else video_url,
                     "title": title,
                     "description": description,
                     "visibility": "public",
