@@ -76,6 +76,20 @@ def _migrate_add_metadata(db_path: str) -> None:
         conn.execute("ALTER TABLE review_jobs ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
 
 
+REVIEW_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status)",
+    "CREATE INDEX IF NOT EXISTS idx_review_jobs_msg ON review_jobs(telegram_message_id)",
+    "CREATE INDEX IF NOT EXISTS idx_review_jobs_created ON review_jobs(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_review_jobs_job_status ON review_jobs(job_id, status)",
+)
+
+
+def _ensure_review_indexes(db_path: str) -> None:
+    with get_db_connection(db_path) as conn:
+        for idx in REVIEW_INDEXES:
+            conn.execute(idx)
+
+
 def init_review_db(db_path: str | os.PathLike[str]) -> None:
     path_or_str = validate_db_path(db_path)
     if str(path_or_str) != ":memory:":
@@ -85,10 +99,16 @@ def init_review_db(db_path: str | os.PathLike[str]) -> None:
     with sqlite3.connect(str(path_or_str), timeout=30.0) as conn:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=15000;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
+        conn.execute("PRAGMA cache_size=-8000;")
         conn.execute(REVIEW_SCHEMA)
+        for idx in REVIEW_INDEXES:
+            conn.execute(idx)
         conn.commit()
     _migrate_legacy_schema(str(path_or_str))
     _migrate_add_metadata(str(path_or_str))
+    _ensure_review_indexes(str(path_or_str))
 
 
 @contextmanager
@@ -97,8 +117,10 @@ def get_db_connection(db_path: str | os.PathLike[str]) -> Iterator[sqlite3.Conne
     path_or_str = validate_db_path(db_path)
     conn = sqlite3.connect(str(path_or_str), timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA busy_timeout=15000;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA temp_store=MEMORY;")
+    conn.execute("PRAGMA cache_size=-8000;")
     try:
         yield conn
         conn.commit()
@@ -332,8 +354,9 @@ class ReviewStateStore:
         try:
             conn = sqlite3.connect(self.db_path, timeout=30.0)
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA busy_timeout=15000;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.execute("PRAGMA temp_store=MEMORY;")
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT * FROM review_jobs WHERE job_id = ? AND version = ?",

@@ -758,7 +758,7 @@ def generate_pil_thumbnail(
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    img.save(str(out), format="JPEG", quality=90)
+    img.save(str(out), format="JPEG", quality=90, optimize=True)
     return str(out)
 
 
@@ -1130,7 +1130,7 @@ def compose_video(
                                         )
                                     im_fit = _apply_channel_overlays(im_fit, channel)
                                     im_fit = _apply_channel_grade(im_fit, channel)
-                                    im_fit.save(prescaled_p, format="JPEG", quality=92)
+                                    im_fit.save(prescaled_p, format="JPEG", quality=90, optimize=True)
                                     for layer in layers:
                                         name = Path(layer).name
                                         if name not in overlays_applied:
@@ -1150,7 +1150,7 @@ def compose_video(
                                         im.draft("RGB", (scale_w, scale_h))
                                     im_rgb = im.convert("RGB")
                                     im_fit = ImageOps.fit(im_rgb, (scale_w, scale_h), method=Image.Resampling.BICUBIC)
-                                    im_fit.save(prescaled_p, format="JPEG", quality=92)
+                                    im_fit.save(prescaled_p, format="JPEG", quality=90, optimize=True)
                                 processed_sources.append(prescaled_p)
                                 continue
                         except Exception:

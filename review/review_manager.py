@@ -135,6 +135,14 @@ class ReviewJobManager:
         meta = dict(metadata or {})
         if drive_url:
             meta["drive_url"] = str(drive_url)
+        if thumbnail_path:
+            meta.setdefault("thumbnail_path", str(thumbnail_path))
+        if subtitle_path:
+            meta.setdefault("subtitle_path", str(subtitle_path))
+        if work_dir:
+            meta.setdefault("work_dir", str(work_dir))
+        if script:
+            meta.setdefault("script_len_chars", len(script))
         job = ReviewJob(
             job_id=job_id,
             project=project,
