@@ -20,10 +20,11 @@ import sys
 from pathlib import Path
 
 # If not running in repo's .venv and .venv exists, transparently re-exec with .venv python
-_repo_venv_py = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python3"
-if _repo_venv_py.is_file() and sys.executable != str(_repo_venv_py) and os.environ.get("MCP_REEXEC") != "1":
-    os.environ["MCP_REEXEC"] = "1"
-    os.execv(str(_repo_venv_py), [str(_repo_venv_py)] + sys.argv)
+if __name__ == "__main__":
+    _repo_venv_py = (Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python3").resolve()
+    if _repo_venv_py.is_file() and Path(sys.executable).resolve() != _repo_venv_py and os.environ.get("MCP_REEXEC") != "1":
+        os.environ["MCP_REEXEC"] = "1"
+        os.execv(str(_repo_venv_py), [str(_repo_venv_py)] + sys.argv)
 
 import asyncio
 import json

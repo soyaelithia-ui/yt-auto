@@ -10,15 +10,75 @@ from pathlib import Path
 import pytest
 
 
+_CATALOG_MEDIA_MODULES = {
+    "test_challenger_m1_empirical",
+    "test_challenger_m1_2",
+    "test_loops_bank",
+}
+
+_STRESS_MODULES = {
+    "test_m2_challenger_stress",
+}
+
+_DOMAIN_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("mcp", ("mcp",)),
+    ("audio", ("audio", "voice", "synth", "tts")),
+    ("media", (
+        "video", "visual", "loop", "scene", "thumbnail", "thumb", "subtitle",
+        "subtitles", "svg", "analog", "compositor", "ken_burns", "ctr", "image",
+        "m2_challenger", "procedural_math", "ffmpeg", "compose_streamed", "xfade",
+        "h264", "font_vendoring", "camera_path", "media_integrity", "scenic",
+        "luminance", "title_card", "catalog_asset", "challenger_m1", "challenger_m2",
+    )),
+    ("narrative", (
+        "narrative", "script", "curator", "story", "beats", "adaptation", "archetype",
+        "agent", "llm", "seo", "topic", "shot_mix", "niche", "outro", "sanitizer",
+        "scraper", "ai_first", "editorial", "narration_hooks", "cadence", "lore",
+        "template", "remediation_edge_cases", "director",
+    )),
+    ("review", ("telegram", "review", "auto_approve", "auto_publish", "publication")),
+    ("observability", ("observability", "ops", "profiling", "retention", "scoring", "analytics", "quality_audit", "healthcheck")),
+    ("pipeline", (
+        "pipeline", "daemon", "cli", "process", "watchdog", "resource", "runonce",
+        "docker", "antigravity", "lifecycle", "youtube_control", "youtube_uploader",
+        "ingest_quality", "stage9_mock",
+    )),
+    ("core", (
+        "core", "channel", "channels", "db", "multichannel", "queue", "repository",
+        "lane", "lanes", "migration", "purge", "cookies", "cookie", "drive",
+        "google_auth", "checkpoints", "cleaner", "resilience", "resolution", "errors",
+        "architectural", "api_health", "branding", "audit_remediation", "harness_m1",
+        "runtime_profiles", "v3_1_architecture", "anti_regression", "security",
+        "docs_integrity", "live_rss", "d2_timing",
+    )),
+]
+
+
 def pytest_collection_modifyitems(config, items):
-    """Keep explicitly live scenarios out of the normal local suite."""
-    if os.environ.get("RUN_LIVE_TESTS") == "1":
-        return
+    """Keep explicitly live scenarios out of normal local suite and assign domain & lifecycle tags."""
+    run_live = os.environ.get("RUN_LIVE_TESTS") == "1"
     skip_live = pytest.mark.skip(
         reason="Prueba live: requiere habilitación consciente con RUN_LIVE_TESTS=1"
     )
+
     for item in items:
-        if item.get_closest_marker("live"):
+        mod_name = Path(item.fspath).stem.lower()
+
+        # Empirical catalog loops requiring uncommitted local production assets
+        if any(target in mod_name for target in _CATALOG_MEDIA_MODULES):
+            item.add_marker(pytest.mark.catalog_media)
+
+        # Stress tests with high computational/memory soak
+        if any(target in mod_name for target in _STRESS_MODULES):
+            item.add_marker(pytest.mark.stress)
+
+        # Domain marker classification
+        for domain, keywords in _DOMAIN_RULES:
+            if any(kw in mod_name for kw in keywords):
+                item.add_marker(getattr(pytest.mark, domain))
+                break
+
+        if not run_live and item.get_closest_marker("live"):
             item.add_marker(skip_live)
 
 
