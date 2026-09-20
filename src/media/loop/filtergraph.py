@@ -136,7 +136,7 @@ class LoopFilterGraphMixin:
             ducking_release_ms=kwargs.get("ducking_release_ms", 350.0),
             lowpass_freq=kwargs.get("lowpass_freq", 12000),
             master_loudness=kwargs.get("master_loudness", True),
-            target_lufs=kwargs.get("target_lufs", -16.0),
+            target_lufs=kwargs.get("target_lufs", -14.0),
             max_tp=kwargs.get("max_tp", -1.5),
             lra=kwargs.get("lra", 11.0),
         )
@@ -252,7 +252,7 @@ class LoopFilterGraphMixin:
             ducking_release_ms=kwargs.get("ducking_release_ms", 350.0),
             lowpass_freq=kwargs.get("lowpass_freq", 12000),
             master_loudness=kwargs.get("master_loudness", True),
-            target_lufs=kwargs.get("target_lufs", -16.0),
+            target_lufs=kwargs.get("target_lufs", -14.0),
             max_tp=kwargs.get("max_tp", -1.5),
             lra=kwargs.get("lra", 11.0),
         )

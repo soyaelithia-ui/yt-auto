@@ -1061,6 +1061,48 @@ def upload_video_via_playwright(
                 page.screenshot(path=f"{screenshot_dir}/8_published.png")
                 
                 if not video_url:
+                    post_selectors = [
+                        'ytcp-video-share-dialog a',
+                        'a.ytcp-video-share-dialog',
+                        '#share-url',
+                        'a[href*="/shorts/"]',
+                        'a[href*="youtu.be"]',
+                        'a[href*="youtube.com/watch"]',
+                        'a.style-scope.ytcp-video-info',
+                    ]
+                    for psel in post_selectors:
+                        try:
+                            loc = page.locator(psel)
+                            if loc.count() > 0:
+                                val = loc.first.get_attribute("href") or loc.first.inner_text()
+                                if val and ("youtu.be" in val or "youtube.com" in val):
+                                    video_url = val.strip()
+                                    logger.info("Captured post-publish video URL from selector '%s': %s", psel, video_url)
+                                    break
+                        except Exception as p_err:
+                            logger.debug("Post-publish selector '%s' failed: %s", psel, p_err)
+
+                if not video_url:
+                    try:
+                        import re
+                        body_text = page.locator("body").inner_text()
+                        match = re.search(r"https?://(?:www\.)?(?:youtu\.be/|youtube\.com/(?:shorts/|watch\?v=))([a-zA-Z0-9_-]+)", body_text)
+                        if match:
+                            video_url = match.group(0)
+                            logger.info("Captured post-publish video URL from page text: %s", video_url)
+                    except Exception as body_err:
+                        logger.debug("Page text regex extraction failed: %s", body_err)
+
+                # Dismiss post-publish dialog if close button exists
+                try:
+                    close_btn = page.locator('ytcp-button:has-text("Cerrar"), button:has-text("Cerrar"), button:has-text("Close")')
+                    if close_btn.count() > 0 and close_btn.first.is_visible():
+                        close_btn.first.click(force=True)
+                        page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+
+                if not video_url:
                     return {
                         "status": "UPLOAD_UNCONFIRMED",
                         "method": "PLAYWRIGHT",
@@ -1079,7 +1121,7 @@ def upload_video_via_playwright(
                     "status": "PUBLISHED" if video_id else "UPLOAD_UNCONFIRMED",
                     "method": "PLAYWRIGHT",
                     "video_id": video_id or None,
-                    "url": video_url,
+                    "url": f"https://youtube.com/shorts/{video_id}" if video_id and "/shorts/" in video_url else video_url,
                     "title": title,
                     "description": description,
                     "visibility": "public",

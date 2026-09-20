@@ -51,7 +51,7 @@ def stage_05_tts_synthesis(ctx: PipelineContext) -> None:
             try:
                 mastered = lib.tts.master_voice_audio(
                     ctx.audio_path,
-                    target_lufs=-16.0,
+                    target_lufs=-14.0,
                     true_peak_dbtp=-1.5,
                 )
                 if mastered != ctx.audio_path:
