@@ -71,17 +71,23 @@ def test_pipeline_coerces_director_to_loop_without_force_multiscene():
 def test_pipeline_rejects_slow_hot_path_literal():
     """Multi-scene render must not hardcode preset=slow (CPU disaster)."""
     src = Path("src/pipeline.py").read_text(encoding="utf-8")
+    stage_render_src = Path("src/pipeline/stages/stage_09_render.py").read_text(encoding="utf-8")
     assert 'preset="slow"' not in src
-    assert "default_render_preset()" in src
+    assert 'preset="slow"' not in stage_render_src
+    assert "default_render_preset()" in stage_render_src
 
 
 def test_stream_copy_policy_muxes_captions_never_burns():
     """Loop path always stream-copies; captions mux, they do not block -c:v copy."""
     src = Path("src/pipeline.py").read_text(encoding="utf-8")
-    assert "stream_copy_mode = True" in src
-    assert "stream_copy=stream_copy_mode" in src
-    assert "include_subtitles=mux_subtitles" in src
+    stage_loop_src = Path("src/pipeline/stages/stage_08_loop.py").read_text(encoding="utf-8")
+    stage_render_src = Path("src/pipeline/stages/stage_09_render.py").read_text(encoding="utf-8")
+    assert "stream_copy_mode = True" in stage_loop_src
+    assert "stream_copy=stream_copy_mode" in stage_render_src
+    assert "include_subtitles=mux_subtitles" in stage_render_src
     assert "burn_subtitles" not in src
+    assert "burn_subtitles" not in stage_loop_src
+    assert "burn_subtitles" not in stage_render_src
     assert 'stream_copy_mode = bool(not burn_subtitles)' not in src
 
 

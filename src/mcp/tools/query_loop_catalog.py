@@ -44,7 +44,7 @@ def register_query_loop_catalog_tool(server: MCPServer) -> None:
         ] = 20,
     ) -> Dict[str, Any]:
         try:
-            if orientation and orientation not in ("vertical", "horizontal"):
+            if orientation is not None and orientation not in ("vertical", "horizontal"):
                 raise ToolError(f"Invalid orientation '{orientation}'. Must be 'vertical' or 'horizontal'.")
 
             if limit <= 0:

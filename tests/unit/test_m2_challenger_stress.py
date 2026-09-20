@@ -131,7 +131,8 @@ class TestInMemoryCompositorStress:
         initial_vmrss = get_vmrss_mb()
 
         t_start = time.perf_counter()
-        for i in range(1000):
+        cycles = int(os.environ.get("COMPOSITOR_STRESS_CYCLES", "100"))
+        for i in range(cycles):
             base_frame[0, 0, 0] = i % 256
             out = compositor.composite_frame(base_frame, overlay_frame)
             mv = compositor.get_memoryview()

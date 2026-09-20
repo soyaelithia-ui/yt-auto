@@ -91,7 +91,6 @@ def _stage_01_claim_lease(
     profiler: PipelineProfiler,
 ) -> tuple[ClaimedLeaseContext | dict[str, Any] | None, dict[str, Any] | None]:
     """Stage 1: Initialize repository, recover expired leases, claim story, resolve lane."""
-    _ = CanonicalStage.CLAIM_LEASE
     target = _dispatch_stage("_stage_01_claim_lease", stage_01_claim_lease, _stage_01_claim_lease)
     return target(
         channel_key=channel_key,
@@ -109,86 +108,61 @@ def _stage_01_claim_lease(
 
 def _stage_02_ingest_translate(ctx: RunContext) -> None:
     """Stage 2: Spanish source normalization, multistory gathering, and script curation."""
-    _ = CanonicalStage.INGEST_TRANSLATE
     _dispatch_stage("_stage_02_ingest_translate", stage_02_ingest_translate, _stage_02_ingest_translate)(ctx)
 
 
 def _stage_03_editorial_barrier(ctx: RunContext) -> None:
     """Stage 3: Editorial barrier, beat extraction, pre-TTS validation, and script artifact persistence."""
-    _ = CanonicalStage.EDITORIAL_BARRIER
     _dispatch_stage("_stage_03_editorial_barrier", stage_03_editorial_barrier, _stage_03_editorial_barrier)(ctx)
 
 
 def _stage_04_mood_theme(ctx: RunContext) -> None:
     """Stage 4: Visual plan planning, shot pacing, and background audio resolution."""
-    _ = CanonicalStage.MOOD_THEME
-    from src.agents.script_curator import CinematicScriptCuratorAgent
-    from src.agents.scene_planner import ScenePlannerCompositorAgent
-
-    _ = (CinematicScriptCuratorAgent, ScenePlannerCompositorAgent)
     _dispatch_stage("_stage_04_mood_theme", stage_04_mood_theme, _stage_04_mood_theme)(ctx)
 
 
 def _stage_05_tts_synthesis(ctx: RunContext) -> None:
     """Stage 5: Voice audio generation via TTS and optional EBU R128 mastering."""
-    _ = CanonicalStage.TTS_SYNTHESIS
     _dispatch_stage("_stage_05_tts_synthesis", stage_05_tts_synthesis, _stage_05_tts_synthesis)(ctx)
 
 
 def _stage_06_duration_alignment(ctx: RunContext) -> None:
     """Stage 6: Re-condensation (shorts) or auto-expansion (longform) to align duration."""
-    _ = CanonicalStage.DURATION_ALIGNMENT
     _dispatch_stage("_stage_06_duration_alignment", stage_06_duration_alignment, _stage_06_duration_alignment)(ctx)
 
 
 def _stage_07_subtitle_generation(ctx: RunContext) -> None:
     """Stage 7: Subtitle creation (ASS & SRT) and grammar/syntax validation if active."""
-    _ = CanonicalStage.SUBTITLE_GENERATION
     _dispatch_stage("_stage_07_subtitle_generation", stage_07_subtitle_generation, _stage_07_subtitle_generation)(ctx)
 
 
 def _stage_08_loop_scene(ctx: RunContext) -> None:
     """Stage 8: Build scene manifest and resolve stream-copy / subtitle mux flags."""
-    _ = CanonicalStage.LOOP_SCENE
-    stream_copy_mode = True
-    _ = stream_copy_mode
     _dispatch_stage("_stage_08_loop_scene", stage_08_loop_scene, _stage_08_loop_scene)(ctx)
 
 
 def _stage_09_video_rendering(ctx: RunContext) -> None:
     """Stage 9: Video composition via stream-copy or MultiSceneCompositor."""
-    _ = CanonicalStage.VIDEO_RENDERING
-    from src.media.encode_defaults import default_render_preset
-
-    stream_copy_mode = ctx.stream_copy_mode
-    mux_subtitles = ctx.mux_subtitles
-    if False:
-        default_render_preset()
-        dict(stream_copy=stream_copy_mode, include_subtitles=mux_subtitles)
     _dispatch_stage("_stage_09_video_rendering", stage_09_video_rendering, _stage_09_video_rendering)(ctx)
 
 
 def _stage_10_qa_gating(ctx: RunContext) -> None:
     """Stage 10: Automated QA gating (validate_prepublication) and RENDERED status transition."""
-    _ = CanonicalStage.QA_GATING
     _dispatch_stage("_stage_10_qa_gating", stage_10_qa_gating, _stage_10_qa_gating)(ctx)
 
 
 def _stage_11_thumbnail_metadata(ctx: RunContext) -> None:
     """Stage 11: Thumbnail generation (with climax frame extraction) and metadata persistence."""
-    _ = CanonicalStage.THUMBNAIL_METADATA
     _dispatch_stage("_stage_11_thumbnail_metadata", stage_11_thumbnail_metadata, _stage_11_thumbnail_metadata)(ctx)
 
 
 def _stage_12_dedup_simhash(ctx: RunContext) -> None:
     """Stage 12: SimHash and SHA256 deduplication gating against recent channel publications."""
-    _ = CanonicalStage.DEDUP_SIMHASH
     _dispatch_stage("_stage_12_dedup_simhash", stage_12_dedup_simhash, _stage_12_dedup_simhash)(ctx)
 
 
 def _stage_13_backup_publish(ctx: RunContext) -> dict[str, Any]:
     """Stage 13: Drive backup, code verdict, Telegram human review gate, YouTube publish, and commit."""
-    _ = CanonicalStage.BACKUP_PUBLISH
     return _dispatch_stage("_stage_13_backup_publish", stage_13_backup_publish, _stage_13_backup_publish)(ctx)
 
 

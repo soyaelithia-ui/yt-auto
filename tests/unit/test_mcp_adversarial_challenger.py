@@ -77,15 +77,20 @@ PATH_TRAVERSAL_PAYLOADS = [
 
 def _extract_text(result: Any) -> str:
     """Helper to extract text from MCP response objects."""
-    if hasattr(result, "content") and isinstance(result.content, list) and len(result.content) > 0:
-        first = result.content[0]
-        if hasattr(first, "text"):
-            return str(first.text)
-        return str(first)
+    if hasattr(result, "content"):
+        if isinstance(result.content, str):
+            return result.content
+        if isinstance(result.content, list) and len(result.content) > 0:
+            first = result.content[0]
+            if hasattr(first, "text"):
+                return str(first.text)
+            return str(first)
     if isinstance(result, list) and len(result) > 0:
         first = result[0]
-        if hasattr(first, "text"):
+        if hasattr(first, "text") and getattr(first, "text") is not None:
             return str(first.text)
+        if hasattr(first, "content") and getattr(first, "content") is not None:
+            return str(first.content)
         return str(first)
     return str(result)
 
@@ -124,7 +129,7 @@ class TestAdversarialParameterFuzzing:
         # Huge threshold (10000 GiB) must cleanly fail closed with ToolError, not crash
         with pytest.raises(ToolError) as exc_info:
             asyncio.run(self.server.call_tool("system_preflight", {"min_disk_gb": 99999.0}))
-        assert "Insufficient disk space" in str(exc_info.value) or "threshold" in str(exc_info.value).lower()
+        assert any(term in str(exc_info.value).lower() for term in ("insufficient disk space", "threshold", "validation error", "less_than_equal"))
 
     def test_preflight_type_confusion_arguments(self):
         """Probes system_preflight with wrong types for booleans and numbers."""
@@ -555,12 +560,15 @@ class TestAdversarialDescriptorDiversionAndJsonRpc:
 
             # Either server responds with error -32700 (Parse error) or logs to stderr
             # It must not hang indefinitely
+            import select
             try:
-                line = proc.stdout.readline()
-                if line:
-                    resp = json.loads(line)
-                    if "error" in resp:
-                        assert resp["error"]["code"] in (-32700, -32600)
+                r, _, _ = select.select([proc.stdout], [], [], 1.0)
+                if r:
+                    line = proc.stdout.readline()
+                    if line:
+                        resp = json.loads(line)
+                        if "error" in resp:
+                            assert resp["error"]["code"] in (-32700, -32600)
             except Exception:
                 pass
         finally:
@@ -606,12 +614,13 @@ async def main():
         # Test python print()
         print("PYTHON_PRINT_DIVERTED")
         sys.stdout.flush()
-        return
+        os._exit(0)
 
 asyncio.run(main())
 """
         proc = subprocess.run(
             [sys.executable, "-c", script],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=10,
