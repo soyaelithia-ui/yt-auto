@@ -198,7 +198,7 @@ def register_inventory_subcommand(subparsers: argparse._SubParsersAction, parent
     ip = subparsers.add_parser(
         "inventory",
         parents=[parent],
-        help="Gestión e inspección del inventario 100% de videos e historias publicadas para agentes IA",
+        help="Gestión e inspección del inventario 100%% de videos e historias publicadas para agentes IA",
     )
     ip.add_argument("inventory_action", nargs="?", choices=["list", "sync", "backup", "digest"], default="list", help="Acción de inventario")
     ip.add_argument("-c", "--channel", type=str, default="all", help="Canal ('horror', 'drama', o 'all')")
