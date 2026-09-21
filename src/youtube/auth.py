@@ -144,7 +144,20 @@ def exchange_code(
     save_credentials(flow.credentials, target_path)
     if verifier_path.is_file():
         try:
-            verifier_path.unlink()
+            current_verifiers = {}
+            try:
+                current_verifiers = json.loads(verifier_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+            if extracted_state and extracted_state in current_verifiers:
+                del current_verifiers[extracted_state]
+            if redirect_uri and redirect_uri in current_verifiers:
+                del current_verifiers[redirect_uri]
+            if current_verifiers:
+                verifier_path.write_text(json.dumps(current_verifiers), encoding="utf-8")
+                os.chmod(verifier_path, 0o600)
+            else:
+                verifier_path.unlink()
         except Exception:
             pass
     print(f"Credentials saved successfully to {target_path}!")
