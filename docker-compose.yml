@@ -5,6 +5,9 @@ x-yt-base: &yt-base
   image: yt-automation:local
   restart: unless-stopped
   init: true
+  env_file:
+    - path: .env
+      required: false
   environment:
     TINI_SUBREAPER: "1"
     YT_PROFILE: prod
@@ -26,12 +29,19 @@ x-yt-base: &yt-base
     WORK_ROOT: /app/work
     ARTIFACT_ROOT: /app/artifacts
     SECRETS_DIR: /run/secrets
+    HORROR_COOKIES_PATH: /run/secrets/cookies_horror.json
+    DRAMA_COOKIES_PATH: /run/secrets/cookies_drama.json
+    HORROR_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/horror.json
+    DRAMA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/drama.json
+    HORROR_YOUTUBE_CHANNEL_ID: ${HORROR_YOUTUBE_CHANNEL_ID:-UC8sStaR-cwz-x7MD4XKNUKA}
+    DRAMA_YOUTUBE_CHANNEL_ID: ${DRAMA_YOUTUBE_CHANNEL_ID:-UCviycs3wnL019JwUwb8Hkig}
+    # Backward compatibility aliases
     COOKIES_PATH: /run/secrets/cookies.json
-    AELITHIA_COOKIES_PATH: /run/secrets/cookies_aelithia.json
-    MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/moku.json
-    AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/aelithia.json
-    MOKU_YOUTUBE_CHANNEL_ID: ${MOKU_YOUTUBE_CHANNEL_ID:-}
-    AELITHIA_YOUTUBE_CHANNEL_ID: ${AELITHIA_YOUTUBE_CHANNEL_ID:-}
+    AELITHIA_COOKIES_PATH: /run/secrets/cookies_drama.json
+    MOKU_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/horror.json
+    AELITHIA_YOUTUBE_TOKEN_PATH: /run/secrets/tokens/drama.json
+    MOKU_YOUTUBE_CHANNEL_ID: ${MOKU_YOUTUBE_CHANNEL_ID:-UC8sStaR-cwz-x7MD4XKNUKA}
+    AELITHIA_YOUTUBE_CHANNEL_ID: ${AELITHIA_YOUTUBE_CHANNEL_ID:-UCviycs3wnL019JwUwb8Hkig}
     TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     TELEGRAM_ALLOWED_USER_ID: ${TELEGRAM_ALLOWED_USER_ID:-}
@@ -44,6 +54,11 @@ x-yt-base: &yt-base
     PYTHONUNBUFFERED: "1"
     YT_MAX_PARALLEL_LANES: "3"
     TEST_MODE: "0"
+    REQUIRE_DRIVE: ${REQUIRE_DRIVE:-0}
+    REQUIRE_PUBLISH: ${REQUIRE_PUBLISH:-1}
+    REQUIRE_REVIEW: ${REQUIRE_REVIEW:-1}
+    USE_AGENT_HARNESS: ${USE_AGENT_HARNESS:-1}
+    USE_ANTIGRAVITY_SDK: ${USE_ANTIGRAVITY_SDK:-1}
     AUTO_APPROVE: ${AUTO_APPROVE:-1}
     ENABLE_AUTO_PUBLISH_SWEEP: ${ENABLE_AUTO_PUBLISH_SWEEP:-1}
     AUTO_PUBLISH_TIMEOUT_HOURS: ${AUTO_PUBLISH_TIMEOUT_HOURS:-2}
@@ -95,19 +110,34 @@ services:
     command: ["python", "main.py", "daemon", "--channel", "all", "--interval", "60"]
 
   # Isolated split-channel daemons (profile: split-channels)
+  yt-horror:
+    <<: *yt-base
+    container_name: yt-horror
+    hostname: yt-horror
+    profiles: ["split-channels"]
+    command: ["python", "main.py", "daemon", "--channel", "horror", "--interval", "60"]
+
+  yt-drama:
+    <<: *yt-base
+    container_name: yt-drama
+    hostname: yt-drama
+    profiles: ["split-channels"]
+    command: ["python", "main.py", "daemon", "--channel", "drama", "--interval", "60"]
+
+  # Backward compatibility aliases
   yt-moku:
     <<: *yt-base
     container_name: yt-moku
     hostname: yt-moku
-    profiles: ["split-channels"]
-    command: ["python", "main.py", "daemon", "--channel", "moku", "--interval", "60"]
+    profiles: ["split-channels-legacy"]
+    command: ["python", "main.py", "daemon", "--channel", "horror", "--interval", "60"]
 
   yt-aelithia:
     <<: *yt-base
     container_name: yt-aelithia
     hostname: yt-aelithia
-    profiles: ["split-channels"]
-    command: ["python", "main.py", "daemon", "--channel", "aelithia", "--interval", "60"]
+    profiles: ["split-channels-legacy"]
+    command: ["python", "main.py", "daemon", "--channel", "drama", "--interval", "60"]
 
   telegram-bot-api:
     profiles: ["local-telegram"]

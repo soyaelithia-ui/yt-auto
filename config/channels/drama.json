@@ -76,7 +76,7 @@
     "default_bg_theme": "drama"
   },
   "auth": {
-    "cookies_path": "secrets/cookies_aelithia.json",
+    "cookies_path": "secrets/cookies_drama.json",
     "youtube_token_path": "secrets/tokens/drama.json",
     "expected_youtube_channel_id": "UCviycs3wnL019JwUwb8Hkig",
     "source_feed": "r/AmItheAsshole+r/relationship_advice"
