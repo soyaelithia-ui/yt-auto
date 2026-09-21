@@ -12,6 +12,7 @@ import math
 import os
 import re
 import signal
+import struct
 import subprocess
 import sys
 import time
@@ -826,53 +827,176 @@ def generate_audio(
                     pass
 
 
-def get_wav_duration(path: str | os.PathLike) -> float:
-    """Return audio duration in seconds; 0.0 for missing/corrupt files.
+def _parse_wav_duration(path: str | os.PathLike) -> float | None:
+    """Fast stdlib WAV duration parser; returns duration or None on parse failure."""
+    try:
+        p_str = str(path)
+        if not os.path.isfile(p_str) or os.path.getsize(p_str) < 12:
+            return None
+        with wave.open(p_str, "rb") as wav:
+            nframes = wav.getnframes()
+            framerate = max(wav.getframerate(), 1)
+            return float(nframes) / float(framerate)
+    except (wave.Error, OSError, ValueError, EOFError, RuntimeError, Exception):
+        return None
 
-    Parses WAV headers via the stdlib (no subprocess); probes MP3/AAC/etc.
-    through ffprobe only when the file starts with recognizable
-    compressed-audio magic (ID3 or MPEG sync), avoiding subprocess calls
-    for arbitrary non-audio payloads.
+
+def _skip_id3v2_tag(data: bytes, p_str: str, file_size: int) -> tuple[int, bytes]:
+    """Skip ID3v2 tag if present, returning total tag byte length and audio buffer."""
+    tag_end = 0
+    if data.startswith(b"ID3") and len(data) >= 10:
+        flags = data[5]
+        tag_size = (
+            ((data[6] & 0x7F) << 21)
+            | ((data[7] & 0x7F) << 14)
+            | ((data[8] & 0x7F) << 7)
+            | (data[9] & 0x7F)
+        )
+        tag_end = 10 + tag_size
+        if flags & 0x10:
+            tag_end += 10  # 10-byte footer present
+        if tag_end >= len(data):
+            if tag_end >= file_size:
+                return tag_end, b""
+            with open(p_str, "rb") as fh:
+                fh.seek(tag_end)
+                data = fh.read(min(file_size - tag_end, 65536))
+    return tag_end, data
+
+
+def _parse_mp3_duration(path: str | os.PathLike) -> float | None:
+    """Fast binary MP3 duration parser inspecting ID3, MPEG frame sync, Xing, and bitrate.
+
+    Returns duration in seconds, or None if the file is not a valid MP3.
     """
-    if not os.path.exists(str(path)):
-        return 0.0
     try:
-        with wave.open(str(path), "rb") as wav:
-            return wav.getnframes() / max(wav.getframerate(), 1)
-    except (wave.Error, OSError, ValueError) as exc:
-        logger.debug("WAV header duration probe skipped (%s): %s", path, exc)
+        p_str = str(path)
+        if not os.path.isfile(p_str):
+            return None
+        file_size = os.path.getsize(p_str)
+        if file_size < 4:
+            return None
+
+        with open(p_str, "rb") as fh:
+            initial_data = fh.read(min(file_size, 131072))
+
+        tag_end, data = _skip_id3v2_tag(initial_data, p_str, file_size)
+        if not data:
+            return None
+
+        # If data was re-read past a large tag, scan starts at 0; otherwise starts at tag_end
+        scan_start = 0 if tag_end >= len(initial_data) else tag_end
+        sync_idx = -1
+        limit = min(len(data) - 4, scan_start + 16384)
+        for i in range(scan_start, limit):
+            if data[i] == 0xFF and (data[i + 1] & 0xE0) == 0xE0:
+                v_id = (data[i + 1] >> 3) & 0x03
+                l_id = (data[i + 1] >> 1) & 0x03
+                b_idx = (data[i + 2] >> 4) & 0x0F
+                sr_idx = (data[i + 2] >> 2) & 0x03
+                # Discard reserved MPEG version (01), reserved layer (00), bad bitrate (15/0), reserved srate (3)
+                if v_id != 1 and l_id != 0 and b_idx not in (0, 15) and sr_idx != 3:
+                    sync_idx = i
+                    break
+
+        if sync_idx == -1:
+            return None
+
+        header = struct.unpack(">I", data[sync_idx : sync_idx + 4])[0]
+        version_id = (header >> 19) & 3      # 3: MPEG1, 2: MPEG2, 0: MPEG2.5
+        layer_id = (header >> 17) & 3        # 1: Layer III, 2: Layer II, 3: Layer I
+        bitrate_idx = (header >> 12) & 15
+        samplerate_idx = (header >> 10) & 3
+        channel_mode = (header >> 6) & 3
+
+        srate_table = {
+            3: [44100, 48000, 32000],
+            2: [22050, 24000, 16000],
+            0: [11025, 12000, 8000],
+        }
+        if version_id not in srate_table or samplerate_idx >= 3:
+            return None
+        sample_rate = srate_table[version_id][samplerate_idx]
+
+        if layer_id == 1:  # Layer III
+            v1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320]
+            v2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]
+            bitrate_kbps = v1[bitrate_idx] if version_id == 3 else v2[bitrate_idx]
+            samples_per_frame = 1152 if version_id == 3 else 576
+        elif layer_id == 2:  # Layer II
+            v1 = [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384]
+            v2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]
+            bitrate_kbps = v1[bitrate_idx] if version_id == 3 else v2[bitrate_idx]
+            samples_per_frame = 1152
+        elif layer_id == 3:  # Layer I
+            v1 = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448]
+            bitrate_kbps = v1[bitrate_idx] if bitrate_idx < len(v1) else 0
+            samples_per_frame = 384
+        else:
+            return None
+
+        # Check for Xing / Info VBR header
+        xing_offset = sync_idx + 4 + (
+            (17 if channel_mode == 3 else 32) if version_id == 3 else (9 if channel_mode == 3 else 17)
+        )
+        if len(data) >= xing_offset + 12:
+            tag = data[xing_offset : xing_offset + 4]
+            if tag in (b"Xing", b"Info"):
+                xing_flags = struct.unpack(">I", data[xing_offset + 4 : xing_offset + 8])[0]
+                if xing_flags & 1:
+                    frame_count = struct.unpack(">I", data[xing_offset + 8 : xing_offset + 12])[0]
+                    return round(frame_count * samples_per_frame / float(sample_rate), 4)
+
+        # Fallback to CBR duration from bitrate and audio stream byte count
+        if bitrate_kbps > 0:
+            frame_size = int((144 if version_id == 3 else 72) * (bitrate_kbps * 1000) / sample_rate)
+            has_id3v1 = data[-128:].startswith(b"TAG") if file_size >= 128 else False
+            audio_bytes = file_size - tag_end - (128 if has_id3v1 else 0)
+            if audio_bytes >= frame_size:
+                return round((audio_bytes * 8.0) / (bitrate_kbps * 1000.0), 4)
+    except Exception as exc:
+        logger.debug("Fast MP3 binary parser exception for %s: %s", path, exc)
+    return None
+
+
+def _probe_duration_ffprobe(path: str | os.PathLike) -> float:
+    """Ultimate fallback: Probe audio duration via ffprobe subprocess on exception/unsupported formats."""
     try:
-        with open(str(path), "rb") as fh:
-            head = fh.read(16)
-        if not (head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0)):
-            return 0.0
         result = _run_subproc(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-            check=False, timeout=30,
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(path),
+            ],
+            check=False, timeout=15,
         )
         if result.returncode == 0 and result.stdout.strip():
             return float(result.stdout.strip())
     except (subprocess.SubprocessError, OSError, ValueError) as exc:
-        logger.debug("FFprobe duration probe skipped (%s): %s", path, exc)
+        logger.debug("FFprobe fallback probe failed (%s): %s", path, exc)
     return 0.0
 
 
 def get_audio_duration(path: str | os.PathLike) -> float:
-    """Probe audio duration via ffprobe with WAV fallback."""
-    if not os.path.exists(str(path)):
-        return 0.0
+    """Instant audio duration reader with WAV/MP3 stdlib parser and ffprobe ultimate fallback."""
     try:
-        result = _run_subproc(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-            check=False, timeout=30,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return float(result.stdout.strip())
-    except (subprocess.SubprocessError, OSError, ValueError) as exc:
-        logger.debug("FFprobe get_audio_duration skipped (%s): %s", path, exc)
-    return get_wav_duration(path)
+        p_str = str(path)
+        if not os.path.exists(p_str) or os.path.getsize(p_str) == 0:
+            return 0.0
+        dur = _parse_wav_duration(p_str)
+        if dur is not None and dur > 0:
+            return dur
+        dur = _parse_mp3_duration(p_str)
+        if dur is not None and dur > 0:
+            return dur
+        return _probe_duration_ffprobe(p_str)
+    except Exception as exc:
+        logger.debug("get_audio_duration top-level catch for %s: %s", path, exc)
+        return 0.0
+
+
+def get_wav_duration(path: str | os.PathLike) -> float:
+    """Backward-compatible wrapper delegating to instant get_audio_duration."""
+    return get_audio_duration(path)
 
 
 def validate_audio_artifact(path: str | os.PathLike, minimum_duration: float = 0.0) -> dict:
@@ -928,6 +1052,7 @@ def master_voice_audio(
     audio_path: str | os.PathLike,
     target_lufs: float = -14.0,
     true_peak_dbtp: float = -1.5,
+    force: bool = False,
     **kwargs: Any,
 ) -> str:
     """Master voice audio: 120 Hz EQ cut + EBU R128 loudnorm (I=-14.0 LUFS).
@@ -936,6 +1061,9 @@ def master_voice_audio(
     dentro del filter_complex de build_audio_chain).
     """
     path = str(audio_path)
+    if os.getenv("YT_FOLD_MASTERING", "1") == "1" and not force and not kwargs.get("force", False):
+        return path
+
     tmp_out = path + ".tmp.master.wav"
     cmd = [
         "ffmpeg", "-y",

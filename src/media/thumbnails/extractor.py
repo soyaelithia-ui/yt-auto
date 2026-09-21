@@ -77,31 +77,52 @@ class ClimaxFrameExtractor:
         window_sec: float = 2.0,
         count: int = 5,
     ) -> List[Path]:
-        """Extracts a burst of candidate frames around the center timestamp."""
+        """Extracts a burst of candidate frames around the center timestamp bounded to 2 cores."""
         output_dir.mkdir(parents=True, exist_ok=True)
         extracted: List[Path] = []
 
         half_window = window_sec / 2.0
         start_t = max(0.5, center_timestamp - half_window)
-        step = window_sec / max(1, count - 1)
+        fps_rate = max(0.5, count / max(0.5, window_sec))
 
-        for i in range(count):
-            t = start_t + (i * step)
-            out_img = output_dir / f"cand_{i:02d}_{t:.2f}s.jpg"
-            cmd = [
-                self.ffmpeg_bin, "-y",
-                "-ss", f"{t:.3f}",
-                "-i", str(video_path.resolve()),
-                "-vframes", "1",
-                "-q:v", "2",
-                str(out_img.resolve()),
-            ]
-            try:
-                subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=15)
-                if out_img.is_file() and out_img.stat().st_size > 1000:
-                    extracted.append(out_img)
-            except Exception as e:
-                logger.debug("Failed extracting frame at %.2fs: %s", t, e)
+        out_pattern = output_dir / "cand_%02d.jpg"
+        cmd = [
+            self.ffmpeg_bin, "-y",
+            "-threads", "2",
+            "-ss", f"{start_t:.3f}",
+            "-i", str(video_path.resolve()),
+            "-vf", f"fps={fps_rate:.2f}",
+            "-vframes", str(count),
+            "-q:v", "2",
+            str(out_pattern.resolve()),
+        ]
+        try:
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=15)
+            extracted = sorted(output_dir.glob("cand_*.jpg"))
+            extracted = [p for p in extracted if p.is_file() and p.stat().st_size > 1000]
+        except Exception as e:
+            logger.debug("Failed unified frame burst extraction at %.2fs: %s", start_t, e)
+
+        if not extracted:
+            step = window_sec / max(1, count - 1)
+            for i in range(count):
+                t = start_t + (i * step)
+                out_img = output_dir / f"cand_{i:02d}_{t:.2f}s.jpg"
+                cmd = [
+                    self.ffmpeg_bin, "-y",
+                    "-threads", "2",
+                    "-ss", f"{t:.3f}",
+                    "-i", str(video_path.resolve()),
+                    "-vframes", "1",
+                    "-q:v", "2",
+                    str(out_img.resolve()),
+                ]
+                try:
+                    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=15)
+                    if out_img.is_file() and out_img.stat().st_size > 1000:
+                        extracted.append(out_img)
+                except Exception as e:
+                    logger.debug("Fallback failed extracting frame at %.2fs: %s", t, e)
 
         return extracted
 

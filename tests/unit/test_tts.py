@@ -130,7 +130,7 @@ class TestTTS(unittest.TestCase):
             f.write(b"RIFF_WAV_HEADER_DATA")
 
         mock_run.return_value = MagicMock(returncode=0)
-        res = master_voice_audio(audio_path)
+        res = master_voice_audio(audio_path, force=True)
         self.assertEqual(res, audio_path)
         self.assertTrue(mock_run.called)
         cmd = mock_run.call_args[0][0]

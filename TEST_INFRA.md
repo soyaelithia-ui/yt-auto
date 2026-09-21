@@ -1,193 +1,50 @@
-# Test Infrastructure & Specification: yt-auto MCP Server Suite
+# E2E Test Infra: yt-auto Video Pipeline Optimization
 
-## 1. Test Architecture & Core Philosophy
+## Test Philosophy
+- Requirement-driven, opaque-box & unit validation.
+- Enforce strict resource budgets: <= 2 CPU Cores, <= 2.0 GiB RAM.
+- Zero-Browser policy: strictly zero Playwright/Chromium outside `src/youtube/session_uploader.py`.
+- Methodology: Category-Partition, Boundary Value Analysis, Integration & Real-World Workload Testing.
 
-The `yt-auto` Model Context Protocol (MCP) server test suite enforces opaque-box, requirement-driven verification across all tools, resources, prompts, lifecycle transports, fail-closed security mechanisms, and client configurations.
+## Feature Inventory & Test Coverage Map
+| # | ID | Feature | Requirements Source | Tier 1 (Feature) | Tier 2 (Boundary) | Tier 3 (Cross-Feature) | Tier 4 (Real-World) |
+|---|----|---------|---------------------|:----------------:|:-----------------:|:----------------------:|:-------------------:|
+| 1 | F01 | Instant Audio Duration | R5 (`lib/tts.py`) | WAV & MP3 parsed in <1ms without ffprobe | Corrupt header, zero-byte file, VBR/CBR edge cases | Audio duration used in pause insertion & alignment | Full story audio duration calculation |
+| 2 | F02 | Stage 1 Claim Lease Cache | R6 (`stage_01_lease.py`) | Feed cache hit & miss behavior | Expired TTL (300s), empty feed response, DB lock recovery | Cache interaction with `is_story_duplicate` and `claim` | Successive pipeline runs in daemon loop |
+| 3 | F03 | Prompt Pacing & Arc Cadence | R1 (`src/llm.py`, `stage_03`) | 2.25 words/s instruction generation | Min/max words boundary, short vs long duration types | Script pacing + coherence gatekeeper | End-to-end script curation without cold cuts |
+| 4 | F04 | TTS Speed Modulation | R1 (`stage_05_tts.py`) | Rate boost (+6% to +8%) for <8% overshoot | Exact 8% boundary, >8% fallback to re-curation | Rate modulation + alignment stage bypass | Complete Short speech generation under 60s |
+| 5 | F05 | Folded Voice Mastering Bypass | R2 (`lib/tts.py`, `stage_05`) | `YT_FOLD_MASTERING=1` bypasses FFmpeg | `force=True` overrides bypass, `YT_FOLD_MASTERING=0` runs FFmpeg | Bypass in Stage 5 followed by Stream-Copy muxing | Full voice pipeline without standalone mastering |
+| 6 | F06 | Sidechain Ducking & Loudnorm | R2 (`stream_copy.py`, `audio.py`) | Sidechain compression + loudnorm in filtergraph | Zero music volume, missing BGM track, custom LUFS | Voice + BGM ducking during narration | Final master bus loudness (-14 LUFS, -1.5 dB TP) |
+| 7 | F07 | Single-Pass Mapped Visual QA | R3 (`src/core/quality.py`) | Single FFmpeg nullsink with `-map "[vb]" -map "[vl]"` | All-black video, high-brightness video, empty video | Visual QA facts + Precomputed QA manifest | Stage 10 prepublication validation in live run |
+| 8 | F08 | Burst Thumbnail Extraction | R4 (`extractor.py`) | Single FFmpeg burst `-vf fps=2.5 -vframes 5` | Video shorter than window, start timestamp near 0 | Burst extraction + frame scoring | Stage 11 metadata and thumbnail selection |
+| 9 | F09 | E2E Regression & Quality Test Suite | R3/R4 (`tests/`) | Unit test coverage for bypasses, header parsing | Adversarial corruptions & timeout handling | Cross-stage pipeline regression testing | Full suite execution via verify_integrity.sh |
+| 10 | F10 | Pipeline Production Benchmark | Governance SLA | Production SLA of 4-6s Short generation | Memory peak <= 2.0 GiB, CPU <= 2 cores | Combined stages 1-12 latency validation | Headless daemon throughput verification |
+| 11 | F11 | Unified Atomic FFmpeg Encoder | R2 (`src/media/`) | Filter complex graph construction & stderr drain | Broken pipe recovery & stream termination | Sidechain ducking & composite mastering muxing | End-to-end video muxing via stream-copy |
+| 12 | F12 | SceneManifest Contract Sync | Architecture (`schemas/`) | Schema Draft-07 syntax & payload validation | Invalid tension levels, missing required fields | Manifest consumption across compositor engines | Multi-scene longform production run |
+| 13 | F13 | Scene Planner Agent Sync | Architecture (`src/agents/`) | Plan generation & camera motion specification | Safe area margins & resolution compliance | Curation -> Art Direction -> Scene Planning | Autonomous story staging & plan rendering |
+| 14 | F14 | Live Director Shot Mix | Architecture (`src/core/`) | Rotation of certified loop pool without repeats | Empty catalog or unindexed categories | Concurrency locks & candidate pool rotation | Multi-act Short & Longform rendering |
+| 15 | F15 | Precomputed QA Metrics Gate | Architecture (`src/core/`) | Bypasses live decode when metrics in manifest | Missing manifest keys or corrupted metric types | QA Gatekeeper & prepublication validation | Live production QA execution |
+| 16 | F16 | Multi-Channel Lane Parity | Architecture (`config/`) | 6 production lanes across Moku, Aelithia, SciFi | Channel isolation & config schema validation | Profile preparsing & lane dispatching | Autonomous multi-channel publication |
 
-### 1.1. Core Directives
-1. **Opaque-Box Requirement-Driven**: Tests assert strictly against external contracts, schemas, input/output behaviors, protocol representations, and security boundaries defined in `ORIGINAL_REQUEST.md` (## 2026-09-19T00:32:27Z) and `PROJECT.md`.
-2. **Deterministic Offline Execution & Zero Quota**: All tests run strictly offline under the global `offline_provider_guard` in `tests/conftest.py`. External network connections and cloud API calls are blocked. Tools execute in synthetic test or dry-run modes with zero quota consumption.
-3. **Synchronous Harness with Asyncio Wrapping**: Tests are written as standard synchronous `pytest` functions that wrap asynchronous MCP SDK calls using `asyncio.run()` (e.g. `asyncio.run(server.call_tool(...))`). This provides deterministic loop management under `tests/conftest.py` without third-party async test runner flakiness.
-4. **Fail-Closed Security & Sanitization**: Absolute zero credential leakage in error messages, payload dumps, or logging. Secrets, tokens, and sensitive file paths (`cookies_path`, `youtube_token_path`) are verified to be masked (`[REDACTED]`) or converted to boolean presence flags.
-5. **Inviolable Governance & Resource Ceilings**: Testing verifies adherence to project governance: peak resource usage strictly within **≤ 2 CPU Cores** and **≤ 2.0 GiB RAM**, zero Playwright/browser dependencies outside session fallback in `src/youtube/`, and zero resurrected legacy architecture docs (`docs/architecture/0*.md`).
+## Test Execution Commands
+- **Full Unit & Decoupled Suite**:
+  ```bash
+  .venv/bin/pytest tests/unit/ -q
+  ```
+- **Targeted Feature Suites**:
+  ```bash
+  .venv/bin/pytest tests/unit/test_tts.py tests/unit/test_audio_processor.py -v
+  .venv/bin/pytest tests/unit/test_quality_gate_resolution.py tests/unit/test_ffmpeg_low_cpu_defaults.py -v
+  .venv/bin/pytest tests/unit/test_channel_profile_and_thumbnails.py -v
+  .venv/bin/pytest tests/unit/test_loop_video_engine.py tests/unit/test_loop_video_engine_adversarial.py -v
+  .venv/bin/pytest tests/unit/test_anti_regression_guardrails.py -v
+  ```
+- **Mandatory Repository Integrity Gate**:
+  ```bash
+  ./scripts/verify_integrity.sh
+  ```
 
----
-
-## 2. 4-Tier Test Architecture
-
-```mermaid
-graph TD
-    subgraph SUITE["yt-auto MCP Server Test Suite (tests/unit/test_mcp_server.py)"]
-        T1["Tier 1: Feature Isolation Coverage<br/>(>=5 tests per feature: 9 tools, 3 resources, 3 prompts, handshakes, configs)"]
-        T2["Tier 2: Boundary Value Analysis & Fail-Closed Robustness<br/>(>=5 boundary tests: path traversal, missing args, corrupt JSON, secret scrubbing)"]
-        T3["Tier 3: Pairwise Combinations & Cross-Feature Interactions<br/>(Tool+Resource, Tool+Prompt, Resource+Sanitizer, DryRun+Queue)"]
-        T4["Tier 4: Real-World Workload Scenarios<br/>(Operator Triage, Production Dry Run, Incident Response, Governance Audit)"]
-    end
-
-    PYTEST["Pytest Runner (.venv/bin/pytest tests/unit/test_mcp_server.py)"] --> T1
-    PYTEST --> T2
-    PYTEST --> T3
-    PYTEST --> T4
-```
-
-### 2.1. Tier 1: Feature Coverage (>=5 tests per feature)
-- **Protocol Handshakes & Server Lifecycle (F01)**:
-  - Server factory instantiation (`create_mcp_server()`).
-  - Server metadata validation (`name == "yt-auto"`, `version == "2.2.0"`).
-  - Tools listing handshake (`server.list_tools()`).
-  - Resources listing handshake (`server.list_resources()` / `server.list_resource_templates()`).
-  - Prompts listing handshake (`server.list_prompts()`).
-- **Tool 1: `system_preflight` (F02)**:
-  - Happy path preflight execution for channel `moku`.
-  - Happy path preflight execution for channel `aelithia`.
-  - Disk headroom inspection and reporting.
-  - Return contract validation (`ok: bool`, `youtube: dict`, `drive: dict`, `cookies: dict`).
-  - Strict absence of raw credential file paths in output.
-- **Tool 2: `list_lanes` (F03)**:
-  - Listing all configured production lanes (6 canonical lanes).
-  - Filter by channel `moku`.
-  - Filter by channel `aelithia`.
-  - Enabled status and cadence structure presence.
-  - Resolved voice profile and visual pipeline validation.
-- **Tool 3: `get_lane_info` (F04)**:
-  - Query existing short lane `moku-scp-shorts`.
-  - Query existing long lane `moku-horror-long`.
-  - Query existing drama lane `aelithia-drama-shorts`.
-  - Validation of duration bounds (`min_sec`, `target_sec`, `max_sec`).
-  - Validation of word limits and background audio configuration.
-- **Tool 4: `query_loop_catalog` (F05)**:
-  - Query loops without filter (returns up to limit).
-  - Query loops filtered by orientation (`horizontal` vs `vertical`).
-  - Query loops filtered by category (`horror`, `drama`, etc.).
-  - Query loops filtered by channel compatibility.
-  - Pagination / limit boundary enforcement.
-- **Tool 5: `audit_loop_catalog` (F06)**:
-  - Audit database loop records against filesystem.
-  - Verified loops count returned.
-  - Quality metrics validation (`longest_black_seconds`, `perceptual_luminance`).
-  - Broken / missing loop detection and cleanup reporting.
-  - Fail-closed reporting on database inconsistencies.
-- **Tool 6: `run_pipeline_dry_run` (F07)**:
-  - Execution with valid short lane and synthetic topic.
-  - Execution with valid long lane and synthetic topic.
-  - Verification of zero external quota consumption (`offline_provider_guard`).
-  - Stream-copy validation flag verification.
-  - Execution summary and timing result return.
-- **Tool 7: `get_system_status` (F08)**:
-  - Full system status retrieval.
-  - Story queue counters (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`).
-  - Lock status and daemon process inspection (`_is_daemon_running`).
-  - Disk free headroom calculation.
-  - Heartbeat age and log file size estimation.
-- **Tool 8: `manage_queue` (F09)**:
-  - Action `list` returns current stories queue.
-  - Action `pause` on channel `moku` with reason.
-  - Action `resume` on channel `moku`.
-  - Action `sweep` triggers pending review approvals.
-  - Return structure confirms status changes.
-- **Tool 9: `verify_integrity` (F10)**:
-  - Execution in development mode returns health report.
-  - Invariant checks summary (worktrees, docs, browser policy, anti-bloat).
-  - Anti-regression test suite status.
-  - Verification exit code evaluation.
-  - Execution duration logging.
-- **Resource 1: `channels://{channel_name}/config` (F11)**:
-  - Read resource for channel `moku`.
-  - Read resource for channel `aelithia`.
-  - Verification of `ChannelConfig.public_dict()` schema.
-  - Exclusion of `cookies_path` and `youtube_token_path`.
-  - Inclusion of `cookies_available` and `youtube_token_available` booleans.
-- **Resource 2: `lanes://catalog` (F12)**:
-  - Read resource returns valid JSON.
-  - Version specification present (`version == 1`).
-  - Defaults present (`fps`, `language`).
-  - Lanes list containing all 6 configured production lanes.
-  - Content MIME type `application/json`.
-- **Resource 3: `system://health` (F13)**:
-  - Read resource returns system health metrics.
-  - Disk headroom information.
-  - Daemon status string.
-  - Story queue depth summary.
-  - Content MIME type `application/json`.
-- **Prompts (`preflight_diagnostics` (F14), `channel_incident_analysis` (F15), `video_qa_review` (F16))**:
-  - Prompt listing contains all 3 canonical operational prompts.
-  - `preflight_diagnostics` returns structured user prompt with diagnostic steps.
-  - `channel_incident_analysis` incorporates target channel and error details.
-  - `video_qa_review` includes 10-stage pipeline QA checklist.
-  - Return type conforms to `GetPromptResult` with `PromptMessage` instances.
-- **Sanitizer & Client Configuration**:
-  - Recursive string, dictionary, and list secret sanitization.
-  - Secret patterns masked with `[REDACTED]`.
-  - Client config `mcp_config.json` parsing and command validation.
-  - Client config `.mcp.json.example` structure validation.
-  - Transport configuration parameters (`stdio`).
-
-### 2.2. Tier 2: Boundary & Corner Cases (>=5 boundary tests)
-- **B01: Unknown / Malformed Tool Calling**: Invoking nonexistent tool names raises `ToolError` or fail-closed error.
-- **B02: Invalid Argument Schemas**: Missing required arguments, wrong types (e.g. integer instead of string lane ID).
-- **B03: Path Traversal & Injection**: Arguments containing `../../etc/passwd`, shell metacharacters (`; rm -rf /`, `&&`), or malicious channel names are rejected.
-- **B04: Nonexistent Resources & Templates**: Reading invalid URIs (`channels://invalid/config`, `unknown://uri`) raises `ResourceNotFoundError`.
-- **B05: Unknown Prompts**: Getting nonexistent prompt names raises `ValueError` or fail-closed exception.
-- **B06: Credential Scrubbing Verification**: Payloads containing synthetic OAuth tokens (`ya29.synthetic...`), API keys (`AIzaSy...`), cookies (`SSID=...`), or Bearer headers are rigorously scrubbed to `[REDACTED]`.
-- **B07: Empty Database & Resource Edge Cases**: Running catalog tools or status tools against empty or locked SQLite databases fails gracefully with clear error descriptions.
-
-### 2.3. Tier 3: Cross-Feature Combinations & Pairwise
-- **P01: Tool `list_lanes` & Resource `lanes://catalog` Parity**: Every lane returned by `list_lanes` matches the entries in `lanes://catalog`.
-- **P02: Tool `system_preflight` & Resource `channels://{channel}/config` Consistency**: Credential availability booleans in channel config align with preflight verification.
-- **P03: Prompt `preflight_diagnostics` & Tool `system_preflight` Alignment**: The prompt instructions explicitly guide the operator to invoke `system_preflight`.
-- **P04: Tool `run_pipeline_dry_run` & Tool `get_system_status`**: Pipeline dry run execution updates or preserves queue integrity without polluting production tables.
-- **P05: Resource `system://health` & Tool `get_system_status` Parity**: Health metrics in `system://health` reflect the status numbers reported by `get_system_status`.
-
-### 2.4. Tier 4: Real-World Application Scenarios
-- **S01: Operator Preflight & Channel Health Triage**:
-  Sequence: Initialize -> list_tools -> read system health -> execute preflight diagnostics prompt -> execute system_preflight -> read channel config.
-- **S02: Production Dry Run & Catalog Verification**:
-  Sequence: Query loop catalog for compatible assets -> inspect lane specifications -> run pipeline dry run -> verify queue state.
-- **S03: Incident Response & Emergency Channel Pause/Resume**:
-  Sequence: Inspect system status -> detect failure -> get incident analysis prompt -> pause channel -> inspect queue -> resume channel.
-- **S04: Repository Governance & Integrity Audit**:
-  Sequence: Execute `verify_integrity` tool -> audit loop catalog -> validate client configuration templates.
-
----
-
-## 3. Coverage Thresholds & Quality SLAs
-
-| Metric | Target Threshold | Verification Method |
-| :--- | :--- | :--- |
-| **Tier 1 Feature Coverage** | ≥ 5 tests per feature (Tools 1-9, Resources 1-3, Prompts 1-3, Handshake, Sanitizer, Configs) | `pytest tests/unit/test_mcp_server.py -k "tier1"` |
-| **Tier 2 Boundary Tests** | ≥ 5 boundary/corner tests per feature category | `pytest tests/unit/test_mcp_server.py -k "tier2"` |
-| **Tier 3 Pairwise Combinations** | Complete pairwise interactions for tools, resources, and prompts | `pytest tests/unit/test_mcp_server.py -k "tier3"` |
-| **Tier 4 Real-World Scenarios** | 4 complete operational workflows | `pytest tests/unit/test_mcp_server.py -k "tier4"` |
-| **Execution Performance** | Full test suite executes in < 30 seconds | `pytest tests/unit/test_mcp_server.py --durations=10` |
-| **Resource Ceiling** | ≤ 2 CPU cores, ≤ 2.0 GiB peak RAM | Measured via `resource.getrusage` |
-| **Credential Scrubbing** | 100% masking of sensitive tokens (`[REDACTED]`) and zero leaked secret paths | Assertions across all payloads and error strings |
-| **Offline Hermeticity** | 100% zero external network requests | Enforced by `tests/conftest.py` |
-
----
-
-## 4. Execution Commands
-
-### 4.1. Complete Suite Execution
-```bash
-.venv/bin/pytest tests/unit/test_mcp_server.py -v
-```
-
-### 4.2. Running by Tier
-```bash
-# Tier 1: Feature Isolation Coverage
-.venv/bin/pytest tests/unit/test_mcp_server.py -k "tier1" -v
-
-# Tier 2: Boundary & Corner Cases
-.venv/bin/pytest tests/unit/test_mcp_server.py -k "tier2" -v
-
-# Tier 3: Pairwise Combinations
-.venv/bin/pytest tests/unit/test_mcp_server.py -k "tier3" -v
-
-# Tier 4: Real-World Application Scenarios
-.venv/bin/pytest tests/unit/test_mcp_server.py -k "tier4" -v
-```
-
-### 4.3. Test Collection Check
-```bash
-.venv/bin/pytest tests/unit/test_mcp_server.py --collect-only
-```
+## Acceptance Criteria
+- 100% test pass rate across all suites (0 failures, 0 errors).
+- Integrity script `./scripts/verify_integrity.sh` returns exit code 0 (100% HEALTHY).
+- Video production benchmark completes Short production in 4-6 seconds under <= 2 CPU cores and <= 2.0 GiB RAM.

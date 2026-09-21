@@ -341,3 +341,74 @@ Implement automated drift detection and synchronization validation:
 - [ ] `docs/MCP.md` provides complete tool catalogs, resource schemas, prompt guides, and contribution rules.
 - [ ] `README.md` and `docs/OPERACION.md` link and describe the MCP server integration and CLI invocation methods.
 
+## 2026-09-21T03:25:26Z
+
+Implementación y ejecución del plan definitivo de optimización y eliminación de cuellos de botella en el pipeline de video de `yt-auto`, acelerando la producción a 4-6 segundos por Short bajo el presupuesto estricto de <= 2 CPU Cores y <= 2.0 GiB RAM.
+
+Working directory: `/home/moku/Projects/YouTubeChannels`  
+Integrity mode: development  
+
+## Context & Architecture Invariants
+- Repository: `/home/moku/Projects/YouTubeChannels`
+- Governance SLA: <= 2 CPU Cores (<= 200% across all concurrent threads) and <= 2.0 GiB RAM (2,048 MiB peak memory).
+- Zero-Browser policy: strictly zero Playwright/Chromium imports outside `src/youtube/session_uploader.py`.
+- Function line budget: <= 100 lines per function.
+- Mandatory integrity gate: `./scripts/verify_integrity.sh` must remain 100% green (code 0).
+
+## Requirements
+
+### R1. Calibración Inteligente de Duración en Stage 3 y 5 (Sin Truncamiento Ciego)
+- En `src/pipeline/stages/stage_03_editorial.py`, aplicar el límite estricto de palabras en el prompt del LLM (2.25 palabras/s) para que el texto curado no desborde la duración del carril. Prohibido truncar en frío al final del texto para no mutilar el desenlace o remate del Short.
+- En `src/pipeline/stages/stage_05_tts.py`, si tras la síntesis de Edge TTS el audio generado excede levemente el carril (< 8%), modular la velocidad con `rate` en Edge TTS (ej. `rate="+6%"`) en vez de re-curar con LLM, eliminando el 100% de las re-curaciones de 12 segundos.
+
+### R2. Masterización y Balance de Audio (Plegado con Sidechain Ducking)
+- En `src/pipeline/stages/stage_05_tts.py` y `lib/tts.py`, activar el bypass `YT_FOLD_MASTERING=1` por defecto, omitiendo el proceso independiente de `master_voice_audio`.
+- En `src/pipeline/stages/stage_09_render.py` y `src/media/loop/stream_copy.py`, aplicar *sidechain ducking* sobre la música de fondo guiado por la pista de voz antes del `amix`, y aplicar `loudnorm` (`-14 LUFS`, `-1.5 dB TP`) al bus maestro final en un solo paso compuesto para evitar desbalances o bombeo de volumen.
+
+### R3. QA Gating en Paso Único con Sintaxis Mapeada Explícitamente (Stage 10)
+- En `src/core/quality.py`, unificar la detección de negros y análisis de luminancia en una sola invocación FFmpeg nullsink mapeando explícitamente ambas salidas del filtergraph para evitar fallos de sintaxis:
+  ```bash
+  ffmpeg -threads 2 -i video.mp4 -filter_complex "[0:v]blackdetect=d=0.5:pix_th=0.10[vb];[0:v]fps=0.25,signalstats,metadata=print:key=lavfi.signalstats.YAVG[vl]" -map "[vb]" -map "[vl]" -f null -
+  ```
+- Parsear métricas directamente desde `stderr`, eliminando la extracción de archivos JPEG en disco y las llamadas a Pillow.
+
+### R4. Extracción de Miniaturas en Ráfaga Bounded a 2 Cores (Stage 11)
+- En `src/media/thumbnails/extractor.py` (`extract_candidate_frames`), sustituir el bucle secuencial de 5 subprocesos FFmpeg por una única invocación en ráfaga con `-vf fps=2.5`, incluyendo explícitamente `-threads 2` y limitando con `-vframes 5` para respetar la envolvente de 2 núcleos.
+
+### R5. Lectura Instantánea de Duración en Audio (lib/tts.py)
+- En `lib/tts.py` (`get_audio_duration`), utilizar `wave.open` para archivos WAV y añadir un analizador rápido de cabeceras binarias (MPEG frame sync `0xFFE`/`0xFFF`) para MP3.
+- Dejar `ffprobe` exclusivamente como fallback de última instancia ante excepciones.
+
+### R6. Optimización y Caché Local en Stage 1 (Claim Lease)
+- En `src/pipeline/stages/stage_01_lease.py`, implementar una capa de caché local (SQLite o JSONL) con TTL de 5 minutos para las peticiones de posts externos (Reddit WAN), eliminando los ~1.8 s de latencia en ejecuciones sucesivas del hilo principal.
+
+## Acceptance Criteria
+
+### Integridad y Gobernanza
+- [ ] `./scripts/verify_integrity.sh` finaliza con código 0 y reporte 100% HEALTHY.
+- [ ] Paridad de herramientas MCP y políticas Zero-Browser preservadas al 100%.
+- [ ] Cero secretos o credenciales en logs o estructuras de memoria.
+
+### Calidad de Pruebas Unitarias
+- [ ] La suite de pruebas unitarias (`.venv/bin/pytest tests/unit/ -q`) pasa al 100% sin regresiones en contratos existentes.
+- [ ] Se añaden o actualizan pruebas específicas que validan:
+  - Bypass de masterización plegada (`YT_FOLD_MASTERING=1`).
+  - Detección de duración de WAV/MP3 sin subproceso `ffprobe`.
+  - Extracción de miniaturas en ráfaga única con `-threads 2`.
+  - QA Gating en un solo comando FFmpeg con `-map "[vb]" -map "[vl]"`.
+
+### Rendimiento y Recursos
+- [ ] El tiempo total de producción por Short de 60s se mantiene entre **4 y 6 segundos**.
+- [ ] El uso de CPU no excede de 2 Cores (<= 200%) y la memoria pico se mantiene <= 2.0 GiB.
+
+## Verification Resources
+- Script de integridad: `./scripts/verify_integrity.sh`
+- Suite de pruebas unitarias: `.venv/bin/pytest tests/unit/ -q`
+- Pruebas focalizadas:
+  - `tests/unit/test_quality_gates.py`
+  - `tests/unit/test_anti_regression_guardrails.py`
+  - `tests/unit/test_thumbnail_engine.py`
+  - `tests/unit/test_procedural_audio.py`
+  - `tests/unit/test_pipeline_decoupling.py`
+
+

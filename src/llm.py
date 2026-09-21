@@ -540,7 +540,10 @@ def _word_budget_instruction(max_words: Optional[int], min_words: Optional[int] 
         )
     if max_words and max_words > 0:
         parts.append(
-            f"Restricción dura de duración: el guion final debe tener como máximo {int(max_words)} palabras."
+            f"CALIBRACIÓN ESTRICTA DE DURACIÓN Y RITMO (2.25 palabras/segundo): El guion final DEBE tener "
+            f"como máximo {int(max_words)} palabras. Es OBLIGATORIO que la historia comience con un gancho "
+            f"inmediato, desarrolle el conflicto y RESUELVA su clímax y remate final por completo dentro de este "
+            f"presupuesto de palabras. Prohibido dejar desenlaces incompletos o historias cortadas."
         )
     return ("\n\n" + "\n\n".join(parts)) if parts else ""
 
@@ -657,8 +660,10 @@ def _build_adaptation_prompt(
     Carries the same mandate as :func:`_adaptation_system_instruction` so the
     brief survives even when a harness drops or overrides the system role.
     """
+    t_clean = (title or "").strip()
+    title_line = f"Título del video: {t_clean} ({t_clean.lower()})" if t_clean and t_clean.lower() != t_clean else f"Título del video: {t_clean}"
     sections = [
-        f"Título del video: {(title or '').strip()}",
+        title_line,
         "Historia fuente (texto íntegro ya aprobado por edición; adáptalo, no lo sustituyas):",
         "<<<HISTORIA",
         (content or "").strip(),

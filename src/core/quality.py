@@ -231,6 +231,125 @@ def detect_long_black_frames(
     return longest, durations
 
 
+def probe_visual_integrity_single_pass(
+    path: str | os.PathLike[str],
+    *,
+    threads: int = 2,
+    sample_fps: float = LUMINANCE_SAMPLE_FPS,
+) -> dict[str, Any]:
+    """Single-pass visual integrity check (black detection + luminance) via FFmpeg nullsink.
+
+    Maps both filtergraph outputs explicitly (-map "[vb]" -map "[vl]") to prevent FFmpeg syntax
+    errors, streaming directly to /dev/null with zero disk I/O and zero Pillow allocations.
+    """
+    target = Path(path)
+    if not target.is_file() or target.stat().st_size == 0:
+        return {
+            "longest_black_seconds": 0.0,
+            "black_segments": [],
+            "avg_luminance": 50.0,
+            "dark_ratio": 0.0,
+            "dark_frames": 0,
+            "total_frames": 0,
+            "passed": False,
+            "degraded": True,
+            "degraded_reason": f"artifact missing or empty: {target}",
+        }
+
+    filter_str = (
+        f"[0:v]blackdetect=d=0.5:pix_th=0.10[vb];"
+        f"[0:v]fps={sample_fps},signalstats,metadata=print:key=lavfi.signalstats.YAVG[vl]"
+    )
+    cmd = [
+        "ffmpeg",
+        "-threads", str(threads),
+        "-i", str(target),
+        "-filter_complex", filter_str,
+        "-map", "[vb]",
+        "-map", "[vl]",
+        "-an",
+        "-f", "null",
+        "-",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        combined_stderr = result.stderr or ""
+    except Exception as exc:
+        logger.warning("probe_visual_integrity_single_pass failed for %s: %s", target, exc)
+        return {
+            "longest_black_seconds": 0.0,
+            "black_segments": [],
+            "avg_luminance": 50.0,
+            "dark_ratio": 0.0,
+            "dark_frames": 0,
+            "total_frames": 0,
+            "passed": False,
+            "degraded": True,
+            "degraded_reason": f"ffmpeg failed: {exc}",
+        }
+
+    durations = [
+        float(value)
+        for value in re.findall(r"black_duration:([\d.]+)", combined_stderr)
+    ]
+    longest_black = max(durations, default=0.0)
+
+    yavg_values = [
+        float(value)
+        for value in re.findall(r"lavfi\.signalstats\.YAVG=([\d.]+)", combined_stderr)
+    ]
+    if yavg_values:
+        avg_lum = sum(yavg_values) / len(yavg_values)
+        dark_frames = sum(1 for y in yavg_values if y < LUMINANCE_DARK_MEAN_Y)
+        dark_ratio = dark_frames / len(yavg_values)
+    else:
+        avg_lum = 50.0
+        dark_frames = 0
+        dark_ratio = 0.0
+
+    lum_passed = avg_luminance_gate_passes(avg_lum, dark_ratio)
+    passed = lum_passed and (longest_black < 3.0)
+
+    return {
+        "longest_black_seconds": longest_black,
+        "black_segments": durations,
+        "avg_luminance": avg_lum,
+        "dark_ratio": dark_ratio,
+        "dark_frames": dark_frames,
+        "total_frames": len(yavg_values),
+        "passed": passed,
+        "luminance_passed": lum_passed,
+        "black_passed": longest_black < 3.0,
+    }
+
+
+def run_single_pass_visual_qa(
+    path: str | os.PathLike[str],
+    *,
+    threads: int = 2,
+    sample_fps: float = LUMINANCE_SAMPLE_FPS,
+) -> tuple[tuple[float, list[float]], dict[str, Any]]:
+    """Single-pass visual QA adapter returning ((longest_black, black_segments), lum_data)."""
+    probe = probe_visual_integrity_single_pass(path, threads=threads, sample_fps=sample_fps)
+    longest_black = probe["longest_black_seconds"]
+    black_segments = probe["black_segments"]
+    lum_data = {
+        "avg_luminance": probe["avg_luminance"],
+        "dark_ratio": probe["dark_ratio"],
+        "dark_frames": probe["dark_frames"],
+        "total_frames": probe["total_frames"],
+        "passed": probe["luminance_passed"],
+    }
+    return ((longest_black, black_segments), lum_data)
+
+
 @dataclass
 class QualityReport:
     channel: CanonicalChannel

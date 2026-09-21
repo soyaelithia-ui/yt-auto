@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
+import sqlite3
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,6 +22,88 @@ from src.pipeline.utils import is_pipeline_test_environment as is_test_environme
 from src.pipeline.context import ClaimedLeaseContext
 
 logger = get_logger("pipeline.stages.stage_01_lease")
+
+FEED_CACHE_TTL_SECONDS: float = 300.0
+
+
+def _get_cached_external_stories(
+    database: str,
+    feed: str,
+    limit: int,
+    ttl_seconds: float = FEED_CACHE_TTL_SECONDS,
+) -> list[dict[str, Any]] | None:
+    """Retrieve unexpired external candidate stories from SQLite cache, or None on miss."""
+    cache_key = f"{feed}:{limit}"
+    now = time.time()
+    try:
+        with connect(database) as conn:
+            table_check = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='external_post_cache'"
+            ).fetchone()
+            if not table_check:
+                return None
+            row = conn.execute(
+                "SELECT payload_json, expires_at FROM external_post_cache WHERE cache_key = ?",
+                (cache_key,),
+            ).fetchone()
+            if row:
+                expires_at = float(row["expires_at"] if isinstance(row, sqlite3.Row) else row[1])
+                if expires_at > now:
+                    payload_str = row["payload_json"] if isinstance(row, sqlite3.Row) else row[0]
+                    data = json.loads(payload_str)
+                    if (
+                        isinstance(data, list)
+                        and all(isinstance(item, dict) and "id" in item and item["id"] for item in data)
+                    ):
+                        logger.info(
+                            "External feed cache HIT for %s (TTL remaining: %.1fs)",
+                            cache_key,
+                            expires_at - now,
+                        )
+                        return data
+                    logger.warning("Corrupt external post cache payload for %s; invalidating", cache_key)
+                    return None
+    except Exception as exc:
+        logger.debug("Failed reading external post cache (%s): %s", cache_key, exc)
+    return None
+
+
+def _set_cached_external_stories(
+    database: str,
+    feed: str,
+    limit: int,
+    stories: list[dict[str, Any]],
+    ttl_seconds: float = FEED_CACHE_TTL_SECONDS,
+) -> None:
+    """Store external candidate stories in SQLite cache with TTL."""
+    cache_key = f"{feed}:{limit}"
+    now = time.time()
+    expires_at = now + ttl_seconds
+    try:
+        payload = json.dumps(stories)
+        with connect(database) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS external_post_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    feed TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    fetched_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO external_post_cache (cache_key, feed, payload_json, fetched_at, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (cache_key, feed, payload, now, expires_at),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.debug("Failed writing external post cache (%s): %s", cache_key, exc)
+
 
 
 def _claim_or_enqueue_story(
@@ -53,9 +138,17 @@ def _claim_or_enqueue_story(
         from src.db import is_story_duplicate
         from src.scraper import fetch_reddit_stories
 
-        stories = fetch_reddit_stories(subreddit=settings.source_feed, limit=25)
+        feed = str(settings.source_feed)
+        limit = 25
+        stories = _get_cached_external_stories(database, feed, limit)
+        if stories is None:
+            stories = fetch_reddit_stories(subreddit=feed, limit=limit)
+            if stories:
+                _set_cached_external_stories(database, feed, limit, stories)
+
         ingest_lane = resolve_lane_for_run(channel_key, lane_id)
-        for s_item in stories:
+        valid_stories = [s for s in (stories or []) if isinstance(s, dict) and "id" in s]
+        for s_item in valid_stories:
             if is_story_duplicate(channel_name, s_item["id"], s_item.get("content"), database):
                 continue
             verdict = filter_and_score_story(s_item, lane=ingest_lane)
