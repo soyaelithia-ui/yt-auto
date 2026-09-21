@@ -52,7 +52,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt \
     && chown -R appuser:appuser /home/appuser /ms-playwright \
          /app/data /app/work /app/artifacts /app/logs /app/output
 COPY . /app
-RUN rm -rf /app/build && chown -R appuser:appuser /app
+RUN rm -rf /app/build /app/.venv && chown -R appuser:appuser /app
 
 USER 10001:10001
 
