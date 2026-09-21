@@ -144,7 +144,10 @@ class LoopSynthesizerWorker:
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(default_render_crf()), "-preset", default_render_preset(),
             "-movflags", "+faststart", str(synth_mp4)
         ]
-        subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        except subprocess.TimeoutExpired:
+            logger.warning("FFmpeg lavfi loop generation timed out after 60s")
 
         size = synth_mp4.stat().st_size if synth_mp4.exists() else 0
         loop_id = f"loop_{category}_{orientation[:1]}_{seed_val}"

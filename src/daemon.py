@@ -205,13 +205,13 @@ def run_pipeline_once(
         )
         if isinstance(res, dict):
             work_dir = res.get("work_dir")
-        return res
     finally:
         if work_dir:
             try:
                 clean_run_intermediates(work_dir)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("clean_run_intermediates failed for %s: %s", work_dir, exc)
+    return res
 
 
 def run_lane_once(
@@ -294,8 +294,8 @@ def _release_telegram_poller_lock() -> None:
         try:
             fcntl.flock(_TELEGRAM_POLLER_LOCK_HANDLE, fcntl.LOCK_UN)
             _TELEGRAM_POLLER_LOCK_HANDLE.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed unlocking telegram poller: %s", exc)
         _TELEGRAM_POLLER_LOCK_HANDLE = None
 
 
@@ -881,8 +881,8 @@ def _execute_lane_pick(
             try:
                 from src.cleaner import clean_run_intermediates
                 clean_run_intermediates(result["work_dir"])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed cleaning run intermediates: %s", exc)
 
     if result is None:
         return {"status": "LANE_EMPTY", "lane": pick.lane_id, "channel": pick.channel.value}

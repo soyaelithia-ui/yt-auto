@@ -13,5 +13,9 @@ def handle_test(args: argparse.Namespace, parser: argparse.ArgumentParser | None
     if not test_script.is_file():
         test_script = BASE_DIR / "scripts" / "verify_integrity.sh"
 
-    res = subprocess.run([str(test_script)], cwd=str(BASE_DIR))
-    return res.returncode
+    try:
+        res = subprocess.run([str(test_script)], cwd=str(BASE_DIR), timeout=600)
+        return res.returncode
+    except subprocess.TimeoutExpired:
+        print("❌ Test suite execution timed out after 600s.")
+        return 1

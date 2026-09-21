@@ -88,12 +88,16 @@ def handle_loop(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
             out_p = Path(output).resolve()
             out_p.parent.mkdir(parents=True, exist_ok=True)
             import subprocess
-            subprocess.run([
-                "ffmpeg", "-y", "-ss", "0.5", "-i", str(rec.file_path),
-                "-vframes", "1", str(out_p)
-            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"🖼️ Vista previa generada en: {out_p}")
-            return 0
+            try:
+                subprocess.run([
+                    "ffmpeg", "-y", "-ss", "0.5", "-i", str(rec.file_path),
+                    "-vframes", "1", str(out_p)
+                ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                print(f"🖼️ Vista previa generada en: {out_p}")
+                return 0
+            except subprocess.TimeoutExpired:
+                print(f"⚠️ Tiempo de espera agotado al generar vista previa para {out_p}")
+                return 1
         else:
             print(f"⚠️ No se encontró loop en catálogo para '{category}' [{orientation}].")
             return 1

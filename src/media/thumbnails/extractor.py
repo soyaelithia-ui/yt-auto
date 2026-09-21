@@ -97,7 +97,7 @@ class ClimaxFrameExtractor:
                 str(out_img.resolve()),
             ]
             try:
-                subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=15)
                 if out_img.is_file() and out_img.stat().st_size > 1000:
                     extracted.append(out_img)
             except Exception as e:

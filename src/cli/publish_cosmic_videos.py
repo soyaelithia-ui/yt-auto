@@ -44,6 +44,7 @@ def create_analog_thumbnail(
                 ],
                 capture_output=True,
                 check=True,
+                timeout=15,
             )
             extracted = frame_path.is_file() and frame_path.stat().st_size > 0
         except Exception as e:
