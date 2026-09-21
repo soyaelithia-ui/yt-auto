@@ -310,7 +310,7 @@ class LoopStreamCopyMixin:
             if not v_path.exists() or not v_path.is_file() or v_path.stat().st_size == 0:
                 logger.warning("Specified video_loop_path '%s' not found or empty; falling back to continuous loop.", v_path)
                 try:
-                    v_path = getattr(self, "resolve_continuous_loop")(orientation=orientation)
+                    v_path = getattr(self, "resolve_continuous_loop")(orientation=orientation, category=category)
                 except CatalogAssetNotFoundError:
                     v_path = getattr(self, "resolve_loop_video")(
                         category=category,
@@ -319,7 +319,7 @@ class LoopStreamCopyMixin:
                     )
         else:
             try:
-                v_path = getattr(self, "resolve_continuous_loop")(orientation=orientation)
+                v_path = getattr(self, "resolve_continuous_loop")(orientation=orientation, category=category)
             except CatalogAssetNotFoundError:
                 v_path = getattr(self, "resolve_loop_video")(
                     category=category,

@@ -298,13 +298,15 @@ class LoopRotationMixin:
         self,
         orientation: str | tuple[int, int] = "vertical",
         *,
+        category: str | None = None,
+        channel: str | None = None,
         allow_test_mock: bool = False,
         persist: bool | None = None,
     ) -> Path:
         """
         Resolves a single continuous loop clip from assets/videos/shorts/ (vertical)
-        or assets/videos/longs/ (horizontal) using round-robin rotation.
-        Neutral without channel coupling.
+        or assets/videos/longs/ (horizontal) using round-robin rotation, optionally
+        filtered by thematic category or channel context.
         Raises CatalogAssetNotFoundError if directory is empty (fail-fast safeguard).
         """
         is_vert = (
@@ -332,11 +334,30 @@ class LoopRotationMixin:
                 f"({spec}) in '{folder}' to enable video composition."
             )
 
-        idx = self.get_rotation_index(mode, len(mp4_files), persist=persist)
-        chosen = mp4_files[idx]
+        # Context-aware candidate filtering (Horror vs Drama vs Scifi)
+        candidates = mp4_files
+        norm_ctx = f"{category or ''} {channel or ''}".lower()
+        if any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss")):
+            horror_matches = [
+                p for p in mp4_files
+                if any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy"))
+            ]
+            if horror_matches:
+                candidates = horror_matches
+        elif any(k in norm_ctx for k in ("drama", "aita", "aelithia", "interior", "romance", "family", "confession")):
+            drama_matches = [
+                p for p in mp4_files
+                if any(k in p.name.lower() for k in ("drama", "interior", "cozy", "rain", "window", "hearth", "ambient_01"))
+            ]
+            if drama_matches:
+                candidates = drama_matches
+
+        rotation_key = f"{mode}_{candidates[0].stem.split('_')[0]}" if len(candidates) < len(mp4_files) else mode
+        idx = self.get_rotation_index(rotation_key, len(candidates), persist=persist)
+        chosen = candidates[idx]
         logger.info(
-            "Resolved continuous single-loop [%s] (%d/%d): %s",
-            mode, idx + 1, len(mp4_files), chosen.name,
+            "Resolved continuous single-loop [%s] (ctx: '%s') (%d/%d): %s",
+            rotation_key, norm_ctx.strip(), idx + 1, len(candidates), chosen.name,
         )
         return chosen
 

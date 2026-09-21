@@ -79,11 +79,13 @@ def stage_04_mood_theme(ctx: PipelineContext) -> None:
         )
         ctx.resolved_loop_path = ctx.loop_engine.resolve_continuous_loop(
             orientation=ctx.lane.orientation,
+            category=str(ctx.target_category),
+            channel=str(ctx.channel_name),
             allow_test_mock=is_test_environment(),
         )
         ctx.scene_bg_list = [str(ctx.resolved_loop_path)]
         ctx.shot_durations = [total_audio_sec]
-        ctx.target_category = getattr(ctx.lane, "loop_category", None) or "neutral_loop"
+        ctx.target_category = ctx.target_category or getattr(ctx.lane, "loop_category", None) or "neutral_loop"
         scenes_plan = [
             {
                 "duration": total_audio_sec,
