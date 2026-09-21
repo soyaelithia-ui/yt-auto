@@ -118,4 +118,4 @@ assets/background_scenes/.*_progress.json
 core.*
 
 # Staged Antigravity CLI ELF for Docker image builds (never commit)
-/build/
+/build/data/inventory_digest_*.json
