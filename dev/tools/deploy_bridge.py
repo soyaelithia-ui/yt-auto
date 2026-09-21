@@ -111,10 +111,10 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        # Fetch from local repo
+        # Fetch from local repo and fast-forward
         print("  1. Obteniendo últimos commits de desarrollo...")
-        _run(["git", "fetch", str(REPO_ROOT), "main:main"])
-        _run(["git", "checkout", "main"])
+        _run(["git", "fetch", str(REPO_ROOT), "main"])
+        _run(["git", "merge", "--ff-only", "FETCH_HEAD"])
 
         # Re-apply sparse checkout to ensure all required components exist
         print("  2. Verificando sparse-checkout...")
