@@ -1,26 +1,38 @@
 """
-src/agents/__init__.py - Native Multi-Agent Pipeline package.
+src/agents/__init__.py - Autonomous AI-First Production Agents.
 """
 from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent
-from src.agents.script_curator import CinematicScriptCuratorAgent
-from src.agents.art_director import ArtDirectorMoodAgent
-from src.agents.scene_planner import ScenePlannerCompositorAgent
-from src.agents.qa_auditor import VisualAudioQAAuditorAgent
-from src.agents.investigator import StoryInvestigatorAgent, generate_story_script
+from src.agents.story_director import (
+    StoryDirectorAgent,
+    StoryInvestigatorAgent,
+    generate_story_script,
+)
+from src.agents.atmospheric_director import (
+    AtmosphericDirectorAgent,
+    ArtDirectorMoodAgent,
+)
+from src.agents.seo_optimizer import SeoOptimizerAgent, ViralPackagingAgent
+from src.agents.video_qa import (
+    VideoQAAgent,
+    MultimodalReviewAgent,
+    run_video_qa,
+    enforce_multimodal_qa_gate,
+)
 from src.agents.translator import TranslatorAgent
-from src.agents.image_auditor import ImageAuditorAgent
-from src.agents.seo_optimizer import SeoOptimizerAgent
 
 __all__ = [
     "CANONICAL_MODEL",
     "ProgrammaticAgent",
-    "CinematicScriptCuratorAgent",
-    "ArtDirectorMoodAgent",
-    "ScenePlannerCompositorAgent",
-    "VisualAudioQAAuditorAgent",
+    "StoryDirectorAgent",
+    "AtmosphericDirectorAgent",
+    "ViralPackagingAgent",
+    "SeoOptimizerAgent",
+    "VideoQAAgent",
+    "MultimodalReviewAgent",
+    "TranslatorAgent",
     "StoryInvestigatorAgent",
     "generate_story_script",
-    "TranslatorAgent",
-    "ImageAuditorAgent",
-    "SeoOptimizerAgent",
+    "ArtDirectorMoodAgent",
+    "run_video_qa",
+    "enforce_multimodal_qa_gate",
 ]

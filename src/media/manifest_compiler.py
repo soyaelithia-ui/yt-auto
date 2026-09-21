@@ -42,8 +42,8 @@ def validate_hex_color(val: Any, default: str = "#00FF88") -> str:
     return default
 
 
-class ScenePlannerCompositorAgent:
-    """Agent 3: Synthesizes SceneManifestV2 from Script and Visual Plan."""
+class SceneManifestCompiler:
+    """Deterministic compiler: Synthesizes SceneManifestV2 from Script, Visual Plan, and Audio."""
 
     def __init__(self, schema_file: Optional[Path] = None) -> None:
         self.schema_path = schema_file or SCHEMA_PATH
@@ -697,3 +697,7 @@ class ScenePlannerCompositorAgent:
             jsonschema.validate(instance=manifest_payload, schema=self._schema)
 
         return manifest_payload
+
+
+# Backward-compatibility alias
+ScenePlannerCompositorAgent = SceneManifestCompiler

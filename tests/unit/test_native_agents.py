@@ -15,9 +15,11 @@ from src.agents.base_agent import (
     _seed_appdata_from_secrets,
     cleanup_ephemeral_sessions,
 )
-from src.agents.investigator import StoryInvestigatorAgent
+from src.agents.story_director import StoryDirectorAgent, StoryInvestigatorAgent
+from src.agents.atmospheric_director import AtmosphericDirectorAgent
 from src.agents.translator import TranslatorAgent
-from src.agents.seo_optimizer import SeoOptimizerAgent
+from src.agents.seo_optimizer import SeoOptimizerAgent, ViralPackagingAgent
+from src.agents.video_qa import VideoQAAgent, MultimodalReviewAgent
 
 
 def test_canonical_model_is_gemini_flash():
@@ -77,10 +79,24 @@ def test_agent_defaults_are_canonical_model_and_high_effort():
     assert seo.reasoning_effort == "high"
 
 
+def test_story_director_agent_instantiation():
+    agent = StoryDirectorAgent(instance_id="creative_lane", reasoning_effort="high")
+    assert agent.model == CANONICAL_MODEL
+    assert agent.role_name == "story-director-agent"
+    assert agent.instance_id == "creative_lane"
+    assert agent.reasoning_effort == "high"
+
+
+def test_atmospheric_director_agent_instantiation():
+    agent = AtmosphericDirectorAgent(instance_id="atmos_lane", reasoning_effort="high")
+    assert agent.model == CANONICAL_MODEL
+    assert agent.role_name == "atmospheric-director-agent"
+    assert agent.instance_id == "atmos_lane"
+
+
 def test_story_investigator_agent_instantiation():
     agent = StoryInvestigatorAgent(instance_id="creative_lane", reasoning_effort="high")
     assert agent.model == CANONICAL_MODEL
-    assert agent.role_name == "story-investigator-agent"
     assert agent.instance_id == "creative_lane"
     assert agent.reasoning_effort == "high"
 

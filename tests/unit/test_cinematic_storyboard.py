@@ -6,9 +6,9 @@ and upstream WGSL archetype propagation.
 from __future__ import annotations
 
 import pytest
-from src.agents.script_curator import CinematicScriptCuratorAgent
-from src.agents.art_director import ArtDirectorMoodAgent
-from src.agents.scene_planner import ScenePlannerCompositorAgent
+from src.curators.text_splitter import CinematicScriptCuratorAgent
+from src.agents.atmospheric_director import AtmosphericDirectorAgent as ArtDirectorMoodAgent
+from src.media.manifest_compiler import SceneManifestCompiler as ScenePlannerCompositorAgent
 from src.core.scenic_detector import VALID_ARCHETYPES  # avoid quarantined native_procedural
 
 

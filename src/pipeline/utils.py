@@ -167,7 +167,7 @@ def _catalog_shots_from_manifest(
     channel: str | None = None,
 ) -> tuple[list[str], list[float], str]:
     """Turn a scene-planner manifest into loop paths + durations (no pixel burn)."""
-    from src.agents.shot_mix import assign_roles
+    from src.media.shot_mix import assign_roles
 
     scenes = manifest.get("scenes") or []
     usable: list[dict[str, Any]] = []

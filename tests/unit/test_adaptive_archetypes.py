@@ -3,7 +3,7 @@ tests/unit/test_adaptive_archetypes.py - Unit tests for universal adaptive visua
 """
 from pathlib import Path
 import pytest
-from src.agents.scene_planner import ScenePlannerCompositorAgent
+from src.media.manifest_compiler import SceneManifestCompiler as ScenePlannerCompositorAgent
 
 
 class TestUniversalAdaptiveArchetypes:

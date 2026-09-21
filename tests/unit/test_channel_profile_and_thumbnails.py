@@ -318,7 +318,7 @@ def test_thematic_asset_resolver_hierarchy(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_qa_auditor_aspect_ratio_16_9_and_9_16(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
     auditor = VisualAudioQAAuditorAgent()
     engine = ThumbnailEngine()
@@ -351,7 +351,7 @@ def test_qa_auditor_aspect_ratio_16_9_and_9_16(tmp_path: Path):
 
 
 def test_qa_auditor_rejects_low_contrast_or_small_file(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
     auditor = VisualAudioQAAuditorAgent()
 
@@ -366,7 +366,7 @@ def test_qa_auditor_rejects_low_contrast_or_small_file(tmp_path: Path):
 
 
 def test_qa_auditor_safe_zone_violation(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
     auditor = VisualAudioQAAuditorAgent()
     engine = ThumbnailEngine()
@@ -389,7 +389,7 @@ def test_qa_auditor_safe_zone_violation(tmp_path: Path):
 
 def test_qa_gatekeeper_thumbnail_wiring(tmp_path: Path):
     from lib.qa_gatekeeper import QAGatekeeper
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
     gk = QAGatekeeper(strict_mode=True)
     engine = ThumbnailEngine()
@@ -508,7 +508,7 @@ def test_moku_lane_aspect_ratio_dispatch_and_asset_resolution():
 
 
 def test_qa_auditor_rejects_9_16_shorts_safe_zone_violations(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
     auditor = VisualAudioQAAuditorAgent()
     engine = ThumbnailEngine()
@@ -688,7 +688,7 @@ def test_parametric_subject_contrast():
 
 
 def test_safe_zone_1280x720_and_1080x1920_qa_auditor_compliance(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
     auditor = VisualAudioQAAuditorAgent()
     engine = ThumbnailEngine()
 
@@ -720,7 +720,7 @@ def test_safe_zone_1280x720_and_1080x1920_qa_auditor_compliance(tmp_path: Path):
 
 
 def test_resilient_safeguard_on_missing_or_corrupt_asset(tmp_path: Path):
-    from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+    from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
     auditor = VisualAudioQAAuditorAgent()
     engine = ThumbnailEngine()
 

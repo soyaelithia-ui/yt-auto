@@ -431,7 +431,7 @@ class QAGatekeeper:
 
     def _audit_thumbnail_artifact(self, path: str, issues: List[QualityReportIssue]) -> None:
         try:
-            from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+            from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
             auditor = VisualAudioQAAuditorAgent()
             t_pass, t_errs = auditor.audit_thumbnail(path)
             if not t_pass:

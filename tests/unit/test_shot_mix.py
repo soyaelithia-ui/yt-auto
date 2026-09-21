@@ -1,6 +1,4 @@
-"""Live director mix: majority settled, no catalog bake."""
-
-from src.agents.shot_mix import DESIGNED, SETTLED, assign_roles, designed_count
+from src.media.shot_mix import DESIGNED, SETTLED, assign_roles, designed_count
 
 
 def test_five_scenes_three_or_four_settled():
@@ -59,7 +57,7 @@ def test_catalog_shots_vertical_rotates_backgrounds():
 
 
 def test_designed_filter_is_not_the_settled_grade():
-    from src.agents.shot_mix import video_filter_for_role
+    from src.media.shot_mix import video_filter_for_role
 
     settled = video_filter_for_role(SETTLED, 1080, 1920, 30)
     designed = video_filter_for_role(DESIGNED, 1080, 1920, 30)

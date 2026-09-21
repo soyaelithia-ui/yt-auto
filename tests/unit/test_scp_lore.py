@@ -19,7 +19,7 @@ from src.core.scp_lore import (
     normalize_scp_lookup_key,
     validate_scp_lore,
 )
-from src.agents.investigator import StoryInvestigatorAgent
+from src.agents.story_director import StoryDirectorAgent, StoryInvestigatorAgent
 
 
 class TestSCPLoreDatabase(unittest.TestCase):

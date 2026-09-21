@@ -36,7 +36,7 @@ def test_get_fallback_story_scifi_aliases():
 
 
 def test_script_curator_agent_scifi_fallback_routing():
-    from src.agents.script_curator import CinematicScriptCuratorAgent
+    from src.curators.text_splitter import CinematicScriptCuratorAgent
 
     curator = CinematicScriptCuratorAgent()
     short_fallback = curator._generate_fallback_narrative("Paradoja Cuántica", "scifi-shorts", "")

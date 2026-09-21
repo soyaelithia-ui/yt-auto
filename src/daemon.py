@@ -140,6 +140,24 @@ def _startup_incident_check(
     send_operational_alert("YTAuto reiniciado tras parada", detail)
 
 
+def _friendly_name(identifier: str) -> str:
+    name_map = {
+        "moku": "Expedientes de Terror",
+        "horror": "Expedientes de Terror",
+        "moku-scp-shorts": "Expedientes de Terror (Shorts)",
+        "moku-horror-long": "Expedientes de Terror (Largos)",
+        "horror-long": "Expedientes de Terror (Largos)",
+        "horror-shorts": "Expedientes de Terror (Shorts)",
+        "aelithia": "Dilemas Morales",
+        "drama": "Dilemas Morales",
+        "aelithia-aita-long": "Dilemas Morales (Largos)",
+        "aelithia-drama-shorts": "Dilemas Morales (Shorts)",
+        "drama-long": "Dilemas Morales (Largos)",
+        "drama-shorts": "Dilemas Morales (Shorts)",
+    }
+    return name_map.get(str(identifier).lower(), str(identifier))
+
+
 def _preflight_disk_or_pause(
     database: str,
     channel_value: str,
@@ -174,7 +192,7 @@ def _preflight_disk_or_pause(
     except Exception:
         logger.debug("channel pause failed", exc_info=True)
     send_operational_alert(
-        f"Canal {channel_value} pausado: disco bajo",
+        f"Canal {_friendly_name(channel_value)} pausado: disco bajo",
         message,
     )
     return False
@@ -381,7 +399,7 @@ def _register_turn_failure(
         except Exception:
             logger.debug("lane pause failed", exc_info=True)
         send_operational_alert(
-            f"Carril {lane_id} pausado por fallos repetidos",
+            f"Carril {_friendly_name(lane_id)} pausado por fallos repetidos",
             message,
         )
     else:
@@ -392,7 +410,7 @@ def _register_turn_failure(
         except Exception:
             logger.debug("channel pause failed", exc_info=True)
         send_operational_alert(
-            f"Canal {channel_value} pausado por fallos repetidos",
+            f"Canal {_friendly_name(channel_value)} pausado por fallos repetidos",
             message,
         )
 

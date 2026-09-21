@@ -79,15 +79,21 @@ def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
         if not src.is_file() or _is_external_interactive_cli(src.parent):
             continue
         for target_dir in targets:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            dst = target_dir / name
-            if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
-                continue
-            shutil.copy2(src, dst)
             try:
-                os.chmod(dst, 0o600)
-            except OSError:
-                pass
+                target_dir.mkdir(parents=True, exist_ok=True)
+                dst = target_dir / name
+                if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+                    continue
+                shutil.copy2(src, dst)
+                try:
+                    os.chmod(dst, 0o600)
+                except OSError:
+                    pass
+            except OSError as exc:
+                if dst.exists() and dst.stat().st_size > 0:
+                    logger.debug("Reusing existing %s despite copy error: %s", dst, exc)
+                else:
+                    logger.warning("Could not seed %s into %s: %s", name, target_dir, exc)
 
 
 def _scrub_external_antigravity_env(cli_env: dict[str, str], *, isolated_root: Path) -> None:

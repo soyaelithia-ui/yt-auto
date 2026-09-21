@@ -248,20 +248,38 @@ async def _dynamic_procedural_fallback(
         seed = int(time.time()) + i
         title, theme = _generate_procedural_title(channel_key, is_lane_long, seed, i, themes_to_use, existing_titles)
 
-        if is_lane_long:
-            content = director.build_longform(
-                channel_key,
-                title,
-                target_words=getattr(lane, "words_min", 2600),
-                seed=seed + i,
-                recent_texts=existing_texts,
+        from src.pipeline.utils import is_pipeline_test_environment
+        target_fmt = "longform" if is_lane_long else "short"
+        words_target = getattr(lane, "words_min", 2600) if is_lane_long else getattr(lane, "words_min", 160)
+
+        if not is_pipeline_test_environment() or bool(os.environ.get("USE_AGENT_HARNESS") in ("1", "true")):
+            from src.agents.story_director import StoryDirectorAgent
+            story_agent = StoryDirectorAgent()
+            story_res = story_agent.generate_story(
+                topic=title,
+                channel=channel_key,
+                target_format=target_fmt,
+                target_words=words_target,
             )
-            prefix = "DYNAMIC-LONG"
+            content = story_res.get("script", "")
+            if story_res.get("title"):
+                title = story_res["title"]
+            prefix = "AI-LONG" if is_lane_long else "AI-SHORT"
         else:
-            content = director.build_short(
-                channel_key, theme, seed_offset=seed + i, recent_texts=existing_texts
-            )
-            prefix = "DYNAMIC-SHORT"
+            if is_lane_long:
+                content = director.build_longform(
+                    channel_key,
+                    title,
+                    target_words=getattr(lane, "words_min", 2600),
+                    seed=seed + i,
+                    recent_texts=existing_texts,
+                )
+                prefix = "DYNAMIC-LONG"
+            else:
+                content = director.build_short(
+                    channel_key, theme, seed_offset=seed + i, recent_texts=existing_texts
+                )
+                prefix = "DYNAMIC-SHORT"
 
         existing_texts.append(content)
         story_id = f"{prefix}-{lane_id}-{seed}"

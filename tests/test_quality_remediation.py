@@ -6,7 +6,7 @@ from PIL import Image
 from src.media.thumbnail_engine import ResilientThumbnailEngine
 from src.audio_processor import sanitize_script_for_tts
 from src.agents.seo_optimizer import SeoOptimizerAgent
-from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
 
 def test_thumbnail_engine_generates_valid_image(tmp_path):

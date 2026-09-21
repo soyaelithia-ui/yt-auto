@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import pytest
 
-from src.agents.scene_planner import ScenePlannerCompositorAgent
+from src.media.manifest_compiler import ScenePlannerCompositorAgent
 
 
 @pytest.fixture

@@ -24,8 +24,8 @@ logger = get_logger("visual_audio_qa_auditor")
 SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schemas" / "video_qa.schema.json"
 
 
-class VisualAudioQAAuditorAgent:
-    """Agent 4: Multi-tier forensic audiovisual QA audit engine."""
+class TechnicalQAAuditor:
+    """Deterministic technical verification engine for audiovisual signal metrics."""
 
     def __init__(self, schema_file: Optional[Path] = None) -> None:
         self.schema_path = schema_file or SCHEMA_PATH
@@ -369,3 +369,7 @@ class VisualAudioQAAuditorAgent:
             jsonschema.validate(instance=report_payload, schema=self._schema)
 
         return report_payload
+
+
+# Backward-compatibility alias
+VisualAudioQAAuditorAgent = TechnicalQAAuditor

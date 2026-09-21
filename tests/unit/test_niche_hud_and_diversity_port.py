@@ -25,7 +25,7 @@ from src.media.multi_act_renderer import (
     resolve_hud_accent_color,
     _escape_ffmpeg_color,
 )
-from src.agents.scene_planner import validate_hex_color
+from src.media.manifest_compiler import validate_hex_color
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.layout import AspectLayoutManager
 

@@ -12,7 +12,7 @@ import pytest
 from PIL import Image
 
 from src.media.thumbnail_engine import ResilientThumbnailEngine
-from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
 
 @pytest.fixture

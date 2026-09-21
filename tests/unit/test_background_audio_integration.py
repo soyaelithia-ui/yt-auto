@@ -8,7 +8,7 @@ import pytest
 
 from src.asset_manager import get_asset_manager
 from src.core.lanes import load_lanes
-from src.agents.scene_planner import ScenePlannerCompositorAgent
+from src.media.manifest_compiler import ScenePlannerCompositorAgent
 from lib.audio import apply_sidechain_ducking, build_sidechain_ducking_filter_graph, DEFAULT_BACKGROUND_AUDIO_VOLUME
 
 

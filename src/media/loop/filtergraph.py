@@ -170,7 +170,7 @@ class LoopFilterGraphMixin:
 
     @staticmethod
     def _shot_video_filter(idx: int, width: int, height: int, fps: int, kwargs: dict) -> str:
-        from src.agents.shot_mix import SETTLED, video_filter_for_role
+        from src.media.shot_mix import SETTLED, video_filter_for_role
 
         roles = kwargs.get("shot_roles") or []
         role = roles[idx] if idx < len(roles) else SETTLED

@@ -51,7 +51,7 @@ def test_fallback_to_B_when_A_fails(monkeypatch):
 
 
 def test_story_investigator_never_returns_degraded_script():
-    from src.agents.investigator import StoryInvestigatorAgent
+    from src.agents.story_director import StoryDirectorAgent, StoryInvestigatorAgent
     from src.core.domain import AIProviderChainExhausted
 
     agent = StoryInvestigatorAgent.__new__(StoryInvestigatorAgent)

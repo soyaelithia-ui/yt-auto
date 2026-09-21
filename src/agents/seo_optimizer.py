@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import jsonschema
 
 from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent, parse_json_reply
+from src.core.domain import AIProviderChainExhausted
 from src.log import get_logger
 
 logger = get_logger("seo_optimizer")
@@ -103,16 +104,25 @@ class SeoOptimizerAgent:
         topic: str,
         target_format: str = "short",
         niche: str = "General",
-        use_agent: bool = False,
+        use_agent: bool = True,
+        fail_closed: bool = False,
     ) -> Dict[str, Any]:
         """
         Generates optimized SEO metadata for a topic.
         Uses Antigravity harness if use_agent is True; otherwise uses deterministic viral formulas.
+        If fail_closed is True and the agent fails, raises AIProviderChainExhausted.
         """
         fmt = "short" if target_format in ("short", "shorts", "9:16", "vertical") else "longform"
         logger.info("Optimizing SEO for topic: '%s' (format=%s, use_agent=%s)", topic, fmt, use_agent)
 
-        if use_agent and bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes")):
+        from src.pipeline.utils import is_pipeline_test_environment as is_test_environment
+
+        run_harness = use_agent and (
+            bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes"))
+            or not is_test_environment()
+        )
+
+        if run_harness:
             try:
                 task_prompt = (
                     f"Generate YouTube SEO metadata for topic '{topic}' in format '{fmt}' and niche '{niche}'.\n"
@@ -137,7 +147,11 @@ class SeoOptimizerAgent:
                 if parsed and "selected_title" in parsed:
                     self.validate_metadata(parsed)
                     return parsed
+                if fail_closed:
+                    raise AIProviderChainExhausted("SeoOptimizerAgent respuesta sin titulo estructurado")
             except Exception as exc:
+                if fail_closed and not is_test_environment():
+                    raise AIProviderChainExhausted(f"SeoOptimizerAgent fallo en optimizacion: {exc}") from exc
                 logger.warning("Antigravity SEO agent fallback to algorithmic engine: %s", exc)
 
         return self._deterministic_seo(topic, fmt, niche)
@@ -290,6 +304,10 @@ def main() -> int:
     data = optimizer.optimize(args.topic, target_format=args.format, niche=args.niche, use_agent=args.use_agent)
     print(json.dumps(data, indent=2, ensure_ascii=False))
     return 0
+
+
+# Primary alias for new AI-First architecture
+ViralPackagingAgent = SeoOptimizerAgent
 
 
 if __name__ == "__main__":

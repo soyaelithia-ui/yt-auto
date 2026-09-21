@@ -433,7 +433,7 @@ def test_multiact_filter_complex_has_setsar1_and_no_trailing_comma(tmp_path, mon
 
 def test_scene_planner_hud_disabled_preserves_stream_copy(tmp_path):
     """Scene planner respects hud_enabled: False and hud_layout: 'none' by producing niche_hud=None."""
-    from src.agents.scene_planner import ScenePlannerCompositorAgent
+    from src.media.manifest_compiler import ScenePlannerCompositorAgent
     from src.media.director_single_pass import scenes_have_niche_hud
 
     agent = ScenePlannerCompositorAgent()

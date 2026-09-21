@@ -172,3 +172,29 @@ def run_video_qa(
         "findings": findings,
         "result_path": str(result_path),
     }
+
+
+def enforce_multimodal_qa_gate(
+    run_id: str,
+    *,
+    db_path: str | None = None,
+    video_path: str | None = None,
+    bundle_root: Union[Path, str, None] = None,
+    agent: VideoQAAgent | None = None,
+) -> dict[str, Any]:
+    """Execute multimodal vision QA and enforce pass/fail blocking gate."""
+    from src.pipeline.utils import is_pipeline_test_environment as is_test_environment
+    if is_test_environment() and not bool(os.environ.get("USE_AGENT_HARNESS") in ("1", "true")):
+        return {"overall_pass": True, "findings": [], "summary": "Test mode pass"}
+    report = run_video_qa(
+        run_id, db_path=db_path, video_path=video_path, bundle_root=bundle_root, agent=agent
+    )
+    if not report.get("overall_pass"):
+        findings = report.get("findings") or []
+        summary = report.get("summary") or "Auditoría visual multimodal reprobada"
+        issues = [f"{f.get('category')}: {f.get('description')}" for f in findings] or [summary]
+        raise ValueError("Video QA Multimodal bloqueado: " + "; ".join(issues))
+    return report
+
+
+MultimodalReviewAgent = VideoQAAgent

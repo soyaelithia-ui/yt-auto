@@ -198,7 +198,7 @@ class TestPhase2MultiChannelLanesAndNarratives:
 
     def test_lane_curation_configs_registered_for_all_lanes(self):
         """src/agents/script_curator.py defines curation profiles for all 6 production lanes."""
-        from src.agents.script_curator import (
+        from src.curators.text_splitter import (
             LANE_CURATION_CONFIGS,
             CinematicScriptCuratorAgent,
         )

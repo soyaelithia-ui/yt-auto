@@ -56,12 +56,16 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
 
         seo_opt = SeoOptimizerAgent()
         target_fmt = "longform" if ctx.is_long_lane else "short"
+        use_agent_real = not is_test_environment() or bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes"))
         seo_res = seo_opt.optimize(
             topic=ctx.spanish_title or ctx.title,
             target_format=target_fmt,
             niche=getattr(ctx.lane, "story_type", "") or ctx.channel_name,
-            use_agent=bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes")),
+            use_agent=use_agent_real,
+            fail_closed=not is_test_environment(),
         )
+        if seo_res.get("selected_title") and not is_test_environment():
+            ctx.youtube_title = str(seo_res["selected_title"]).strip()
         thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
         thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
         thumb_prompt = (

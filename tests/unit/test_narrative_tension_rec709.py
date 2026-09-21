@@ -33,9 +33,9 @@ from src.narrative.engine import (
     score_5phase_tension_curve,
     segment_narration_into_scenes,
 )
-from src.agents.script_curator import CinematicScriptCuratorAgent
-from src.agents.art_director import THEME_PALETTES, ArtDirectorMoodAgent
-from src.agents.scene_planner import ScenePlannerCompositorAgent
+from src.curators.text_splitter import CinematicScriptCuratorAgent
+from src.agents.atmospheric_director import THEME_PALETTES, AtmosphericDirectorAgent as ArtDirectorMoodAgent
+from src.media.manifest_compiler import SceneManifestCompiler as ScenePlannerCompositorAgent
 
 
 SCHEMA_DIR = Path(__file__).resolve().parent.parent.parent / "schemas"

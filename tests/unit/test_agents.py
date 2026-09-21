@@ -17,10 +17,10 @@ import pytest
 import jsonschema
 from jsonschema import validate
 
-from src.agents.script_curator import CinematicScriptCuratorAgent
-from src.agents.art_director import ArtDirectorMoodAgent
-from src.agents.scene_planner import ScenePlannerCompositorAgent
-from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+from src.curators.text_splitter import CinematicScriptCuratorAgent
+from src.agents.atmospheric_director import AtmosphericDirectorAgent as ArtDirectorMoodAgent
+from src.media.manifest_compiler import SceneManifestCompiler as ScenePlannerCompositorAgent
+from src.verification.technical_qa import TechnicalQAAuditor as VisualAudioQAAuditorAgent
 
 
 @pytest.fixture
@@ -138,8 +138,8 @@ class TestAgentLifecycle:
         dummy_mp4.write_bytes(b"\x00\x00\x00\x18ftypisom" + b"\x00" * 100)
 
         auditor = VisualAudioQAAuditorAgent()
-        with patch("src.agents.qa_auditor.probe_media") as mock_probe, \
-             patch("src.agents.qa_auditor.has_faststart", return_value=True):
+        with patch("src.verification.technical_qa.probe_media") as mock_probe, \
+             patch("src.verification.technical_qa.has_faststart", return_value=True):
 
             mock_video = MagicMock()
             mock_video.width = 1920

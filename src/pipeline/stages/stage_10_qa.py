@@ -51,6 +51,15 @@ def stage_10_qa_gating(ctx: PipelineContext) -> None:
                 min_duration_sec=float(ctx.lane.duration_min_sec),
             )
             report.require_pass()
+
+            # Multimodal Vision QA Quality Gate (Blocking)
+            from src.agents.video_qa import enforce_multimodal_qa_gate
+            enforce_multimodal_qa_gate(
+                ctx.run_id,
+                db_path=ctx.database,
+                video_path=str(ctx.video_path),
+            )
+
             if not ctx.set_owned_status(JobStatus.RENDERED):
                 raise LeaseOwnershipError("Ownership perdido antes de marcar RENDERED")
 

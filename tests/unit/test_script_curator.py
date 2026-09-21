@@ -16,7 +16,7 @@ import pytest
 import jsonschema
 from jsonschema import Draft7Validator, validate, ValidationError
 
-from src.agents.script_curator import (
+from src.curators.text_splitter import (
     CinematicScriptCuratorAgent,
     LANE_CURATION_CONFIGS,
     VALID_AUDIO_PACING_CUES,

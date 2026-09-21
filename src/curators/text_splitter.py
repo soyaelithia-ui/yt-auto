@@ -394,8 +394,8 @@ LANE_CURATION_CONFIGS["drama-shorts"] = LANE_CURATION_CONFIGS["aelithia-drama-sh
 LANE_CURATION_CONFIGS["drama-aita-long"] = LANE_CURATION_CONFIGS["aelithia-aita-long"]
 
 
-class CinematicScriptCuratorAgent:
-    """Agent 1: Generates structured, schema-compliant 4-Act dramatic scripts."""
+class TextSegmentationEngine:
+    """Deterministic narrative text segmentation and 4-act timing compiler."""
 
     def __init__(self, schema_file: Optional[Path] = None) -> None:
         self.schema_path = schema_file or SCHEMA_PATH
@@ -931,3 +931,7 @@ class CinematicScriptCuratorAgent:
         
         t = re.sub(r"\s+", " ", t).strip()
         return t
+
+
+# Backward-compatibility alias
+CinematicScriptCuratorAgent = TextSegmentationEngine

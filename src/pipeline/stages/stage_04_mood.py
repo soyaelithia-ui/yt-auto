@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from src.agents.art_director import ArtDirectorMoodAgent
-from src.agents.scene_planner import ScenePlannerCompositorAgent
-from src.agents.script_curator import CinematicScriptCuratorAgent
+from src.agents.atmospheric_director import AtmosphericDirectorAgent, ArtDirectorMoodAgent
+from src.media.manifest_compiler import SceneManifestCompiler, ScenePlannerCompositorAgent
+from src.curators.text_splitter import TextSegmentationEngine, CinematicScriptCuratorAgent
 from src.asset_manager import get_asset_manager
 from src.core.profiling import CanonicalStage
 from src.log import get_logger

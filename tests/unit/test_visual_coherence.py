@@ -3,7 +3,7 @@ from src.media.visual_coherence import (
     timing_scales_to_audio,
     visual_plan_palette,
 )
-from src.agents.art_director import ArtDirectorMoodAgent
+from src.agents.atmospheric_director import AtmosphericDirectorAgent as ArtDirectorMoodAgent
 
 
 def test_script_order_is_act_flatten():
