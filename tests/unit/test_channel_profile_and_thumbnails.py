@@ -19,20 +19,20 @@ def test_channel_profile_registry_loads_all_channels():
     assert len(channels) >= 2
     
     moku = ChannelProfileRegistry.get_channel("moku")
-    assert moku.id == "moku"
-    assert moku.editorial.public_name == "Moku"
+    assert moku.id == "horror"
+    assert moku.editorial.public_name == "Expedientes de Terror"
     assert moku.visual.palette.accent == "#00FF66"
     assert "horror" in moku.visual.palette.lut_profile
 
     aelithia = ChannelProfileRegistry.get_channel("aelithia")
-    assert aelithia.id == "aelithia"
-    assert aelithia.editorial.public_name == "Aelithia"
+    assert aelithia.id == "drama"
+    assert aelithia.editorial.public_name == "Dilemas Morales"
     assert aelithia.visual.palette.accent == "#FF4081"
 
     # Alias normalization
-    assert ChannelProfileRegistry.get_channel("channel1").id == "moku"
-    assert ChannelProfileRegistry.get_channel("channel2").id == "aelithia"
-    assert ChannelProfileRegistry.get_channel("aita").id == "aelithia"
+    assert ChannelProfileRegistry.get_channel("channel1").id == "horror"
+    assert ChannelProfileRegistry.get_channel("channel2").id == "drama"
+    assert ChannelProfileRegistry.get_channel("aita").id == "drama"
     assert ChannelProfileRegistry.get_channel("scifi").id == "scifi"
 
 

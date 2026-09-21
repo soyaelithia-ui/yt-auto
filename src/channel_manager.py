@@ -51,16 +51,18 @@ def get_channel_statuses(db_path: str = None) -> Dict[str, Any]:
         rows = conn.execute(
             "SELECT channel, paused, reason, updated_at FROM channel_controls"
         ).fetchall()
-    statuses = {
-        str(row["channel"]): {
-            "name": _safe_public_name(str(row["channel"])),
+    from src.core.channel_profile import ChannelProfileRegistry
+
+    statuses = {}
+    for row in rows:
+        raw_cid = str(row["channel"])
+        cid = ChannelProfileRegistry.normalize_channel_id(raw_cid)
+        statuses[cid] = {
+            "name": _safe_public_name(cid),
             "status": "SUSPENDED" if row["paused"] else "ACTIVE",
             "reason": row["reason"],
             "updated_at": row["updated_at"],
         }
-        for row in rows
-    }
-    from src.core.channel_profile import ChannelProfileRegistry
 
     for cid in ChannelProfileRegistry.list_active_channel_ids():
         if cid not in statuses:
@@ -88,14 +90,13 @@ def suspend_channel(
     db_path: str = None,
 ) -> Dict[str, Any]:
     target_path = db_path if db_path is not None else STATUS_FILE
-    try:
-        key = canonical_channel(channel)
-    except ValueError:
+    from src.core.channel_profile import ChannelProfileRegistry
+    ch_key = ChannelProfileRegistry.normalize_channel_id(channel)
+    if not ch_key:
         return {}
     repository = QueueRepository(target_path)
     repository.initialize()
-    repository.pause(key, reason)
-    ch_key = key.value if hasattr(key, "value") else str(key)
+    repository.pause(ch_key, reason)
     return get_channel_statuses(target_path).get(ch_key, {})
 
 
@@ -104,12 +105,11 @@ def activate_channel(
     db_path: str = None,
 ) -> Dict[str, Any]:
     target_path = db_path if db_path is not None else STATUS_FILE
-    try:
-        key = canonical_channel(channel)
-    except ValueError:
+    from src.core.channel_profile import ChannelProfileRegistry
+    ch_key = ChannelProfileRegistry.normalize_channel_id(channel)
+    if not ch_key:
         return {}
     repository = QueueRepository(target_path)
     repository.initialize()
-    repository.resume(key)
-    ch_key = key.value if hasattr(key, "value") else str(key)
+    repository.resume(ch_key)
     return get_channel_statuses(target_path).get(ch_key, {})

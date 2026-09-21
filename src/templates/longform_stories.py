@@ -35,32 +35,32 @@ def build_aelithia_family_debt(topic: str, **kwargs: Any) -> str:
 
 def build_moku_bunker(topic: str, **kwargs: Any) -> str:
     """Story 1: Subterranean Granite Geological Bunker."""
-    tpl = load_template_json("longform_stories_moku.json")
+    tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["bunker"], {"topic": topic})
 
 
 def build_moku_lighthouse(topic: str, **kwargs: Any) -> str:
     """Story 2: Desolate Cape Fog Lighthouse Keeper."""
-    tpl = load_template_json("longform_stories_moku.json")
+    tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["lighthouse"], {"topic": topic})
 
 
 def build_moku_rail(topic: str, **kwargs: Any) -> str:
     """Story 3: Siberian Freight Railway Signalman."""
-    tpl = load_template_json("longform_stories_moku.json")
+    tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["rail"], {"topic": topic})
 
 
 def get_wedding_story(topic: str) -> str:
     """Story 1 base: Wedding Extravaganza & Broken Engagement."""
-    tpl = load_template_json("longform_stories_aelithia.json")
+    tpl = load_template_json("longform_stories_drama.json")
     return render_paragraphs(tpl["wedding"], {"topic": topic})
 
 
 def get_wedding_story_v2(topic: str) -> str:
     """Story 1 extended: In-depth psychological and legal reflections."""
     base = get_wedding_story(topic)
-    tpl = load_template_json("longform_stories_aelithia.json")
+    tpl = load_template_json("longform_stories_drama.json")
     extra = render_paragraphs(tpl["wedding_v2_extra"], {"topic": topic})
     return base + "\n\n" + extra
 
@@ -68,13 +68,13 @@ def get_wedding_story_v2(topic: str) -> str:
 def build_aelithia_wedding_house(topic: str, **kwargs: Any) -> str:
     """Story 1: Complete wedding and house drama narrative."""
     s = get_wedding_story_v2(topic)
-    tpl = load_template_json("longform_stories_aelithia.json")
+    tpl = load_template_json("longform_stories_drama.json")
     return s + "\n\n" + tpl["wedding_house_final"]
 
 
 def get_business_story(topic: str) -> str:
     """Story 2 base: Small Business Embezzlement & Hostile Partner."""
-    tpl = load_template_json("longform_stories_aelithia.json")
+    tpl = load_template_json("longform_stories_drama.json")
     return render_paragraphs(tpl["business"], {"topic": topic})
 
 
@@ -85,7 +85,7 @@ def build_aelithia_business_betrayal(topic: str, **kwargs: Any) -> str:
 
 def get_eldercare_story(topic: str) -> str:
     """Story 3 base: Eldercare Abandonment & Greedy Siblings."""
-    tpl = load_template_json("longform_stories_aelithia.json")
+    tpl = load_template_json("longform_stories_drama.json")
     return render_paragraphs(tpl["eldercare"], {"topic": topic})
 
 

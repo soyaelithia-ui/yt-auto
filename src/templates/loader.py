@@ -11,13 +11,21 @@ from src.config import BASE_DIR
 
 TEMPLATES_DIR = BASE_DIR / "config" / "templates"
 
+TEMPLATE_ALIASES: Dict[str, str] = {
+    "narratives_moku.json": "narratives_horror.json",
+    "longform_stories_moku.json": "longform_stories_horror.json",
+    "narratives_aelithia.json": "narratives_drama.json",
+    "longform_stories_aelithia.json": "longform_stories_drama.json",
+}
+
 
 @functools.lru_cache(maxsize=16)
 def load_template_json(filename: str) -> Dict[str, Any]:
     """Load and cache structured JSON template from config/templates/."""
+    target_filename = TEMPLATE_ALIASES.get(filename, filename)
     # Prevent path traversal attacks
     resolved_dir = TEMPLATES_DIR.resolve()
-    file_path = (TEMPLATES_DIR / filename).resolve()
+    file_path = (TEMPLATES_DIR / target_filename).resolve()
     try:
         file_path.relative_to(resolved_dir)
     except ValueError:

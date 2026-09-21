@@ -50,8 +50,8 @@ def test_dynamic_channel_discovery_no_hardcoding(tmp_path):
     """Channel statuses and active channels are determined dynamically from registry and DB."""
     active_ids = ChannelProfileRegistry.list_active_channel_ids()
     assert len(active_ids) >= 2
-    assert "moku" in active_ids
-    assert "aelithia" in active_ids
+    assert "horror" in active_ids
+    assert "drama" in active_ids
 
     db_path = str(tmp_path / "test_discovery.db")
     migrate_database(db_path)
@@ -66,19 +66,19 @@ def test_dynamic_channel_discovery_no_hardcoding(tmp_path):
         assert cid in active_list
 
     # Suspend one channel dynamically
-    suspended = suspend_channel("moku", reason="test maintenance", db_path=db_path)
+    suspended = suspend_channel("horror", reason="test maintenance", db_path=db_path)
     assert suspended.get("status") == "SUSPENDED"
 
     statuses_after = get_channel_statuses(db_path)
-    assert statuses_after["moku"]["status"] == "SUSPENDED"
-    assert statuses_after["aelithia"]["status"] == "ACTIVE"
-    assert "moku" not in get_active_channels(db_path)
-    assert "aelithia" in get_active_channels(db_path)
+    assert statuses_after["horror"]["status"] == "SUSPENDED"
+    assert statuses_after["drama"]["status"] == "ACTIVE"
+    assert "horror" not in get_active_channels(db_path)
+    assert "drama" in get_active_channels(db_path)
 
     # Resume channel
-    resumed = activate_channel("moku", db_path=db_path)
+    resumed = activate_channel("horror", db_path=db_path)
     assert resumed.get("status") == "ACTIVE"
-    assert "moku" in get_active_channels(db_path)
+    assert "horror" in get_active_channels(db_path)
 
 
 def test_dynamic_channel_key_protocol():

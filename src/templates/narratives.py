@@ -15,7 +15,7 @@ from src.core.scp_lore import lookup_scp
 from src.templates.loader import load_template_json, render_paragraphs
 
 # Load externalized structured templates
-_moku_tpl = load_template_json("narratives_moku.json")
+_moku_tpl = load_template_json("narratives_horror.json")
 _MOKU_SITES: list[str] = _moku_tpl["sites"]
 _MOKU_MTF: list[str] = _moku_tpl["mtf"]
 _MOKU_PERSONNEL: list[str] = _moku_tpl["personnel"]
@@ -26,7 +26,7 @@ _MOKU_SCP_INCIDENTS: list[str] = _moku_tpl["scp_incidents"]
 _MOKU_SCP_OUTROS: list[str] = _moku_tpl["scp_outros"]
 _MOKU_HORROR_ARCHETYPES: list[dict[str, Any]] = _moku_tpl["horror_archetypes"]
 
-_aelithia_tpl = load_template_json("narratives_aelithia.json")
+_aelithia_tpl = load_template_json("narratives_drama.json")
 _AELITHIA_NAMES: list[str] = _aelithia_tpl["names"]
 _AELITHIA_ROLES: list[str] = _aelithia_tpl["roles"]
 _AELITHIA_AMOUNTS: list[str] = _aelithia_tpl["amounts"]

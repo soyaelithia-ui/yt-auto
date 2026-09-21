@@ -2,7 +2,7 @@
 tests/unit/test_narrative_scripting.py - Unit tests for SCP/Horror high-retention scripting.
 """
 import pytest
-from src.curators.moku_horror import MokuHorrorCurator
+from src.curators.horror import HorrorCurator, MokuHorrorCurator
 from src.agents.script_curator import CinematicScriptCuratorAgent
 from src.narrative.engine import CosmicNarrativeEngine, segment_narration_into_scenes
 from src.narrative.schema import VideoFormat, NarrativeArchetype
