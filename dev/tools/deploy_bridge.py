@@ -121,7 +121,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         _run([
             "git", "sparse-checkout", "set",
             "src", "config", "schemas", "deploy", "lib", "review",
-            "assets", "main.py", "manage.py", "healthcheck.py",
+            "assets", "scripts", "main.py", "manage.py", "healthcheck.py",
             "requirements.txt", "constraints.txt", ".env.example",
         ])
 
