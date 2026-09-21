@@ -412,7 +412,11 @@ def validate_runtime_config(
     channel: str | None = None,
 ) -> None:
     errors: list[str] = []
-    if require_drive:
+    enable_drive = (
+        os.environ.get("REQUIRE_DRIVE", "1").strip().lower() not in ("0", "false", "no")
+        and os.environ.get("ENABLE_DRIVE_BACKUP", "1").strip().lower() not in ("0", "false", "no")
+    )
+    if require_drive and enable_drive:
         if not SETTINGS.drive_folder_id:
             errors.append("DRIVE_FOLDER_ID es obligatorio para respaldar")
         if not SETTINGS.drive_approved_video_folder_id:
@@ -447,7 +451,7 @@ def validate_runtime_config(
 
         for ch in channels_to_check:
             cid = ch.key.value if hasattr(ch.key, "value") else str(ch.key)
-            if not ch.cookies_path.exists() or not ch.youtube_token_path.exists():
+            if not ch.cookies_path.exists() and not ch.youtube_token_path.exists():
                 errors.append(
                     f"{cid}: faltan cookies o token de YouTube"
                 )
