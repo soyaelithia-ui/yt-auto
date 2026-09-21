@@ -1,9 +1,10 @@
-import os
-import re
 import json
-import time
+import os
+import random
+import re
 import signal
 import subprocess
+import time
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from src.config import (
@@ -670,6 +671,9 @@ def upload_video_via_playwright(
     thumbnail_path: Optional[str] = None,
     expected_identity: Optional[str] = None,
     user_data_dir: Optional[str] = None,
+    expected_channel_id: Optional[str] = None,
+    channel: str = "default",
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Strategy B: Automation upload via Playwright using channel session cookies.
@@ -786,16 +790,12 @@ def upload_video_via_playwright(
                         user_agent=modern_ua,
                         viewport={"width": 1280, "height": 720},
                         args=[
+                            "--headless=new",
                             "--disable-blink-features=AutomationControlled",
                             "--no-sandbox",
                             "--disable-dev-shm-usage",
                         ],
                     )
-                    context.add_init_script("""
-                        Object.defineProperty(navigator, 'webdriver', {
-                            get: () => undefined
-                        });
-                    """)
                 except Exception as launch_err:
                     if "playwright install" in str(launch_err).lower() or "executable" in str(launch_err).lower():
                         raise RuntimeError(
@@ -811,12 +811,16 @@ def upload_video_via_playwright(
                         logger.debug("Persistent context cookie seeding: %s", cookie_err)
 
                 page = context.pages[0] if context.pages else context.new_page()
-                
-                # 1. Navigate to upload page
-                logger.info("Navigating to https://youtube.com/upload...")
-                page.goto("https://youtube.com/upload")
-                page.wait_for_timeout(5000)
-                
+
+                # 1. Navigate to upload page (direct canonical channel URL when available)
+                target_url = "https://youtube.com/upload"
+                if expected_channel_id and str(expected_channel_id).strip():
+                    cid = str(expected_channel_id).strip()
+                    target_url = f"https://studio.youtube.com/channel/{cid}/videos/upload"
+                logger.info("Navigating to %s...", target_url)
+                page.goto(target_url)
+                page.wait_for_timeout(random.randint(3500, 5500))
+
                 page.screenshot(path=f"{screenshot_dir}/1_loaded.png")
                 
                 if "accounts.google.com" in page.url:
@@ -886,8 +890,7 @@ def upload_video_via_playwright(
                             try:
                                 from review.telegram_bot import send_telegram_message
                                 send_telegram_message(
-                                    "⚠️ *Google solicita verificación 2FA para publicar vía sesión web (Playwright).* "
-                                    "Por favor confirma en tu teléfono ahora."
+                                    f"⚠️ *Subida a YouTube detenida: Google solicita verificación en el canal '{channel}'. Se reintentará en 1 hora.*"
                                 )
                             except Exception:
                                 pass
@@ -1526,6 +1529,39 @@ def _perform_playwright_fallback_flow(
     """Attempts Playwright session fallback upload."""
     playwright_error: Exception | None = None
     if os.path.isfile(effective_cookies):
+        # 1. Primary Attempt: InnerTube Direct HTTP (0 RAM, 2-3s)
+        try:
+            from src.core.cookies import parse_cookies_file
+            from src.youtube.innertube_uploader import upload_video_via_innertube
+
+            loaded_cookies = parse_cookies_file(effective_cookies)
+            logger.info("Attempting primary session upload via InnerTube HTTP for %s...", channel_key)
+            tube_result = upload_video_via_innertube(
+                video_path=video_path,
+                title=title,
+                description=effective_description,
+                cookies=loaded_cookies,
+                tags=effective_tags,
+                thumbnail_path=thumbnail_path,
+                channel_id=settings.expected_youtube_channel_id,
+                dry_run=dry_run,
+            )
+            if dry_run:
+                return {"status": "DRY_RUN", "method": "INNERTUBE"}
+            return _normalize_upload_result(
+                tube_result,
+                method="INNERTUBE",
+                channel=channel_key,
+                title=title,
+                description=effective_description,
+            )
+        except Exception as tube_err:
+            logger.warning(
+                "InnerTube session upload failed (%s); falling back to Playwright Stealth...",
+                tube_err,
+            )
+
+        # 2. Fallback Attempt: Playwright Stealth Browser
         try:
             result = upload_video_via_playwright(
                 video_path,
@@ -1536,6 +1572,8 @@ def _perform_playwright_fallback_flow(
                 dry_run=dry_run,
                 thumbnail_path=thumbnail_path,
                 expected_identity=f"{settings.public_name}|{settings.handle}|{settings.expected_youtube_channel_id}|dilemas|dilemamoralyt",
+                expected_channel_id=settings.expected_youtube_channel_id,
+                channel=channel_key,
             )
             if dry_run:
                 return {"status": "DRY_RUN", "method": "PLAYWRIGHT"}

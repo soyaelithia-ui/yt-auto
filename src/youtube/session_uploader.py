@@ -113,17 +113,47 @@ class SessionUploader:
                 "health": health.status.value,
             }
 
-        # Delegate to underlying Playwright session uploader
+        cookie_file = self.resolve_cookie_path()
+        if not cookie_file or not cookie_file.is_file():
+            raise FileNotFoundError(f"Cookies file not found for channel '{self.channel}'")
+
+        # 1. Primary Attempt: InnerTube Direct HTTP (0 RAM, 2-3s)
+        try:
+            from src.core.cookies import parse_cookies_file
+            from src.youtube.innertube_uploader import upload_video_via_innertube
+
+            parsed_cookies = parse_cookies_file(cookie_file)
+            logger.info("Attempting primary session upload via InnerTube HTTP for '%s'...", self.channel)
+            tube_result = upload_video_via_innertube(
+                video_path=v_path,
+                title=title,
+                description=description,
+                cookies=parsed_cookies,
+                tags=tags,
+                thumbnail_path=thumbnail_path,
+                channel_id=kwargs.get("expected_channel_id") or kwargs.get("channel_id"),
+                visibility=visibility,
+                dry_run=dry_run,
+            )
+            return tube_result
+        except Exception as innertube_err:
+            logger.warning(
+                "InnerTube upload failed for '%s' (%s); falling back to Playwright Stealth...",
+                self.channel,
+                innertube_err,
+            )
+
+        # 2. Fallback Attempt: Playwright Stealth Browser
         from src.youtube.uploader import upload_video_via_playwright
 
-        cookie_file = str(self.resolve_cookie_path() or "")
         return upload_video_via_playwright(
             video_path=str(v_path),
             title=title,
             description=description,
+            tags=tags,
             thumbnail_path=str(thumbnail_path) if thumbnail_path else None,
             channel=self.channel,
-            cookie_path=cookie_file,
+            cookie_path=str(cookie_file),
             visibility=visibility,
             **kwargs,
         )
