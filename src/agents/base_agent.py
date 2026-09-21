@@ -417,6 +417,8 @@ class ProgrammaticAgent:
         """SDK Agent path can execute via google.antigravity if configured."""
         if not self._use_sdk:
             return False
+        if not os.environ.get("GEMINI_API_KEY"):
+            return False
         try:
             import google.antigravity  # noqa: F401
             return True
