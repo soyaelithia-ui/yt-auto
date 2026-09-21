@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-dev/produce_scp5000_10min_and_short.py - Production Suite for SCP-5000: Longform (10+ min) & Short (60s).
+dev/produce_scp5000_multi_act_cinematic.py - Production Suite for SCP-5000:
+100% Code-Based Procedural Multi-Scene Cinematic Video (10+ min) & Dynamic Subtitled Short (49s).
 """
 from __future__ import annotations
 
@@ -15,23 +16,24 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
 from src.audio_processor import sanitize_script_for_tts
 from src.media.thumbnail_engine import ResilientThumbnailEngine
 from src.agents.seo_optimizer import SeoOptimizerAgent
 from src.agents.qa_auditor import VisualAudioQAAuditorAgent
+from src.media.multi_act_renderer import MultiActVideoRenderer, NarrativeSceneAct
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("produce_scp5000_10min")
+logger = logging.getLogger("produce_scp5000_multi_act")
 
 OUTPUT_DIR = ROOT_DIR / "output"
-WORK_DIR = ROOT_DIR / "work" / "scp5000_production"
+WORK_DIR = ROOT_DIR / "work" / "scp5000_cinematic_production"
 AUDIO_BGM = ROOT_DIR / "assets" / "music" / "horror_ambient.mp3"
 
 
@@ -74,9 +76,8 @@ En el año 2020, la Fundación SCP cometió el acto más aterrador de su histori
 
 
 async def synthesize_audio(text: str, output_wav: Path, voice: str = "es-MX-JorgeNeural", rate: str = "-3%", pitch: str = "-1Hz") -> float:
-    """Synthesizes neural voice track with Edge-TTS."""
     import edge_tts
-    logger.info("🎤 Sintetizando audio (%s, rate=%s, pitch=%s)...", voice, rate, pitch)
+    logger.info("🎤 Sintetizando audio neural (%s)...", voice)
     temp_mp3 = output_wav.with_suffix(".mp3")
     clean_text = sanitize_script_for_tts(text)
     communicate = edge_tts.Communicate(text=clean_text, voice=voice, rate=rate, pitch=pitch)
@@ -99,7 +100,6 @@ async def synthesize_audio(text: str, output_wav: Path, voice: str = "es-MX-Jorg
 
 
 def mix_master_audio(voice_wav: Path, bgm_path: Path, output_audio: Path, total_dur: float, target_lufs: float = -14.0) -> None:
-    """Masters audio track under EBU R128 standards with fast, trimmed sidechain ducking."""
     logger.info("🎛️ Masterizando audio EBU R128 (%.1f LUFS) con sidechain ducking...", target_lufs)
     filter_complex = (
         f"[0:a]aresample=48000,asplit=2[voice_sc][voice_mix];"
@@ -123,60 +123,31 @@ def mix_master_audio(voice_wav: Path, bgm_path: Path, output_audio: Path, total_
     subprocess.run(cmd, check=True)
 
 
-def compose_video(shader_loop_mp4: Path, master_audio: Path, output_master: Path, total_dur: float, is_vertical: bool = False) -> Path:
-    """Composites master video with seamless loop and Rec.709 color metadata."""
-    logger.info("🎬 Componiendo Video Master (%s, %.1fs)...", "9:16 Vertical" if is_vertical else "16:9 Horizontal", total_dur)
-    
-    if is_vertical:
-        vf_opts = ["-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"]
-    else:
-        vf_opts = []
-
-    cmd = [
-        "ffmpeg", "-y", "-v", "error",
-        "-stream_loop", "-1", "-i", str(shader_loop_mp4),
-        "-i", str(master_audio),
-        "-t", f"{total_dur:.3f}",
-    ] + vf_opts + [
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "19",
-        "-pix_fmt", "yuv420p",
-        "-colorspace", "bt709",
-        "-color_primaries", "bt709",
-        "-color_trc", "bt709",
-        "-c:a", "copy",
-        "-movflags", "+faststart",
-        str(output_master),
-    ]
-    subprocess.run(cmd, check=True)
-    return output_master
-
-
 def main() -> int:
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\n" + "=" * 65)
-    print("🚀 INICIANDO PRODUCCIÓN DUAL: SCP-5000 (LONGFORM 10+ MIN + SHORT 60S)")
-    print("=" * 65 + "\n")
+    print("\n" + "=" * 68)
+    print("🚀 INICIANDO PRODUCCIÓN CINEMÁTICA 100% EN CÓDIGO MULTI-ESCENA: SCP-5000")
+    print("=" * 68 + "\n")
+
+    renderer = MultiActVideoRenderer()
 
     # =========================================================================
     # PART A: LONGFORM VIDEO (10+ MINUTES, 16:9 FULL HD)
     # =========================================================================
-    logger.info(">>> FASE 1: PRODUCCIÓN DEL VIDEO LARGO (LONGFORM 1080P) <<<")
+    logger.info(">>> FASE 1: PRODUCCIÓN DEL VIDEO LARGO MULTI-ESCENA (1080P) <<<")
     long_voice_wav = WORK_DIR / "scp5000_long_voice.wav"
     long_master_audio = WORK_DIR / "scp5000_long_master_audio.m4a"
     long_master_video = OUTPUT_DIR / "scp5000_why_longform_1080p.mp4"
     long_thumbnail = OUTPUT_DIR / "scp5000_thumbnail_hd.jpg"
+    long_ass_subtitles = WORK_DIR / "scp5000_long_subtitles.ass"
 
     # Step A1: Voice Synthesis
     long_dur = asyncio.run(synthesize_audio(SCP5000_LONG_SCRIPT, long_voice_wav, voice="es-MX-JorgeNeural", rate="-3%", pitch="-1Hz"))
     logger.info("✅ Audio Largo Generado: %.2f segundos (%.2f minutos)", long_dur, long_dur / 60.0)
 
-    # Step A2: Fast Audio Mastering EBU R128
+    # Step A2: Audio Mastering EBU R128
     mix_master_audio(long_voice_wav, AUDIO_BGM, long_master_audio, long_dur, target_lufs=-14.0)
 
     # Step A3: High-CTR Thumbnail
@@ -192,26 +163,115 @@ def main() -> int:
     )
     logger.info("✅ Miniatura HD 1080p Generada: %s", long_thumbnail.name)
 
-    # Step A4: Video Composition
-    h_loop = ROOT_DIR / "assets" / "loops" / "web_procedural" / "cosmic_horror" / "web_cosmic_horror_h_s142567_6s.mp4"
-    compose_video(h_loop, long_master_audio, long_master_video, long_dur, is_vertical=False)
-    logger.info("✅ Master Largo 1080p Generado: %s (%.2f MB)", long_master_video.name, long_master_video.stat().st_size / (1024*1024))
-
-    # Step A5: SEO Metadata & Synchronized Timestamps
-    act_titles = [
-        "El Hallazgo del Traje SCP-5000 en el Sitio-62C",
-        "El Proyecto Pneuma y el Mapeo de la Noosfera",
-        "La Declaración de Guerra del Consejo O5",
-        "El Despliegue Masivo de Anomalías (682, 096, 173)",
-        "La Frialdad Quirúrgica de las Fuerzas de Contención",
-        "La Caída de Ganzir y la Extinción de la Humanidad",
-        "La Odisea de Pietro Wilson con la Maleta SCP-055",
-        "El Sacrificio Final en SCP-579 y el Reinicio Temporal",
+    # Step A4: Multi-Act Narrative Scene Configuration (8 Acts mapped to 5 distinct procedural themes)
+    sec_per_act = long_dur / 8.0
+    long_acts = [
+        NarrativeSceneAct(
+            act_index=1,
+            start_sec=0 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 1: El Hallazgo del Traje SCP-5000 en el Sitio-62C",
+            theme_category="act1_suit",
+            hud_badge="NIVEL 5 // CLASIFICADO",
+            hud_site="SITIO-62C // BÚNKER DE CONTENCIÓN",
+            hud_telemetry="TRAJE RECUPERADO // PIETRO WILSON SIN VIDA",
+            color_hex="#00FF88",
+        ),
+        NarrativeSceneAct(
+            act_index=2,
+            start_sec=1 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 2: El Proyecto Pneuma y el Mapeo de la Noosfera",
+            theme_category="act2_pneuma",
+            hud_badge="ANOMALÍA COGNITIVA // PARÁSITO",
+            hud_site="LABORATORIO DE PSICO-ANÁLISIS",
+            hud_telemetry="RED NEURONAL GLOBAL // ENTIDAD DETECTADA",
+            color_hex="#00E5FF",
+        ),
+        NarrativeSceneAct(
+            act_index=3,
+            start_sec=2 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 3: La Declaración de Guerra del Consejo O5",
+            theme_category="act3_o5",
+            hud_badge="ALERTA ROJA // GUERRA DECLARADA",
+            hud_site="SALA PLENARIA DEL CONSEJO O5",
+            hud_telemetry="DIRECTIVA OMNICIDA TRANSMITIDA // CÓDIGO O5-1",
+            color_hex="#FF2244",
+        ),
+        NarrativeSceneAct(
+            act_index=4,
+            start_sec=3 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 4: El Despliegue Masivo de Anomalías (682, 096, 173)",
+            theme_category="act4_monsters",
+            hud_badge="BRECHA MASIVA: 682, 096, 173",
+            hud_site="SECTORES METROPOLITANOS",
+            hud_telemetry="RADAR TÁCTICO // 100% CIUDADES BAJO ATAQUE",
+            color_hex="#FFAA00",
+        ),
+        NarrativeSceneAct(
+            act_index=5,
+            start_sec=4 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 5: La Caída de Ganzir y las Fuerzas de Contención",
+            theme_category="act5_ganzir",
+            hud_badge="COLAPSO TOTAL // GOC EXTINTA",
+            hud_site="FORTALEZA SUBTERRÁNEA GANZIR",
+            hud_telemetry="ESTRUCTURA HUNDIDA EN MAGMA // TAREAS MÓVILES",
+            color_hex="#FF0055",
+        ),
+        NarrativeSceneAct(
+            act_index=6,
+            start_sec=5 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 6: La Odisea de Pietro Wilson con la Maleta SCP-055",
+            theme_category="act6_desert",
+            hud_badge="SOPORTE VITAL: 12% // FILTROS SATURADOS",
+            hud_site="DESIERTO RADIACTIVO NORTE",
+            hud_telemetry="MALETÍN TITANIO SCP-055 // RUMBO A SITIO-62C",
+            color_hex="#00FFCC",
+        ),
+        NarrativeSceneAct(
+            act_index=7,
+            start_sec=6 * sec_per_act,
+            duration_sec=sec_per_act,
+            title="Acto 7: El Sacrificio Final en el Abismo de SCP-579",
+            theme_category="act7_vortex",
+            hud_badge="DISTORSIÓN HUME CRÍTICA // PARADOJA",
+            hud_site="CÁMARA DE CONTENCIÓN SCP-579",
+            hud_telemetry="VÓRTICE GRAVITACIONAL // SINGULARIDAD ACTIVA",
+            color_hex="#8800FF",
+        ),
+        NarrativeSceneAct(
+            act_index=8,
+            start_sec=7 * sec_per_act,
+            duration_sec=long_dur - (7 * sec_per_act),
+            title="Acto 8: El Reinicio de la Realidad y la Nota: ¿Por Qué?",
+            theme_category="act8_helmet",
+            hud_badge="RESOLUCIÓN // ARCHIVO SELLADO",
+            hud_site="SITIO-62C // PRESENTE",
+            hud_telemetry="REALIDAD RESTAURADA // CASCO INSCRITO: ¿POR QUÉ?",
+            color_hex="#00FF88",
+        ),
     ]
-    sec_per_act = long_dur / len(act_titles)
-    acts_manifest = [{"start_sec": i * sec_per_act, "title": t} for i, t in enumerate(act_titles)]
-    long_timestamps = SeoOptimizerAgent.build_synchronized_timestamps(acts_manifest, long_dur)
 
+    # Generate ASS Subtitles
+    renderer.generate_ass_subtitles(long_acts, long_ass_subtitles, is_vertical=False)
+
+    # Step A5: Multi-Scene Procedural Video Composition
+    renderer.composite_multi_act_video(
+        acts=long_acts,
+        audio_path=long_master_audio,
+        output_video=long_master_video,
+        total_duration=long_dur,
+        is_vertical=False,
+        ass_subtitles=long_ass_subtitles,
+    )
+
+    # Step A6: SEO Metadata & Synchronized Timestamps
+    acts_manifest = [{"start_sec": a.start_sec, "title": a.title} for a in long_acts]
+    long_timestamps = SeoOptimizerAgent.build_synchronized_timestamps(acts_manifest, long_dur)
     from src.branding import get_channel_branding
     branding = get_channel_branding("moku")
 
@@ -219,17 +279,17 @@ def main() -> int:
     long_desc = (
         f"{long_title}\n\n"
         "Dentro del Sitio-62C fue hallado un traje mecánico chamuscado con el cadáver de un técnico y una grabación imposible: "
-        "la historia de cuando la Fundación SCP decidió exterminar deliberadamente a toda la especie humana tras descubrir un parásito en el alma.\n\n"
+        "la historia de cuando la Fundación SCP decidió exterminar deliberadamente a toda la especie humana tras descubrir un parásito cósmico en el alma humana.\n\n"
         f"{long_timestamps}\n\n"
         f"🔔 Suscríbete a {branding.handle} para más expedientes clasificados y documentales de la Fundación SCP.\n\n"
         "#SCP #SCP5000 #FundacionSCP #TerrorPsicologico #DocumentalSCP #Creepypasta"
     )
 
-    # Step A6: QA Audit for Longform
+    # Step A7: QA Audit
     qa_agent = VisualAudioQAAuditorAgent()
     long_qa = qa_agent.audit_video(
         long_master_video,
-        run_id="scp5000_longform_run",
+        run_id="scp5000_multi_act_longform",
         target_resolution="1920x1080",
         thumbnail_path=long_thumbnail,
         description_text=long_desc,
@@ -237,19 +297,20 @@ def main() -> int:
     logger.info("🔍 QA Audit Longform Score: %d/100 (Overall Pass: %s)", long_qa["quality_score"], long_qa["overall_pass"])
 
     # =========================================================================
-    # PART B: VERTICAL SHORT (9:16, 1080x1920, ~60 SECONDS)
+    # PART B: VERTICAL SHORT (9:16, 1080x1920, 49s)
     # =========================================================================
-    logger.info("\n>>> FASE 2: PRODUCCIÓN DEL SHORT VERTICAL (9:16 1080x1920) <<<")
+    logger.info("\n>>> FASE 2: PRODUCCIÓN DEL SHORT VERTICAL MULTI-ESCENA (1080x1920) <<<")
     short_voice_wav = WORK_DIR / "scp5000_short_voice.wav"
     short_master_audio = WORK_DIR / "scp5000_short_master_audio.m4a"
     short_master_video = OUTPUT_DIR / "scp5000_why_short_1080x1920.mp4"
     short_thumbnail = OUTPUT_DIR / "scp5000_short_thumbnail.jpg"
+    short_ass_subtitles = WORK_DIR / "scp5000_short_subtitles.ass"
 
     # Step B1: Short Voice Synthesis (Dynamic +15% rate)
     short_dur = asyncio.run(synthesize_audio(SCP5000_SHORT_SCRIPT, short_voice_wav, voice="es-MX-JorgeNeural", rate="+15%", pitch="-1Hz"))
     logger.info("✅ Audio Short Generado: %.2f segundos", short_dur)
 
-    # Step B2: Fast Audio Mastering
+    # Step B2: Audio Mastering
     mix_master_audio(short_voice_wav, AUDIO_BGM, short_master_audio, short_dur, target_lufs=-14.0)
 
     # Step B3: Short Vertical Thumbnail
@@ -264,17 +325,58 @@ def main() -> int:
         height=1920,
     )
 
-    # Step B4: Short Vertical Video Composition using web_scp_v_s51047_6s.mp4
-    v_loop = ROOT_DIR / "assets" / "loops" / "web_procedural" / "scp" / "web_scp_v_s51047_6s.mp4"
-    if not v_loop.is_file():
-        v_loop = h_loop
-    compose_video(v_loop, short_master_audio, short_master_video, short_dur, is_vertical=True)
-    logger.info("✅ Master Short 9:16 Generado: %s (%.2f MB)", short_master_video.name, short_master_video.stat().st_size / (1024*1024))
+    # Step B4: Short Dynamic Multi-Cut Acts (3 Visual Scenes in 49 seconds)
+    cut_dur = short_dur / 3.0
+    short_acts = [
+        NarrativeSceneAct(
+            act_index=1,
+            start_sec=0.0,
+            duration_sec=cut_dur,
+            title="LA GUERRA DE LA FUNDACIÓN",
+            theme_category="short1_suit",
+            hud_badge="SHORTS // CLASIFICADO",
+            hud_site="CONSEJO O5 // DECLARACIÓN",
+            color_hex="#00FF88",
+        ),
+        NarrativeSceneAct(
+            act_index=2,
+            start_sec=cut_dur,
+            duration_sec=cut_dur,
+            title="ANOMALÍAS LIBERADAS: 682 & 096",
+            theme_category="short2_monsters",
+            hud_badge="BRECHA TOTAL",
+            hud_site="COLAPSO GLOBAL",
+            color_hex="#FF2244",
+        ),
+        NarrativeSceneAct(
+            act_index=3,
+            start_sec=cut_dur * 2,
+            duration_sec=short_dur - (cut_dur * 2),
+            title="SCP-5000: ¿POR QUÉ?",
+            theme_category="short3_vortex",
+            hud_badge="REINICIO CUÁNTICO",
+            hud_site="ABISMO SCP-579",
+            color_hex="#8800FF",
+        ),
+    ]
 
-    # Step B5: QA Audit for Short
+    # Generate ASS Subtitles for Short
+    renderer.generate_ass_subtitles(short_acts, short_ass_subtitles, is_vertical=True)
+
+    # Step B5: Multi-Scene Short Composition
+    renderer.composite_multi_act_video(
+        acts=short_acts,
+        audio_path=short_master_audio,
+        output_video=short_master_video,
+        total_duration=short_dur,
+        is_vertical=True,
+        ass_subtitles=short_ass_subtitles,
+    )
+
+    # Step B6: QA Audit for Short
     short_qa = qa_agent.audit_video(
         short_master_video,
-        run_id="scp5000_short_run",
+        run_id="scp5000_multi_act_short",
         target_resolution="1080x1920",
         thumbnail_path=short_thumbnail,
     )
@@ -284,21 +386,21 @@ def main() -> int:
     if WORK_DIR.exists():
         shutil.rmtree(WORK_DIR, ignore_errors=True)
 
-    print("\n" + "=" * 65)
-    print("🎉 ¡PRODUCCIÓN DUAL COMPLETADA EXITOSAMENTE!")
-    print("=" * 65)
-    print(f"🎬 VIDEO LARGO (16:9): {long_master_video}")
+    print("\n" + "=" * 68)
+    print("🎉 ¡PRODUCCIÓN MULTI-ESCENA EN CÓDIGO COMPLETADA EXITOSAMENTE!")
+    print("=" * 68)
+    print(f"🎬 VIDEO LARGO (16:9 Multi-Escena): {long_master_video}")
     print(f"   ⏱️ Duración:        {int(long_dur // 60)}m {int(long_dur % 60):02d}s ({long_dur:.2f}s)")
-    print(f"   📐 Resolución:      1920x1080 Full HD")
+    print(f"   📐 Resolución:      1920x1080 Full HD (8 Actos Procedurales)")
     print(f"   🖼️ Miniatura:       {long_thumbnail}")
     print(f"   🎯 QA Score:        {long_qa['quality_score']}/100")
-    print("-" * 65)
-    print(f"📱 SHORT VERTICAL (9:16): {short_master_video}")
+    print("-" * 68)
+    print(f"📱 SHORT VERTICAL (9:16 Multi-Corte): {short_master_video}")
     print(f"   ⏱️ Duración:        {int(short_dur // 60)}m {int(short_dur % 60):02d}s ({short_dur:.2f}s)")
-    print(f"   📐 Resolución:      1080x1920 Vertical")
+    print(f"   📐 Resolución:      1080x1920 Vertical (3 Actos Procedurales)")
     print(f"   🖼️ Miniatura:       {short_thumbnail}")
     print(f"   🎯 QA Score:        {short_qa['quality_score']}/100")
-    print("=" * 65 + "\n")
+    print("=" * 68 + "\n")
 
     return 0
 

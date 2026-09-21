@@ -4,6 +4,12 @@
 set -euo pipefail
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$PROJECT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$PROJECT/.env"
+  set +a
+fi
 PY="${PYTHON_BIN:-}"
 if [ -z "$PY" ] || [ ! -x "$PY" ]; then
   if [ -x "$PROJECT/.venv/bin/python" ]; then
