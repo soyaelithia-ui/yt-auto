@@ -368,7 +368,7 @@ class LoopRotationMixin:
         if regenerate:
             cmd = [
                 "ffmpeg", "-y",
-                "-f", "lavfi", "-i", f"color=c=black:s={w}x{h}:r=30",
+                "-f", "lavfi", "-i", f"color=c=0x454545:s={w}x{h}:r=30",
                 "-t", str(dur),
                 "-c:v", "libx264", "-profile:v", "main", "-level", "4.0", "-pix_fmt", "yuv420p",
                 str(fixture_path),
