@@ -87,6 +87,7 @@ x-yt-base: &yt-base
     - yt_logs:/app/logs
     - yt_output:/app/output
     - yt_agy_home:/home/appuser/.gemini
+    - ./assets:/app/assets:ro
     - ./secrets:/run/secrets:ro
   tmpfs:
     - /tmp:size=2g,mode=1777
