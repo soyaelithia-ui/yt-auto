@@ -133,6 +133,108 @@ class ClaimedLeaseContext(Mapping):
                 extra[name] = value
 
 
+_RUN_RESULT_FIELDS = frozenset([
+    "status",
+    "channel",
+    "story_id",
+    "run_id",
+    "work_dir",
+    "review_status",
+    "drive_url",
+    "drive_file_id",
+    "youtube_url",
+    "youtube_video_id",
+    "lane_id",
+    "error",
+    "profiling",
+])
+
+
+@dataclass(slots=True)
+class PipelineRunResult(Mapping):
+    """Strongly-typed contract for terminal pipeline execution results."""
+
+    status: str
+    channel: str
+    story_id: str | None = None
+    run_id: str | None = None
+    work_dir: str | None = None
+    review_status: str | None = None
+    drive_url: str | None = None
+    drive_file_id: str | None = None
+    youtube_url: str | None = None
+    youtube_video_id: str | None = None
+    lane_id: str | None = None
+    error: str | None = None
+    profiling: dict[str, Any] = field(default_factory=dict)
+    _extra: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        res: dict[str, Any] = {
+            "status": self.status,
+            "channel": self.channel,
+            "story_id": self.story_id,
+            "run_id": self.run_id,
+            "work_dir": self.work_dir,
+            "review_status": self.review_status,
+            "drive_url": self.drive_url,
+            "drive_file_id": self.drive_file_id,
+            "youtube_url": self.youtube_url,
+            "youtube_video_id": self.youtube_video_id,
+            "lane_id": self.lane_id,
+            "error": self.error,
+            "profiling": dict(self.profiling),
+        }
+        res.update(self._extra)
+        return res
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __getitem__(self, key: str) -> Any:
+        if key in _RUN_RESULT_FIELDS:
+            return getattr(self, key)
+        if key in self._extra:
+            return self._extra[key]
+        raise KeyError(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if key in _RUN_RESULT_FIELDS:
+            setattr(self, key, value)
+        else:
+            self._extra[key] = value
+
+    def __iter__(self) -> Iterator[str]:
+        yield from _RUN_RESULT_FIELDS
+        yield from self._extra.keys()
+
+    def __len__(self) -> int:
+        return len(_RUN_RESULT_FIELDS) + len(self._extra)
+
+    def __contains__(self, key: Any) -> bool:
+        k = str(key)
+        return k in _RUN_RESULT_FIELDS or k in self._extra
+
+    def __getattr__(self, name: str) -> Any:
+        extra = object.__getattribute__(self, "_extra")
+        if name in extra:
+            return extra[name]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _RUN_RESULT_FIELDS or name == "_extra":
+            object.__setattr__(self, name, value)
+        else:
+            try:
+                object.__setattr__(self, name, value)
+            except AttributeError:
+                extra = object.__getattribute__(self, "_extra")
+                extra[name] = value
+
+
 _PIPELINE_CTX_FIELDS = frozenset([
     "story",
     "story_id",

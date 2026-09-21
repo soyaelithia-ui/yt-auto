@@ -25,11 +25,12 @@ def stage_02_ingest_translate(ctx: PipelineContext) -> None:
     with ctx.profiler.phase(CanonicalStage.INGEST_TRANSLATE):
         if ctx.directed:
             ctx.repository.require_single_story_run(ctx.run_id, ctx.story_id)
+        from src.core.contracts.story import StoryRecord
         from src.llm import ensure_spanish_source
 
         ctx.content, ctx.title = ensure_spanish_source(str(ctx.story["content"]), str(ctx.story["title"]))
 
-        additional: list[dict[str, Any]] = []
+        additional: list[StoryRecord] = []
         ctx.is_long_lane = ctx.is_long_lane or (getattr(ctx.lane, "orientation", "") == "horizontal")
         if (
             not ctx.directed
@@ -43,16 +44,16 @@ def stage_02_ingest_translate(ctx: PipelineContext) -> None:
                     "SELECT * FROM stories WHERE channel = ? AND (lane_id IS NULL OR lane_id = ?) AND status = ? AND story_id != ? ORDER BY created_at LIMIT 5",
                     (ctx.channel_name, ctx.lane.id, JobStatus.PENDING.value, ctx.story_id),
                 ):
-                    candidate = dict(row)
+                    candidate = StoryRecord.from_dict(dict(row))
                     c_content, c_title = ensure_spanish_source(
-                        str(candidate.get("content") or ""), str(candidate.get("title") or "")
+                        candidate.content, candidate.title
                     )
-                    candidate["content"], candidate["title"] = c_content, c_title
+                    candidate.content, candidate.title = c_content, c_title
                     additional.append(candidate)
                     current_words += len(c_content.split())
                     if current_words >= target_words:
                         break
-        ctx.used_ids = [ctx.story_id] + [str(item["story_id"]) for item in additional]
+        ctx.used_ids = [ctx.story_id] + [str(item.story_id) for item in additional]
         if ctx.directed:
             if ctx.used_ids != [ctx.story_id]:
                 raise RuntimeError("El modo directed intentó agregar historias adicionales")
@@ -66,7 +67,7 @@ def stage_02_ingest_translate(ctx: PipelineContext) -> None:
         ctx.script = _dispatch_curate_script(
             ctx.content,
             ctx.title,
-            additional_stories=[] if not ctx.is_long_lane or ctx.directed else additional,
+            additional_stories=[] if not ctx.is_long_lane or ctx.directed else [s.to_dict() for s in additional],
             min_words=ctx.words_min,
             provider=curate_provider,
             channel=ctx.channel_name,

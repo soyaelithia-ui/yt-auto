@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.core.contracts.pipeline import (
     ClaimedLeaseContext,
     PipelineContext,
+    PipelineRunResult,
     RunContext,
     _write_run_marker,
     active_heartbeat_scope,
@@ -16,6 +17,7 @@ from src.core.contracts.story import StoryRecord
 __all__ = [
     "ClaimedLeaseContext",
     "PipelineContext",
+    "PipelineRunResult",
     "RenderSpec",
     "ReviewContract",
     "RunContext",

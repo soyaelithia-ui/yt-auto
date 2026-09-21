@@ -506,8 +506,8 @@ def clean_tts_cache(
                 if sub.is_dir() and not sub.is_symlink() and not any(sub.iterdir()):
                     try:
                         sub.rmdir()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        logger.debug("Could not rmdir empty subdir %s: %s", sub, exc)
 
     return report
 
@@ -595,8 +595,8 @@ def clean_proxy_cache(
                 if sub.is_dir() and not sub.is_symlink() and not any(sub.iterdir()):
                     try:
                         sub.rmdir()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        logger.debug("Could not rmdir empty subdir %s: %s", sub, exc)
 
     return report
 

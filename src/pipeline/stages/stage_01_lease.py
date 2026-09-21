@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import socket
+from collections.abc import Mapping
 from typing import Any
 
 from src.branding import get_channel_branding
 from src.config import SETTINGS, get_channel_settings
+from src.core.contracts.story import StoryRecord
 from src.core.lanes import resolve_lane_for_run
 from src.core.profiling import CanonicalStage, PipelineProfiler
 from src.core.repository import QueueRepository, connect
@@ -28,23 +30,24 @@ def _claim_or_enqueue_story(
     database: str,
     lane_id: str | None,
     requested_story_id: str,
-    story: dict[str, Any] | None,
+    story: StoryRecord | Mapping[str, Any] | None,
     directed: bool,
     generate_only: bool,
     owner: str,
     lease_seconds: int,
-) -> dict[str, Any] | None:
+) -> StoryRecord | None:
     """Resolve story by direct argument, directed claim, or queue claim with scraper fallback."""
     if story is not None:
-        return story
+        return story if isinstance(story, StoryRecord) else StoryRecord.from_dict(story)
     if directed:
-        return repository.claim_exact(
+        exact = repository.claim_exact(
             requested_story_id,
             channel_key,
             owner=owner,
             mode="directed-generate-only" if generate_only else "directed-publish",
             lease_seconds=lease_seconds,
         )
+        return StoryRecord.from_dict(exact) if exact else None
     if not is_test_environment():
         from src.core.scoring import filter_and_score_story
         from src.db import is_story_duplicate
@@ -99,7 +102,7 @@ def _claim_or_enqueue_story(
             mode="generate-only" if generate_only else "publish",
             lease_seconds=lease_seconds,
         )
-    return claimed
+    return StoryRecord.from_dict(claimed) if claimed is not None else None
 
 
 def stage_01_claim_lease(
@@ -108,7 +111,7 @@ def stage_01_claim_lease(
     channel_name: str,
     db_path: str | None,
     story_id: str | None,
-    story: dict[str, Any] | None,
+    story: StoryRecord | Mapping[str, Any] | None,
     directed: bool,
     generate_only: bool,
     owner: str | None,

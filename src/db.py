@@ -233,8 +233,8 @@ def is_story_duplicate(
                     ).fetchone()
                     if fp_row is not None:
                         return True
-                except sqlite3.OperationalError:
-                    pass
+                except sqlite3.OperationalError as exc:
+                    logger.debug("Table or column absent during fingerprint check: %s", exc)
 
                 # Also check exact content match in stories table
                 try:
@@ -248,8 +248,8 @@ def is_story_duplicate(
                     ).fetchone()
                     if story_content_row is not None:
                         return True
-                except sqlite3.OperationalError:
-                    pass
+                except sqlite3.OperationalError as exc:
+                    logger.debug("Table or column absent during stories exact check: %s", exc)
 
                 # 3. 64-bit SimHash near-duplicate check (Hamming distance <= 3)
                 target_simhashes = [
@@ -273,8 +273,8 @@ def is_story_duplicate(
                                 for tsh in target_simhashes:
                                     if simhash_hamming_distance(tsh, existing_sh) <= 3:
                                         return True
-                    except sqlite3.OperationalError:
-                        pass
+                    except sqlite3.OperationalError as exc:
+                        logger.debug("Table or column absent during simhash check: %s", exc)
 
                     # Also check against recent stories in stories table
                     try:
@@ -294,8 +294,8 @@ def is_story_duplicate(
                                     for tsh in target_simhashes:
                                         if simhash_hamming_distance(tsh, s_sh) <= 3:
                                             return True
-                    except sqlite3.OperationalError:
-                        pass
+                    except sqlite3.OperationalError as exc:
+                        logger.debug("Table or column absent during recent stories check: %s", exc)
         return False
     except sqlite3.OperationalError as exc:
         msg = str(exc).lower()
