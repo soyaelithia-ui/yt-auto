@@ -5,13 +5,13 @@
     {
       "id": "moku",
       "enabled": true,
-      "aliases": ["horror", "terror", "scp", "moku_horror", "moku_terror"],
+      "aliases": ["horror", "terror", "scp", "moku_horror", "moku_terror", "canal1", "canal_1", "canal-1", "canal 1", "channel1", "channel_1", "channel-1", "channel 1"],
       "config_file": "config/channels/moku.json"
     },
     {
       "id": "aelithia",
       "enabled": true,
-      "aliases": ["drama", "aita", "relatos_reddit", "aelithia_drama", "soy_el_malo"],
+      "aliases": ["drama", "aita", "relatos_reddit", "aelithia_drama", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2", "channel2", "channel_2", "channel-2", "channel 2"],
       "config_file": "config/channels/aelithia.json"
     },
     {

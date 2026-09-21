@@ -235,7 +235,7 @@ def print_report(metrics: dict[str, Any]) -> None:
 
 if __name__ == "__main__":
     metrics = get_cadence_metrics()
-    if "--json" in sys.argv:
+    if "--json" in sys.argv or "-j" in sys.argv:
         print(json.dumps(metrics, indent=2))
     else:
         print_report(metrics)

@@ -36,7 +36,7 @@ A continuación se detallan los hallazgos técnicos comprobados en el código, d
 
 ### Error 1: Desconexión de Configuración en el Despacho de Motores
 * **¿Qué rompe actualmente?**
-  Anula y desecha por completo el trabajo de los agentes de IA en todas las producciones de los canales principales (`moku-horror-long`, `aelithia-aita-long`, `moku-scp-shorts`). Fuerza a que todos los videos se generen como un único bucle repetitivo de 6 segundos.
+  Anula y desecha por completo el trabajo de los agentes de IA en todas las producciones de los canales principales (`horror-long`, `drama-aita-long`, `horror-scp-shorts`). Fuerza a que todos los videos se generen como un único bucle repetitivo de 6 segundos.
 * **¿Por qué lo rompe?**
   En el archivo de configuración `config/lanes.json` los canales declaran la clave `"visual_pipeline": "director"`, pero en el orquestador `src/pipeline.py` el código intenta leer `getattr(lane, "video_engine", None)`. Al no encontrar esa propiedad, el valor resulta nulo y el sistema activa por defecto `engine_mode = "loop"`. Además, la palabra `"director"` ni siquiera figura dentro de los valores válidos reconocidos por el orquestador (`"multiscene"`, `"hybrid"`, `"procedural"`), por lo que si se configurara textualmente lanzaría un error crítico deteniendo el programa.
 * **Si se corrige, ¿qué más podría romper?**

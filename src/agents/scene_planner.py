@@ -2,7 +2,7 @@
 src/agents/scene_planner_compositor.py - Agent 3: Scene Planner / Compositor.
 
 Merges the narrative script (Agent 1) and visual plan (Agent 2) with audio master tracks,
-decides engine selection (Hybrid Cinematic AI vs Pure Procedural WebGL/Canvas),
+decides engine selection (Hybrid Cinematic AI vs Pre-rendered Loop / FFmpeg),
 configures camera motion, transitions, sidechain ducking, and generates the canonical
 scene_manifest.json. Validates output with schemas/scene_manifest.schema.json.
 """

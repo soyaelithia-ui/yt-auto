@@ -67,9 +67,9 @@
 * **Eliminar `web_renderer.py` y el pipeline de captura sincrónica por WebSocket CDP**:
   - *Qué se rompe*: NADA en el flujo de producción estándar. Solo se utilizaba en pruebas prototipo aisladas.
   - *Beneficio*: Se eliminan ~1,200 líneas de código acopladas a Chrome DevTools Protocol, liberando al sistema de la trampa de rendimiento más costosa.
-* **Eliminar dependencias de CDNs externos en plantillas HTML**:
-  - *Qué se rompe*: NADA, siempre que Three.js r128 se aloje en `assets/vendor/three/`.
-  - *Beneficio*: El renderizado se vuelve 100% determinista, hermético y operable sin conexión a internet.
+* **Eliminar renderizado por navegador web y sombreadores procedurales**:
+  - *Qué se rompe*: NADA. La composición se realiza mediante stream-copy de catálogo FFmpeg pre-renderizado.
+  - *Beneficio*: El renderizado se vuelve 100% determinista, hermético y de mínimo consumo de recursos (<= 2 CPU Cores).
 * **Eliminar la doble pasada de video a disco**:
   - *Qué se rompe*: NADA. La combinación de pistas de audio, filtros de ecualización y subtitulado se realiza en un único comando FFmpeg con `-filter_complex`.
   - *Beneficio*: Reducción del 50% en desgaste de E/S en disco SSD y ahorro de 8 a 15 segundos de transcodificación por video.
@@ -89,7 +89,7 @@
 * **Modelo Gemini 3.8 Flash High**: Sí, representa el estado del arte en velocidad de inferencia, costo-eficiencia y capacidad de seguimiento de directivas JSON Schema.
 
 ### 3.5. ¿Se aplican las mejores prácticas de la industria?
-* **Separación de Responsabilidades**: Sí, segregación estricta entre tareas creativas semánticas (IA en arnés `agy`), composición audiovisual determinista local (FFmpeg/Three.js) y operaciones de persistencia/red.
+* **Separación de Responsabilidades**: Sí, segregación estricta entre tareas creativas semánticas (IA en arnés `agy`), composición audiovisual determinista local (FFmpeg stream-copy) y operaciones de persistencia/red.
 * **Diseño Fail-Closed**: Todo fallo de validación de calidad, barrera editorial o integridad de sesión aborta el pipeline antes de consumir recursos de renderizado o publicación.
 * **Idempotencia Transaccional**: Cada historia, run y publicación cuenta con identificadores únicos (`uuid4`) y hashes criptográficos de contenido (`sha256`) para evitar duplicaciones.
 
@@ -171,7 +171,7 @@ yt-auto/
 ├── assets/
 │   ├── fonts/                     # Tipografías locales (Montserrat-Black.ttf)
 │   ├── loops/                     # Bucles de video pre-sintetizados offline
-│   └── vendor/three/              # [NUEVO] Three.js r128 local (eliminación de CDN)
+│   └── overlays/                  # Overlays gráficos e insignias vectoriales (SVG/PNG)
 ├── config/
 │   ├── channels.json              # Configuración de canales (HORROR, DRAMA)
 │   ├── lanes.json                 # Perfiles de carril (creepy_short, scp_short, etc.)
@@ -253,7 +253,7 @@ gantt
     dateFormat  YYYY-MM-DD
     section Fase 1: Poda y Aislamiento
     Deprecación de realtime_video_engine & web_renderer :f1_1, 2026-09-02, 2d
-    Empaquetado local de Three.js en assets/vendor/     :f1_2, after f1_1, 1d
+    Consolidación de catálogo de loops y anti-bloat     :f1_2, after f1_1, 1d
     section Fase 2: Motor de Sesión y Subida
     Refactor de core/cookies.py (Health Validator)      :f2_1, after f1_2, 2d
     Diseño de session_uploader.py (InnerTube/Playwright):f2_2, after f2_1, 3d

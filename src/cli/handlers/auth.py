@@ -34,7 +34,7 @@ def _get_token_paths():
 def handle_auth(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> int:
     """Generate OAuth authorization URLs, exchange authorization codes, login, or verify API tokens."""
     action = (getattr(args, "action", None) or "url").lower()
-    channel = getattr(args, "channel", "moku") or "moku"
+    channel = getattr(args, "channel", "horror") or "horror"
 
     try:
         target_channel = _resolve_channel_key(channel)

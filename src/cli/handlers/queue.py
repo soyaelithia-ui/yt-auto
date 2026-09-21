@@ -77,7 +77,7 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
             return 0
 
         if not target_channel:
-            print("Error: Especifique el canal o --lane a pausar (ej. 'queue pause moku' o '--lane moku-horror-long')", file=sys.stderr)
+            print("Error: Especifique el canal o --lane a pausar (ej. 'queue pause horror' o '--lane horror-long')", file=sys.stderr)
             return 2
         from src.core.channel_profile import ChannelProfileRegistry
         from src.core.domain import canonical_channel
@@ -114,7 +114,7 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
             return 0
 
         if not target_channel:
-            print("Error: Especifique el canal o --lane a reanudar (ej. 'queue resume moku' o '--lane moku-horror-long')", file=sys.stderr)
+            print("Error: Especifique el canal o --lane a reanudar (ej. 'queue resume horror' o '--lane horror-long')", file=sys.stderr)
             return 2
         from src.core.channel_profile import ChannelProfileRegistry
         from src.core.domain import canonical_channel
@@ -140,7 +140,7 @@ def handle_queue(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
 
     if action == "activate":
         if not target_channel:
-            print("Error: Especifique el canal a activar (ej. 'queue activate moku' o '-c moku')", file=sys.stderr)
+            print("Error: Especifique el canal a activar (ej. 'queue activate horror' o '-c horror')", file=sys.stderr)
             return 2
         from src.channel_manager import activate_channel
         from src.core.channel_profile import ChannelProfileRegistry

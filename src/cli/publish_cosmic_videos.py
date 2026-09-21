@@ -29,7 +29,7 @@ def create_analog_thumbnail(
     width: int,
     height: int,
 ) -> Path:
-    """Generates a high-contrast analog horror thumbnail from video frame or procedural canvas."""
+    """Generates a high-contrast analog horror thumbnail from video frame or clean background."""
     frame_path = output_thumb_path.parent / f"frame_{output_thumb_path.stem}.png"
     
     extracted = False
@@ -270,7 +270,7 @@ Directiva C-88: Manual de Procedimientos ante Fallo de Contención de Entidades 
 00:05 - Escalada de Presión y Deformación Espaciotemporal
 00:08 - Protocolo de Depuración y Aislamiento del Sector
 
-⚠️ Producción audiovisual generada con motor procedural WebGL Rec.709, CRT phosphor shaders y audio binaural sub-drone EBU R128 (-16 LUFS).
+⚠️ Producción audiovisual cinematográfica Rec.709, CRT phosphor overlays y audio binaural sub-drone EBU R128 (-16 LUFS).
 
 #AnalogHorror #HorrorCosmico #FundacionSCP #CienciaFiccion #Terror #Documental #Misterio"""
 

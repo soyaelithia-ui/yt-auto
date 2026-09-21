@@ -280,9 +280,9 @@ class SeoOptimizerAgent:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="SEO & Viral Metadata Optimizer")
-    parser.add_argument("--topic", type=str, required=True, help="Video topic")
-    parser.add_argument("--format", type=str, default="short", choices=["short", "longform"], help="Target format")
-    parser.add_argument("--niche", type=str, default="General", help="Content niche")
+    parser.add_argument("-t", "--topic", type=str, required=True, help="Video topic")
+    parser.add_argument("-f", "--format", type=str, default="short", choices=["short", "longform"], help="Target format")
+    parser.add_argument("-n", "--niche", type=str, default="General", help="Content niche")
     parser.add_argument("--use-agent", action="store_true", default=False, help="Use Antigravity CLI harness")
     args = parser.parse_args()
 

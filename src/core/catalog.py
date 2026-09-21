@@ -1,7 +1,7 @@
 """
-src/core/loop_catalog.py - SQLite-backed Catalog Repository for Web-Generated Video Loops.
+src/core/catalog.py - SQLite-backed Catalog Repository for Video Loops.
 
-Manages lightweight procedural video loops generated via HTML5/WebGL/Canvas/CSS,
+Manages video loops and scenery assets (pre-rendered loops and FFmpeg lavfi filters),
 indexing their thematic tags, dimensions, usage metrics, and SHA-256 digests.
 Provides smart rotation (least-recently used / lowest usage count) and audit tools.
 """

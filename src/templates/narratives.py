@@ -1,7 +1,7 @@
 """
 Narrative synthesis templates for YouTube automation pipelines.
-Provides channel-isolated narrative builders for Moku (Horror/SCP), Aelithia (Drama/AITA),
-and Singularidad (Sci-Fi), free of vocalized structural headers, with rich first-person
+Provides channel-isolated narrative builders for Canal 1 / Horror (Horror/SCP), Canal 2 / Drama (Drama/AITA),
+and Sci-Fi, free of vocalized structural headers, with rich first-person
 immersion, dialogue, and zero mechanical repetition.
 """
 from __future__ import annotations
@@ -422,4 +422,11 @@ def get_fallback_story(
     if is_short:
         return build_moku_short_narrative(default_topic, channel="horror", **kwargs)
     return build_moku_longform_narrative(default_topic, channel="horror", target_duration_minutes=10.5, **kwargs)
+
+
+# Thematic canonical aliases
+build_horror_short_narrative = build_moku_short_narrative
+build_drama_short_narrative = build_aelithia_short_narrative
+build_horror_longform_narrative = build_moku_longform_narrative
+build_drama_longform_narrative = build_aelithia_longform_narrative
 

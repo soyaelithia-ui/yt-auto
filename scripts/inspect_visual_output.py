@@ -6,13 +6,17 @@ Allows inspecting video frames, semantic motif resolution, and thumbnail creatio
 fragment-by-fragment without blind execution.
 
 Usage:
-  python3 scripts/inspect_visual_output.py --topic "Terror con caramelos" --lane moku-scp-shorts
-  python3 scripts/inspect_visual_output.py --topic "Misterio en el faro" --lane moku-horror-longform
+  python3 scripts/inspect_visual_output.py --topic "Terror con caramelos" --lane horror-scp-shorts
+  python3 scripts/inspect_visual_output.py --topic "Misterio en el faro" --lane horror-long
+
+Output:
+  - 4 extracted keyframes (scenes 1-4)
+  - 1 styled high-CTR thumbnail (.jpg)
+  - 1 visual audit report (.json)
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -20,8 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Ensure repository root is on sys.path
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import BASE_DIR
@@ -30,7 +33,7 @@ from src.core.scenic_detector import extract_story_motifs
 from src.media.loop_engine import LoopVideoEngine
 from src.media.thumbnails import ThumbnailConfig, ThumbnailEngine
 
-ARTIFACTS_DIR = Path("/home/moku/.gemini/antigravity-cli/brain/94b740c5-bbbf-45d3-b964-be25b918b147")
+ARTIFACTS_DIR = Path(os.environ.get("ARTIFACT_ROOT", BASE_DIR / "artifacts"))
 
 
 def extract_frame(video_path: Path, timestamp_sec: float, output_img: Path) -> bool:
@@ -51,8 +54,8 @@ def extract_frame(video_path: Path, timestamp_sec: float, output_img: Path) -> b
 
 def inspect_story(
     topic: str,
-    channel: str = "moku",
-    lane: str = "moku-scp-shorts",
+    channel: str = "horror",
+    lane: str = "horror-scp-shorts",
     output_dir: Path | None = None,
     copy_to_artifacts: bool = True,
 ) -> dict:
@@ -85,7 +88,7 @@ def inspect_story(
 
     # 2. Multi-Scene Loop Video Asset Resolution
     loop_engine = LoopVideoEngine()
-    target_category = "horror" if channel == "moku" else ("scifi" if channel == "scifi" else "drama")
+    target_category = "horror" if channel in ("moku", "horror", "canal1") else ("scifi" if channel in ("scifi", "singularidad") else "drama")
     
     shot_count = 4
     resolved_scenes = []
@@ -133,7 +136,7 @@ def inspect_story(
 
     # Determine channel-adaptive hook text
     topic_low = topic.lower()
-    if channel == "moku":
+    if channel in ("moku", "horror", "canal1"):
         if "caramelo" in topic_low or "feria" in topic_low:
             hook_text = "¿QUÉ HABÍA EN LA FERIA?"
         elif "cabaña" in topic_low or "bosque" in topic_low:
@@ -144,7 +147,7 @@ def inspect_story(
             hook_text = "EL FARO NUNCA SE APAGÓ"
         else:
             hook_text = "NO DEBIERON ENTRAR"
-    elif channel == "aelithia":
+    elif channel in ("aelithia", "drama"):
         if "boda" in topic_low or "hermana" in topic_low or "esposo" in topic_low:
             hook_text = "¿SOY LA MALA?"
         else:
@@ -160,7 +163,7 @@ def inspect_story(
         output_path=thumb_path,
         width=thumb_width,
         height=thumb_height,
-        accent_color="#FF0044" if channel == "moku" else "#FFB300",
+        accent_color="#FF0044" if channel in ("moku", "horror") else "#FFB300",
         primary_color="#FFE600",
     )
 
@@ -212,10 +215,10 @@ def inspect_story(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Empirical Visual Inspection Rig")
-    parser.add_argument("--topic", type=str, default="Terror con caramelos", help="Story title/topic")
-    parser.add_argument("--channel", type=str, default="moku", help="Target channel (moku, aelithia)")
-    parser.add_argument("--lane", type=str, default="moku-scp-shorts", help="Target lane ID")
-    parser.add_argument("--output-dir", type=str, default=None, help="Custom output directory")
+    parser.add_argument("-t", "--topic", type=str, default="Terror con caramelos", help="Story title/topic")
+    parser.add_argument("-c", "--channel", type=str, default="horror", help="Target channel ('horror' / canal 1, 'drama' / canal 2)")
+    parser.add_argument("-l", "--lane", type=str, default="horror-scp-shorts", help="Target lane ID")
+    parser.add_argument("-o", "--output-dir", type=str, default=None, help="Custom output directory")
     args = parser.parse_args()
 
     out_p = Path(args.output_dir) if args.output_dir else None

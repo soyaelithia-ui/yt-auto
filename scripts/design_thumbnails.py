@@ -289,7 +289,7 @@ def design_aita_thumbnail(base_path: str, output_path: str) -> str:
 
 
 def design_horror_thumbnail(base_path: str, output_path: str) -> str:
-    """Design 16:9 horizontal thumbnail for Moku Horror Longform."""
+    """Design 16:9 horizontal thumbnail for Horror Longform."""
     base = Image.open(base_path).convert("RGB")
     w, h = 1920, 1080
     graded = apply_analog_horror_grade(

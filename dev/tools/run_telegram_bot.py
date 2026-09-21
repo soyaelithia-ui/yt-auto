@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-dev/run_telegram_bot.py - Daemon Runner for the Interactive Telegram Bot.
+dev/tools/run_telegram_bot.py - Daemon Runner for the Interactive Telegram Bot.
 
 Runs the long-polling Telegram bot with interactive command handling:
 /start, /help, /status, /create, /shorts, /long, /seo, /jobs, /autopilot, /latest
@@ -33,8 +33,8 @@ def main() -> int:
         description="Interactive Telegram Bot Service Runner",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--token", type=str, default=None, help="Telegram Bot Token (default: env TELEGRAM_BOT_TOKEN)")
-    parser.add_argument("--chat-id", type=str, default=None, help="Authorized Chat ID (default: env TELEGRAM_CHAT_ID)")
+    parser.add_argument("-t", "--token", type=str, default=None, help="Telegram Bot Token (default: env TELEGRAM_BOT_TOKEN)")
+    parser.add_argument("-c", "--chat-id", type=str, default=None, help="Authorized Chat ID (default: env TELEGRAM_CHAT_ID)")
     parser.add_argument("--once", action="store_true", default=False, help="Poll updates once and exit (for testing/diagnostics)")
     parser.add_argument("--autopilot", action="store_true", default=False, help="Start with AutoPilot 24/7 enabled")
     parser.add_argument("--autopilot-interval", type=float, default=4.0, help="AutoPilot interval in hours")

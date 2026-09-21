@@ -2,7 +2,7 @@
 """
 dev/produce_batch.py - High-Volume Multi-Channel Production Batch Runner.
 
-Orchestrates concurrent or sequential production batches across channels ('moku', 'aelithia')
+Orchestrates concurrent or sequential production batches across channels ('horror', 'drama')
 and editorial formats ('short', 'longform') with structured progress tracking and notifications.
 """
 from __future__ import annotations
@@ -118,9 +118,9 @@ def main() -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--count", type=int, default=3, help="Número de videos a generar en el lote")
-    parser.add_argument("--channels", nargs="+", default=["moku", "aelithia"], help="Canales objetivo")
+    parser.add_argument("--channels", nargs="+", default=["horror", "drama"], help="Canales objetivo ('horror' / canal 1, 'drama' / canal 2)")
     parser.add_argument("--format", type=str, default="short", choices=["short", "longform"], help="Formato de video")
-    parser.add_argument("--dry-run", action="store_true", default=False, help="Ejecutar sin invocar renderizado pesado")
+    parser.add_argument("-d", "--dry-run", action="store_true", default=False, help="Ejecutar sin invocar renderizado pesado")
     parser.add_argument("--dispatch-telegram", action="store_true", default=False, help="Enviar alertas por Telegram")
     args = parser.parse_args()
 

@@ -169,7 +169,7 @@ def register_auth_subcommand(subparsers: argparse._SubParsersAction, parent: arg
         help="Acción OAuth: 'url', 'exchange', 'login', 'check', 'standardize'",
     )
     p.add_argument("code", nargs="?", default=None, help="Código de autorización OAuth")
-    p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo para el token ('horror' / canal 1, 'drama' / canal 2)")
+    p.add_argument("-c", "--channel", type=str, default="horror", help="Canal objetivo para el token ('horror' / canal 1, 'drama' / canal 2)")
     p.add_argument("--code", dest="code_flag", type=str, default=None, help="Código de autorización OAuth (flag opcional)")
     p.add_argument("--port", type=int, default=8585, help="Puerto local para flujo interactivo 'auth login'")
 
@@ -223,7 +223,7 @@ def register_loop_subcommand(subparsers: argparse._SubParsersAction, parent: arg
         nargs="?",
         default="list",
         choices=["list", "catalog", "generate", "preview", "audit", "daemon", "maintain"],
-        help="Acción: 'list', 'generate', 'preview', 'audit', 'daemon', 'maintain'",
+        help="Acción: 'list', 'catalog', 'generate', 'preview', 'audit', 'daemon', 'maintain'",
     )
     p.add_argument("-c", "--category", type=str, default=None, help="Categoría temática")
     p.add_argument("-o", "--orientation", type=str, default="vertical", choices=["vertical", "horizontal", "9:16", "16:9"], help="Orientación del bucle")
@@ -244,7 +244,7 @@ def register_profile_and_benchmark_subcommands(subparsers: argparse._SubParsersA
         ("benchmark", "Ejecutar ciclos de benchmarking y pruebas de carga por fase (R1)"),
     ]:
         p = subparsers.add_parser(p_name, parents=[parent], help=p_help)
-        p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo ('horror' / canal 1, 'drama' / canal 2, 'scifi', 'all')")
+        p.add_argument("-c", "--channel", type=str, default="horror", help="Canal objetivo ('horror' / canal 1, 'drama' / canal 2, 'scifi', 'all')")
         p.add_argument("-l", "--lane", type=str, default=None, help="Carril específico a perfilar")
         p.add_argument("-n", "--iterations", type=int, default=1, help="Número de ciclos de benchmarking a ejecutar")
         p.add_argument("--mock", action="store_true", default=True, help="Ejecutar sobre arneses simulados sin costo de API/GPU")

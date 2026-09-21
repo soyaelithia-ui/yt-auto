@@ -19,9 +19,15 @@ class CanonicalChannel(str, Enum):
     @classmethod
     def _missing_(cls, value: object):
         val = str(value).lower()
-        if val in ("horror", "terror", "canal1", "canal_1", "canal-1", "canal 1"):
+        if val in (
+            "horror", "terror", "canal1", "canal_1", "canal-1", "canal 1",
+            "channel1", "channel_1", "channel-1", "channel 1",
+        ):
             return cls.MOKU
-        if val in ("drama", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2"):
+        if val in (
+            "drama", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2",
+            "channel2", "channel_2", "channel-2", "channel 2",
+        ):
             return cls.AELITHIA
         return None
 
@@ -38,10 +44,18 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
     "canal_1": CanonicalChannel.MOKU,
     "canal-1": CanonicalChannel.MOKU,
     "canal 1": CanonicalChannel.MOKU,
+    "channel1": CanonicalChannel.MOKU,
+    "channel_1": CanonicalChannel.MOKU,
+    "channel-1": CanonicalChannel.MOKU,
+    "channel 1": CanonicalChannel.MOKU,
     "canal2": CanonicalChannel.AELITHIA,
     "canal_2": CanonicalChannel.AELITHIA,
     "canal-2": CanonicalChannel.AELITHIA,
     "canal 2": CanonicalChannel.AELITHIA,
+    "channel2": CanonicalChannel.AELITHIA,
+    "channel_2": CanonicalChannel.AELITHIA,
+    "channel-2": CanonicalChannel.AELITHIA,
+    "channel 2": CanonicalChannel.AELITHIA,
     "moku": CanonicalChannel.MOKU,
     "terror": CanonicalChannel.MOKU,
     "moku_terror": CanonicalChannel.MOKU,

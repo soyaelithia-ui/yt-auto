@@ -67,7 +67,7 @@ def register_run_pipeline_dry_run_tool(server: MCPServer) -> None:
     async def run_pipeline_dry_run(
         lane_id: Annotated[
             str,
-            Field(description="Target production lane identifier (e.g. 'moku-scp-shorts', 'moku-horror-long', 'aelithia-drama-shorts')"),
+            Field(description="Target production lane identifier (e.g. 'horror-scp-shorts', 'horror-long', 'drama-shorts')"),
         ],
         topic: Annotated[
             Optional[str],

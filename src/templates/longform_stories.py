@@ -249,3 +249,12 @@ def get_aelithia_longform_story(topic: str, index: Optional[int] = None, **kwarg
             return hybrid
 
     return best_story or AELITHIA_STORIES[start_idx](topic, **kwargs)
+
+
+# Thematic canonical aliases
+HORROR_STORIES: List[Callable[..., str]] = MOKU_STORIES
+DRAMA_STORIES: List[Callable[..., str]] = AELITHIA_STORIES
+get_horror_longform_story = get_moku_longform_story
+get_drama_longform_story = get_aelithia_longform_story
+build_horror_longform_story = get_moku_longform_story
+build_drama_longform_story = get_aelithia_longform_story

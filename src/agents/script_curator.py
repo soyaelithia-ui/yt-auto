@@ -836,29 +836,29 @@ class CinematicScriptCuratorAgent:
         """Generates deterministic, canon-grounded fallback story when input text is minimal."""
         try:
             from src.templates.narratives import (
-                build_aelithia_longform_narrative,
-                build_aelithia_short_narrative,
-                build_moku_longform_narrative,
-                build_moku_short_narrative,
+                build_drama_longform_narrative,
+                build_drama_short_narrative,
+                build_horror_longform_narrative,
+                build_horror_short_narrative,
                 build_scifi_longform_narrative,
                 build_scifi_short_narrative,
             )
 
             is_short = "short" in lane_key
             if "scp" in lane_key:
-                return build_moku_short_narrative(topic=title or "SCP-087", channel="moku")
+                return build_horror_short_narrative(topic=title or "SCP-087", channel="horror")
             elif "aita" in lane_key or "drama" in lane_key or "aelithia" in lane_key:
                 if is_short:
-                    return build_aelithia_short_narrative(topic=title or "el límite personal frente a la familia", channel="aelithia")
-                return build_aelithia_longform_narrative(topic=title or "el conflicto de herencia familiar", channel="aelithia")
+                    return build_drama_short_narrative(topic=title or "el límite personal frente a la familia", channel="drama")
+                return build_drama_longform_narrative(topic=title or "el conflicto de herencia familiar", channel="drama")
             elif "scifi" in lane_key or "singularidad" in lane_key or "sci_fi" in lane_key:
                 if is_short:
                     return build_scifi_short_narrative(topic=title or "el horizonte de sucesos y la paradoja del tiempo", channel="scifi")
                 return build_scifi_longform_narrative(topic=title or "el horizonte de sucesos y la paradoja del tiempo", channel="scifi")
             else:
                 if is_short:
-                    return build_moku_short_narrative(topic=title or "la anomalía del bosque", channel="moku")
-                return build_moku_longform_narrative(topic=title or "la frecuencia prohibida del bosque", channel="moku")
+                    return build_horror_short_narrative(topic=title or "la anomalía del bosque", channel="horror")
+                return build_horror_longform_narrative(topic=title or "la frecuencia prohibida del bosque", channel="horror")
         except Exception as exc:
             logger.debug("Fallback template invocation notice: %s", exc)
 

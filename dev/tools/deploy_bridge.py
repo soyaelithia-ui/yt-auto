@@ -164,7 +164,7 @@ def main() -> int:
 
     # Logs
     p_logs = subparsers.add_parser("logs", help="Ver logs en vivo de los servicios de despliegue")
-    p_logs.add_argument("--service", choices=["sched", "bot", "all"], default="all", help="Servicio a consultar")
+    p_logs.add_argument("-s", "--service", choices=["sched", "bot", "all"], default="all", help="Servicio a consultar")
     p_logs.add_argument("-n", "--lines", type=int, default=30, help="Número de líneas a mostrar")
     p_logs.set_defaults(func=cmd_logs)
 

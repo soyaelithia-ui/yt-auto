@@ -32,9 +32,9 @@ def handle_profile(
         )
 
     iterations = getattr(args, "iterations", 1)
-    channel = getattr(args, "channel", "moku")
+    channel = getattr(args, "channel", "horror")
     if channel == "all":
-        channel = "moku"
+        channel = "horror"
     lane_id = getattr(args, "lane", None)
     mock_mode = getattr(args, "mock", True)
     export_path = getattr(args, "export_json", None) or getattr(args, "output", None)

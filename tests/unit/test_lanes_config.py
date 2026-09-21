@@ -212,6 +212,35 @@ class TestResolution:
         moku = lanes_for_channel("moku", path="no/such/file")
         assert all(lane.channel.value == "moku" for lane in moku)
 
+    def test_thematic_lane_aliases_resolve_get_lane(self):
+        assert get_lane("horror-scp-shorts") is not None
+        assert get_lane("horror-scp-shorts").id == "moku-scp-shorts"
+        assert get_lane("horror-long") is not None
+        assert get_lane("horror-long").id == "moku-horror-long"
+        assert get_lane("drama-shorts") is not None
+        assert get_lane("drama-shorts").id == "aelithia-drama-shorts"
+        assert get_lane("drama-aita-long") is not None
+        assert get_lane("drama-aita-long").id == "aelithia-aita-long"
+
+    def test_thematic_and_numbered_channel_aliases_resolve_for_run(self):
+        lane_h = resolve_lane_for_run("horror", "horror-scp-shorts")
+        assert lane_h.id == "moku-scp-shorts"
+
+        lane_d = resolve_lane_for_run("drama", "drama-aita-long")
+        assert lane_d.id == "aelithia-aita-long"
+
+        lane_c1 = resolve_lane_for_run("canal1", "horror-long")
+        assert lane_c1.id == "moku-horror-long"
+
+        lane_c2 = resolve_lane_for_run("canal2", "drama-shorts")
+        assert lane_c2.id == "aelithia-drama-shorts"
+
+        lane_ch1 = resolve_lane_for_run("channel_1", "horror-scp-shorts")
+        assert lane_ch1.id == "moku-scp-shorts"
+
+        lane_ch2 = resolve_lane_for_run("channel_2", "drama-aita-long")
+        assert lane_ch2.id == "aelithia-aita-long"
+
 
 class TestOverrides:
     def test_with_overrides_only_touches_known_fields(self):

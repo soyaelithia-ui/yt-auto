@@ -2,7 +2,7 @@
 src/agents/image_auditor.py - Agent 5: Image Auditor Agent (Anti-Filler & Visual Asset Vetting).
 
 Enforces strict anti-filler criteria:
-1. 100% of video backgrounds and animated visual subjects must be procedural 2D/3D WebGL/Canvas code.
+1. 100% of video backgrounds and animated visual subjects must come from FFmpeg procedural loops or catalog scenery.
 2. Pure filler or generic stock photography is strictly REJECTED and discarded.
 3. Only verified official brandmarks, institutional emblems (e.g. SCP Foundation Logo, NASA, OpenAI),
    or technical schematics are approved as small non-invasive reference overlay badges.
@@ -130,7 +130,7 @@ class ImageAuditorAgent:
                     "confidence_score": 0.99,
                     "reasoning": (
                         "DESCARTE ESTRICTO: Las imágenes de relleno genérico o fotos de stock están prohibidas. "
-                        "Todo el contenido dinámico de fondo debe ser generado procedimentalmente en código WebGL/Canvas."
+                        "Todo el contenido dinámico de fondo debe provenir de loops de catálogo o scenery verificado."
                     ),
                     "badge_render_type": "none",
                 }
@@ -194,9 +194,9 @@ class ImageAuditorAgent:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Image Auditor Agent (Anti-Filler & Visual Asset Vetting)")
-    parser.add_argument("--topic", type=str, required=True, help="Video topic / subject")
-    parser.add_argument("--candidates", type=str, default=None, help="JSON list of candidate visual assets")
-    parser.add_argument("--channel-lane", type=str, default="general", help="Channel editorial lane")
+    parser.add_argument("-t", "--topic", type=str, required=True, help="Video topic / subject")
+    parser.add_argument("-c", "--candidates", type=str, default=None, help="JSON list of candidate visual assets")
+    parser.add_argument("-l", "--channel-lane", type=str, default="general", help="Channel editorial lane")
     parser.add_argument("--use-agent", action="store_true", default=False, help="Invoke Antigravity CLI harness")
     args = parser.parse_args()
 

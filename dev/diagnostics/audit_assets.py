@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-dev/audit_assets.py - Visual Asset Auditor & Anti-Filler CLI Tool.
+dev/diagnostics/audit_assets.py - Visual Asset Auditor & Anti-Filler CLI Tool.
 
 Audits candidate visual assets or asset directories against the strict anti-filler criteria:
 - Rejects generic stock photography or filler imagery.
@@ -30,9 +30,9 @@ def main() -> int:
         description="Visual Asset Auditor & Anti-Filler CLI Tool",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--topic", type=str, required=True, help="Video topic / entity subject")
-    parser.add_argument("--candidates-json", type=str, default=None, help="JSON string or file path with candidates")
-    parser.add_argument("--lane", type=str, default="moku-scp-shorts", help="Editorial channel lane")
+    parser.add_argument("-t", "--topic", type=str, required=True, help="Video topic / entity subject")
+    parser.add_argument("-c", "--candidates-json", type=str, default=None, help="JSON string or file path with candidates")
+    parser.add_argument("-l", "--lane", type=str, default="horror-scp-shorts", help="Editorial channel lane")
     parser.add_argument("--use-agent", action="store_true", default=False, help="Invoke Antigravity CLI harness")
     args = parser.parse_args()
 

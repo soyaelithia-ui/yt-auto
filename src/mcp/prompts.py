@@ -20,11 +20,11 @@ def register_prompts(server: MCPServer) -> None:
         description="Standardized operational workflow for checking system readiness, credentials, storage, and API connectivity.",
     )
     async def preflight_diagnostics(
-        channel: str = "moku",
+        channel: str = "horror",
         require_publish: bool = True,
         channel_name: str = "",
     ) -> List[Message]:
-        target_channel = channel_name or channel or "moku"
+        target_channel = channel_name or channel or "horror"
         text = (
             f"You are conducting a strict preflight diagnostic review for yt-auto (channel='{target_channel}').\n\n"
             f"Follow this operational checklist:\n"
@@ -44,12 +44,12 @@ def register_prompts(server: MCPServer) -> None:
         description="Guided triage workflow for channel failures, error spikes, and paused lanes.",
     )
     async def channel_incident_analysis(
-        channel_name: str = "moku",
+        channel_name: str = "horror",
         incident_description: str = "",
         channel: str = "",
         error_context: str = "",
     ) -> List[Message]:
-        target_channel = channel or channel_name or "moku"
+        target_channel = channel or channel_name or "horror"
         context = incident_description or error_context or "Unspecified failure report"
         text = (
             f"Analyze a channel incident on yt-auto for channel '{target_channel}'.\n"
@@ -73,10 +73,10 @@ def register_prompts(server: MCPServer) -> None:
     async def video_qa_review(
         story_id: str,
         lane_id: str = "",
-        channel_name: str = "moku",
+        channel_name: str = "horror",
         channel: str = "",
     ) -> List[Message]:
-        target_channel = channel or channel_name or "moku"
+        target_channel = channel or channel_name or "horror"
         text = (
             f"Perform an exhaustive Quality Assurance audit for produced story '{story_id}' "
             f"(channel='{target_channel}', lane='{lane_id or 'auto'}').\n\n"

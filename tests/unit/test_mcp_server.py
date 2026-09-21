@@ -283,6 +283,19 @@ class TestTier1ToolGetLaneInfo:
         result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "aelithia-drama-shorts"}))
         data = _parse_content_json(result)
         assert data.get("id") == "aelithia-drama-shorts"
+
+    def test_tier1_get_lane_info_thematic_aliases(self):
+        """get_lane_info successfully resolves thematic lane aliases."""
+        server = create_mcp_server()
+        for alias, expected_id in [
+            ("horror-scp-shorts", "moku-scp-shorts"),
+            ("horror-long", "moku-horror-long"),
+            ("drama-shorts", "aelithia-drama-shorts"),
+            ("drama-aita-long", "aelithia-aita-long"),
+        ]:
+            result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": alias}))
+            data = _parse_content_json(result)
+            assert data.get("id") == expected_id, f"Failed for alias {alias}"
         assert data.get("channel") == "aelithia"
 
     def test_tier1_get_lane_info_scifi_chronicles_shorts(self):

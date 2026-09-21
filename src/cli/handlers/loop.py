@@ -1,5 +1,5 @@
 """
-src/cli/handlers/loop.py - CLI Handler for Web-Based Video Loops & Catalog Management.
+src/cli/handlers/loop.py - CLI Handler for Video Loops Catalog & Assets Inventory.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def handle_loop(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
             print(json.dumps([r.to_dict() for r in records], indent=2, ensure_ascii=False))
             return 0
 
-        print(f"\n🎬 Catálogo de Video Loops Procedurales Web ({len(records)} registros):")
+        print(f"\n🎬 Catálogo de Video Loops ({len(records)} registros):")
         print("=" * 95)
         print(f"{'ID':<28} | {'Categoría':<14} | {'Orientación':<10} | {'Tecnología':<12} | {'Uso':<5} | {'Tamaño':<8}")
         print("-" * 95)
@@ -57,7 +57,7 @@ def handle_loop(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
         seed_base = getattr(args, "seed", None)
 
         if not as_json:
-            print(f"🚀 Generando {count} bucle(s) procedural(es) web para '{category}' [{orientation}]...")
+            print(f"🚀 Generando {count} bucle(s) para '{category}' [{orientation}]...")
         generated = []
         for i in range(count):
             seed = (seed_base + i) if seed_base is not None else None

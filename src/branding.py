@@ -92,12 +92,12 @@ class ChannelBranding:
         and contains no hardcoded channel or brand leaks.
         """
         clean_t = (raw_title or "").strip()
-        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
+        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia", "relato de drama"):
             clean_t = self.default_title_fallback
 
         clean_t = strip_brand_metadata_from_title(clean_t, self.display_name)
 
-        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia"):
+        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia", "relato de drama"):
             clean_t = self.default_title_fallback
 
         if len(clean_t) > 100:

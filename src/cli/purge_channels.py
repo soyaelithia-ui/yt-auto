@@ -335,7 +335,7 @@ def purge_channel_videos(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="YouTube Channel Video Purge Tool")
-    parser.add_argument("--channel", type=str, required=True, help="Canonical channel identifier (e.g. horror, drama, scifi)")
+    parser.add_argument("-c", "--channel", type=str, required=True, help="Canonical channel identifier ('horror' / canal 1, 'drama' / canal 2, 'scifi')")
     parser.add_argument("--execute", action="store_true", default=False, help="Execute live video deletions (default: dry-run inspection mode)")
     parser.add_argument("--force", action="store_true", default=False, help="Bypass interactive 'DELETE' confirmation prompt")
     parser.add_argument("--delay", type=float, default=0.5, help="Pacing delay in seconds between deletions (default: 0.5s)")

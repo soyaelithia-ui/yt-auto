@@ -663,10 +663,10 @@ def _cli() -> int:
             "Programmatic Agent (Antigravity CLI harness, Pro quota)"
         )
     )
-    parser.add_argument("--task", default=DEFAULT_TASK)
-    parser.add_argument("--model", default=CANONICAL_MODEL)
-    parser.add_argument("--effort", default="high", choices=["low", "medium", "high"])
-    parser.add_argument("--instance", default="default")
+    parser.add_argument("-t", "--task", default=DEFAULT_TASK)
+    parser.add_argument("-m", "--model", default=CANONICAL_MODEL)
+    parser.add_argument("-e", "--effort", default="high", choices=["low", "medium", "high"])
+    parser.add_argument("-i", "--instance", default="default")
     args = parser.parse_args()
     path = ProgrammaticAgent(
         model=args.model,

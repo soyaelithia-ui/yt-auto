@@ -203,8 +203,8 @@ def inspect_video_media(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Visual QA Media Inspection Tool")
-    parser.add_argument("--video", type=str, required=True, help="Input video MP4 path")
-    parser.add_argument("--output-dir", type=str, default="output/visual_qa", help="Output directory for keyframes and report")
+    parser.add_argument("-v", "--video", type=str, required=True, help="Input video MP4 path")
+    parser.add_argument("-o", "--output-dir", type=str, default="output/visual_qa", help="Output directory for keyframes and report")
     parser.add_argument("--black-thresh", type=float, default=0.5, help="Black screen min duration threshold (s)")
     parser.add_argument("--freeze-thresh", type=float, default=2.0, help="Freeze frame min duration threshold (s)")
     args = parser.parse_args()

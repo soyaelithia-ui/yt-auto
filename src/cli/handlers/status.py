@@ -269,7 +269,7 @@ def handle_status(args: argparse.Namespace, parser: argparse.ArgumentParser | No
     db_path = getattr(args, "db_path", DEFAULT_DB_PATH)
 
     if getattr(args, "apis", False) or getattr(args, "check_apis", False):
-        ch = "moku" if getattr(args, "channel", "all") in ("all", None) else args.channel
+        ch = "horror" if getattr(args, "channel", "all") in ("all", None) else args.channel
         report = check_all(ch)
         print(format_status_report(report, ch))
         return 0

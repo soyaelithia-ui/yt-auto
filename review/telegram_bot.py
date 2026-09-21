@@ -1246,7 +1246,7 @@ class TelegramReviewBot:
     _HELP_TEXT = (
         "🛠 Control YouTube:\n"
         "/menu — botones rápidos\n"
-        "/stats <video_id> [moku|aelithia] — estadísticas\n"
+        "/stats <video_id> [canal] — estadísticas\n"
         "/priv <video_id> [canal] — poner PRIVADO\n"
         "/pub <video_id> [canal] — hacer PÚBLICO\n"
         "/unlist <video_id> [canal] — NO LISTADO\n"

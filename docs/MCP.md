@@ -97,8 +97,8 @@ El servidor registra 9 herramientas operativas:
 {
   "lanes": [
     {
-      "lane_id": "moku-scp-shorts",
-      "channel": "moku",
+      "lane_id": "horror-scp-shorts",
+      "channel": "horror",
       "story_type": "scp",
       "orientation": "vertical",
       "resolution": [1080, 1920],
@@ -115,7 +115,7 @@ El servidor registra 9 herramientas operativas:
 
 ### 3.3. `get_lane_info`
 - **Parámetros**:
-  - `lane_id` (string requerido): Identificador canónico del carril (ej. `"moku-scp-shorts"`).
+  - `lane_id` (string requerido): Identificador canónico del carril (ej. `"horror-scp-shorts"`).
 - **Respuesta**: Retorna la especificación editorial completa, fuentes de Reddit, configuración visual, parámetros de audio y estado dinámico del scheduler.
 
 ### 3.4. `query_loop_catalog`
@@ -140,11 +140,11 @@ El servidor registra 9 herramientas operativas:
 ```json
 {
   "status": "SUCCESS",
-  "run_id": "dryrun_moku-scp-shorts_20260919_003300",
-  "lane_id": "moku-scp-shorts",
-  "channel": "moku",
+  "run_id": "dryrun_horror-scp-shorts_20260919_003300",
+  "lane_id": "horror-scp-shorts",
+  "channel": "horror",
   "duration_sec": 84.5,
-  "video_path": "output/dryrun_moku-scp-shorts.mp4",
+  "video_path": "output/dryrun_horror-scp-shorts.mp4",
   "zero_quota_verified": true,
   "facts": { "composition_mode": "stream-copy", "cpu_time_sec": 1.4 }
 }

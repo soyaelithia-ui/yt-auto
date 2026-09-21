@@ -55,6 +55,7 @@ _SA_SCAN_SKIP_PREFIXES = ("openspec/",)
 _SA_SCAN_SKIP_FILES = {
     "tests/unit/test_security_policies.py",
     "dev/audit_security.py",
+    "dev/diagnostics/audit_security.py",
 }
 _HYGIENE_DOCS = (
     "SECURITY.md",

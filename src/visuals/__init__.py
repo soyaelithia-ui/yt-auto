@@ -1,7 +1,7 @@
 """Visual provenance and tracking module.
 
 Video generation uses ``LoopVideoEngine`` and the SQLite-backed ``LoopCatalogRepository``
-with web-based procedural generation (Three.js, Canvas, WebGL, CSS).
+with pre-rendered video loops and FFmpeg stream-copy composition.
 """
 from src.visuals.scene_asset_tracker import SceneAssetTracker
 

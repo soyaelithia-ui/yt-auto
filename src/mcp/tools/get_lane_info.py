@@ -32,7 +32,7 @@ def register_get_lane_info_tool(server: MCPServer) -> None:
     async def get_lane_info(
         lane_id: Annotated[
             str,
-            Field(description="Unique lane identifier (e.g. 'moku-scp-shorts', 'moku-horror-long', 'aelithia-aita-long')"),
+            Field(description="Unique lane identifier (e.g. 'horror-scp-shorts', 'horror-long', 'drama-aita-long')"),
         ],
     ) -> Dict[str, Any]:
         # Security: validate lane_id format to prevent injection attacks
