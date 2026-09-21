@@ -5,8 +5,6 @@ Backward-compatible facade delegating execution to the modular src.sanitizer pac
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, List, Optional
 
 from src.sanitizer import (
     _COMPILED_EDITORIAL_CACHE,

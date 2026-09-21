@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from src.branding import resolve_channel_key
 from src.scrapers import (

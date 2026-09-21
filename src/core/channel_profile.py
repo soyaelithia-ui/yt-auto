@@ -14,6 +14,7 @@ logger = logging.getLogger("channel_profile")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_CHANNELS_DIR = REPO_ROOT / "config" / "channels"
+CONFIG_CHANNELS_JSON = REPO_ROOT / "config" / "channels.json"
 
 
 @dataclass(frozen=True)
@@ -108,15 +109,28 @@ class ChannelProfile:
     visual: VisualStrategyConfig
     audio: AudioStrategyConfig
     auth: ChannelAuthConfig
+    aliases: Tuple[str, ...] = ()
 
 
 class ChannelProfileRegistry:
     """
     Thread-safe registry for declarative channel profiles.
-    Loads and caches JSON configurations from config/channels/.
+    Loads and caches JSON configurations from config/channels/ and config/channels.json.
     """
     _cache: Dict[str, ChannelProfile] = {}
     _cache_mtimes: Dict[str, int] = {}
+    _alias_to_id: Dict[str, str] = {
+        "horror": "moku",
+        "terror": "moku",
+        "scp": "moku",
+        "drama": "aelithia",
+        "aita": "aelithia",
+        "soy_el_malo": "aelithia",
+        "channel1": "moku",
+        "channel2": "aelithia",
+        "scifi": "scifi",
+        "singularidad": "scifi",
+    }
 
     @classmethod
     def get_channel(cls, channel_id_or_alias: str) -> ChannelProfile:
@@ -135,50 +149,50 @@ class ChannelProfileRegistry:
     @classmethod
     def _apply_env_overrides(cls, profile: ChannelProfile) -> ChannelProfile:
         cid = profile.id
-        prefix = cid.upper()
+        prefixes = [cid.upper()] + [a.upper() for a in profile.aliases]
         active_channel_env = os.environ.get("CHANNEL_KEY", "").strip().lower()
-        use_generic_env = (active_channel_env == cid or not active_channel_env)
+        active_cid = cls.normalize_channel_id(active_channel_env) if active_channel_env else ""
+        use_generic_env = (active_cid == cid or not active_channel_env)
 
-        handle = (
-            os.environ.get(f"{prefix}_HANDLE")
-            or (os.environ.get("CHANNEL_HANDLE") if use_generic_env and "CHANNEL_HANDLE" in os.environ else None)
-            or profile.editorial.handle
-        )
-        channel_url = (
-            os.environ.get(f"{prefix}_CHANNEL_URL")
-            or (os.environ.get("CHANNEL_URL") if use_generic_env and "CHANNEL_URL" in os.environ else None)
-            or profile.editorial.channel_url
-        )
+        def _get_env(suffix: str, generic_var: Optional[str] = None) -> Optional[str]:
+            if generic_var and use_generic_env and generic_var in os.environ:
+                return os.environ[generic_var]
+            for pfx in prefixes:
+                var_name = f"{pfx}_{suffix}"
+                if var_name in os.environ:
+                    return os.environ[var_name]
+            return None
+
+        handle = _get_env("HANDLE", "CHANNEL_HANDLE") or profile.editorial.handle
+        channel_url = _get_env("CHANNEL_URL", "CHANNEL_URL") or profile.editorial.channel_url
         public_name = (
-            os.environ.get(f"{prefix}_NAME")
-            or os.environ.get(f"{prefix}_PUBLIC_NAME")
-            or (os.environ.get("CHANNEL_NAME") if use_generic_env and "CHANNEL_NAME" in os.environ else None)
+            _get_env("NAME", "CHANNEL_NAME")
+            or _get_env("PUBLIC_NAME")
             or profile.editorial.public_name
         )
+        watermark_text = _get_env("WATERMARK", "CHANNEL_WATERMARK") or profile.visual.watermark_text
+        voice = _get_env("TTS_VOICE", "CHANNEL_TTS_VOICE") or profile.audio.default_voice_profile
+        tts_provider = _get_env("TTS_PROVIDER", "CHANNEL_TTS_PROVIDER") or profile.audio.default_tts_provider
 
-        watermark_text = (
-            os.environ.get(f"{prefix}_WATERMARK")
-            or (os.environ.get("CHANNEL_WATERMARK") if use_generic_env and "CHANNEL_WATERMARK" in os.environ else None)
-            or profile.visual.watermark_text
-        )
-
-        voice = os.environ.get(f"{prefix}_TTS_VOICE") or profile.audio.default_voice_profile
-        tts_provider = os.environ.get(f"{prefix}_TTS_PROVIDER") or profile.audio.default_tts_provider
+        cookies_override = _get_env("COOKIES_PATH", "CHANNEL_COOKIES_PATH")
         cookies_path = (
-            Path(os.environ[f"{prefix}_COOKIES_PATH"]).expanduser().resolve()
-            if f"{prefix}_COOKIES_PATH" in os.environ
+            Path(cookies_override).expanduser().resolve()
+            if cookies_override
             else profile.auth.cookies_path
         )
+
+        token_override = _get_env("YOUTUBE_TOKEN_PATH", "CHANNEL_YOUTUBE_TOKEN_PATH")
         youtube_token_path = (
-            Path(os.environ[f"{prefix}_YOUTUBE_TOKEN_PATH"]).expanduser().resolve()
-            if f"{prefix}_YOUTUBE_TOKEN_PATH" in os.environ
+            Path(token_override).expanduser().resolve()
+            if token_override
             else profile.auth.youtube_token_path
         )
+
         expected_channel_id = (
-            os.environ.get(f"{prefix}_YOUTUBE_CHANNEL_ID")
+            _get_env("YOUTUBE_CHANNEL_ID", "CHANNEL_YOUTUBE_CHANNEL_ID")
             or profile.auth.expected_youtube_channel_id
         ).strip()
-        source_feed = os.environ.get(f"{prefix}_SOURCE_FEED") or profile.auth.source_feed
+        source_feed = _get_env("SOURCE_FEED", "CHANNEL_SOURCE_FEED") or profile.auth.source_feed
 
         if (
             handle == profile.editorial.handle
@@ -234,20 +248,56 @@ class ChannelProfileRegistry:
 
     @classmethod
     def normalize_channel_id(cls, raw: Any) -> str:
+        cls._ensure_loaded()
         if hasattr(raw, "value"):
             s = str(raw.value).strip().lower()
         else:
             s = (str(raw or "")).strip().lower()
-        if s in ("moku", "channel1", "primary", "terror", "scp", "horror") or s.startswith("moku-") or "moku" in s:
-            return "moku"
-        if s in ("aelithia", "channel2", "secondary", "aita", "reddit", "drama", "soy_el_malo") or s.startswith("aelithia-") or "aelithia" in s:
-            return "aelithia"
-        if s in ("scifi", "sci_fi", "space", "singularidad") or s.startswith("scifi-") or "scifi" in s:
-            return "scifi"
+        if not s:
+            return s
+        if s in cls._cache:
+            return s
+        if s in cls._alias_to_id:
+            return cls._alias_to_id[s]
+        prefix = s.split("-")[0]
+        if prefix in cls._cache:
+            return prefix
+        if prefix in cls._alias_to_id:
+            return cls._alias_to_id[prefix]
         return s
 
     @classmethod
     def _ensure_loaded(cls, force_reload: bool = False) -> None:
+        has_channels_json = False
+        if CONFIG_CHANNELS_JSON.is_file():
+            has_channels_json = True
+            try:
+                mtime_cj = CONFIG_CHANNELS_JSON.stat().st_mtime_ns
+                if force_reload or cls._cache_mtimes.get("__channels_json__") != mtime_cj:
+                    with open(CONFIG_CHANNELS_JSON, "r", encoding="utf-8") as f:
+                        cj_data = json.load(f)
+                    channels_list = cj_data.get("channels", []) if isinstance(cj_data, dict) else cj_data
+                    if isinstance(channels_list, list):
+                        for entry in channels_list:
+                            if isinstance(entry, dict) and "config_file" in entry:
+                                p_path = REPO_ROOT / entry["config_file"]
+                                if p_path.is_file():
+                                    with open(p_path, "r", encoding="utf-8") as pf:
+                                        p_data = json.load(pf)
+                                    prof = cls._parse_profile_dict(p_data, p_path)
+                                    cls._cache[prof.id] = prof
+                                    for al in (entry.get("aliases") or ()):
+                                        cls._alias_to_id[str(al).lower()] = prof.id
+                                    for al in prof.aliases:
+                                        cls._alias_to_id[al] = prof.id
+                        has_channels_json = bool(cls._cache)
+                    cls._cache_mtimes["__channels_json__"] = mtime_cj
+            except Exception as e:
+                logger.warning("Failed to load config/channels.json: %s", e)
+
+        if has_channels_json:
+            return
+
         if not CONFIG_CHANNELS_DIR.exists():
             CONFIG_CHANNELS_DIR.mkdir(parents=True, exist_ok=True)
             return
@@ -266,6 +316,8 @@ class ChannelProfileRegistry:
                 profile = cls._parse_profile_dict(data, jf)
                 cls._cache[profile.id] = profile
                 cls._cache_mtimes[profile.id] = mtime
+                for al in profile.aliases:
+                    cls._alias_to_id[al] = profile.id
             except Exception as e:
                 logger.warning("Failed to load channel profile from %s: %s", jf, e)
 
@@ -273,6 +325,7 @@ class ChannelProfileRegistry:
     def _parse_profile_dict(cls, data: Dict[str, Any], file_path: Path) -> ChannelProfile:
         cid = str(data.get("id", file_path.stem)).lower()
         enabled = bool(data.get("enabled", True))
+        aliases = tuple(str(a).lower() for a in data.get("aliases", ()))
 
         # Editorial
         ed_data = data.get("editorial", {})
@@ -370,4 +423,5 @@ class ChannelProfileRegistry:
             visual=visual,
             audio=audio,
             auth=auth,
+            aliases=aliases,
         )

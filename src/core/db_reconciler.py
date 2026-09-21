@@ -9,11 +9,10 @@ Eliminates orphaned approval states, duplicate uploads on network retry, and spl
 
 from __future__ import annotations
 
-import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Union
 
 from review.domain import ReviewStatus
 from src.core.domain import JobStatus

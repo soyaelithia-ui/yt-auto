@@ -7,7 +7,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceNotFoundError
@@ -89,8 +88,9 @@ def register_resources(server: MCPServer) -> None:
     )
     async def get_system_health() -> str:
         try:
+            from src.config import get_active_channel_key
             st = cli_status(DEFAULT_DB_PATH)
-            st["api_health"] = check_all("moku")
+            st["api_health"] = check_all(get_active_channel_key())
             clean = sanitize_payload(st)
             return json.dumps(clean, indent=2, ensure_ascii=False)
         except Exception as exc:

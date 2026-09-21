@@ -6,7 +6,6 @@ Combines rawvideo stdin, ASS typography burning (libass), audio ducking, and EBU
 from __future__ import annotations
 
 import collections
-import os
 import subprocess
 import threading
 from pathlib import Path

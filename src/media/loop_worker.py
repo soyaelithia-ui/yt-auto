@@ -8,12 +8,11 @@ opt-in experiments; quarantined NativeProceduralEngine/wgpu (_legacy) is NOT con
 """
 from __future__ import annotations
 
-import logging
 import random
 import time
 from pathlib import Path
 from src.media.encode_defaults import default_render_crf, default_render_preset
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 
 from src.config import DEFAULT_DB_PATH
 from src.core.catalog import LoopCatalogRepository, LoopRecord

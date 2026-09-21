@@ -10,18 +10,16 @@ Integrates seamlessly with TelegramReviewBot, supporting:
 from __future__ import annotations
 
 import argparse
-import logging
-import os
 import sys
 import threading
 import time
 from typing import Any, Dict, Optional
 
 from review import DeliveryResult, TelegramReviewBot
-from review.telegram_bot import send_telegram_message, is_local_bot_api, get_telegram_api_base_url
+from review.telegram_bot import send_telegram_message, is_local_bot_api
 from src.core.scheduler import AutoPilotScheduler
 from src.log import get_logger
-from src.telegram.callbacks import _route_update, poll_callbacks, PollerHeartbeat
+from src.telegram.callbacks import _route_update, poll_callbacks
 
 logger = get_logger("telegram_interactive")
 

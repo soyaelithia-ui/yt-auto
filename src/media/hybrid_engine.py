@@ -9,18 +9,15 @@ Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
 
-import json
 import math
-import os
 import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw
 
 from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
 from src.log import get_logger
@@ -29,15 +26,10 @@ from src.media.subtitles_ass import libass_filter_clause
 from src.scene_manifest import (
     CameraMotionConfig,
     HybridAIConfig,
-    LayerConfig,
     SceneConfig,
-    SceneManifestV2,
     parse_scene_manifest_model,
 )
 from lib.ffmpeg import (
-    FFmpegError,
-    FFmpegExecutionError,
-    probe_media,
     run_ffmpeg,
 )
 from src.media.encode_defaults import (

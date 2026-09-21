@@ -2,7 +2,7 @@
 src/media/thumbnails/layout.py - Safe zone management and aspect ratio coordinates.
 """
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Tuple
 
 
 @dataclass(frozen=True)

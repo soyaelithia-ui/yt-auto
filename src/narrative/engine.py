@@ -4,7 +4,6 @@ src/narrative/engine.py - 5-Phase Tension Curve Narrative Generator & Script Com
 from __future__ import annotations
 
 import datetime
-import math
 import re
 from typing import Any, Dict, List, Optional, Union
 
@@ -18,13 +17,9 @@ from src.narrative.schema import (
     CameraTransform,
     CosmicScriptContract,
     NarrativeArchetype,
-    Rec709Palette,
     SceneContract,
-    SceneContractV2,
     SFXCue,
-    TensionLevel,
     VideoFormat,
-    VoicePreset,
 )
 from src.log import get_logger
 

@@ -5,13 +5,12 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
-from PIL import Image, ImageFilter, ImageStat
+from PIL import Image
 
 logger = logging.getLogger("thumbnail_extractor")
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 
@@ -21,17 +21,6 @@ from src.media.visual_coherence import (
     plan_scenes_by_id,
     timing_scales_to_audio,
     visual_plan_palette,
-)
-from src.scene_manifest import (
-    AudioTracks,
-    CameraMotionConfig,
-    ColorProfile,
-    DuckingConfig,
-    HybridAIConfig,
-    SafeArea,
-    SceneConfig,
-    SceneManifestV2,
-    TransitionConfig,
 )
 
 logger = get_logger("scene_planner_compositor")
@@ -64,26 +53,15 @@ class ScenePlannerCompositorAgent:
                 self._schema = json.load(f)
 
     @staticmethod
-    def _extract_channel_palette_and_hud(
+    def _extract_hud_layout(
         channel_name: str,
         lane_id: str,
         meta: Dict[str, Any],
         visual_plan: Dict[str, Any],
-        channel_config: Optional[Any] = None,
-        lane_config: Optional[Any] = None,
+        ch_cfg: Optional[Any] = None,
+        ln_cfg: Optional[Any] = None,
         explicit_hud_layout: Optional[str] = None,
-        explicit_accent: Optional[str] = None,
-    ) -> Tuple[str, str, str]:
-        """Extracts and validates suggested (hud_layout, accent_color_hex, primary_color_hex).
-
-        Extracts layout and chromatic palette from explicit arguments, metadata, visual_plan,
-        provided channel/lane configs, or ChannelProfileRegistry.
-        Empty or invalid color values degrade cleanly to safe, neutral defaults.
-        """
-        ch_cfg = channel_config or meta.get("channel_config") or visual_plan.get("channel_config")
-        ln_cfg = lane_config or meta.get("lane_config") or visual_plan.get("lane_config")
-
-        # 1. Extract suggested HUD layout/style
+    ) -> str:
         hud_layout_candidate = (
             explicit_hud_layout
             or meta.get("hud_layout")
@@ -114,19 +92,35 @@ class ScenePlannerCompositorAgent:
             or meta.get("hud_enabled") is False
             or visual_plan.get("hud_enabled") is False
         ):
-            resolved_layout = "none"
-        elif cand in _allowed:
-            resolved_layout = cand
-        elif cand in ("scp", "classified", "terminal") or "scp" in lane_l or "scp" in story_l:
-            resolved_layout = "top_bar"
-        elif cand in ("reddit_aita", "reddit", "aita", "drama") or "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l or "aita" in story_l or "reddit" in story_l:
-            resolved_layout = "card"
-        elif cand in ("scifi", "cyberpunk", "space") or "scifi" in lane_l or "space" in lane_l or "scifi" in ch_l:
-            resolved_layout = "top_bar"
-        else:
-            resolved_layout = "bottom_bar"
+            return "none"
+        if cand in _allowed:
+            return cand
+        if cand in ("scp", "classified", "terminal") or "scp" in lane_l or "scp" in story_l:
+            return "top_bar"
+        if (
+            cand in ("reddit_aita", "reddit", "aita", "drama")
+            or any(k in lane_l for k in ("aita", "reddit", "drama"))
+            or any(k in story_l for k in ("aita", "reddit"))
+        ):
+            return "card"
+        if (
+            cand in ("scifi", "cyberpunk", "space")
+            or any(k in lane_l for k in ("scifi", "space"))
+            or "scifi" in ch_l
+        ):
+            return "top_bar"
+        return "bottom_bar"
 
-        # 2. Extract Accent Color
+    @staticmethod
+    def _extract_accent_color(
+        channel_name: str,
+        lane_id: str,
+        meta: Dict[str, Any],
+        visual_plan: Dict[str, Any],
+        ch_cfg: Optional[Any] = None,
+        ln_cfg: Optional[Any] = None,
+        explicit_accent: Optional[str] = None,
+    ) -> str:
         raw_accent = (
             explicit_accent
             or meta.get("accent_color")
@@ -135,7 +129,6 @@ class ScenePlannerCompositorAgent:
             or visual_plan.get("accent_color")
             or visual_plan.get("palette", {}).get("accent")
         )
-
         if not raw_accent and ln_cfg:
             if isinstance(ln_cfg, dict):
                 raw_accent = ln_cfg.get("accent_color") or ln_cfg.get("palette", {}).get("accent")
@@ -169,21 +162,32 @@ class ScenePlannerCompositorAgent:
             except Exception:
                 pass
 
+        lane_l = (lane_id or "").lower()
+        story_l = str(meta.get("story_type") or "").lower()
+        ch_l = (channel_name or "").lower()
+
         if "scp" in lane_l or "scp" in story_l:
             safe_accent_default = "#00FF66"
-        elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l or "aita" in story_l:
+        elif any(k in lane_l for k in ("aita", "reddit", "drama")) or "aita" in story_l:
             safe_accent_default = "#FF4500"
-        elif "scifi" in lane_l or "space" in lane_l or "scifi" in ch_l:
+        elif any(k in lane_l for k in ("scifi", "space")) or "scifi" in ch_l:
             safe_accent_default = "#00F0FF"
         else:
             safe_accent_default = "#00E5FF"
 
-        if raw_accent is not None:
-            resolved_accent = validate_hex_color(raw_accent, default="#00FF88")
-        else:
-            resolved_accent = validate_hex_color(safe_accent_default, default="#00FF88")
+        return validate_hex_color(
+            raw_accent if raw_accent is not None else safe_accent_default,
+            default="#00FF88",
+        )
 
-        # 3. Extract Primary Color
+    @staticmethod
+    def _extract_primary_color(
+        channel_name: str,
+        lane_id: str,
+        meta: Dict[str, Any],
+        visual_plan: Dict[str, Any],
+        ch_cfg: Optional[Any] = None,
+    ) -> str:
         raw_primary = (
             meta.get("primary_color")
             or meta.get("primary_color_hex")
@@ -213,8 +217,32 @@ class ScenePlannerCompositorAgent:
             except Exception:
                 pass
 
-        resolved_primary = validate_hex_color(raw_primary, default="#030A14")
+        return validate_hex_color(raw_primary, default="#030A14")
 
+    @staticmethod
+    def _extract_channel_palette_and_hud(
+        channel_name: str,
+        lane_id: str,
+        meta: Dict[str, Any],
+        visual_plan: Dict[str, Any],
+        channel_config: Optional[Any] = None,
+        lane_config: Optional[Any] = None,
+        explicit_hud_layout: Optional[str] = None,
+        explicit_accent: Optional[str] = None,
+    ) -> Tuple[str, str, str]:
+        """Extracts and validates suggested (hud_layout, accent_color_hex, primary_color_hex)."""
+        ch_cfg = channel_config or meta.get("channel_config") or visual_plan.get("channel_config")
+        ln_cfg = lane_config or meta.get("lane_config") or visual_plan.get("lane_config")
+
+        resolved_layout = ScenePlannerCompositorAgent._extract_hud_layout(
+            channel_name, lane_id, meta, visual_plan, ch_cfg, ln_cfg, explicit_hud_layout
+        )
+        resolved_accent = ScenePlannerCompositorAgent._extract_accent_color(
+            channel_name, lane_id, meta, visual_plan, ch_cfg, ln_cfg, explicit_accent
+        )
+        resolved_primary = ScenePlannerCompositorAgent._extract_primary_color(
+            channel_name, lane_id, meta, visual_plan, ch_cfg
+        )
         return resolved_layout, resolved_accent, resolved_primary
 
     @staticmethod

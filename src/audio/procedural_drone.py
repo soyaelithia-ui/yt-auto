@@ -10,7 +10,6 @@ Synthesizes broadcast-ready 44.1 kHz 16-bit mono/stereo WAV drones consisting of
 from __future__ import annotations
 
 import math
-import struct
 import wave
 from pathlib import Path
 from typing import Optional, Union

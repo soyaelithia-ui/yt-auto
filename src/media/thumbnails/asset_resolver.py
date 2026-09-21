@@ -11,7 +11,6 @@ from typing import Optional, Tuple, Union
 from PIL import Image, ImageDraw, ImageOps
 
 from src.media.thumbnails.extractor import ClimaxFrameExtractor
-from src.media.thumbnails.grading import ChiaroscuroColorGrader
 
 logger = logging.getLogger("thematic_asset_resolver")
 

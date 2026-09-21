@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
-from typing import Any
 
 from src.config import DEFAULT_DB_PATH
 from src.core.repository import migrate_database

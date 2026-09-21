@@ -5,8 +5,7 @@ from __future__ import annotations
 
 import functools
 import json
-from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from src.config import BASE_DIR
 

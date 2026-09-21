@@ -73,11 +73,13 @@ def register_system_preflight_tool(server: MCPServer) -> None:
             # 4. Channel resolution and validation
             target_channels: list[str] = []
             if channel in ("all", None):
-                target_channels = ["moku", "aelithia", "scifi"]
+                from src.core.channel_profile import ChannelProfileRegistry
+                active_ids = ChannelProfileRegistry.list_active_channel_ids()
+                target_channels = active_ids if active_ids else ["horror", "drama", "scifi"]
             else:
                 try:
-                    c_key = canonical_channel(channel).value
-                    target_channels = [c_key]
+                    c_key = canonical_channel(channel)
+                    target_channels = [c_key.value if hasattr(c_key, "value") else str(c_key)]
                 except (ValueError, KeyError) as e:
                     raise ToolError(f"Invalid channel identifier '{channel}': {e}") from e
 

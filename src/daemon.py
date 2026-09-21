@@ -30,7 +30,7 @@ logger = get_logger("daemon")
 _SHUTDOWN_EVENT = threading.Event()
 _SHUTDOWN_REQUESTED = False
 
-from src.core.render_guard import _LONG_RENDER_SEMAPHORE, _SHORT_RENDER_SEMAPHORE
+from src.core.render_guard import _LONG_RENDER_SEMAPHORE
 
 _RENDER_SEMAPHORE = _LONG_RENDER_SEMAPHORE
 _SYNTHESIS_SEMAPHORE = threading.Semaphore(2)

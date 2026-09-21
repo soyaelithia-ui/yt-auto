@@ -1,6 +1,5 @@
 """Backward compatibility alias for src.youtube.uploader."""
 
-from pathlib import Path
 
 # Contract compatibility markers
 # PublicationGate

@@ -5,8 +5,8 @@ and ambient audio files for video generation pipelines.
 import os
 import random
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Union
-from src.config import BASE_DIR, BACKGROUNDS_DIR, MUSIC_DIR, DEFAULT_BACKGROUND
+from typing import List, Dict, Optional, Union
+from src.config import BASE_DIR, DEFAULT_BACKGROUND
 from src.log import get_logger
 
 logger = get_logger("asset_manager")
@@ -405,5 +405,4 @@ def get_asset_manager() -> AssetManager:
     return _default_asset_manager
 
 
-from src.media.assets import check_local_templates, search_reference_image_web, generate_ai_image
 

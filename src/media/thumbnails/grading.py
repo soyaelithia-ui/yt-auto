@@ -3,7 +3,7 @@ src/media/thumbnails/grading.py - Chiaroscuro Grading, Rec.709 S-Curve, Depth Bl
 """
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict
 
 from PIL import Image, ImageEnhance, ImageFilter
 

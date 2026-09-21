@@ -8,7 +8,6 @@ waiting for the 900s TTL expiration window.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import socket
@@ -16,7 +15,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from src.core.domain import JobStatus
 from src.core.repository import validate_db_path

@@ -110,21 +110,22 @@ class ChannelLock:
 
         self.lock_file = self._resolve_lock_path(self.channel_name)
 
-    def _resolve_lock_path(self, name: str) -> str:
+    def _resolve_lock_path(self, name: Any) -> str:
+        name_str = getattr(name, "value", str(name)) if name is not None else ""
         if self._lock_file_path is not None:
             base_lock = str(self._lock_file_path)
-            return base_lock if name in ("global", None, "") else f"{base_lock}.{name}"
+            return base_lock if name_str in ("global", "", "None") else f"{base_lock}.{name_str}"
         elif self._lock_dir is not None:
             dir_path = Path(self._lock_dir)
-            filename = "youtube_automation.lock" if name in ("global", None, "") else f"youtube_automation.lock.{name}"
+            filename = "youtube_automation.lock" if name_str in ("global", "", "None") else f"youtube_automation.lock.{name_str}"
             return str(dir_path / filename)
         elif "YT_LOCK_DIR" in os.environ:
             dir_path = Path(os.environ["YT_LOCK_DIR"])
-            filename = "youtube_automation.lock" if name in ("global", None, "") else f"youtube_automation.lock.{name}"
+            filename = "youtube_automation.lock" if name_str in ("global", "", "None") else f"youtube_automation.lock.{name_str}"
             return str(dir_path / filename)
         else:
             base_lock = _get_default_lock_path()
-            return str(base_lock) if name in ("global", None, "") else f"{base_lock}.{name}"
+            return str(base_lock) if name_str in ("global", "", "None") else f"{base_lock}.{name_str}"
 
     @property
     def is_acquired(self) -> bool:
@@ -174,12 +175,12 @@ class ChannelLock:
                 cids: set[str] = set()
                 try:
                     from src.core.channel_profile import ChannelProfileRegistry
-                    cids.update(ChannelProfileRegistry.list_active_channel_ids())
+                    cids.update(str(getattr(cid, "value", cid)) for cid in ChannelProfileRegistry.list_active_channel_ids())
                 except Exception:
                     pass
                 try:
                     from src.core.lanes import load_lanes
-                    cids.update(lane.channel for lane in load_lanes())
+                    cids.update(str(getattr(lane.channel, "value", lane.channel)) for lane in load_lanes())
                 except Exception:
                     pass
                 try:

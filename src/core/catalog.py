@@ -36,7 +36,9 @@ __all__ = [
 ]
 
 CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
+    "horror": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
     "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
+    "drama": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
     "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
     "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
 }
@@ -219,7 +221,9 @@ class LoopCatalogRepository:
     """
 
     CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
+        "horror": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
         "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
+        "drama": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
         "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
         "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
     }
@@ -586,16 +590,22 @@ class LoopCatalogRepository:
         def _is_foreign_channel(rec: LoopRecord) -> bool:
             if not eff_channel:
                 return False
+            from src.core.channel_profile import ChannelProfileRegistry
+            eff_norm = ChannelProfileRegistry.normalize_channel_id(eff_channel)
             rec_ch = rec.channel
-            if rec_ch and rec_ch.lower() != eff_channel.lower():
-                return True
+            if rec_ch:
+                rec_norm = ChannelProfileRegistry.normalize_channel_id(rec_ch)
+                if rec_norm != eff_norm:
+                    return True
             if not rec_ch and eff_channel in self.CHANNEL_THEMES:
                 tags = {t.lower().strip() for t in rec.theme_tags}
-                other_channels = {c for c in self.CHANNEL_THEMES if c != eff_channel}
-                if any(oc in tags for oc in other_channels):
-                    return True
+                for oc in self.CHANNEL_THEMES:
+                    oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
+                    if oc_norm != eff_norm and (oc in tags or f"channel:{oc}" in tags):
+                        return True
                 for oc, themes in self.CHANNEL_THEMES.items():
-                    if oc != eff_channel and rec.category in themes:
+                    oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
+                    if oc_norm != eff_norm and rec.category in themes:
                         return True
             return False
 
@@ -665,17 +675,21 @@ class LoopCatalogRepository:
                     seen_motif_ids.add(mh.loop_id)
 
         # --- Tier 2: Same-channel compatible fallback / multi-scene expansion ---
+        from src.core.channel_profile import ChannelProfileRegistry
+        ch_key = eff_channel if (eff_channel and eff_channel in self.CHANNEL_THEMES) else (
+            ChannelProfileRegistry.normalize_channel_id(eff_channel) if eff_channel else None
+        )
         need_channel_pool = (
-            (not candidates and eff_channel and eff_channel in self.CHANNEL_THEMES)
+            (not candidates and ch_key and ch_key in self.CHANNEL_THEMES)
             or (
                 seed is not None
-                and eff_channel
-                and eff_channel in self.CHANNEL_THEMES
+                and ch_key
+                and ch_key in self.CHANNEL_THEMES
                 and len([c for c in candidates if c.category.strip().lower() == cat_clean]) <= 1
             )
         )
-        if need_channel_pool and eff_channel and eff_channel in self.CHANNEL_THEMES:
-            ch_cats = self.CHANNEL_THEMES[eff_channel]
+        if need_channel_pool and ch_key and ch_key in self.CHANNEL_THEMES:
+            ch_cats = self.CHANNEL_THEMES[ch_key]
             placeholders = ",".join("?" for _ in ch_cats)
             sql_ch = f"""
             SELECT *, (CASE WHEN category = ? THEN 0 ELSE 1 END) AS cat_priority

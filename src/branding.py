@@ -7,7 +7,7 @@ voice mappings, and tag generation for YouTube upload pipeline.
 import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from src.core.domain import CanonicalChannel, CHANNEL_ALIASES, canonical_channel
+from src.core.domain import CHANNEL_ALIASES, canonical_channel
 from src.log import get_logger
 
 logger = get_logger("branding")
@@ -115,7 +115,7 @@ class ChannelBranding:
         clean_handle_tag = self.handle.lstrip("@").replace("-", "").replace("_", "")
         clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
 
-        if self.channel_key == "aelithia":
+        if self.channel_key in ("aelithia", "drama"):
             desc = (
                 f"💭 {title} | Historias Reales y Confesiones en {self.display_name}\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Historias fascinantes, dilemas morales y experiencias reales narradas en español.\n\n"
@@ -129,7 +129,7 @@ class ChannelBranding:
                 f"#{clean_name_tag} #HistoriasReales #DramasDeLaVidaReal #Confesiones #HistoriasEnEspañol"
                 + (f" #{clean_handle_tag}" if clean_handle_tag and clean_handle_tag.lower() != clean_name_tag.lower() else "")
             )
-        elif self.channel_key == "moku":
+        elif self.channel_key in ("moku", "horror"):
             desc = (
                 f"😱 {title} | Relato de Terror y Suspenso en Español\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Una experiencia inmersiva para escuchar en la oscuridad.\n\n"
@@ -169,10 +169,10 @@ class ChannelBranding:
             short_title = clean_t
 
         clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
-        if self.channel_key == "aelithia":
+        if self.channel_key in ("aelithia", "drama"):
             hashtag_block = f"#Shorts #HistoriasReales #{clean_name_tag} #DilemasMorales"
             full_title = f"{short_title} #Shorts"
-        elif self.channel_key == "moku":
+        elif self.channel_key in ("moku", "horror"):
             hashtag_block = f"#Shorts #Horror #HistoriasDeTerror #{clean_name_tag}"
             full_title = f"{short_title} #Shorts"
         else:

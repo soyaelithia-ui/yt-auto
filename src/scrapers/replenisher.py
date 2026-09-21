@@ -7,7 +7,7 @@ import logging
 import sys
 import time
 import unittest.mock
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import aiohttp
 
@@ -18,7 +18,6 @@ from src.scrapers.reddit.client import (
     fetch_reddit_stories,
 )
 from src.scrapers.reddit.constants import CHANNEL_SUBREDDITS
-from src.scrapers.scp.client import fetch_top_scp_articles
 from src.scrapers.scp.enqueue import (
     async_scrape_and_enqueue_scp,
     scrape_and_enqueue_scp,

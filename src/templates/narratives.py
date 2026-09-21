@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any, Optional, Sequence
+from typing import Any, Sequence
 
 from src.branding import resolve_channel_key
 from src.core.scp_lore import lookup_scp
@@ -331,7 +331,7 @@ def build_scifi_longform_narrative(
 
 def build_channel_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     video_mode: str = "longform",
     duration_minutes: float = 10.5,
     **kwargs: Any,
@@ -340,11 +340,11 @@ def build_channel_narrative(
     actual_channel = kwargs.get("ch") or channel
     actual_duration = kwargs.get("target_mins") or duration_minutes
     canon_ch = resolve_channel_key(actual_channel)
-    if canon_ch == "aelithia":
+    if canon_ch in ("aelithia", "drama"):
         if video_mode == "short":
             return build_aelithia_short_narrative(topic, channel=actual_channel, **kwargs)
         return build_aelithia_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
-    elif canon_ch == "scifi":
+    elif canon_ch in ("scifi", "singularidad"):
         if video_mode == "short":
             return build_scifi_short_narrative(topic, channel=actual_channel, **kwargs)
         return build_scifi_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
@@ -357,7 +357,7 @@ def build_channel_narrative(
 def build_narrative(
     topic: str,
     *,
-    channel: str = "moku",
+    channel: str = "horror",
     length: str = "short",
     target_minutes: float | None = None,
 ) -> str:
@@ -372,7 +372,7 @@ def build_narrative(
 
 def build_longform_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     target_duration_minutes: float = 10.5,
     **kwargs: Any,
 ) -> str:
@@ -382,15 +382,22 @@ def build_longform_narrative(
 
 def build_short_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     **kwargs: Any,
 ) -> str:
     """Compatibility alias for legacy orchestrators and test harnesses."""
     return build_channel_narrative(topic, channel=channel, video_mode="short", **kwargs)
 
 
+# Modular domain aliases
+build_horror_short_narrative = build_moku_short_narrative
+build_horror_longform_narrative = build_moku_longform_narrative
+build_drama_short_narrative = build_aelithia_short_narrative
+build_drama_longform_narrative = build_aelithia_longform_narrative
+
+
 def get_fallback_story(
-    channel: str = "moku",
+    channel: str = "horror",
     *,
     topic: str | None = None,
     is_short: bool = True,
@@ -398,14 +405,14 @@ def get_fallback_story(
     **kwargs: Any,
 ) -> str:
     """Returns an authentic channel-specific fallback story."""
-    ch = (channel or "moku").strip().lower()
+    ch = (channel or "horror").strip().lower()
     canon_ch = resolve_channel_key(ch)
-    if canon_ch == "aelithia" or ch in ("aelithia", "drama", "aita"):
+    if canon_ch in ("aelithia", "drama") or ch in ("aelithia", "drama", "aita"):
         default_topic = topic or "la herencia familiar y el límite del perdón"
         if is_short:
-            return build_aelithia_short_narrative(default_topic, channel="aelithia", **kwargs)
-        return build_aelithia_longform_narrative(default_topic, channel="aelithia", target_duration_minutes=10.5, **kwargs)
-    elif canon_ch == "scifi" or ch in ("scifi", "singularidad", "sci_fi"):
+            return build_aelithia_short_narrative(default_topic, channel="drama", **kwargs)
+        return build_aelithia_longform_narrative(default_topic, channel="drama", target_duration_minutes=10.5, **kwargs)
+    elif canon_ch in ("scifi", "singularidad") or ch in ("scifi", "singularidad", "sci_fi"):
         default_topic = topic or "el horizonte de sucesos y la paradoja del tiempo"
         if is_short:
             return build_scifi_short_narrative(default_topic, channel="scifi", **kwargs)
@@ -413,5 +420,6 @@ def get_fallback_story(
 
     default_topic = topic or "SCP-087 y la escalera del silencio"
     if is_short:
-        return build_moku_short_narrative(default_topic, channel="moku", **kwargs)
-    return build_moku_longform_narrative(default_topic, channel="moku", target_duration_minutes=10.5, **kwargs)
+        return build_moku_short_narrative(default_topic, channel="horror", **kwargs)
+    return build_moku_longform_narrative(default_topic, channel="horror", target_duration_minutes=10.5, **kwargs)
+

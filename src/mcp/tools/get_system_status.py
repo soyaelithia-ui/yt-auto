@@ -57,11 +57,14 @@ def register_get_system_status_tool(server: MCPServer) -> None:
             st["counts"] = st.get("queue", {})
 
             if include_api_health:
-                st["api_health"] = check_all("moku")
+                from src.config import get_active_channel_key
+                st["api_health"] = check_all(get_active_channel_key())
 
             if include_locks:
+                from src.core.channel_profile import ChannelProfileRegistry
                 lock_status: Dict[str, str] = {}
-                for ch in ("global", "moku", "aelithia", "scifi"):
+                channels_to_check = ["global"] + (ChannelProfileRegistry.list_active_channel_ids() or ["horror", "drama", "scifi"])
+                for ch in channels_to_check:
                     chk = ChannelLock(ch)
                     try:
                         acquired = chk.acquire(timeout=0.0)

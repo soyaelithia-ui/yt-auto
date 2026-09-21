@@ -1,14 +1,12 @@
 import os
 import re
-import signal
-import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Any, Optional, List, Tuple
 from src.log import get_logger
 
 logger = get_logger("scp_audio_processor")
 
-from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError, FFmpegTimeoutError
+from lib.ffmpeg import run_ffmpeg
 from lib.audio import (
     normalize_narration_lufs,
     apply_sidechain_ducking,
@@ -20,6 +18,19 @@ from lib.audio import (
     shift_word_timestamps_with_pauses,
     insert_dramatic_pauses_to_audio,
 )
+
+__all__ = [
+    "AudioProcessor",
+    "parse_dramatic_pauses",
+    "extract_dramatic_pauses",
+    "strip_dramatic_pauses",
+    "generate_silence_audio",
+    "insert_dramatic_pauses_to_audio",
+    "shift_word_timestamps_with_pauses",
+    "apply_sidechain_ducking",
+    "normalize_narration_lufs",
+    "master_audio_track",
+]
 
 
 def _run_subproc(cmd: List[str], timeout: float = 60, **kwargs) -> Any:
@@ -164,7 +175,6 @@ class AudioProcessor:
         Concatenates TTS narration audio clips using FFmpeg filter acrossfade=d=crossfade_sec:c1=tri:c2=tri,
         eliminating micro-pauses between scenes. Recalculates and returns (output_path, scene_durations).
         """
-        from typing import List, Tuple
         from lib.tts import get_wav_duration
 
         valid_clips = [p for p in clip_paths if p and os.path.exists(p)]

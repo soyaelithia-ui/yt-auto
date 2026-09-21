@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Sequence
+from typing import Any
 
 from src.core.domain import ALL_STATUSES, CanonicalChannel, JobStatus, canonical_channel
 from src.core.repository.migrations import _utc_now, connect, wal_checkpoint_passive

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any
 
 from src.config import BASE_DIR
 from src.core.resolution import SHORT_RESOLUTION
@@ -136,7 +136,7 @@ class LoopFilterGraphMixin:
             ducking_release_ms=kwargs.get("ducking_release_ms", 350.0),
             lowpass_freq=kwargs.get("lowpass_freq", 12000),
             master_loudness=kwargs.get("master_loudness", True),
-            target_lufs=kwargs.get("target_lufs", -14.0),
+            target_lufs=kwargs.get("target_lufs", -16.0),
             max_tp=kwargs.get("max_tp", -1.5),
             lra=kwargs.get("lra", 11.0),
         )

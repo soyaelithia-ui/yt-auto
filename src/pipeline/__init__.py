@@ -91,6 +91,7 @@ __all__ = [
     "validate_prepublication",
     "is_test_environment",
     "curate_script",
+    "_dispatch_curate_script",
     "_marker",
     "_file_sha256",
     "_record_combined_stories",

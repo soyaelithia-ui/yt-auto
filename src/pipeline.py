@@ -6,16 +6,10 @@ Backward-compatible facade delegating execution to the modular src.pipeline pack
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from src.config import (
-    SETTINGS,
-    is_test_environment,
-)
-from src.core.checkpoints import CHECKPOINT_KINDS, resume_plan
 from src.core.domain import (
     AuthenticationError,
     JobStatus,
@@ -28,11 +22,9 @@ from src.core.domain import (
 from src.core.guard import memory_checkpoint
 from src.core.profiling import CanonicalStage, PipelineProfiler
 from src.core.providers import CapabilityUnavailable
-from src.core.quality import is_spanish_neutral, normalize_text, validate_prepublication
-from src.llm import curate_script
 from src.log import get_logger
 from src.observability import set_run_context
-from src.pipeline.context import ClaimedLeaseContext, PipelineContext, RunContext, active_heartbeat_scope
+from src.pipeline.context import ClaimedLeaseContext, RunContext, active_heartbeat_scope
 from src.pipeline.stages import (
     stage_01_claim_lease,
     stage_02_ingest_translate,
@@ -50,18 +42,10 @@ from src.pipeline.stages import (
 )
 from src.pipeline.utils import (
     _apply_resume_plan_checkpoints,
-    _catalog_shots_from_manifest,
-    _dispatch_curate_script,
-    _drive_review_url,
-    _enforce_editorial_compliance,
-    _file_sha256,
     _handle_pipeline_exception,
     _marker,
-    _peak_rss_metric,
     _prepare_pipeline_paths,
-    _record_combined_stories,
     _resolve_engine_mode,
-    _should_translate,
 )
 
 logger = get_logger("pipeline")

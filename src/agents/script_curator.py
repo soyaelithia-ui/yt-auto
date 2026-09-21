@@ -10,11 +10,9 @@ Validates output against schemas/script_curator.schema.json.
 from __future__ import annotations
 
 import json
-import math
-import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 

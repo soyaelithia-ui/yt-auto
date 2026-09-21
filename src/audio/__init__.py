@@ -4,9 +4,6 @@ Exposes modern Cosmic audio classes and re-exports legacy audio mastering utilit
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
-
 # Modern Cosmic Audio Components
 from src.audio.procedural_drone import ProceduralDroneSynthesizer, apply_butterworth_4th_lowpass_50hz
 from src.audio.vocal_chain import VocalChainProcessor, VOCAL_FILTERGRAPHS

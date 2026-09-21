@@ -19,7 +19,6 @@ import google_auth_oauthlib.flow
 
 from src.config import (
     BASE_DIR,
-    DRIVE_KEY_PATH,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     YOUTUBE_TOKEN_PATH,

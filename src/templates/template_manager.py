@@ -3,7 +3,7 @@ Template management system defining video presets, subtitle styling, audio mixin
 visual filters, and thumbnail design templates.
 """
 from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import json
 import os
 from src.log import get_logger

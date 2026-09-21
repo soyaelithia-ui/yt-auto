@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path
 from typing import Optional
 
-from src.config import BASE_DIR, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, YOUTUBE_TOKEN_PATH
+from src.config import BASE_DIR, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 from src.core.google_auth import (
     DEFAULT_SCOPES,
     create_oauth_flow,

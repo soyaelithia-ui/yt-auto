@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 # Regex patterns matching known secret token structures
 _BEARER_PATTERN = re.compile(r"(?i)bearer\s+[a-z0-9_\-\.]{4,}")

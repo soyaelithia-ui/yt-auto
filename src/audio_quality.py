@@ -10,8 +10,6 @@ import logging
 import math
 import os
 import re
-import struct
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 

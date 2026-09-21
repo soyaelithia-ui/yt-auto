@@ -64,7 +64,6 @@ def build_review_bundle(
     run_row: dict[str, Any] | None = None
     with_errors: list[dict[str, Any]] = []
     try:
-        import sqlite3
 
         from src.core.repository import connect
 

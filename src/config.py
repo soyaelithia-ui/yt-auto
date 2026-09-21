@@ -296,8 +296,36 @@ ANTIGRAVITY_AGENTS_APP_DATA_DIR = _env_path(
 )
 SECRETS_DIR = _env_path("SECRETS_DIR", BASE_DIR / "secrets")
 
-MOKU = _resolve_dynamic_channel(CanonicalChannel.MOKU)
-AELITHIA = _resolve_dynamic_channel(CanonicalChannel.AELITHIA)
+
+def get_active_channel_key() -> str:
+    from src.core.channel_profile import ChannelProfileRegistry
+    key = os.environ.get("CHANNEL_KEY", "").strip()
+    if key:
+        return ChannelProfileRegistry.normalize_channel_id(key)
+    active = ChannelProfileRegistry.list_active_channel_ids()
+    return active[0] if active else "horror"
+
+
+def get_active_channel_settings() -> ChannelSettings:
+    return _resolve_dynamic_channel(get_active_channel_key())
+
+
+def get_channel_cookies_path(channel: str | CanonicalChannel | None = None) -> Path:
+    ch_key = channel if channel is not None else get_active_channel_key()
+    return _resolve_dynamic_channel(ch_key).cookies_path
+
+
+def get_channel_token_path(channel: str | CanonicalChannel | None = None) -> Path:
+    ch_key = channel if channel is not None else get_active_channel_key()
+    return _resolve_dynamic_channel(ch_key).youtube_token_path
+
+
+# Dynamic channel reference
+ACTIVE_CHANNEL = get_active_channel_settings()
+
+# Backward compatibility aliases for existing tests
+MOKU = _resolve_dynamic_channel("horror")
+AELITHIA = _resolve_dynamic_channel("drama")
 
 # ---------------------------------------------------------------------------
 # Runtime profiles (WP1): production vs CLI sandbox isolation.
@@ -504,10 +532,16 @@ LOCK_FILE_PATH = os.environ.get(
 DRIVE_FOLDER_ID = SETTINGS.drive_folder_id
 DRIVE_KEY_PATH = str(SETTINGS.drive_key_path)
 DRIVE_UPLOAD_MAX_RETRIES = _env_int("DRIVE_UPLOAD_MAX_RETRIES", 3)
-COOKIES_PATH = os.environ.get("COOKIES_PATH", str(MOKU.cookies_path))
-COOKIES_AELITHIA_PATH = str(AELITHIA.cookies_path)
-YOUTUBE_TOKEN_PATH = os.environ.get("YOUTUBE_TOKEN_PATH", str(MOKU.youtube_token_path))
-TOKEN_AELITHIA_PATH = str(AELITHIA.youtube_token_path)
+COOKIES_PATH = os.environ.get(
+    "CHANNEL_COOKIES_PATH",
+    os.environ.get("COOKIES_PATH", str(get_channel_cookies_path()))
+)
+COOKIES_AELITHIA_PATH = os.environ.get("AELITHIA_COOKIES_PATH", str(get_channel_cookies_path("aelithia")))
+YOUTUBE_TOKEN_PATH = os.environ.get(
+    "CHANNEL_YOUTUBE_TOKEN_PATH",
+    os.environ.get("YOUTUBE_TOKEN_PATH", str(get_channel_token_path()))
+)
+TOKEN_AELITHIA_PATH = os.environ.get("AELITHIA_YOUTUBE_TOKEN_PATH", str(get_channel_token_path("aelithia")))
 TOKEN_CHANNEL2_PATH = os.environ.get(
     "TOKEN_CHANNEL2_PATH",
     os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH", TOKEN_AELITHIA_PATH),
@@ -516,7 +550,7 @@ CHANNELS_CONFIG = {
     (channel.value if hasattr(channel, "value") else str(channel)): settings.public_dict()
     for channel, settings in SETTINGS.channels.items()
 }
-DEFAULT_SUBREDDIT = MOKU.source_feed
+DEFAULT_SUBREDDIT = get_active_channel_settings().source_feed
 SHORT_MIN_DURATION_SEC = _env_float("SHORT_MIN_DURATION_SEC", 60.0)
 SHORT_MAX_DURATION_SEC = _env_float("SHORT_MAX_DURATION_SEC", 180.0)
 SHORT_TARGET_DURATION_SEC = _env_float("SHORT_TARGET_DURATION_SEC", 150.0)

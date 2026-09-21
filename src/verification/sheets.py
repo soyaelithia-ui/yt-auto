@@ -2,7 +2,7 @@ import os
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 from src.log import get_logger
 from src.core.resolution import SHORT_RESOLUTION, SHORT_RESOLUTION_TEST
 from lib.ffmpeg import run_ffmpeg

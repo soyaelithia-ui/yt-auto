@@ -10,17 +10,14 @@ FFmpeg-only (no Canvas/Three.js/WebGL/wgpu).
 """
 from __future__ import annotations
 
-import json
-import logging
-import math
 import os
 import re
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
-from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError, probe_media
+from lib.ffmpeg import run_ffmpeg, probe_media
 from src.log import get_logger
 from src.media.director_single_pass import director_single_pass_enabled
 from src.media.encode_defaults import default_render_crf, default_render_preset

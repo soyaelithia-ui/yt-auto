@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "default_channel": "moku",
+  "channels": [
+    {
+      "id": "moku",
+      "enabled": true,
+      "aliases": ["horror", "terror", "scp", "moku_horror", "moku_terror"],
+      "config_file": "config/channels/moku.json"
+    },
+    {
+      "id": "aelithia",
+      "enabled": true,
+      "aliases": ["drama", "aita", "relatos_reddit", "aelithia_drama", "soy_el_malo"],
+      "config_file": "config/channels/aelithia.json"
+    },
+    {
+      "id": "scifi",
+      "enabled": false,
+      "aliases": ["singularidad", "space", "sci_fi", "singularidad_scifi"],
+      "config_file": "config/channels/scifi.json"
+    }
+  ]
+}

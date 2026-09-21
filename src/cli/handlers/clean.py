@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
 
 from src.cleaner import (
     clean_expired_failed_runs,

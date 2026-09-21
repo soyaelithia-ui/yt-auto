@@ -5,7 +5,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Sequence
 
 # Ensure src.cli has __path__ if it was stubbed as a flat ModuleType in test environments
 _cli_mod = sys.modules.get("src.cli")

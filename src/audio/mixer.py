@@ -10,12 +10,10 @@ Implements the broadcast mastering pipeline:
 """
 from __future__ import annotations
 
-import os
-import wave
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
-from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
+from lib.ffmpeg import run_ffmpeg
 from src.narrative.schema import AudioContract, SFXCue
 from src.audio.procedural_drone import ProceduralDroneSynthesizer
 from src.audio.vocal_chain import VocalChainProcessor

@@ -16,7 +16,6 @@ from lib.ffmpeg import (
     probe_media,
     run_ffmpeg,
 )
-from src.core.resolution import SHORT_RESOLUTION
 from src.media.encode_defaults import (
     default_ffmpeg_threads,
     default_render_crf,

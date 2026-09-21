@@ -7,14 +7,12 @@ with word-by-word active highlighting, neon glows, rounded backdrop pills, and s
 from __future__ import annotations
 
 import contextlib
-import math
-import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from src.core.lifecycle import cleanup_subprocesses, register_process
 from src.log import get_logger

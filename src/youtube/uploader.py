@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import json
 import time
 import signal
@@ -9,8 +8,6 @@ from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from src.config import (
     COOKIES_PATH,
-    YOUTUBE_TOKEN_PATH,
-    TOKEN_CHANNEL2_PATH,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     BASE_DIR,
@@ -1265,40 +1262,16 @@ def _normalize_upload_result(
     return normalized
 
 
-def upload_video(
+def _claim_publication_gate(
     video_path: str,
-    title: str,
-    description: str,
-    tags: List[str] = None,
-    cookies_path: str | None = None,
-    dry_run: bool = False,
-    channel: str = "terror",
-    thumbnail_path: Optional[str] = None,
-    token_path: Optional[str] = None,
-    api_only: bool = False,
-    expected_channel_id: str | None = None,
-    on_video_id: Callable[[str], None] | None = None,
-    job_id: Optional[str] = None,
-    version: int = 1,
-) -> Dict[str, Any]:
-    """Try Playwright cookies first, then the explicitly selected channel API token."""
-    channel = channel or "terror"
-    if not video_path or not os.path.isfile(video_path):
-        raise FileNotFoundError("Video local inexistente")
-    if not thumbnail_path or not os.path.isfile(thumbnail_path):
-        cand = Path(video_path).parent / "thumbnail.jpg"
-        if cand.is_file():
-            thumbnail_path = str(cand)
-    if not is_test_environment() and (not str(job_id or "").strip() or version <= 0):
-        raise RuntimeError(
-            "Publication gate requires job_id and a positive version before YouTube upload"
-        )
-
-    # The canonical ReviewJobManager owns the single atomic publication claim.
-    # Direct pipeline calls may claim APPROVED jobs; the review daemon invokes
-    # this function only after the core has already moved the job to PUBLISHING.
+    job_id: Optional[str],
+    version: int,
+) -> tuple[Optional[str], Optional[int], Any]:
+    """Single atomic publication claim against the canonical ReviewJobManager."""
     claimed_job_id: Optional[str] = None
     claimed_version: Optional[int] = None
+    gate = None
+
     unsafe_gate_bypass = bool(os.environ.get("SKIP_PUBLICATION_GATE_FOR_TESTS"))
     if unsafe_gate_bypass and not is_test_environment():
         raise RuntimeError(
@@ -1309,68 +1282,86 @@ def upload_video(
             "Publication gate BYPASSED via SKIP_PUBLICATION_GATE_FOR_TESTS "
             "(test environment detected)"
         )
-    if not unsafe_gate_bypass:
-        from review import PublicationGate, ReviewStateStore
-        from review.db import get_db_connection
-        from review.review_manager import ReviewStatus
+        return None, None, None
 
-        _store = ReviewStateStore()
-        target_job_id = job_id
-        if not target_job_id:
-            if not is_test_environment():
-                raise RuntimeError(
-                    "Publication gate requires job_id and version; path lookup is disabled"
-                )
-            with get_db_connection(_store.db_path) as _conn:
-                _cur = _conn.execute(
-                    "SELECT job_id, version FROM review_jobs "
-                    "WHERE original_video_path = ? ORDER BY version DESC LIMIT 1",
-                    (os.path.realpath(video_path),),
-                )
-                _row = _cur.fetchone()
-                if _row:
-                    target_job_id, version = _row["job_id"], _row["version"]
+    from review import PublicationGate, ReviewStateStore
+    from review.db import get_db_connection
+    from review.review_manager import ReviewStatus
 
-        if target_job_id:
-            _gate = PublicationGate(_store)
-            _job = _store.get_job(target_job_id, version)
-            if not _job:
-                raise RuntimeError(
-                    f"Publication gate job not found: {target_job_id} v{version}"
-                )
-            if _job.status == ReviewStatus.APPROVED.value:
-                _gate.verify_and_claim_publication(
-                    target_job_id, version, video_path
-                )
-                claimed_job_id, claimed_version = target_job_id, version
-            elif _job.status != ReviewStatus.PUBLISHING.value:
-                raise RuntimeError(
-                    f"Publication gate is not approved for {target_job_id} v{version}: "
-                    f"{_job.status}"
-                )
+    _store = ReviewStateStore()
+    target_job_id = job_id
+    if not target_job_id:
+        if not is_test_environment():
+            raise RuntimeError(
+                "Publication gate requires job_id and version; path lookup is disabled"
+            )
+        with get_db_connection(_store.db_path) as _conn:
+            _cur = _conn.execute(
+                "SELECT job_id, version FROM review_jobs "
+                "WHERE original_video_path = ? ORDER BY version DESC LIMIT 1",
+                (os.path.realpath(video_path),),
+            )
+            _row = _cur.fetchone()
+            if _row:
+                target_job_id, version = _row["job_id"], _row["version"]
 
-    def _finalize_result(normalized: Dict[str, Any]) -> Dict[str, Any]:
-        """Consume a direct pipeline claim after verified publication."""
-        if (
-            claimed_job_id
-            and str(normalized.get("status") or "").upper() == "PUBLISHED"
-            and normalized.get("verified") is True
-        ):
-            try:
-                _gate.confirm_publication_success(
-                    claimed_job_id,
-                    claimed_version or 1,
-                    published_id=normalized.get("video_id"),
-                    published_url=normalized.get("url"),
-                )
-            except Exception as exc:
-                logger.error(
-                    "Publication claim could not be consumed for %s: %s",
-                    claimed_job_id,
-                    exc,
-                )
-        return normalized
+    if target_job_id:
+        gate = PublicationGate(_store)
+        _job = _store.get_job(target_job_id, version)
+        if not _job:
+            raise RuntimeError(
+                f"Publication gate job not found: {target_job_id} v{version}"
+            )
+        if _job.status == ReviewStatus.APPROVED.value:
+            gate.verify_and_claim_publication(
+                target_job_id, version, video_path
+            )
+            claimed_job_id, claimed_version = target_job_id, version
+        elif _job.status != ReviewStatus.PUBLISHING.value:
+            raise RuntimeError(
+                f"Publication gate is not approved for {target_job_id} v{version}: "
+                f"{_job.status}"
+            )
 
+    return claimed_job_id, claimed_version, gate
+
+
+def _consume_publication_claim(
+    gate: Any,
+    claimed_job_id: Optional[str],
+    claimed_version: Optional[int],
+    normalized: Dict[str, Any],
+) -> None:
+    """Consume a direct pipeline claim after verified publication."""
+    if (
+        gate
+        and claimed_job_id
+        and str(normalized.get("status") or "").upper() == "PUBLISHED"
+        and normalized.get("verified") is True
+    ):
+        try:
+            gate.confirm_publication_success(
+                claimed_job_id,
+                claimed_version or 1,
+                published_id=normalized.get("video_id"),
+                published_url=normalized.get("url"),
+            )
+        except Exception as exc:
+            logger.error(
+                "Publication claim could not be consumed for %s: %s",
+                claimed_job_id,
+                exc,
+            )
+
+
+def _resolve_upload_metadata(
+    channel: str,
+    title: str,
+    description: str,
+    tags: Optional[List[str]],
+    cookies_path: Optional[str],
+    token_path: Optional[str],
+) -> tuple[Any, Any, str, List[str], str, str, str]:
     from src.branding import get_channel_branding
     from src.config import get_channel_settings
 
@@ -1381,34 +1372,39 @@ def upload_video(
     effective_description = description or branding.generate_description(title)
     effective_cookies = cookies_path or str(settings.cookies_path)
     effective_token = token_path or str(settings.youtube_token_path)
+    return (
+        branding,
+        settings,
+        channel_key,
+        effective_tags,
+        effective_description,
+        effective_cookies,
+        effective_token,
+    )
 
-    mock = os.environ.get("TEST_MODE") == "1" or os.environ.get(
-        "MOCK_YOUTUBE_UPLOAD"
-    ) == "1"
-    if mock:
-        return {
-            "status": "TEST_MOCK",
-            "method": "TEST_MOCK",
-            "channel": channel_key,
-            "title": title,
-            "description": effective_description,
-            "thumbnail_confirmed": bool(thumbnail_path),
-            "verified": False,
-        }
-    if not dry_run:
-        from lib.video import validate_video_format
 
-        validate_video_format(video_path, min_duration=0.0)
+def _perform_api_upload_flow(
+    *,
+    video_path: str,
+    title: str,
+    effective_description: str,
+    effective_tags: List[str],
+    thumbnail_path: Optional[str],
+    effective_token: str,
+    channel_key: str,
+    expected_channel_id: Optional[str],
+    on_video_id: Optional[Callable[[str], None]],
+    api_only: bool,
+    effective_cookies: str,
+) -> tuple[Optional[Dict[str, Any]], Optional[Exception], Optional[Exception]]:
+    """Attempts API upload flow, returning (result_dict, quota_err, auth_err)."""
+    api_quota_error: Optional[YouTubeQuotaExceededError] = None
+    api_auth_error: Optional[Exception] = None
 
-    if api_only:
-        expected_id = str(
-            expected_channel_id or settings.expected_youtube_channel_id or ""
-        ).strip()
-        preflight_youtube_api(
-            channel=channel_key,
-            token_path=effective_token,
-            expected_channel_id=expected_id,
-        )
+    if not os.path.isfile(effective_token):
+        return None, None, None
+
+    try:
         result = upload_video_via_api(
             video_path,
             title,
@@ -1417,126 +1413,117 @@ def upload_video(
             thumbnail_path=thumbnail_path,
             token_path=effective_token,
             channel=channel_key,
-            expected_channel_id=expected_id,
+            expected_channel_id=expected_channel_id,
             on_video_id=on_video_id,
         )
-        return _finalize_result(
-            _normalize_upload_result(
-                result,
-                method="API",
-                channel=channel_key,
-                title=title,
-                description=effective_description,
-            )
+        return _normalize_upload_result(
+            result,
+            method="API",
+            channel=channel_key,
+            title=title,
+            description=effective_description,
+        ), None, None
+    except YouTubeUploadLimitError as limit_err:
+        logger.warning(
+            "YouTube daily upload limit reached for channel %s: %s",
+            channel_key,
+            limit_err,
         )
-
-    api_quota_error: Optional[YouTubeQuotaExceededError] = None
-    api_auth_error: Optional[Exception] = None
-    if not dry_run and os.path.isfile(effective_token):
-        try:
-            result = upload_video_via_api(
-                video_path,
-                title,
-                effective_description,
-                effective_tags,
-                thumbnail_path=thumbnail_path,
-                token_path=effective_token,
-                channel=channel_key,
-                expected_channel_id=settings.expected_youtube_channel_id,
-                on_video_id=on_video_id,
-            )
-            return _finalize_result(
-                _normalize_upload_result(
-                    result,
-                    method="API",
-                    channel=channel_key,
-                    title=title,
-                    description=effective_description,
-                )
-            )
-        except YouTubeUploadLimitError as limit_err:
-            logger.warning(
-                "YouTube daily upload limit reached for channel %s: %s",
+        return {
+            "status": "WAITING_YOUTUBE_LIMIT",
+            "method": "API",
+            "reason": str(limit_err),
+            "retry_after_seconds": 14400,
+            "verified": False,
+        }, None, None
+    except YouTubeQuotaExceededError as quota_err:
+        api_quota_error = quota_err
+        if not api_only and os.path.isfile(effective_cookies):
+            logger.info(
+                "YouTube API quota exceeded for channel %s; falling back to Playwright session upload: %s",
                 channel_key,
-                limit_err,
+                quota_err,
+            )
+        else:
+            logger.warning(
+                "YouTube API quota exceeded for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
+                channel_key,
+                api_only,
+                os.path.isfile(effective_cookies),
+                quota_err,
             )
             return {
                 "status": "WAITING_YOUTUBE_LIMIT",
                 "method": "API",
-                "reason": str(limit_err),
-                "retry_after_seconds": 14400,
+                "reason": str(quota_err),
+                "retry_after_seconds": 3600,
                 "verified": False,
-            }
-        except YouTubeQuotaExceededError as quota_err:
-            api_quota_error = quota_err
+            }, quota_err, None
+    except Exception as api_error:
+        from google.auth.exceptions import GoogleAuthError
+        from src.core.domain import AuthenticationError
+
+        err_str = str(api_error).lower()
+        is_auth_error = (
+            isinstance(api_error, (AuthenticationError, GoogleAuthError))
+            or "invalid_grant" in err_str
+            or "token has been expired" in err_str
+            or "token oauth no pertenece" in err_str
+            or "token api explícito" in err_str
+        )
+        if is_auth_error:
+            api_auth_error = api_error
             if not api_only and os.path.isfile(effective_cookies):
                 logger.info(
-                    "YouTube API quota exceeded for channel %s; falling back to Playwright session upload: %s",
+                    "YouTube API authentication failed for channel %s (%s); falling back to Playwright session upload",
                     channel_key,
-                    quota_err,
+                    api_error,
                 )
             else:
                 logger.warning(
-                    "YouTube API quota exceeded for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
+                    "YouTube API authentication failed for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
                     channel_key,
                     api_only,
                     os.path.isfile(effective_cookies),
-                    quota_err,
+                    api_error,
                 )
                 return {
                     "status": "WAITING_YOUTUBE_LIMIT",
                     "method": "API",
-                    "reason": str(quota_err),
+                    "reason": f"YouTube API auth failed: {api_error}",
                     "retry_after_seconds": 3600,
                     "verified": False,
-                }
-        except Exception as api_error:
-            from google.auth.exceptions import GoogleAuthError
-            from src.core.domain import AuthenticationError
-
-            err_str = str(api_error).lower()
-            is_auth_error = (
-                isinstance(api_error, (AuthenticationError, GoogleAuthError))
-                or "invalid_grant" in err_str
-                or "token has been expired" in err_str
-                or "token oauth no pertenece" in err_str
-                or "token api explícito" in err_str
+                }, None, api_error
+        else:
+            logger.error(
+                "YouTube API upload failed; refusing Playwright fallback to avoid duplicates: %s",
+                api_error,
             )
-            if is_auth_error:
-                api_auth_error = api_error
-                if not api_only and os.path.isfile(effective_cookies):
-                    logger.info(
-                        "YouTube API authentication failed for channel %s (%s); falling back to Playwright session upload",
-                        channel_key,
-                        api_error,
-                    )
-                else:
-                    logger.warning(
-                        "YouTube API authentication failed for channel %s and Playwright fallback unavailable (api_only=%s, cookies=%s): %s",
-                        channel_key,
-                        api_only,
-                        os.path.isfile(effective_cookies),
-                        api_error,
-                    )
-                    return {
-                        "status": "WAITING_YOUTUBE_LIMIT",
-                        "method": "API",
-                        "reason": f"YouTube API auth failed: {api_error}",
-                        "retry_after_seconds": 3600,
-                        "verified": False,
-                    }
-            else:
-                logger.error(
-                    "YouTube API upload failed; refusing Playwright fallback to avoid duplicates: %s",
-                    api_error,
-                )
-                return {
-                    "status": "UPLOAD_UNCONFIRMED",
-                    "method": "API",
-                    "reason": "YouTube API upload failed; manual reconciliation required",
-                    "verified": False,
-                }
+            return {
+                "status": "UPLOAD_UNCONFIRMED",
+                "method": "API",
+                "reason": "YouTube API upload failed; manual reconciliation required",
+                "verified": False,
+            }, None, None
 
+    return None, api_quota_error, api_auth_error
+
+
+def _perform_playwright_fallback_flow(
+    *,
+    video_path: str,
+    title: str,
+    effective_description: str,
+    effective_tags: List[str],
+    thumbnail_path: Optional[str],
+    effective_cookies: str,
+    channel_key: str,
+    settings: Any,
+    dry_run: bool,
+    api_quota_error: Optional[Exception],
+    api_auth_error: Optional[Exception],
+) -> Dict[str, Any]:
+    """Attempts Playwright session fallback upload."""
     playwright_error: Exception | None = None
     if os.path.isfile(effective_cookies):
         try:
@@ -1552,14 +1539,12 @@ def upload_video(
             )
             if dry_run:
                 return {"status": "DRY_RUN", "method": "PLAYWRIGHT"}
-            return _finalize_result(
-                _normalize_upload_result(
-                    result,
-                    method="PLAYWRIGHT",
-                    channel=channel_key,
-                    title=title,
-                    description=effective_description,
-                )
+            return _normalize_upload_result(
+                result,
+                method="PLAYWRIGHT",
+                channel=channel_key,
+                title=title,
+                description=effective_description,
             )
         except Exception as exc:
             playwright_error = exc
@@ -1601,3 +1586,98 @@ def upload_video(
             "Playwright falló y no hay token API válido; los artefactos se preservan"
         ) from playwright_error
     raise RuntimeError("No hay cookies ni token del canal seleccionado")
+
+
+def upload_video(
+    video_path: str,
+    title: str,
+    description: str,
+    tags: list[str] | None = None,
+    cookies_path: str | None = None,
+    dry_run: bool = False,
+    channel: str = "horror",
+    thumbnail_path: Optional[str] = None,
+    token_path: Optional[str] = None,
+    api_only: bool = False,
+    expected_channel_id: str | None = None,
+    on_video_id: Callable[[str], None] | None = None,
+    job_id: Optional[str] = None,
+    version: int = 1,
+) -> Dict[str, Any]:
+    """Try Playwright cookies first, then the explicitly selected channel API token."""
+    channel = channel or "horror"
+    if not video_path or not os.path.isfile(video_path):
+        raise FileNotFoundError("Video local inexistente")
+    if not thumbnail_path or not os.path.isfile(thumbnail_path):
+        cand = Path(video_path).parent / "thumbnail.jpg"
+        if cand.is_file():
+            thumbnail_path = str(cand)
+    if not is_test_environment() and (not str(job_id or "").strip() or version <= 0):
+        raise RuntimeError(
+            "Publication gate requires job_id and a positive version before YouTube upload"
+        )
+
+    claimed_job_id, claimed_version, gate = _claim_publication_gate(
+        video_path, job_id, version
+    )
+
+    def _finalize(normalized: Dict[str, Any]) -> Dict[str, Any]:
+        _consume_publication_claim(gate, claimed_job_id, claimed_version, normalized)
+        return normalized
+
+    (
+        _branding,
+        settings,
+        channel_key,
+        effective_tags,
+        effective_description,
+        effective_cookies,
+        effective_token,
+    ) = _resolve_upload_metadata(
+        channel, title, description, tags, cookies_path, token_path
+    )
+
+    mock = os.environ.get("TEST_MODE") == "1" or os.environ.get("MOCK_YOUTUBE_UPLOAD") == "1"
+    if mock:
+        return {
+            "status": "TEST_MOCK",
+            "method": "TEST_MOCK",
+            "channel": channel_key,
+            "title": title,
+            "description": effective_description,
+            "thumbnail_confirmed": bool(thumbnail_path),
+            "verified": False,
+        }
+    if not dry_run:
+        from lib.video import validate_video_format
+        validate_video_format(video_path, min_duration=0.0)
+
+    if api_only:
+        expected_id = str(expected_channel_id or settings.expected_youtube_channel_id or "").strip()
+        preflight_youtube_api(channel=channel_key, token_path=effective_token, expected_channel_id=expected_id)
+        result = upload_video_via_api(
+            video_path, title, effective_description, effective_tags,
+            thumbnail_path=thumbnail_path, token_path=effective_token,
+            channel=channel_key, expected_channel_id=expected_id, on_video_id=on_video_id,
+        )
+        return _finalize(_normalize_upload_result(
+            result, method="API", channel=channel_key, title=title, description=effective_description
+        ))
+
+    api_result, quota_err, auth_err = _perform_api_upload_flow(
+        video_path=video_path, title=title, effective_description=effective_description,
+        effective_tags=effective_tags, thumbnail_path=thumbnail_path, effective_token=effective_token,
+        channel_key=channel_key, expected_channel_id=settings.expected_youtube_channel_id,
+        on_video_id=on_video_id, api_only=api_only, effective_cookies=effective_cookies,
+    )
+    if api_result is not None:
+        return _finalize(api_result)
+
+    pw_result = _perform_playwright_fallback_flow(
+        video_path=video_path, title=title, effective_description=effective_description,
+        effective_tags=effective_tags, thumbnail_path=thumbnail_path, effective_cookies=effective_cookies,
+        channel_key=channel_key, settings=settings, dry_run=dry_run,
+        api_quota_error=quota_err, api_auth_error=auth_err,
+    )
+    return _finalize(pw_result)
+

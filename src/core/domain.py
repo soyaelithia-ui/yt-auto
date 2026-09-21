@@ -13,8 +13,27 @@ class CanonicalChannel(str, Enum):
     AELITHIA = "aelithia"
     SCIFI = "scifi"
 
+    def __str__(self) -> str:
+        return self.value
+
+    @classmethod
+    def _missing_(cls, value: object):
+        val = str(value).lower()
+        if val in ("horror", "terror"):
+            return cls.MOKU
+        if val in ("drama", "soy_el_malo"):
+            return cls.AELITHIA
+        return None
+
+
+CanonicalChannel.HORROR = CanonicalChannel.MOKU
+CanonicalChannel.DRAMA = CanonicalChannel.AELITHIA
+
 
 CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
+    "horror": CanonicalChannel.MOKU,
+    "drama": CanonicalChannel.AELITHIA,
+    "scifi": CanonicalChannel.SCIFI,
     "moku": CanonicalChannel.MOKU,
     "terror": CanonicalChannel.MOKU,
     "moku_terror": CanonicalChannel.MOKU,
@@ -32,7 +51,6 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
     "aita": CanonicalChannel.AELITHIA,
     "aita_drama": CanonicalChannel.AELITHIA,
     "aita-drama": CanonicalChannel.AELITHIA,
-    "scifi": CanonicalChannel.SCIFI,
     "singularidad_scifi": CanonicalChannel.SCIFI,
     "singularidad-scifi": CanonicalChannel.SCIFI,
 }

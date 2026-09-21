@@ -12,9 +12,9 @@ import subprocess
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
-from src.config import SETTINGS, SHORT_MAX_DURATION_SEC, SHORT_MIN_DURATION_SEC, is_test_environment
+from src.config import SETTINGS, SHORT_MAX_DURATION_SEC, is_test_environment
 from src.core.domain import LEGACY_ALIASES, CanonicalChannel, canonical_channel
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION, SHORT_RESOLUTION_TEST
 
@@ -370,7 +370,7 @@ def analyze_perceptual_luminance(
     (LUMINANCE_DOWNSCALE_HEIGHT): the metrics are means/ratios, invariant to
     scale in practice. Degraded runs are flagged, never silently passed.
     """
-    from PIL import Image, ImageStat
+    from PIL import Image
     import tempfile
 
     target = Path(video_path)

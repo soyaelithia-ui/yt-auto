@@ -6,7 +6,6 @@ Backward-compatible facade delegating execution to the modular src.scrapers.scp 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
 from src.scrapers import (
     CANONICAL_SCP_STORIES,

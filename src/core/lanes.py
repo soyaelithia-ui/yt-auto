@@ -14,10 +14,9 @@ import logging
 import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Final, Mapping, Sequence
+from typing import Any, Final, Mapping
 
 from src.core.domain import CanonicalChannel, canonical_channel
-from src.core.repository import connect
 from src.core.resolution import LONGFORM_RESOLUTION, SHORT_RESOLUTION
 
 logger = logging.getLogger(__name__)

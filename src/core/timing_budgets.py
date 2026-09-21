@@ -12,7 +12,7 @@ Hotspot reporting threshold (25%) is for prioritization, not a hard fail on mock
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 # Absolute mock ceilings (seconds)
 MOCK_PIPELINE_WALL_SEC_MAX = float(os.environ.get("YT_MOCK_WALL_SEC", "5.0"))

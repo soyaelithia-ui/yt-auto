@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 import sys
-from pathlib import Path
 from typing import Any, Callable
 
-from src.config import SETTINGS
-from src.core.checkpoints import CHECKPOINT_KINDS, resume_plan
 from src.core.domain import (
     AuthenticationError,
     JobStatus,
@@ -24,7 +19,7 @@ from src.core.profiling import CanonicalStage, PipelineProfiler
 from src.core.providers import CapabilityUnavailable
 from src.log import get_logger
 from src.observability import set_run_context
-from src.pipeline.context import PipelineContext, RunContext, active_heartbeat_scope
+from src.pipeline.context import PipelineContext, active_heartbeat_scope
 from src.pipeline.stages import (
     stage_01_claim_lease,
     stage_02_ingest_translate,

@@ -24,7 +24,7 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional
 
 try:
     from src.log import get_logger

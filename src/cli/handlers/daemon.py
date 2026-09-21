@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any
 
 from src.config import DEFAULT_DB_PATH
 

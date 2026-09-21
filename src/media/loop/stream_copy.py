@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import re
 import tempfile
 import time
 import wave
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Union
 
-from src.config import BASE_DIR
 from src.core.resolution import SHORT_RESOLUTION
 from src.log import get_logger
 from src.media.encode_defaults import (
@@ -25,7 +23,6 @@ from src.media.interface import CatalogAssetNotFoundError, CompositorError
 from src.media.loop.exceptions import (
     LoopCompositionError,
     LoopVideoAssetError,
-    LoopVideoError,
 )
 from src.media.subtitles_ass import (
     force_pillow_subtitles_enabled,
@@ -34,7 +31,6 @@ from src.media.subtitles_ass import (
     write_ass_from_cues_or_words,
 )
 from lib.ffmpeg import (
-    FFmpegError,
     FFmpegExecutionError,
     FFmpegTimeoutError,
     probe_media,

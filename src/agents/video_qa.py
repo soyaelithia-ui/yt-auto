@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent
 from src.log import get_logger

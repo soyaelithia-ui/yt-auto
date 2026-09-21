@@ -20,7 +20,7 @@ class LoopAudioMixin:
         ducking_release_ms: float = 350.0,
         lowpass_freq: int = 12000,
         master_loudness: bool = True,
-        target_lufs: float = -14.0,
+        target_lufs: float = -16.0,
         max_tp: float = -1.5,
         lra: float = 11.0,
     ) -> str:

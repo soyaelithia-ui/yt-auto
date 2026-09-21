@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 import fcntl
-import json
-import os
 import random
-import re
-import shutil
-import subprocess
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -18,14 +13,11 @@ from typing import Any, Callable, Iterator, Mapping
 import threading
 from enum import Enum
 
-from src.config import SETTINGS, validate_runtime_config
 from src.core.domain import (
-    AIProviderChainExhausted,
     AuthenticationError,
     CanonicalChannel,
     ManualInterventionRequired,
     PermanentRejectionError,
-    ProviderTimeoutError,
     ProviderValidationError,
     PublicationProof,
     QuotaError,
@@ -211,7 +203,15 @@ def publication_proof_from_response(
     """Build a proof only from independently confirmed uploader fields."""
     confirmed_channel = canonical_channel(str(response.get("channel") or ""))
     expected = canonical_channel(expected_channel)
-    if confirmed_channel != expected:
+    confirmed_key = getattr(confirmed_channel, "value", str(confirmed_channel))
+    expected_key = getattr(expected, "value", str(expected))
+    try:
+        from src.core.channel_profile import ChannelProfileRegistry
+        confirmed_key = ChannelProfileRegistry.normalize_channel_id(confirmed_key)
+        expected_key = ChannelProfileRegistry.normalize_channel_id(expected_key)
+    except Exception:
+        pass
+    if confirmed_key != expected_key and confirmed_channel != expected:
         raise ProviderValidationError("La cuenta de YouTube confirmó otro canal")
     if not response.get("verified"):
         raise ProviderValidationError("La publicación no fue verificada independientemente")

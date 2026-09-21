@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Union
 
 from PIL import Image
 
-from src.core.channel_profile import ChannelProfile, ChannelProfileRegistry
+from src.core.channel_profile import ChannelProfileRegistry
 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.grading import ChiaroscuroColorGrader
 from src.media.thumbnails.layout import AspectLayoutManager

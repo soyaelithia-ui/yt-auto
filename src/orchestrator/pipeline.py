@@ -11,19 +11,16 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Optional
 
 from src.branding import resolve_channel_key
 from src.channel_manager import get_active_channels
 from src.config import DEFAULT_DB_PATH, SETTINGS, validate_runtime_config
 from src.core.domain import JobStatus
-from src.core.lock import ChannelLock, ChannelLockError
+from src.core.lock import ChannelLock
 from src.core.repository import QueueRepository, connect
 from src.daemon import run_pipeline_once, start_daemon_lanes
-from src.sanitizer import sanitize_filename
 from src.telegram.notifier import TelegramNotifier
-from src.templates.narratives import build_longform_narrative, build_short_narrative
 
 logger = logging.getLogger(__name__)
 

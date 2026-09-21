@@ -6,13 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
-from typing import Any
 
 from src.config import DEFAULT_DB_PATH
 from src.core.catalog import LoopCatalogRepository
-from src.media.loop_worker import LoopSynthesizerWorker, maintain_loop_buffer
+from src.media.loop_worker import LoopSynthesizerWorker
 
 logger = logging.getLogger("cli.loop")
 

@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional, Union
 
 from src.config import SETTINGS
 from src.log import get_logger
-from src.scene_manifest import validate_scene_manifest
 
 logger = get_logger("compositor_interface")
 

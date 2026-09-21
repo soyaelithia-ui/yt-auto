@@ -3,16 +3,10 @@ src/narrative/archetypes.py - Archetypal story templates, tension progression st
 """
 from __future__ import annotations
 
-import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from src.narrative.schema import (
-    AudioContract,
-    CosmicScriptContract,
     NarrativeArchetype,
     Rec709Palette,
-    SceneContract,
-    SFXCue,
-    VideoFormat,
     VoicePreset,
 )
 

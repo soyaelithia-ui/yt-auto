@@ -11,7 +11,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.core.domain import CanonicalChannel, canonical_channel
+from src.core.domain import CanonicalChannel
 from src.core.repository import QueueRepository
 from src.log import get_logger
 

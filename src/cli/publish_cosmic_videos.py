@@ -3,13 +3,10 @@ src/cli/publish_cosmic_videos.py - Publish Cosmic & Analog Horror Videos to YouT
 """
 from __future__ import annotations
 
-import json
-import os
 import subprocess
 import sys
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
@@ -17,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from src.config import MOKU, YOUTUBE_TOKEN_PATH
+from src.config import YOUTUBE_TOKEN_PATH
 from src.core.google_auth import build_youtube_service
 from src.log import get_logger
 

@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import logging
-import math
-import os
 import random
-import re
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Sequence
 
-from src.config import BASE_DIR, DEFAULT_DB_PATH
+from src.config import BASE_DIR
 from src.core.catalog import (
     CHANNEL_THEMES,
     LoopCatalogRepository,

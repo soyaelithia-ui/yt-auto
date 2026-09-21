@@ -3,11 +3,10 @@ src/visual_integrity.py - Visual Integrity and Frame ROI Detail Verifier.
 """
 from __future__ import annotations
 
-import logging
 import math
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 import numpy as np
 from PIL import Image, ImageFilter
 

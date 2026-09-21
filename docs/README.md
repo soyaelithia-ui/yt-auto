@@ -25,7 +25,8 @@
 | [ARQUITECTURA](ARQUITECTURA.md) | Diseño multiformato (Shorts 9:16 y Longform 16:9), persistencia SQLite WAL y máquina de estados. |
 | [PLAN_ARQUITECTURA_V3_1](PLAN_ARQUITECTURA_V3_1.md) | Plan maestro de arquitectura v3.1: Resiliencia de sesiones, reaper de PIDs, reconciliador 2PC y audio en RAM. |
 | [FLUJO_VIDEOS](FLUJO_VIDEOS.md) | Las 13 etapas canónicas de producción, desde la extracción hasta la publicación. |
-| [MULTICHANNEL_PIPELINE](MULTICHANNEL_PIPELINE.md) | Especificaciones visuales, perfiles de canal (`moku`, `aelithia`), márgenes y renderizado zero-copy. |
+| [MULTICHANNEL_PIPELINE](MULTICHANNEL_PIPELINE.md) | Especificaciones visuales, márgenes y renderizado zero-copy. |
+| [CANALES](CANALES.md) | Arquitectura modular de perfiles de canal (`config/channels/`), variables genéricas y adición de nuevos canales. |
 | [OPERACION](OPERACION.md) | Manual operativo: CLI unificado (`main.py`), Systemd, Docker Compose, respaldos y recuperación. |
 | [CONFIGURACION_SECRETOS](CONFIGURACION_SECRETOS.md) | Inventario de variables de entorno `.env`, perfiles de ejecución (`prod`, `cli`, `test`) y preflight. |
 | [INTEGRACIONES_Y_SERVICIOS](INTEGRACIONES_Y_SERVICIOS.md) | Contratos de APIs externas: Telegram Bot API (servidor local 2 GB), publicación por sesión/cookies, Drive y FFmpeg. |

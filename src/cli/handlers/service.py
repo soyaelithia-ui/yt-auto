@@ -5,7 +5,6 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 SERVICE = "youtube_daemon.service"
 ROOT = Path(__file__).resolve().parents[3]

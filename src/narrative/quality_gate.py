@@ -5,9 +5,8 @@ and detection/rejection of formulaic clickbait crutches or forbidden channel ali
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from src.core.quality import (
     forbidden_aliases,

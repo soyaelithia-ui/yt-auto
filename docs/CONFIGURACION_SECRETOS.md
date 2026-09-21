@@ -53,15 +53,16 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 ### D. Canales de YouTube, Identidades y Publicación
 | Variable | Descripción | Detalle / Dinámico |
 |---|---|---|
-| `CHANNEL_HANDLE` | Handle global dinámico del canal activo (`@Canal`). | Override genérico para el carril en ejecución. |
+| `CHANNEL_KEY` | Identificador del canal activo a procesar por defecto. | `horror`, `drama`, `scifi` (resuelto en `config/channels/<id>.json`). |
+| `CHANNEL_HANDLE` | Handle global dinámico del canal activo (`@Canal`). | Override genérico para el canal en ejecución. |
 | `CHANNEL_URL` | URL de YouTube del canal activo. | Override genérico (`https://youtube.com/@Canal`). |
 | `CHANNEL_NAME` | Nombre público del canal activo. | Override genérico. |
-| `MOKU_HANDLE` | Handle específico para canal Moku. | Por defecto resuelto de `config/channels/moku.json`. |
-| `MOKU_YOUTUBE_CHANNEL_ID` | ID de canal de YouTube para Moku. | Identificador `UC...` |
-| `MOKU_YOUTUBE_TOKEN_PATH` | Ruta al token OAuth2 de Moku. | `/run/secrets/tokens/moku.json` |
-| `AELITHIA_HANDLE` | Handle específico para canal Aelithia. | Por defecto resuelto de `config/channels/aelithia.json`. |
-| `AELITHIA_YOUTUBE_CHANNEL_ID`| ID de canal de YouTube para Aelithia. | Identificador `UC...` |
-| `AELITHIA_YOUTUBE_TOKEN_PATH`| Ruta al token OAuth2 de Aelithia. | `/run/secrets/tokens/aelithia.json` |
+| `CHANNEL_TITLE` | Título / Nombre visible del canal. | Override genérico. |
+| `CHANNEL_TOPIC` | Temática / Nicho del canal. | Override genérico. |
+| `CHANNEL_TARGET_AUDIENCE` | Audiencia objetivo del canal. | Override genérico. |
+| `CHANNEL_YOUTUBE_CHANNEL_ID` | ID de canal de YouTube (`UC...`). | Override genérico para subida y preflight. |
+| `CHANNEL_YOUTUBE_TOKEN_PATH` | Ruta al token OAuth2 de YouTube del canal. | `secrets/tokens/<channel_id>.json` |
+| `CHANNEL_COOKIES_PATH` | Ruta a cookies de Playwright del canal. | `secrets/cookies/<channel_id>.json` |
 
 ### E. Telegram Bot API y Puerta de Revisión
 | Variable | Descripción | Valor Predeterminado / Ejemplo |
@@ -88,30 +89,30 @@ El sistema utiliza las bibliotecas oficiales de Google (`google-auth`, `google-a
 
 1. **Login interactivo de 1-clic** (abre navegador local y guarda credenciales):
    ```bash
-   python3 main.py auth login --channel moku
-   python3 main.py auth login --channel aelithia
+   python3 main.py auth login --channel horror
+   python3 main.py auth login --channel drama
    ```
 
 2. **Generar URL de autorización (manual / headless)**:
    ```bash
-   python3 main.py auth url --channel moku
+   python3 main.py auth url --channel horror
    ```
 
 3. **Canjear código de autorización**:
    ```bash
-   python3 main.py auth exchange <CODIGO_OAUTH> --channel moku
+   python3 main.py auth exchange <CODIGO_OAUTH> --channel horror
    ```
 
 4. **Diagnóstico y verificación de credenciales/permisos**:
    ```bash
-   python3 main.py auth check --channel moku
-   python3 main.py auth check --channel aelithia
+   python3 main.py auth check --channel horror
+   python3 main.py auth check --channel drama
    ```
 
 5. **Estandarizar tokens existentes al formato canónico oficial**:
    ```bash
-   python3 main.py auth standardize --channel moku
-   python3 main.py auth standardize --channel aelithia
+   python3 main.py auth standardize --channel horror
+   python3 main.py auth standardize --channel drama
    ```
 
 ---

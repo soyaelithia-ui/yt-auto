@@ -3,8 +3,6 @@ src/media/__init__.py - Media engines, compositors, and video renderers.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from src.media.assets import (
     check_local_templates,
     search_reference_image_web,

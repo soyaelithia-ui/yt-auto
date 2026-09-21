@@ -47,16 +47,21 @@ class NarrativeDirector:
 
     def get_curator(self, channel: str | CanonicalChannel) -> INarrativeCurator:
         ch_str = channel.value.lower() if isinstance(channel, CanonicalChannel) else str(channel).lower()
-        # Aliases mapping
-        if ch_str in ("terror", "horror", "scp", "moku"):
-            ch_str = "moku"
-        elif ch_str in ("drama", "soy_el_malo", "aelithia"):
-            ch_str = "aelithia"
+        if ch_str in self._curators:
+            return self._curators[ch_str]
 
-        if ch_str not in self._curators:
-            # Fallback to moku or first registered
-            return self._curators.get("moku") or next(iter(self._curators.values()))
-        return self._curators[ch_str]
+        # Canonical aliases mapping
+        if ch_str in ("terror", "horror", "scp", "moku"):
+            for candidate in (ch_str, "moku", "horror"):
+                if candidate in self._curators:
+                    return self._curators[candidate]
+        elif ch_str in ("drama", "soy_el_malo", "aelithia", "aita"):
+            for candidate in (ch_str, "aelithia", "drama"):
+                if candidate in self._curators:
+                    return self._curators[candidate]
+
+        # Fallback to horror, moku or first registered
+        return self._curators.get("horror") or self._curators.get("moku") or next(iter(self._curators.values()))
 
     def build_short(self, channel: str | CanonicalChannel, topic: str, **kwargs: Any) -> str:
         curator = self.get_curator(channel)
@@ -76,11 +81,14 @@ def get_narrative_director() -> NarrativeDirector:
     """Returns the singleton NarrativeDirector populated with standard curators."""
     global _DIRECTOR_INSTANCE
     if _DIRECTOR_INSTANCE is None:
-        from src.curators.moku_horror import MokuHorrorCurator
-        from src.curators.aelithia_drama import AelithiaDramaCurator
+        from src.curators.drama import DramaCurator
+        from src.curators.horror import HorrorCurator
 
         director = NarrativeDirector()
-        director.register(MokuHorrorCurator())
-        director.register(AelithiaDramaCurator())
+        director.register(HorrorCurator(channel="horror"))
+        director.register(HorrorCurator(channel="moku"))
+        director.register(DramaCurator(channel="drama"))
+        director.register(DramaCurator(channel="aelithia"))
         _DIRECTOR_INSTANCE = director
     return _DIRECTOR_INSTANCE
+

@@ -1,19 +1,20 @@
 {
   "id": "scifi",
   "enabled": false,
+  "aliases": ["singularidad", "space", "sci_fi", "scifi"],
   "editorial": {
     "public_name": "Singularidad Sci-Fi",
     "handle": "@SingularidadSciFi",
     "topic": "ciencia ficción dura, paradojas temporales, inteligencia artificial y exploración espacial",
     "tone": "analítico, sobrecogedor, especulativo y futurista",
-    "channel_url": "https://www.youtube.com/@SingularidadSciFi",
+    "channel_url": "https://www.youtube.com",
     "persona_system_prompt": "Eres un narrador analítico y archivista de ciencia ficción dura y astrofísica especulativa...",
     "language": "es",
     "category_id": "28",
     "title_prefix": "[REGISTRO ESTELAR] ",
     "title_suffix": "",
     "default_title_fallback": "Expedición al Horizonte de Sucesos",
-    "description_summary_template": "Una travesía por los límites de la física y la exploración espacial en Singularidad Sci-Fi.",
+    "description_summary_template": "Una travesía por los límites de la física y la exploración espacial.",
     "community_question": "¿Crees que la humanidad sobrevivirá al Gran Filtro? Deja tu perspectiva.",
     "tags": ["ciencia ficcion", "espacio", "paradojas temporales", "astronomia", "agujeros negros", "scifi"],
     "shorts_hashtags": ["#Shorts", "#SciFi", "#Espacio", "#Astronomía", "#CienciaFicción"],
@@ -50,7 +51,7 @@
     "default_particle_layer": "electric_embers",
     "default_camera_motion": "slow_zoom_in",
     "vignette_default_strength": 0.35,
-    "watermark_text": "SINGULARIDAD // SCI-FI",
+    "watermark_text": "SINGULARIDAD",
     "prompt_style_prefix": "8k masterpiece sci-fi concept art, hard science fiction, Arri Alexa, 35mm",
     "prompt_style_suffix": "volumetric lighting, photorealistic, cinematic, deep space",
     "negative_prompt": "fantasy, medieval, low quality, blurry, cartoon",
@@ -72,9 +73,9 @@
     "default_bg_theme": "space_ambient"
   },
   "auth": {
-    "cookies_path": "secrets/cookies_scifi.txt",
+    "cookies_path": "secrets/cookies_scifi.json",
     "youtube_token_path": "secrets/tokens/scifi.json",
-    "expected_youtube_channel_id": "UC_SCIFI_CHANNEL_PLACEHOLDER",
+    "expected_youtube_channel_id": "",
     "source_feed": "r/HFY+r/scifi"
   }
 }

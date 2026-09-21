@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
-from typing import Any
 
 from src.core.google_auth import (
-    DEFAULT_SCOPES,
-    DRIVE_SCOPES,
-    YOUTUBE_SCOPES,
     load_authorized_user_credentials,
     resolve_channel_token_path,
-    save_credentials,
     standardize_token_file,
 )
 from src.log import get_logger

@@ -8,7 +8,7 @@ import hashlib
 import os
 import sqlite3
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, Optional
 
 from src.config import DEFAULT_DB_PATH
 from src.core.domain import ALL_STATUSES, JobStatus, canonical_channel

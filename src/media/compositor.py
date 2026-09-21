@@ -20,12 +20,8 @@ Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
 
-import json
-import math
-import os
 import re
 import shutil
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -37,7 +33,7 @@ from src.media.encode_defaults import (
 )
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
+from src.media.interface import BaseVideoCompositor, CompositorError
 from src.log import get_logger
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
 from src.media.subtitles_ass import (
@@ -53,8 +49,6 @@ from src.scene_manifest import (
     parse_scene_manifest_model,
 )
 from lib.ffmpeg import (
-    FFmpegError,
-    FFmpegExecutionError,
     probe_media,
     run_ffmpeg,
 )

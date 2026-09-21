@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config import DEFAULT_DB_PATH
-from src.core.profiling import PipelineProfiler, run_benchmark_cycle
+from src.core.profiling import run_benchmark_cycle
 
 logger = logging.getLogger("cli.profile")
 

@@ -11,10 +11,9 @@ Generates broadcast-ready synthesized WAV sound effects without relying on exter
 """
 from __future__ import annotations
 
-import math
 import wave
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 

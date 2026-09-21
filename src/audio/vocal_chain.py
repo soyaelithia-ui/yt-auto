@@ -3,11 +3,10 @@ src/audio/vocal_chain.py - Vocal processing chains (intercom bunker, hydrophone 
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
-from lib.ffmpeg import run_ffmpeg, FFmpegExecutionError
+from lib.ffmpeg import run_ffmpeg
 from src.narrative.schema import VoicePreset
 from src.log import get_logger
 
