@@ -40,11 +40,12 @@ class ContactSheetGenerator:
         frames_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Extract 1 frame every 5 seconds
+            # Extract 1 frame every 5 seconds, preserving aspect ratio (426x240 horizontal, 240x426 vertical)
+            scale_filter = "fps=1/5,scale='if(gt(iw,ih),426,240)':'if(gt(iw,ih),240,426)'"
             cmd_frames = [
                 "ffmpeg", "-y",
                 "-i", video_path,
-                "-vf", "fps=1/5,scale=240:426",
+                "-vf", scale_filter,
                 str(frames_dir / "frame_%03d.jpg")
             ]
             run_ffmpeg(cmd_frames, timeout=300, check=True)

@@ -16,7 +16,7 @@
       "template": "shorts_creepypasta",
       "voice_rate": "+0%",
       "voice_profile": "scp_documentary_es",
-      "cadence": { "min_gap_seconds": 600, "initial_offset_seconds": 0 },
+      "cadence": { "min_gap_seconds": 300, "initial_offset_seconds": 0 },
       "sources": {
         "kind": "reddit",
         "subreddits": ["SCP", "SCPDeclassified", "nosleep"],
@@ -124,7 +124,7 @@
       "template": "shorts_aita",
       "voice_rate": "+6%",
       "voice_profile": "aelithia_reddit",
-      "cadence": { "min_gap_seconds": 600, "initial_offset_seconds": 300 },
+      "cadence": { "min_gap_seconds": 300, "initial_offset_seconds": 150 },
       "sources": {
         "kind": "reddit",
         "subreddits": ["AmItheAsshole", "TrueOffMyChest", "relationship_advice", "Confession"],

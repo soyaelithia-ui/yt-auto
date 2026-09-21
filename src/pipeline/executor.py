@@ -210,7 +210,7 @@ class PipelineExecutor:
 
         engine_mode, is_loop_mode, is_multiscene_mode = _resolve_engine_mode(lane, video_engine, compositor)
 
-        subtitles_active = bool(enable_subtitles is True)
+        subtitles_active = True if enable_subtitles is None else bool(enable_subtitles)
 
         set_run_context(run_id=run_id, story_id=story_id, channel=channel_name, component="pipeline")
         memory_checkpoint("lease_claimed")

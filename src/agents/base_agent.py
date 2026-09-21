@@ -553,14 +553,25 @@ class ProgrammaticAgent:
 
     def run(self, task: str = DEFAULT_TASK, task_result_path: Optional[Union[Path, str]] = None) -> Path:
         """Execute the agent task synchronously."""
+        def _run_coro(coro):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    return executor.submit(asyncio.run, coro).result()
+            return asyncio.run(coro)
+
         with _GLOBAL_EXECUTION_LOCK:
             if task_result_path is not None:
                 prev, self.task_result_path = self.task_result_path, Path(task_result_path)
                 try:
-                    return asyncio.run(self._run_async(task))
+                    return _run_coro(self._run_async(task))
                 finally:
                     self.task_result_path = prev
-            return asyncio.run(self._run_async(task))
+            return _run_coro(self._run_async(task))
 
     @staticmethod
     def consume(path: Union[str, Path, None] = None) -> dict[str, Any]:
