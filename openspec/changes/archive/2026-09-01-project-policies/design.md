@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
     subgraph P1_Editorial["1. Editorial & Content Policy"]
-        E1[Curator Agent - Gemini 3.7 Flash] --> E2[Sanitizer & 3-Sec Hook Guard]
+        E1[Curator Agent - Gemini 3.8 Flash High] --> E2[Sanitizer & 3-Sec Hook Guard]
         E2 --> E3[Anti-Filler Pure Procedural WebGL/Three.js]
         E3 --> E4[CC BY-SA 3.0 Attribution Injector]
     end

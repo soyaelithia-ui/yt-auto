@@ -30,12 +30,12 @@ Sistema de producción y publicación automatizada para **YouTube Shorts vertica
 
 | Canal | Carril (`--lane`) | Enfoque Narrativo | Orientación y Formato | Plantilla Visual | Perfil de Voz TTS | Cadencia |
 |---|---|---|---|---|---|---|
-| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` | 1 c/10m (offset 0s, 6/h) |
-| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-drama-shorts` | Dilemas Morales / AITA | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_drama` | `es-MX-DaliaNeural` | 1 c/10m (offset 300s, 6/h) |
-| **MOKU** (`moku`, `config/channels/moku.json`) | `moku-horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` | 1 c/60m (offset 0s, 1/h) |
-| **AELITHIA** (`aelithia`, `config/channels/aelithia.json`) | `aelithia-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` | 1 c/60m (offset 1800s, 1/h) |
+| **TERROR / HORROR** (`horror`, `config/channels/horror.json`) | `horror-scp-shorts` | Anomalías SCP Foundation | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_creepypasta` | `es-ES-AlvaroNeural` | 1 c/10m (offset 0s, 6/h) |
+| **DRAMA / RELACIONES** (`drama`, `config/channels/drama.json`) | `drama-shorts` | Dilemas Morales / AITA | Vertical 9:16 (`1080x1920`, 60–180s) | `shorts_drama` | `es-MX-DaliaNeural` | 1 c/10m (offset 300s, 6/h) |
+| **TERROR / HORROR** (`horror`, `config/channels/horror.json`) | `horror-long` | Terror / Creepypastas | Horizontal 16:9 (`1920x1080`, ≥600s) | `creepypasta` | `es-ES-AlvaroNeural` | 1 c/60m (offset 0s, 1/h) |
+| **DRAMA / RELACIONES** (`drama`, `config/channels/drama.json`) | `drama-aita-long` | Drama / Relatos AITA | Horizontal 16:9 (`1920x1080`, ≥600s) | `aita` | `es-MX-DaliaNeural` | 1 c/60m (offset 1800s, 1/h) |
 
-- **Cadencia Intercalada**: 12 Shorts/h (1 c/5m) y 2 Videos Largos/h (1 c/30m) alternando Moku y Aelithia.
+- **Cadencia Intercalada**: 12 Shorts/h (1 c/5m) y 2 Videos Largos/h (1 c/30m) alternando los canales de Terror y Drama.
 - **Rendimiento y Narrativa**: Stream-copy (`-c:v copy`) en <5s; narración en primera persona sin handles ni CTAs.
 
 ---
@@ -49,11 +49,11 @@ python3 main.py run --preflight
 # 2. Listar carriles configurados y estado de planificación
 python3 main.py lanes
 
-# 3. Prueba sintética ultrarrápida (~2s render, sin consumo de cuotas)
-python3 main.py run --lane moku-scp-shorts -t
+# 3. Prueba sintética ultrarrápida (simulación dry-run sin consumo de cuotas)
+python3 main.py run --lane horror-scp-shorts --dry-run
 
 # 4. Ejecución puntual de pipeline en producción por carril
-python3 main.py run --lane moku-scp-shorts  # o moku-horror-long / aelithia-aita-long
+python3 main.py run --lane horror-scp-shorts  # o horror-long / drama-aita-long
 
 # 5. Estado de salud general y colas
 python3 main.py status
@@ -64,7 +64,7 @@ python3 main.py loop list
 python3 main.py loop audit
 
 # 7. Autenticación y diagnóstico de Google (YouTube v3 & Drive)
-python3 main.py auth check --channel moku
+python3 main.py auth check --channel horror
 
 # 8. Daemon continuo multi-carril autónomo
 python3 main.py daemon --interval 60
@@ -100,7 +100,7 @@ Pipeline de 6 agentes desacoplados bajo contratos JSON Schema y CLI local `agy` 
 ## 🛠️ Herramientas de Desarrollo y Diagnóstico (`dev/`)
 
 - `python3 dev/test_pipeline_harness.py`: Diagnóstico integral Zero-Quota del arnés y contratos JSON.
-- `python3 dev/produce_batch.py --count 3`: Producción en lote multi-canal (`moku`, `aelithia`).
+- `python3 dev/produce_batch.py --count 3`: Producción en lote multi-canal (`horror`, `drama`).
 - `python3 dev/run_telegram_bot.py --autopilot`: Bot interactivo en segundo plano con AutoPilot 24/7.
 - `python3 dev/audit_assets.py --topic "SCP-2000"`: Veeduría independiente de activos contra la política anti-filler.
 

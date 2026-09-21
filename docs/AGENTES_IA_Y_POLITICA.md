@@ -16,13 +16,11 @@ El renderizado FFmpeg con `LoopVideoEngine`, subtítulos ASS, miniaturas y opera
 
 ---
 
-## 2. Catálogo de Modelos de Gemini
+## 2. Modelo de IA Oficial
 
 | Identificador | Rol en el Sistema | Estado |
 |---|---|---|
-| **`gemini-3.8-flash-high`** | **Modelo Canónico Primario** para agentes nativos en `src/agents/` y arnés CLI `agy`. | Activo / Predeterminado |
-| **`gemini-3.7-flash`** | Modelo alternativo compatible en arnés CLI `agy`. | Activo / Alternativo |
-| **`gemini-3.6-flash`** | Modelo secundario de alta velocidad y compatibilidad en arnés CLI `agy`. | Activo / Secundario |
+| **`gemini-3.8-flash-high`** | **Modelo Canónico Exclusivo** para todos los agentes nativos en `src/agents/` bajo arnés CLI `agy`. | Activo / Oficial |
 
 ---
 

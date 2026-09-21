@@ -30,10 +30,10 @@ El sistema opera con cuatro carriles (`LaneProfile`) autodirigidos por cadencia 
 
 | Carril | Canal | Formato | Cadencia | Especificaciones |
 |---|---|---|---|---|
-| `moku-scp-shorts` | Moku | 9:16 (`1080x1920`) | 1 c/10m (offset 0s, 6/h) | Anomalías SCP, 60–180s (180–320 palabras), subtítulos ASS Karaoke. |
-| `aelithia-drama-shorts` | Aelithia | 9:16 (`1080x1920`) | 1 c/10m (offset 300s, 6/h) | Dilemas morales y AITA, 60–180s (180–320 palabras), intercalado c/5m. |
-| `moku-horror-long` | Moku | 16:9 (`1920x1080`) | 1 c/60m (offset 0s, 1/h) | Creepypastas/terror, multihistoria ≥2600 palabras, duración ≥600s. |
-| `aelithia-aita-long` | Aelithia | 16:9 (`1920x1080`) | 1 c/60m (offset 1800s, 1/h) | Drama familiar/relaciones, ≥2600 palabras, ≥600s, intercalado c/30m. |
+| `horror-scp-shorts` | Terror / Horror | 9:16 (`1080x1920`) | 1 c/10m (offset 0s, 6/h) | Anomalías SCP, 60–180s (180–320 palabras), subtítulos ASS Karaoke. |
+| `drama-shorts` | Drama / Relatos | 9:16 (`1080x1920`) | 1 c/10m (offset 300s, 6/h) | Dilemas morales y AITA, 60–180s (180–320 palabras), intercalado c/5m. |
+| `horror-long` | Terror / Horror | 16:9 (`1920x1080`) | 1 c/60m (offset 0s, 1/h) | Creepypastas/terror, multihistoria ≥2600 palabras, duración ≥600s. |
+| `drama-aita-long` | Drama / Relatos | 16:9 (`1920x1080`) | 1 c/60m (offset 1800s, 1/h) | Drama familiar/relaciones, ≥2600 palabras, ≥600s, intercalado c/30m. |
 
 - **Cadencia Agregada Global**: 12 Shorts/h (1 cada 5 min alternando canales) y 2 Videos Largos/h (1 cada 30 min alternando canales). Cero límites artificiales de duración por video; duración natural según narración TTS.
 
@@ -44,7 +44,7 @@ El sistema opera con cuatro carriles (`LaneProfile`) autodirigidos por cadencia 
 Gestionada en `src/core/repository.py` y `src/db.py`:
 - **Modo WAL (`journal_mode=WAL`)**: Permite lecturas simultáneas concurrentes sin bloquear escrituras.
 - **Configuración de Bloqueos**: `PRAGMA busy_timeout=15000`, claves foráneas activadas y leases transaccionales con `BEGIN IMMEDIATE`.
-- **Leases por Carril (`lane_leases`)**: Permite la ejecución concurrente no conflictiva de múltiples carriles sobre el mismo canal (ej. `moku-scp-shorts` y `moku-horror-long` en paralelo).
+- **Leases por Carril (`lane_leases`)**: Permite la ejecución concurrente no conflictiva de múltiples carriles sobre el mismo canal (ej. `horror-scp-shorts` y `horror-long` en paralelo).
 - **Deduplicación Aislada**: Huellas SHA-256 y SimHash 64-bit por canal en la tabla `content_fingerprints`. Lo encolado o publicado en un canal no afecta a otros.
 
 ---

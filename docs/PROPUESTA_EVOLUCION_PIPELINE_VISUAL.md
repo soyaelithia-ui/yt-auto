@@ -5,7 +5,7 @@
 ## 1. Origen y Contexto del Descubrimiento
 
 ### 1.1. El Detonante Visual: Las Capturas de Producción
-Durante la validación de tres videos recién generados en producción (un Short vertical de SCP-049 y dos producciones largas de más de 10 minutos para Moku y Aelithia), la inspección visual en Telegram reveló un contraste revelador:
+Durante la validación de tres videos recién generados en producción (un Short vertical de SCP-049 y dos producciones largas de más de 10 minutos para los canales de Terror y Drama), la inspección visual en Telegram reveló un contraste revelador:
 
 1. **El video de terror documental (*La Frecuencia Prohibida* - 14m 25s):** 
    Al avanzar en la línea de tiempo (minuto 0:01, minuto 12:09), la pantalla permanecía prácticamente en **negro absoluto**, mostrando únicamente un cono tenue y diminuto de luz naranja flotando en el vacío. En pantallas de teléfonos móviles o monitores estándar, el video parecía una pantalla apagada o un fallo técnico de renderizado. No había entorno visible, ni olas, ni acantilado perceptible, ni variedad alguna a lo largo de un cuarto de hora de narración.

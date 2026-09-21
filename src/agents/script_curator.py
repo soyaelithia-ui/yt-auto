@@ -387,6 +387,12 @@ LANE_CURATION_CONFIGS = {
     },
 }
 
+# Thematic canonical aliases for script curation configs
+LANE_CURATION_CONFIGS["horror-scp-shorts"] = LANE_CURATION_CONFIGS["moku-scp-shorts"]
+LANE_CURATION_CONFIGS["horror-long"] = LANE_CURATION_CONFIGS["moku-horror-long"]
+LANE_CURATION_CONFIGS["drama-shorts"] = LANE_CURATION_CONFIGS["aelithia-drama-shorts"]
+LANE_CURATION_CONFIGS["drama-aita-long"] = LANE_CURATION_CONFIGS["aelithia-aita-long"]
+
 
 class CinematicScriptCuratorAgent:
     """Agent 1: Generates structured, schema-compliant 4-Act dramatic scripts."""

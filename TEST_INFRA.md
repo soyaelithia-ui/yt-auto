@@ -24,7 +24,7 @@
 | 13 | F13 | Scene Planner Agent Sync | Architecture (`src/agents/`) | Plan generation & camera motion specification | Safe area margins & resolution compliance | Curation -> Art Direction -> Scene Planning | Autonomous story staging & plan rendering |
 | 14 | F14 | Live Director Shot Mix | Architecture (`src/core/`) | Rotation of certified loop pool without repeats | Empty catalog or unindexed categories | Concurrency locks & candidate pool rotation | Multi-act Short & Longform rendering |
 | 15 | F15 | Precomputed QA Metrics Gate | Architecture (`src/core/`) | Bypasses live decode when metrics in manifest | Missing manifest keys or corrupted metric types | QA Gatekeeper & prepublication validation | Live production QA execution |
-| 16 | F16 | Multi-Channel Lane Parity | Architecture (`config/`) | 6 production lanes across Moku, Aelithia, SciFi | Channel isolation & config schema validation | Profile preparsing & lane dispatching | Autonomous multi-channel publication |
+| 16 | F16 | Multi-Channel Lane Parity | Architecture (`config/`) | 6 production lanes across Horror, Drama, SciFi | Channel isolation & config schema validation | Profile preparsing & lane dispatching | Autonomous multi-channel publication |
 
 ## Test Execution Commands
 - **Full Unit & Decoupled Suite**:

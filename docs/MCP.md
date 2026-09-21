@@ -69,7 +69,7 @@ El servidor registra 9 herramientas operativas:
 
 ### 3.1. `system_preflight`
 - **Parámetros**:
-  - `channel` (string opcional): Canal a auditar (`"moku"`, `"aelithia"`, `"scifi"` o `"all"`, por defecto `"all"`).
+  - `channel` (string opcional): Canal a auditar (`"horror"`, `"drama"`, `"scifi"` o `"all"`, por defecto `"all"`).
   - `require_drive` (boolean, default `False`): Requiere validación estricta de credenciales de Google Drive.
   - `require_publish` (boolean, default `False`): Requiere validación de tokens/cookies de publicación en YouTube.
   - `require_review` (boolean, default `False`): Requiere validación de conectividad con Telegram Bot API.
@@ -82,7 +82,7 @@ El servidor registra 9 herramientas operativas:
     { "name": "binaries", "status": "ok", "binaries": { "ffmpeg": true, "ffprobe": true } }
   ],
   "channels": {
-    "moku": { "youtube_ok": true, "drive_ok": true, "cookies_ok": true }
+    "horror": { "youtube_ok": true, "drive_ok": true, "cookies_ok": true }
   },
   "errors": []
 }
@@ -90,7 +90,7 @@ El servidor registra 9 herramientas operativas:
 
 ### 3.2. `list_lanes`
 - **Parámetros**:
-  - `channel` (string opcional): Filtrar por canal (`"moku"`, `"aelithia"`).
+  - `channel` (string opcional): Filtrar por canal (`"horror"`, `"drama"`).
   - `include_disabled` (boolean, default `False`): Incluir carriles desactivados.
 - **Respuesta**:
 ```json
@@ -122,7 +122,7 @@ El servidor registra 9 herramientas operativas:
 - **Parámetros**:
   - `category` (string opcional): Categoría temática (`"cosmic_horror"`, `"dark_forest"`, `"drama"`, etc.).
   - `orientation` (string opcional): `"vertical"` o `"horizontal"`.
-  - `channel` (string opcional): `"moku"`, `"aelithia"` o `"scifi"`.
+  - `channel` (string opcional): `"horror"`, `"drama"` o `"scifi"`.
   - `limit` (integer, default `50`): Límite de registros.
 - **Respuesta**: Lista de loops maestros registrados con metadatos de resolución, duración, FPS, ruta física y estadísticas de uso.
 
@@ -200,23 +200,23 @@ resources/
 ```
 
 ### 4.1. `channels://{channel_name}/config`
-- **URI Template**: `channels://{channel_name}/config` (`channel_name` ∈ `{"moku", "aelithia", "scifi"}`)
+- **URI Template**: `channels://{channel_name}/config` (`channel_name` ∈ `{"horror", "drama", "scifi"}`)
 - **MIME Type**: `application/json`
 - **Seguridad**: Rutas locales a cookies y tokens se eliminan y sustituyen por banderas booleanas:
 ```json
 {
-  "id": "moku",
+  "id": "horror",
   "enabled": true,
   "editorial": {
-    "public_name": "Moku",
-    "handle": "@MokuRedit",
+    "public_name": "Expedientes de Terror",
+    "handle": "@expedientesdeterror",
     "topic": "terror psicológico, historias de la Fundación SCP",
     "tone": "oscuro, inmersivo, solemne",
-    "channel_url": "https://www.youtube.com/@MokuRedit"
+    "channel_url": "https://www.youtube.com"
   },
   "visual": {
     "style_id": "cosmic_chiaroscuro",
-    "watermark_text": "MOKU // CLASIFICADO"
+    "watermark_text": "CLASIFICADO"
   },
   "audio": {
     "default_voice_profile": "scp_documentary_es",

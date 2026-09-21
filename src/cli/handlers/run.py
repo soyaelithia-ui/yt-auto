@@ -234,11 +234,15 @@ def handle_run(args: argparse.Namespace, parser: argparse.ArgumentParser | None 
 
     lane_id = getattr(args, "lane", None)
     if channel == "all" and lane_id:
-        from src.core.lanes import load_lanes
-        for lane in load_lanes():
-            if lane.id == lane_id or lane_id.startswith(lane.channel):
-                channel = lane.channel
-                break
+        from src.core.lanes import get_lane, load_lanes
+        found = get_lane(lane_id)
+        if found:
+            channel = getattr(found.channel, "value", str(found.channel))
+        else:
+            for lane in load_lanes():
+                if lane.id == lane_id or lane_id.startswith(str(lane.channel)):
+                    channel = lane.channel
+                    break
 
     if channel != "all":
         try:

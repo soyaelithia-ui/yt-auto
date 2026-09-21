@@ -73,6 +73,6 @@ La integración expone una fachada unificada en `src/telegram`:
 ## 4. Microsoft Edge-TTS (Síntesis Neural de Voz)
 
 - Genera locución con calidad neural humana y acento neutro:
-  * Canal **MOKU**: `es-MX-JorgeNeural` (tono profundo y misterioso para relatos de terror).
-  * Canal **AELITHIA**: `es-MX-DaliaNeural` (tono empático y dinámico para drama/AITA).
+  * Canal **HORROR / TERROR**: `es-MX-JorgeNeural` o `es-ES-AlvaroNeural` (tono profundo y misterioso para relatos de terror).
+  * Canal **DRAMA**: `es-MX-DaliaNeural` (tono empático y dinámico para drama/AITA).
 - Latencia típica: ~2 segundos por relato completo con costo cero de infraestructura.

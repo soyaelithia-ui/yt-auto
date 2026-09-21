@@ -16,14 +16,14 @@ El sistema cuenta con subcomandos principales y banderas estandarizadas:
 | Subcomando | Propósito | Opciones Clave | Ejemplo de Invocación |
 |---|---|---|---|
 | **`lanes`** | Lista carriles configurados y su estado de planificación. | `-j` (salida JSON), `--db-path` | `python3 main.py lanes` |
-| **`run`** | Ejecuta iteración puntual del pipeline por carril. | `--lane <lane_id>`, `-c` (canal), `-s` (historia), `-t` (test sintético), `-d` (dry-run), `--preflight`, `--generate-only` | `python3 main.py run --lane moku-scp-shorts` |
+| **`run`** | Ejecuta iteración puntual del pipeline por carril. | `--lane <lane_id>`, `-c` (canal), `-s` (historia), `-t` (tema), `-d, --dry-run` (simulación), `--preflight`, `--generate-only` | `python3 main.py run --lane horror-scp-shorts --dry-run` |
 | **`daemon`** | Bucle planificador continuo multi-carril. | `-i`, `--interval` (intervalo en seg, default 60), `--sequential` | `python3 main.py daemon --interval 60` |
 | **`status`** | Diagnóstico y salud del sistema. | `-j` (JSON), `--apis` (auditar credenciales), `--errors` (triage de errores), `-l` (límite) | `python3 main.py status --apis` |
 | **`queue`** | Administración de colas de producción. | `list`, `pause <canal>`, `resume <canal>`, `activate <canal>`, `sweep` (barrido `AUTO_PUBLISH_TIMEOUT_HOURS`, default 24h), `-j` | `python3 main.py queue list` |
-| **`clean`** | Limpieza de temporales y caché. | `-d` (dry-run), `--cache` (trabajos expirados), `--sessions` | `python3 main.py clean --cache -d` |
-| **`auth`** | Gestión y diagnóstico de tokens OAuth2 oficiales de Google (YouTube Data API v3 y Drive). | `login`, `check`, `url`, `exchange <code>`, `standardize`, `-c` (canal), `--port` | `python3 main.py auth login -c moku`<br>`python3 main.py auth check -c moku` |
+| **`clean`** | Limpieza de temporales y caché. | `-d, --dry-run` (simulación), `--cache` (trabajos expirados), `--sessions` | `python3 main.py clean --cache --dry-run` |
+| **`auth`** | Gestión y diagnóstico de tokens OAuth2 oficiales de Google (YouTube Data API v3 y Drive). | `login`, `check`, `url`, `exchange <code>`, `standardize`, `-c` (canal), `--port` | `python3 main.py auth login -c horror`<br>`python3 main.py auth check -c horror` |
 | **`backup`** | Respaldo atómico de SQLite con verificación. | `-o` (directorio destino), `-j` (salida JSON) | `python3 main.py backup` |
-| **`migrate`** | Migraciones de esquema SQLite. | `-d` (dry-run), `-j` (salida JSON) | `python3 main.py migrate -d` |
+| **`migrate`** | Migraciones de esquema SQLite. | `-d, --dry-run` (simulación), `-j` (salida JSON) | `python3 main.py migrate --dry-run` |
 | **`service`** | Control de servicios Systemd y logs. | `build`, `start`, `stop`, `restart`, `logs` | `python3 main.py service logs` |
 | **`loop`** | Administración e indexación de bucles de video (catálogo de videos pre-renderizados MP4 y stream-copy). | `list`, `generate`, `preview`, `audit`, `daemon`, `-c` (categoría), `-o` (orientación), `-n` (cantidad), `-j` (JSON) | `python3 main.py loop list`<br>`python3 main.py loop generate -c cosmic_horror -o vertical`<br>`python3 main.py loop audit` |
 | **`mcp`** | Servidor Model Context Protocol oficial (stdio / SSE) para orquestación e inspección por IA. | `--transport {stdio,sse}`, `--port` | `python3 main.py mcp`<br>`python3 -m src.mcp` |
@@ -65,7 +65,7 @@ Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en 
 | Paso | Acción | Criterio de OK |
 |---|---|---|
 | **0** | Árbol vacío / clone limpio; `cp .env.example .env` y editar (sin secretos en git). | `.env` local `chmod 600`; no commitear. |
-| **1** | Layout `secrets/`: `drive_key.json`, `tokens/<canal>.json` (`tokens/moku.json`, `tokens/aelithia.json`), `cookies.json`, `cookies_aelithia.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
+| **1** | Layout `secrets/`: `drive_key.json`, `tokens/<canal>.json` (`tokens/horror.json`, `tokens/drama.json`), `cookies.json`, `cookies_aelithia.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
 | **2** | Completar `.env`: Telegram (`TELEGRAM_*` + `TELEGRAM_ALLOWED_CHAT_ID`), Drive IDs (`DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`, …), channel IDs; `TELEGRAM_API_ID`/`HASH` para sidecar. | Placeholders secretos no vacíos en runtime. |
 | **3** | `./scripts/stage_agy.sh` | `build/agy` existe (gitignored). |
 | **4** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |

@@ -22,7 +22,7 @@
 * **Hito 2 (Motor de Sesiones & Resiliencia YouTube)**: Implementación de la bóveda de credenciales, validador de salud de cookies (`SessionHealthResult`), cabeceras dinámicas y conector InnerTube/Playwright.
 * **Hito 3 (Pipeline Visual & Audio Streamlined)**: Consolidación de `LoopVideoEngine` como motor canónico exclusivo, temporales de audio en RAM (`/dev/shm`) y auto-wrapping geométrico de subtítulos 9:16 con Safe Area.
 * **Hito 4 (Persistencia Atómica & Auto-Reaper)**: Transacciones coordinadas de 2 fases (2PC) para aprobación/publicación y monitoreo activo de PIDs (`os.kill(pid, 0)`) para liberación de leases de carril.
-* **Hito 5 (Gobernanza IA & Saneamiento Documental)**: Estandarización bajo arnés `agy` con `gemini-3.7-flash` / `gemini-3.6-flash`, eliminación de referencias obsoletas y actualización de toda la suite en `docs/`.
+* **Hito 5 (Gobernanza IA & Saneamiento Documental)**: Estandarización bajo arnés `agy` con el modelo canónico exclusivo `gemini-3.8-flash-high`, eliminación de referencias obsoletas y actualización de toda la suite en `docs/`.
 
 ### 1.3. Antipatrones y Malas Prácticas Terminantemente Prohibidas
 * 🚫 **Dependencia Intensiva de YouTube Data API v3 para Subidas**: Prohibido quemar cuota API (1,600 unidades por video) como método de producción masiva; el canal de subida es sesión directa autenticada.
@@ -44,7 +44,7 @@
 | **4** | **Desbordamiento Visual en Subtítulos 9:16** | `lib/subtitles.py` agrupa palabras por conteo fijo sin estimar píxeles reales en español, colisionando con la UI nativa de Shorts. | Medición dinámica de bounding box tipográfico con Pillow (`font.getlength`), auto-wrapping con `\N` y respeto de Safe Area (`MarginV = 260px`). | **Error Crítico Estructural** |
 | **5** | **Desincronización Transaccional Dual-DB** | `shorts_queue.db` y `review_state.db` operan sin transacción coordinada; una falla de red tras aprobación duplica publicaciones. | Adaptador de reconciliación idempotente de 2 fases (2PC) con bloqueos transaccionales `BEGIN IMMEDIATE` y verificación de `run_id`. | **Error Crítico Estructural** |
 | **6** | **Leases Huérfanos tras Falla Dura (OOM/SIGKILL)** | `src/core/repository.py` solo limpia leases al reintentar un claim pasivo tras 900s de TTL. | Proceso proactivo *Auto-Reaper* que inspecciona la vida real de los PIDs (`os.kill(pid, 0)`) cada 30s y libera bloqueos inmediatamente. | **Error Crítico Estructural** |
-| **7** | **Presencia de Modelos Obsoletos / Retirados** | Uso de `gemini-2.0-flash` (retirado) o `gemini-2.5-flash` en scripts legacy y tests. | Estandarización centralizada en `src/agents/base_agent.py` bajo arnés nativo `agy` con `gemini-3.7-flash` (primario) y `gemini-3.6-flash` (secundario). | **Error Crítico Estructural** |
+| **7** | **Presencia de Modelos Obsoletos / Retirados** | Uso de modelos retirados o alternativos en scripts y tests. | Estandarización centralizada en `src/agents/base_agent.py` bajo arnés nativo `agy` con el modelo canónico exclusivo `gemini-3.8-flash-high`. | **Error Crítico Estructural** |
 | **8** | *Alerta: "La fragmentación de audio en archivos WAV es una mala práctica"* | Falso positivo del reporte previo. Edge-TTS no procesa pausas SSML dinámicas; segmentar y desplazar timestamps es indispensable. | **DESCARTAR ALERTA.** Preservar la segmentación matemática y optimizar alojando los temporales en memoria RAM (`/dev/shm`). | **Falso Positivo Justificado** |
 | **9** | *Alerta: "El flag `--disable-gpu` es un bloqueo perjudicial de hardware"* | Falso positivo. En VPS headless y contenedores Docker sin GPU dedicada, omitir este flag produce el crash fatal de Chromium. | **DESCARTAR ALERTA.** Mantener `--disable-gpu` como predeterminado headless y aplicar aceleración EGL solo ante detección explícita de `/dev/dri/renderD128`. | **Falso Positivo Justificado** |
 | **10** | *Alerta: "`pipeline.py` bloquea 45s antes del render por encadenar `VideoQAAgent`"* | Falso positivo por absurdo lógico. La auditoría forense de video se ejecuta en la Etapa 10 sobre el contenedor MP4 terminado. | **DESCARTAR ALERTA.** El orden de ejecución canónico es correcto; no existe ejecución de QA sobre video inexistente. | **Falso Positivo Justificado** |
@@ -86,7 +86,7 @@
 * **Python 3.11+ / Asyncio**: Sí, es el estándar de facto para orquestación multimedia, integración con APIs de IA y automatización con Playwright.
 * **FFmpeg 6.0+ con `libx264`, `libass` y `ebur128`**: Sí, es el estándar indiscutible de la industria para procesamiento audiovisual determinista de alto rendimiento.
 * **Playwright sobre Selenium/Puppeteer**: Sí, ofrece mejor control de contexto de navegador, captura hermética de eventos de red y serialización limpia de cookies de sesión.
-* **Modelos Gemini 3.7 / 3.6 Flash**: Sí, representan el estado del arte en velocidad de inferencia, costo-eficiencia y capacidad de seguimiento de directivas JSON Schema.
+* **Modelo Gemini 3.8 Flash High**: Sí, representa el estado del arte en velocidad de inferencia, costo-eficiencia y capacidad de seguimiento de directivas JSON Schema.
 
 ### 3.5. ¿Se aplican las mejores prácticas de la industria?
 * **Separación de Responsabilidades**: Sí, segregación estricta entre tareas creativas semánticas (IA en arnés `agy`), composición audiovisual determinista local (FFmpeg/Three.js) y operaciones de persistencia/red.
@@ -102,7 +102,7 @@
 ```mermaid
 flowchart TD
     subgraph S1_Ingesta_y_Curaduria["1. Ingesta y Curaduría Semántica"]
-        A1[Scraper Multi-Fuente / Reddit API con Rotación] --> A2[Curator Agent - Gemini 3.7 Flash]
+        A1[Scraper Multi-Fuente / Reddit API con Rotación] --> A2[Curator Agent - Gemini 3.8 Flash High]
         A2 --> A3[Sanitizer Determinista & Editorial Fail-Closed]
     end
 
@@ -157,7 +157,7 @@ flowchart TD
    - **`AudioMemoryPipeline`**: Procesa chunks de voz, silencios y masterización EBU R128 directamente en `/dev/shm`, calculando desplazamientos temporales acumulativos exactos.
    - **`SubtitleGeometryEngine`**: Calcula el ancho en píxeles de cada cue tipográfico con Pillow, divide palabras largas y asegura márgenes inferiores (`MarginV = 260px`) para evitar solapamientos con la interfaz de YouTube Shorts.
 4. **Gobernanza de Agentes IA (`src/agents/`)**:
-   - Orquesta agentes de curaduría y SEO mediante contratos JSON Schema bajo el CLI `agy` con `gemini-3.7-flash`, implementando política fail-closed.
+   - Orquesta agentes de curaduría y SEO mediante contratos JSON Schema bajo el CLI `agy` con `gemini-3.8-flash-high`, implementando política fail-closed.
 
 ---
 
@@ -173,7 +173,7 @@ yt-auto/
 │   ├── loops/                     # Bucles de video pre-sintetizados offline
 │   └── vendor/three/              # [NUEVO] Three.js r128 local (eliminación de CDN)
 ├── config/
-│   ├── channels.json              # Configuración de canales (MOKU, AELITHIA)
+│   ├── channels.json              # Configuración de canales (HORROR, DRAMA)
 │   ├── lanes.json                 # Perfiles de carril (creepy_short, scp_short, etc.)
 │   └── settings.py                # Variables de entorno y rutas maestras
 ├── data/
@@ -189,11 +189,11 @@ yt-auto/
 │   ├── telegram_bot.py            # Bot de revisión con comando /health integrado
 │   └── ui.py                      # Teclados interactivos de aprobación
 ├── secrets/                       # Almacenamiento seguro de credenciales (cifrado local)
-│   ├── cookies.txt                # Cookies de sesión Netscape para canal MOKU
-│   └── cookies_aelithia.txt       # Cookies de sesión Netscape para canal AELITHIA
+│   ├── cookies.txt                # Cookies de sesión Netscape para canal de Terror
+│   └── cookies_aelithia.txt       # Cookies de sesión Netscape para canal de Drama
 ├── src/
 │   ├── __init__.py
-│   ├── agents/                    # Agentes semánticos bajo arnés agy (Gemini 3.7 Flash)
+│   ├── agents/                    # Agentes semánticos bajo arnés agy (Gemini 3.8 Flash High)
 │   │   ├── base_agent.py          # Gobernanza central y contratos JSON Schema
 │   │   ├── curator_agent.py       # Curaduría de relatos
 │   │   ├── qa_agent.py            # Auditoría semántica editorial
@@ -236,7 +236,7 @@ yt-auto/
 |---|---|---|
 | [`docs/ARQUITECTURA.md`](ARQUITECTURA.md) | `[Actualizar]` | **Reflejar el pipeline de sesión de YouTube**: Eliminar referencias a la YouTube Data API v3 como método exclusivo de subida. Documentar el subsistema `session_uploader` basado en cookies, el demonio `lease_reaper` y la consolidación de `LoopVideoEngine`. |
 | [`docs/INTEGRACIONES_Y_SERVICIOS.md`](INTEGRACIONES_Y_SERVICIOS.md) | `[Actualizar]` | **Reestructurar jerarquía de subida**: Establecer la subida por sesión persistente / cookies como método primario de producción masiva para evitar cuotas API. Documentar el protocolo de validación de salud de cookies (`LOGIN_INFO`, `SAPISID`) y el comando `/health` de Telegram. |
-| [`docs/AGENTES_IA_Y_POLITICA.md`](AGENTES_IA_Y_POLITICA.md) | `[Actualizar]` | **Limpieza de modelos**: Eliminar toda mención a `gemini-2.0-flash` y `gemini-2.5-flash`. Ratificar `gemini-3.7-flash` (primario) y `gemini-3.6-flash` (secundario) bajo el arnés `agy`. |
+| [`docs/AGENTES_IA_Y_POLITICA.md`](AGENTES_IA_Y_POLITICA.md) | `[Actualizar]` | **Limpieza de modelos**: Eliminar toda mención a versiones anteriores y ratificar `gemini-3.8-flash-high` como el único modelo oficial bajo el arnés `agy`. |
 | [`docs/SYSTEM_DEFECTS_AND_AUDIT.md`](SYSTEM_DEFECTS_AND_AUDIT.md) | `[Actualizar]` | **Añadir advertencia de archivo superado**: Incorporar nota de encabezado indicando que este reporte inicial contiene falsos positivos corregidos en la versión maestra v3.0 / v3.1. |
 | [`docs/SYSTEM_DEFECTS_META_AUDIT.md`](SYSTEM_DEFECTS_META_AUDIT.md) | `[Actualizar]` | **Vincular con el documento maestro**: Mantener como documento histórico de análisis crítico apuntando a `SYSTEM_DEFECTS_MASTER_CONSOLIDATED_AUDIT_AND_SOLUTIONS.md`. |
 | [`docs/SYSTEM_DEFECTS_MASTER_CONSOLIDATED_AUDIT_AND_SOLUTIONS.md`](SYSTEM_DEFECTS_MASTER_CONSOLIDATED_AUDIT_AND_SOLUTIONS.md) | `[Actualizar]` | **Incorporar directiva de subida por sesión**: Actualizar la sección de YouTube para alinearla con la política de sesión directa/cookies, descartando la dependencia de cuota API. |

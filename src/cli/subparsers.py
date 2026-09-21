@@ -66,7 +66,7 @@ def register_run_subcommand(subparsers: argparse._SubParsersAction, parent: argp
         parents=[parent],
         help="Ejecutar una iteración del pipeline, generación de historias o pruebas",
     )
-    p.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')")
+    p.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('horror' / canal 1, 'drama' / canal 2, 'scifi', 'all')")
     p.add_argument("-s", "--story-id", type=str, default=None, help="ID de historia específica en cola a procesar")
     p.add_argument("-t", "--topic", type=str, default=None, help="Tema, premisa o texto para generar historia")
     p.add_argument(
@@ -97,12 +97,12 @@ def register_daemon_subcommand(subparsers: argparse._SubParsersAction, parent: a
         default=60,
         help="Intervalo de sondeo del daemon en segundos (por defecto: 60); la cadencia real la marca cada carril",
     )
-    p.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')")
+    p.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('horror' / canal 1, 'drama' / canal 2, 'scifi', 'all')")
     p.add_argument(
         "--lanes",
         type=str,
         default=None,
-        help="Lista de carriles permitidos separados por coma (p.ej. moku-scp-shorts,moku-horror-long)",
+        help="Lista de carriles permitidos separados por coma (p.ej. horror-scp-shorts,horror-long)",
     )
     p.add_argument("--sequential", action="store_true", help="Procesar historias consecutivamente sin esperar intervalo")
     p.add_argument("--mass-produce", action="store_true", help="Alias de compatibilidad con producción por lotes")
@@ -169,7 +169,7 @@ def register_auth_subcommand(subparsers: argparse._SubParsersAction, parent: arg
         help="Acción OAuth: 'url', 'exchange', 'login', 'check', 'standardize'",
     )
     p.add_argument("code", nargs="?", default=None, help="Código de autorización OAuth")
-    p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo para el token ('moku', 'aelithia')")
+    p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo para el token ('horror' / canal 1, 'drama' / canal 2)")
     p.add_argument("--code", dest="code_flag", type=str, default=None, help="Código de autorización OAuth (flag opcional)")
     p.add_argument("--port", type=int, default=8585, help="Puerto local para flujo interactivo 'auth login'")
 
@@ -207,7 +207,7 @@ def register_service_and_lanes_subcommands(subparsers: argparse._SubParsersActio
         parents=[parent],
         help="Listar todos los carriles de producción (config/lanes.json) y estado del planificador",
     )
-    lp.add_argument("-c", "--channel", type=str, default="all", help="Filtrar carriles por canal ('moku', 'aelithia', 'all')")
+    lp.add_argument("-c", "--channel", type=str, default="all", help="Filtrar carriles por canal ('horror' / canal 1, 'drama' / canal 2, 'all')")
     lp.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
 
 
@@ -216,7 +216,7 @@ def register_loop_subcommand(subparsers: argparse._SubParsersAction, parent: arg
     p = subparsers.add_parser(
         "loop",
         parents=[parent],
-        help="Administrar y generar bucles de video procedurales por código web (Three.js/Canvas/WebGL)",
+        help="Administrar catálogo de bucles de video pre-renderizados y verificar inventario de activos",
     )
     p.add_argument(
         "loop_action",
@@ -244,7 +244,7 @@ def register_profile_and_benchmark_subcommands(subparsers: argparse._SubParsersA
         ("benchmark", "Ejecutar ciclos de benchmarking y pruebas de carga por fase (R1)"),
     ]:
         p = subparsers.add_parser(p_name, parents=[parent], help=p_help)
-        p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo ('moku', 'aelithia', 'scifi', 'all')")
+        p.add_argument("-c", "--channel", type=str, default="moku", help="Canal objetivo ('horror' / canal 1, 'drama' / canal 2, 'scifi', 'all')")
         p.add_argument("-l", "--lane", type=str, default=None, help="Carril específico a perfilar")
         p.add_argument("-n", "--iterations", type=int, default=1, help="Número de ciclos de benchmarking a ejecutar")
         p.add_argument("--mock", action="store_true", default=True, help="Ejecutar sobre arneses simulados sin costo de API/GPU")

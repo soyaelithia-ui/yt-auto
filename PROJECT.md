@@ -26,7 +26,7 @@
 | 13 | F13 | Scene Planner Agent Sync | Multi-agent scene planning, camera motion, and safe area layout bounds | Agents | Architecture |
 | 14 | F14 | Live Director Shot Mix & Thematic Rotation | Seeded candidate pool rotation across scenes without consecutive repetitions | Visuals | Architecture |
 | 15 | F15 | Precomputed QA Metrics Gate | `bank_manifest.json` visual metrics avoid double full-file decode in prepublication QA | Verification | PR #69 |
-| 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Moku, Aelithia, and SciFi (Shorts + Longform) | Core | PR #69 |
+| 16 | F16 | Multi-Channel Lane Parity | Six production lanes across Horror, Drama, and SciFi (Shorts + Longform) | Core | PR #69 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |

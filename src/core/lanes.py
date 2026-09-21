@@ -34,6 +34,28 @@ ALLOWED_STORY_TYPES: Final[frozenset[str]] = frozenset(
 ALLOWED_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"reddit", "scp_wiki"})
 MIN_GAP_SECONDS = 60
 
+LANE_ALIASES: Final[dict[str, str]] = {
+    # Thematic horror -> moku-scp-shorts / moku-horror-long
+    "horror-scp-shorts": "moku-scp-shorts",
+    "terror-scp-shorts": "moku-scp-shorts",
+    "scp-shorts": "moku-scp-shorts",
+    "horror-shorts": "moku-scp-shorts",
+    "horror-long": "moku-horror-long",
+    "horror-horror-long": "moku-horror-long",
+    "terror-long": "moku-horror-long",
+    "creepypasta-long": "moku-horror-long",
+    # Thematic drama -> aelithia-drama-shorts / aelithia-aita-long
+    "drama-shorts": "aelithia-drama-shorts",
+    "drama-drama-shorts": "aelithia-drama-shorts",
+    "relatos-shorts": "aelithia-drama-shorts",
+    "drama-aita-long": "aelithia-aita-long",
+    "drama-long": "aelithia-aita-long",
+    "aita-long": "aelithia-aita-long",
+    "relatos-long": "aelithia-aita-long",
+    # Legacy aliases
+    "scifi-chronicles-shorts": "scifi-singularity-shorts",
+}
+
 # Fail-safe fallback equivalent to today's three production formats. Used when
 # config/lanes.json is missing or corrupt so the daemon never crashes on config.
 FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
@@ -404,8 +426,9 @@ _LANES_CACHE: tuple[str, tuple[LaneProfile, ...]] | None = None
 
 def get_lane(lane_id: str, *, path: str | os.PathLike[str] | None = None) -> LaneProfile | None:
     wanted = str(lane_id or "").strip()
+    canonical = LANE_ALIASES.get(wanted, wanted)
     for lane in load_lanes(path):
-        if lane.id == wanted:
+        if lane.id in (wanted, canonical):
             return lane
     return None
 
@@ -438,8 +461,6 @@ def resolve_lane_for_run(
     channel_key = canonical_channel(channel)
     channel_str = getattr(channel_key, "value", str(channel_key))
     wanted = str(lane_id or "").strip()
-    if wanted == "scifi-chronicles-shorts":
-        wanted = "scifi-singularity-shorts"
 
     available = lanes_for_channel(channel_key, path=path)
     if not available:
@@ -456,8 +477,9 @@ def resolve_lane_for_run(
     if wanted:
         if any(char in wanted for char in (";", "&", "|", "`", "$", ">", "<", "\n", "\r")):
             raise ValueError(f"Identificador de carril inválido o sospechoso: {wanted!r}")
+        canonical = LANE_ALIASES.get(wanted, wanted)
         for lane in available:
-            if lane.id == wanted:
+            if lane.id in (wanted, canonical):
                 return lane
         raise ValueError(
             f"El carril {wanted!r} no existe o no pertenece al canal "
@@ -468,8 +490,9 @@ def resolve_lane_for_run(
     if story_row is not None:
         story_lane = str(story_row.get("lane_id") or "").strip()
     if story_lane:
+        canonical_story = LANE_ALIASES.get(story_lane, story_lane)
         for lane in available:
-            if lane.id == story_lane:
+            if lane.id in (story_lane, canonical_story):
                 return lane
         logger.warning(
             "La historia guarda lane_id=%r pero ya no existe en la configuración; "
