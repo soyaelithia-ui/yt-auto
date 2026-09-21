@@ -89,7 +89,7 @@
   "auth": {
     "cookies_path": "secrets/cookies.json",
     "youtube_token_path": "secrets/tokens/horror.json",
-    "expected_youtube_channel_id": "",
+    "expected_youtube_channel_id": "UC8sStaR-cwz-x7MD4XKNUKA",
     "source_feed": "r/nosleep+r/SCP"
   }
 }
