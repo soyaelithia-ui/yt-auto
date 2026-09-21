@@ -132,18 +132,35 @@ def _sync_queue_db(
                     (video_id, url, visibility, channel, job_id),
                 )
             if run_id and video_id:
-                pub_exists = conn.execute(
-                    "SELECT 1 FROM publications WHERE run_id = ? AND video_id = ?",
-                    (run_id, video_id),
-                ).fetchone()
-                if not pub_exists:
-                    conn.execute(
-                        """INSERT INTO publications(
-                            run_id, story_id, provider, video_id, url, channel,
-                            visibility, title, description, thumbnail_confirmed, verified_at
-                        ) VALUES (?, ?, 'YOUTUBE_DATA_API_V3', ?, ?, ?, ?, ?, ?, 1, ?)""",
-                        (run_id, job_id, video_id, url, channel, visibility, title, description, now_iso),
+                try:
+                    from src.core.inventory import record_published_inventory
+                    record_published_inventory(
+                        db_path=target_db,
+                        run_id=run_id,
+                        story_id=job_id,
+                        video_id=video_id,
+                        url=url,
+                        channel=channel,
+                        title=title,
+                        description=description,
+                        provider="YOUTUBE_DATA_API_V3",
+                        visibility=visibility,
+                        verified_at=now_iso,
                     )
+                except Exception as inv_err:
+                    logger.warning("Could not record publication in enriched inventory: %s", inv_err)
+                    pub_exists = conn.execute(
+                        "SELECT 1 FROM publications WHERE run_id = ? AND video_id = ?",
+                        (run_id, video_id),
+                    ).fetchone()
+                    if not pub_exists:
+                        conn.execute(
+                            """INSERT INTO publications(
+                                run_id, story_id, provider, video_id, url, channel,
+                                visibility, title, description, thumbnail_confirmed, verified_at
+                            ) VALUES (?, ?, 'YOUTUBE_DATA_API_V3', ?, ?, ?, ?, ?, ?, 1, ?)""",
+                            (run_id, job_id, video_id, url, channel, visibility, title, description, now_iso),
+                        )
             conn.commit()
             logger.info("Synced queue.db for job_id=%s run_id=%s video_id=%s", job_id, run_id, video_id)
     except Exception as exc:

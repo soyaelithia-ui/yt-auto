@@ -193,6 +193,20 @@ def register_backup_and_migrate_subcommands(subparsers: argparse._SubParsersActi
     mp.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON")
 
 
+def register_inventory_subcommand(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
+    """Register 'inventory' subcommand."""
+    ip = subparsers.add_parser(
+        "inventory",
+        parents=[parent],
+        help="Gestión e inspección del inventario 100% de videos e historias publicadas para agentes IA",
+    )
+    ip.add_argument("inventory_action", nargs="?", choices=["list", "sync", "backup", "digest"], default="list", help="Acción de inventario")
+    ip.add_argument("-c", "--channel", type=str, default="all", help="Canal ('horror', 'drama', o 'all')")
+    ip.add_argument("-l", "--limit", type=int, default=50, help="Límite de elementos a procesar o mostrar")
+    ip.add_argument("--folder-id", type=str, default=None, help="ID de carpeta de Google Drive para respaldo")
+    ip.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON")
+
+
 def register_service_and_lanes_subcommands(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
     """Register 'service' and 'lanes' subcommands."""
     sp = subparsers.add_parser(
@@ -283,6 +297,7 @@ def register_all_subcommands(subparsers: argparse._SubParsersAction, parent: arg
     register_clean_subcommand(subparsers, parent)
     register_auth_subcommand(subparsers, parent)
     register_backup_and_migrate_subcommands(subparsers, parent)
+    register_inventory_subcommand(subparsers, parent)
     register_service_and_lanes_subcommands(subparsers, parent)
     register_loop_subcommand(subparsers, parent)
     register_profile_and_benchmark_subcommands(subparsers, parent)

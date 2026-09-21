@@ -364,6 +364,27 @@ MIGRATION_005 = (
     """,
 )
 
+MIGRATION_006 = (
+    "ALTER TABLE publications ADD COLUMN video_sha256 TEXT",
+    "ALTER TABLE publications ADD COLUMN drive_video_id TEXT",
+    "ALTER TABLE publications ADD COLUMN drive_backup_metadata TEXT",
+    "ALTER TABLE publications ADD COLUMN language TEXT DEFAULT 'es'",
+    "ALTER TABLE publications ADD COLUMN source_language TEXT DEFAULT 'es'",
+    "ALTER TABLE publications ADD COLUMN hook_summary TEXT",
+    "ALTER TABLE publications ADD COLUMN synopsis TEXT",
+    "ALTER TABLE publications ADD COLUMN themes_json TEXT",
+    "ALTER TABLE publications ADD COLUMN simhash TEXT",
+    "ALTER TABLE publications ADD COLUMN full_script TEXT",
+    "ALTER TABLE publications ADD COLUMN predictive_success_score REAL DEFAULT 0.0",
+    "ALTER TABLE publications ADD COLUMN score_rationale TEXT",
+    "ALTER TABLE publications ADD COLUMN used_resources TEXT",
+    "ALTER TABLE publications ADD COLUMN duration_sec REAL DEFAULT 0.0",
+    "CREATE INDEX IF NOT EXISTS idx_publications_channel ON publications(channel)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_verified_at ON publications(verified_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_simhash ON publications(simhash)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_video_id ON publications(video_id)",
+)
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -495,6 +516,19 @@ def _apply_migration_005(conn: sqlite3.Connection) -> None:
             raise
 
 
+def _apply_migration_006(conn: sqlite3.Connection) -> None:
+    for statement in MIGRATION_006:
+        try:
+            conn.execute(statement)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "duplicate column name" in msg:
+                continue
+            if "already exists" in msg:
+                continue
+            raise
+
+
 def _count_channels(conn: sqlite3.Connection, names: Sequence[str]) -> dict[str, int]:
     placeholders = ",".join("?" for _ in names)
     sql = f"""
@@ -614,6 +648,23 @@ def _apply_v5_production_lanes(conn: sqlite3.Connection, applied: list[int]) -> 
         applied.append(5)
 
 
+def _apply_v6_publications_inventory(conn: sqlite3.Connection, applied: list[int]) -> None:
+    m6_checksum = _migration_checksum("publications_inventory", MIGRATION_006)
+    existing_m6 = conn.execute(
+        "SELECT checksum FROM schema_migrations WHERE version = 6"
+    ).fetchone()
+    if existing_m6 and existing_m6["checksum"] != m6_checksum:
+        raise RuntimeError("Checksum de migración 6 no coincide")
+    if not existing_m6:
+        _apply_migration_006(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum, applied_at) "
+            "VALUES (6, 'publications_inventory', ?, ?)",
+            (m6_checksum, _utc_now()),
+        )
+        applied.append(6)
+
+
 def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
     indexes = (
         "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
@@ -642,6 +693,7 @@ def migrate_database(
             _apply_v3_scene_assets(conn, applied)
             _apply_v4_observability(conn, applied)
             _apply_v5_production_lanes(conn, applied)
+            _apply_v6_publications_inventory(conn, applied)
             _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry

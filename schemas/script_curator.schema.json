@@ -43,6 +43,14 @@
             "minimum": 1,
             "maximum": 5
           }
+        },
+        "predictive_success_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "score_rationale": {
+          "type": "string"
         }
       },
       "required": [

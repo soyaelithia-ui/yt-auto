@@ -124,9 +124,25 @@ class SeoOptimizerAgent:
 
         if run_harness:
             try:
+                recent_titles_prompt = ""
+                try:
+                    from src.core.inventory import get_inventory_ai_digest
+                    channel_scope = niche if niche in ("moku", "aelithia", "horror", "drama") else None
+                    digest = get_inventory_ai_digest(channel=channel_scope, limit=12)
+                    titles = [p["title"] for p in digest.get("recent_publications", []) if p.get("title")]
+                    if titles:
+                        recent_titles_prompt = (
+                            "\n\nIMPORTANT - PREVIOUSLY PUBLISHED TITLES IN INVENTORY:\n"
+                            + "\n".join(f"- {t}" for t in titles[:10])
+                            + "\nYou MUST generate NOVEL, unique hooks that do NOT duplicate or closely mimic any of the above titles."
+                        )
+                except Exception:
+                    recent_titles_prompt = ""
+
                 task_prompt = (
                     f"Generate YouTube SEO metadata for topic '{topic}' in format '{fmt}' and niche '{niche}'.\n"
                     "Include 3 viral titles, description with timestamps, tags, hashtags, pinned comment, and thumbnail concepts."
+                    f"{recent_titles_prompt}"
                 )
                 agent = ProgrammaticAgent(
                     system_instructions=SYSTEM_INSTRUCTIONS,

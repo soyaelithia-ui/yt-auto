@@ -28,6 +28,7 @@ data/worksets/*
 *.sqlite3
 *.zip
 
+secrets
 secrets/
 browser_data/
 data/browser_profiles/

@@ -17,6 +17,7 @@ from src.cli.handlers import (
     handle_backup,
     handle_clean,
     handle_daemon,
+    handle_inventory,
     handle_lanes,
     handle_loop,
     handle_mcp,
@@ -40,6 +41,7 @@ CANONICAL_SUBCOMMANDS = {
     "clean",
     "auth",
     "backup",
+    "inventory",
     "migrate",
     "service",
     "lanes",
@@ -327,6 +329,8 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_auth(args, parser)
     if subcommand == "backup":
         return handle_backup(args, parser)
+    if subcommand == "inventory":
+        return handle_inventory(args, parser)
     if subcommand == "migrate":
         return handle_migrate(args, parser)
     if subcommand == "service":

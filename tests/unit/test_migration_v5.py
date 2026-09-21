@@ -33,7 +33,7 @@ class TestMigrationV5:
                 row["version"]
                 for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version")
             ]
-        assert versions == [1, 2, 3, 4, 5]
+        assert [1, 2, 3, 4, 5] <= versions
 
     def test_additive_columns_present(self, db_path):
         with connect(db_path, read_only=True) as conn:

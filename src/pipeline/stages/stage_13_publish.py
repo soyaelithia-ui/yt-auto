@@ -278,6 +278,30 @@ def _finalize_published_run(
         expected_description=ctx.youtube_description,
     )
     ctx.repository.mark_published(ctx.story_id, ctx.run_id, proof, provider=str(result["method"]), owner=ctx.owner)
+    try:
+        from src.core.inventory import record_published_inventory
+        record_published_inventory(
+            db_path=ctx.database,
+            run_id=ctx.run_id,
+            story_id=ctx.story_id,
+            video_id=proof.video_id,
+            url=proof.url,
+            channel=ctx.channel_name,
+            title=proof.title,
+            description=proof.description,
+            provider=str(result["method"]),
+            visibility=proof.visibility,
+            video_sha256=getattr(ctx, "video_sha256", None) or ctx.file_fingerprints.get("video"),
+            drive_video_id=getattr(ctx, "drive_video_id", None) or (ctx.drive_proof.file_id if getattr(ctx, "drive_proof", None) else None),
+            full_script=getattr(ctx, "clean_script", None) or getattr(ctx, "script", None),
+            used_resources={
+                "loop": str(getattr(ctx, "resolved_loop_path", "")),
+                "music": str(getattr(ctx, "music_track_path", "")),
+                "voice": getattr(ctx.lane, "voice", ""),
+            },
+        )
+    except Exception as inv_exc:
+        logger.warning("Failed to record publication in inventory: %s", inv_exc)
     if getattr(ctx, "review_contract", None) is not None:
         try:
             ctx.review_contract.status = ReviewStatus.PUBLISHED.value

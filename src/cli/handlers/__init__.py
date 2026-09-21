@@ -3,6 +3,7 @@ from src.cli.handlers.auth import handle_auth
 from src.cli.handlers.backup import handle_backup
 from src.cli.handlers.clean import handle_clean
 from src.cli.handlers.daemon import handle_daemon
+from src.cli.handlers.inventory import handle_inventory
 from src.cli.handlers.lanes import handle_lanes
 from src.cli.handlers.loop import handle_loop
 from src.cli.handlers.mcp import handle_mcp
@@ -22,6 +23,7 @@ __all__ = [
     "handle_clean",
     "handle_auth",
     "handle_backup",
+    "handle_inventory",
     "handle_migrate",
     "handle_service",
     "handle_lanes",
