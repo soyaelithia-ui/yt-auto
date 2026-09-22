@@ -195,10 +195,16 @@ def _chunk_cues(word_timestamps, max_words: int) -> list[list[dict]]:
             chunks.append(current)
     merged: list[list[dict]] = []
     for chunk in chunks:
-        if merged and _dangling_base(_word_text(chunk[0]).strip()):
+        if merged and _dangling_base(_word_text(merged[-1][-1]).strip()):
             merged[-1].extend(chunk)
         else:
             merged.append(chunk)
+    if merged and _dangling_base(_word_text(merged[-1][-1]).strip()):
+        if len(merged) > 1 and len(merged[-1]) == 1:
+            last = merged.pop()
+            merged[-1].extend(last)
+        elif len(merged[-1]) > 1:
+            merged[-1].pop()
     return merged
 
 
@@ -449,17 +455,26 @@ def _repair_dangling_events(
     events: list[tuple[float, float, str]],
 ) -> list[tuple[float, float, str]]:
     """Merge dangling tails forward so no cue ends on a dangling word."""
-    for _ in range(3):
+    for _ in range(5):
         fixed = False
         merged: list[tuple[float, float, str]] = []
         for start, end, text in events:
             if merged and _line_ends_dangling(merged[-1][2]):
-                prev_parts = merged[-1][2].split(" ")
-                stolen = prev_parts[-1]
-                head = " ".join(prev_parts[:-1]).strip()
-                if head and stolen:
-                    merged[-1] = (merged[-1][0], merged[-1][1], head)
-                    text = stolen + " " + text
+                prev_text = merged[-1][2]
+                clean_parts = _strip_ass_tags(prev_text).replace(r"\N", " ").replace("\n", " ").split()
+                if len(clean_parts) > 1:
+                    stolen = clean_parts[-1]
+                    idx = prev_text.rfind(stolen)
+                    if idx != -1:
+                        head = prev_text[:idx].rstrip(" \\\nN")
+                        if head:
+                            merged[-1] = (merged[-1][0], merged[-1][1], head)
+                            text = stolen + " " + text
+                            fixed = True
+                elif len(clean_parts) == 1:
+                    t0, _, single_word = merged.pop()
+                    start = min(start, t0)
+                    text = single_word + " " + text
                     fixed = True
             merged.append((start, end, text))
         events = merged

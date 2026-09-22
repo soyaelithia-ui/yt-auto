@@ -254,9 +254,9 @@ class CircuitBreaker:
     def record_success(self) -> None:
         self._failures = 0
 
-    def record_failure(self) -> None:
+    def record_failure(self, error_text: str = "") -> None:
         self._failures += 1
-        if self._failures >= self.failure_threshold:
+        if (error_text and is_saturation_text(error_text)) or self._failures >= self.failure_threshold:
             self._open_until = time.time() + self.cooldown_seconds
 
     def reset(self) -> None:
@@ -530,11 +530,11 @@ class ProgrammaticAgent:
                 duration_seconds = data.get("duration_seconds")
                 structured_output = data.get("structured_output")
             except AgentSaturationError as exc:
-                self.circuit_breaker.record_failure()
+                self.circuit_breaker.record_failure(str(exc))
                 error = str(exc)
                 status = "saturated"
             except Exception as exc:
-                self.circuit_breaker.record_failure()
+                self.circuit_breaker.record_failure(str(exc))
                 error = str(exc)
                 status = "error"
             else:

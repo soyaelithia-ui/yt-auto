@@ -243,6 +243,7 @@ async def _dynamic_procedural_fallback(
 
     existing_titles, existing_texts = _get_procedural_history(path, channel_key)
     needed = min(3, target_depth)
+    story_agent_exhausted = False
 
     for i in range(needed):
         seed = int(time.time()) + i
@@ -254,7 +255,7 @@ async def _dynamic_procedural_fallback(
 
         content = ""
         prefix = "AI-LONG" if is_lane_long else "AI-SHORT"
-        if not is_pipeline_test_environment() or bool(os.environ.get("USE_AGENT_HARNESS") in ("1", "true")):
+        if not story_agent_exhausted and (not is_pipeline_test_environment() or bool(os.environ.get("USE_AGENT_HARNESS") in ("1", "true"))):
             try:
                 from src.agents.story_director import StoryDirectorAgent
                 story_agent = StoryDirectorAgent()
@@ -270,6 +271,7 @@ async def _dynamic_procedural_fallback(
             except Exception as story_err:
                 logger.warning("StoryDirectorAgent exhausted/failed (%s); falling back to narrative director", story_err)
                 content = ""
+                story_agent_exhausted = True
 
         if not content:
             if is_lane_long:
