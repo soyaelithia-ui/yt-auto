@@ -62,7 +62,7 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             target_format=target_fmt,
             niche=getattr(ctx.lane, "story_type", "") or ctx.channel_name,
             use_agent=use_agent_real,
-            fail_closed=not is_test_environment(),
+            fail_closed=False,
         )
         if seo_res.get("selected_title") and not is_test_environment():
             ctx.youtube_title = str(seo_res["selected_title"]).strip()

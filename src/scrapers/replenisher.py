@@ -252,20 +252,26 @@ async def _dynamic_procedural_fallback(
         target_fmt = "longform" if is_lane_long else "short"
         words_target = getattr(lane, "words_min", 2600) if is_lane_long else getattr(lane, "words_min", 160)
 
+        content = ""
+        prefix = "AI-LONG" if is_lane_long else "AI-SHORT"
         if not is_pipeline_test_environment() or bool(os.environ.get("USE_AGENT_HARNESS") in ("1", "true")):
-            from src.agents.story_director import StoryDirectorAgent
-            story_agent = StoryDirectorAgent()
-            story_res = story_agent.generate_story(
-                topic=title,
-                channel=channel_key,
-                target_format=target_fmt,
-                target_words=words_target,
-            )
-            content = story_res.get("script", "")
-            if story_res.get("title"):
-                title = story_res["title"]
-            prefix = "AI-LONG" if is_lane_long else "AI-SHORT"
-        else:
+            try:
+                from src.agents.story_director import StoryDirectorAgent
+                story_agent = StoryDirectorAgent()
+                story_res = story_agent.generate_story(
+                    topic=title,
+                    channel=channel_key,
+                    target_format=target_fmt,
+                    target_words=words_target,
+                )
+                content = story_res.get("script", "")
+                if story_res.get("title"):
+                    title = story_res["title"]
+            except Exception as story_err:
+                logger.warning("StoryDirectorAgent exhausted/failed (%s); falling back to narrative director", story_err)
+                content = ""
+
+        if not content:
             if is_lane_long:
                 content = director.build_longform(
                     channel_key,
