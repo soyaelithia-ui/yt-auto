@@ -7,10 +7,12 @@ Directivas de inteligencia artificial generativa, arquitectura de agentes en `sr
 
 ---
 
-## 1. Política AI-First y Falla Cerrada (Fail-Closed)
+## 1. Política AI-First y Conmutación por Cuota (Graceful Procedural Fallback)
 
 > [!IMPORTANT]
-> **Principio Fundamental**: Las tareas creativas y semánticas (curación y estructuración de guiones, traducción adaptativa y optimización SEO) DEBEN ser ejecutadas exclusivamente por modelos de IA. Si la cadena de proveedores se agota por cuotas o saturación, el sistema **falla cerrado** elevando `AIProviderChainExhausted` para reintentar tras enfriamiento.
+> **Principio Fundamental**: Las tareas creativas y semánticas (curación y estructuración de guiones, traducción adaptativa y optimización SEO) son ejecutadas prioritariamente por modelos de IA a través del arnés nativo de Antigravity CLI (`gemini-3.8-flash-high`) para consumir la cuota Pro del usuario.
+>
+> Si la cuota de la cuenta o del proveedor se satura (HTTP 429, `RESOURCE_EXHAUSTED` o circuit breaker abierto), el sistema **no detiene el demonio de producción**: activa un enfriamiento temporal de 300 segundos y conmuta de manera elegante a plantillas narrativas procedurales (`_procedural_fallback_story`) y fórmulas SEO determinísticas (`_deterministic_seo`) para asegurar continuidad de publicación.
 
 El renderizado FFmpeg con `LoopVideoEngine`, subtítulos ASS, miniaturas y operaciones de base de datos son **100% código determinista local**.
 
@@ -42,10 +44,11 @@ src/agents/
 ### Funciones de los Agentes
 
 1. **`ProgrammaticAgent` (`base_agent.py`)**:
-   - Gestiona el arnés de ejecución nativo con cliente de streaming persistente NDJSON (`stream-json`) y SDK oficial `google-antigravity`.
-   - Autenticación 100% nativa con cuota Pro mediante sesión OAuth (`antigravity-oauth-token`) sin necesidad de API keys.
+   - Gestiona el arnés de ejecución nativo priorizando el cliente de streaming persistente NDJSON (`stream-json`) del CLI oficial de Antigravity (`/usr/local/bin/agy`) para aprovechar la suscripción y cuotas Pro del usuario.
+   - Soporte secundario del SDK oficial `google-antigravity` cuando se configura explícitamente `USE_ANTIGRAVITY_SDK=1` y `GEMINI_API_KEY`.
+   - Autenticación limpia mediante el volumen persistente de sesión `yt_agy_home:/home/appuser/.gemini` sin requerir inyecciones manuales ni scraping de tokens del host.
    - Aislamiento Multi-Instancia: directorio AppData (`.bot_home_{instance_id}/.gemini/antigravity-cli`) y `CircuitBreaker.get(instance_id)` independientes por instancia para evitar colisiones y saturación cruzada.
-   - Soporte de modulación de esfuerzo de razonamiento (`--effort low|medium|high`) y poda automática de trayectorias efímeras (`cleanup_ephemeral_sessions`).
+   - Control de saturación: ante errores 429 o saturación, marca el circuito como abierto y devuelve envolturas `status="saturated"`, permitiendo que los agentes de historia y SEO ejecuten sus respaldos determinísticos.
 2. **`CinematicScriptCuratorAgent` (`script_curator.py`)**:
    - Estructura guiones en 4 actos con gancho inicial (0-3s), sincronización de pausas dramáticas y franja segura de subtitulado.
    - Opera en `instance_id="pipeline_creative"` con esfuerzo `high` para máxima profundidad narrativa.

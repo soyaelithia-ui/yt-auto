@@ -18,7 +18,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 
-from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent, parse_json_reply
+from src.agents.base_agent import (
+    CANONICAL_MODEL,
+    CircuitBreaker,
+    ProgrammaticAgent,
+    is_saturation_text,
+    parse_json_reply,
+)
 from src.core.domain import AIProviderChainExhausted
 from src.log import get_logger
 
@@ -54,6 +60,7 @@ class SeoOptimizerAgent:
         self.schema_path = schema_file or SCHEMA_PATH
         self.model = model
         self.instance_id = instance_id
+        self.circuit_breaker = CircuitBreaker.get(self.instance_id)
         self.reasoning_effort = reasoning_effort
         self._schema: Optional[Dict[str, Any]] = None
         if self.schema_path.is_file():
@@ -134,6 +141,13 @@ class SeoOptimizerAgent:
             or not is_test_environment()
         )
 
+        if self.circuit_breaker.is_open():
+            logger.warning(
+                "Antigravity SEO agent circuit breaker open for '%s'; using deterministic fallback",
+                self.instance_id,
+            )
+            return self._deterministic_seo(topic, fmt, niche)
+
         if run_harness:
             try:
                 recent_titles_prompt = ""
@@ -167,6 +181,11 @@ class SeoOptimizerAgent:
                 result_path = agent.run(task_prompt)
                 consumed = ProgrammaticAgent.consume(result_path)
                 output_doc = consumed.get("output", {})
+                if consumed.get("result") == "saturated" or output_doc.get("status") == "saturated":
+                    self.circuit_breaker.record_failure("saturated")
+                    logger.warning("Antigravity SEO agent returned saturated result; using deterministic fallback")
+                    return self._deterministic_seo(topic, fmt, niche)
+
                 structured = output_doc.get("structured_output")
                 if isinstance(structured, dict) and "selected_title" in structured:
                     self.validate_metadata(structured)
@@ -178,9 +197,13 @@ class SeoOptimizerAgent:
                 if fail_closed:
                     raise AIProviderChainExhausted("SeoOptimizerAgent respuesta sin titulo estructurado")
             except Exception as exc:
-                if fail_closed and not is_test_environment():
+                if is_saturation_text(str(exc)):
+                    self.circuit_breaker.record_failure(str(exc))
+                    logger.warning("Antigravity SEO agent saturated (%s); using deterministic fallback", exc)
+                elif fail_closed and not is_test_environment():
                     raise AIProviderChainExhausted(f"SeoOptimizerAgent fallo en optimizacion: {exc}") from exc
-                logger.warning("Antigravity SEO agent fallback to algorithmic engine: %s", exc)
+                else:
+                    logger.warning("Antigravity SEO agent fallback to algorithmic engine: %s", exc)
 
         return self._deterministic_seo(topic, fmt, niche)
 

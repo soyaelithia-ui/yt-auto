@@ -3,7 +3,7 @@
 set -e
 
 if [ ! -x /usr/local/bin/agy ]; then
-  echo "yt-auto: Antigravity CLI missing at /usr/local/bin/agy. Rebuild after ./scripts/stage_agy.sh" >&2
+  echo "yt-auto: Antigravity CLI missing at /usr/local/bin/agy. Rebuild image with official installer." >&2
   exit 1
 fi
 
