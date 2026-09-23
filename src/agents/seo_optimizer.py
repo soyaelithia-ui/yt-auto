@@ -60,8 +60,20 @@ class SeoOptimizerAgent:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
 
+    @staticmethod
+    def _clamp_titles(metadata: Dict[str, Any]) -> None:
+        """Ensure all titles strictly observe YouTube's 100-character ceiling at word boundary."""
+        from src.branding import truncate_at_word_boundary
+        if "selected_title" in metadata and isinstance(metadata["selected_title"], str):
+            metadata["selected_title"] = truncate_at_word_boundary(metadata["selected_title"].strip(), 100)
+        if "viral_title_options" in metadata and isinstance(metadata["viral_title_options"], list):
+            metadata["viral_title_options"] = [
+                truncate_at_word_boundary(str(t).strip(), 100) for t in metadata["viral_title_options"]
+            ]
+
     def validate_metadata(self, metadata: Dict[str, Any]) -> None:
         """Validates output against schemas/seo_metadata.schema.json."""
+        self._clamp_titles(metadata)
         if self._schema:
             jsonschema.validate(instance=metadata, schema=self._schema)
 
@@ -174,6 +186,8 @@ class SeoOptimizerAgent:
 
     def _deterministic_seo(self, topic: str, target_format: str, niche: str) -> Dict[str, Any]:
         """Algorithmic viral formulas with zero API dependencies, ported from Temp-."""
+        from src.branding import truncate_at_word_boundary
+
         clean_topic = topic.strip()
         slug = re.sub(r"[^A-Za-z0-9]", "", clean_topic)
         if not slug:
@@ -182,31 +196,48 @@ class SeoOptimizerAgent:
         niche_l = (niche or "").lower()
         is_scp = "scp" in clean_topic.lower() or "scp" in niche_l
         is_moku_horror = any(k in niche_l or k in clean_topic.lower() for k in ("moku", "horror", "terror", "creepy", "nosleep"))
+        is_drama = any(k in niche_l or k in clean_topic.lower() for k in ("drama", "aita", "aelithia", "relato", "confesion", "infidelidad", "boda", "familia")) or clean_topic.startswith("¿")
+
         if is_scp or is_moku_horror:
             if is_scp:
-                viral_titles = [
-                    f"El Secreto Prohibido de {clean_topic} (Clase Thaumiel)",
-                    f"¿Qué Oculta Realmente {clean_topic}? La Verdad de la Fundación",
-                    f"NUNCA Mires los Archivos de {clean_topic} a Solas",
-                ]
+                if len(clean_topic) > 40:
+                    viral_titles = [
+                        f"[CLASIFICADO] {clean_topic}",
+                        f"Expediente SCP: {clean_topic}",
+                        f"NUNCA abras este archivo: {clean_topic}",
+                    ]
+                else:
+                    viral_titles = [
+                        f"El Secreto Prohibido de {clean_topic} (Clase Thaumiel)",
+                        f"¿Qué Oculta Realmente {clean_topic}? La Verdad de la Fundación",
+                        f"NUNCA Mires los Archivos de {clean_topic} a Solas",
+                    ]
             else:
-                viral_titles = [
-                    f"Lo que pasó en {clean_topic} (nadie volvió igual)",
-                    f"NUNCA ignores esta advertencia sobre {clean_topic}",
-                    f"Escuché esto sobre {clean_topic}… y no pude dormir",
-                ]
+                if len(clean_topic) > 40:
+                    viral_titles = [
+                        clean_topic,
+                        f"Lo que pasó: {clean_topic}",
+                        f"NUNCA ignores esto: {clean_topic}",
+                    ]
+                else:
+                    viral_titles = [
+                        f"Lo que pasó en {clean_topic} (nadie volvió igual)",
+                        f"NUNCA ignores esta advertencia sobre {clean_topic}",
+                        f"Escuché esto sobre {clean_topic}… y no pude dormir",
+                    ]
+            viral_titles = [truncate_at_word_boundary(t, 100) for t in viral_titles]
             selected_title = viral_titles[0]
             description = (
-                f"⚠️ ARCHIVO CLASIFICADO: Descubre los expedientes secretos sobre {clean_topic}.\n\n"
+                f"⚠️ ARCHIVO CLASIFICADO: Descubre los expedientes secretos sobre {truncate_at_word_boundary(clean_topic, 60)}.\n\n"
                 "📌 Suscríbete y activa la campana para más accesos autorizados de la Fundación SCP.\n\n"
                 "⏱️ Marcas de tiempo:\n"
                 "0:00 Entrada y Hook de Contención\n"
                 "0:15 Los Procedimientos Especiales\n"
                 "0:45 Revelación Final y Conclusión\n\n"
-                f"#{slug} #SCPFoundation #Misterio #Viral"
+                f"#{slug[:15]} #SCPFoundation #Misterio #Viral"
             )
             tags = [
-                clean_topic.lower(),
+                truncate_at_word_boundary(clean_topic.lower(), 40),
                 "scp",
                 "scp foundation",
                 "archivos secretos",
@@ -215,8 +246,8 @@ class SeoOptimizerAgent:
                 "misterio",
                 target_format,
             ]
-            hashtags = [f"#{slug}", "#SCPFoundation", "#Misterio", "#Viral"]
-            pinned_comment = f"👇 ¿Crees que la Fundación tomó la decisión correcta con {clean_topic}? ¡Debatamos en los comentarios!"
+            hashtags = [f"#{slug[:15]}", "#SCPFoundation", "#Misterio", "#Viral"]
+            pinned_comment = f"👇 ¿Crees que la Fundación tomó la decisión correcta con {truncate_at_word_boundary(clean_topic, 40)}? ¡Debatamos en los comentarios!"
             seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
             horror_headlines = [
                 "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
@@ -240,33 +271,100 @@ class SeoOptimizerAgent:
                     "facial_expression": "Sujeto en penumbra de espaldas al abismo",
                 },
             ]
-        else:
-            viral_titles = [
-                f"El Secreto Oculto de {clean_topic} que Nadie te Dice",
-                f"NUNCA HAGAS ESTO con {clean_topic} (La Verdad Revelada)",
-                f"Cómo Dominar {clean_topic} en Tiempo Récord [2026]",
-            ]
+        elif is_drama:
+            if clean_topic.startswith("¿") or len(clean_topic) > 35:
+                viral_titles = [
+                    clean_topic,
+                    f"{clean_topic} (La verdad oculta)",
+                    f"{clean_topic} ¿Hice lo correcto?",
+                ]
+            else:
+                viral_titles = [
+                    f"¿Soy la mala por lo que pasó con {clean_topic}?",
+                    f"NUNCA imaginé la traición tras {clean_topic}",
+                    f"La verdad sobre {clean_topic} que nadie sospechaba",
+                ]
+            viral_titles = [truncate_at_word_boundary(t, 100) for t in viral_titles]
             selected_title = viral_titles[0]
             description = (
-                f"🔥 En este video revelamos todo lo que necesitas saber sobre {clean_topic}.\n\n"
+                f"💭 En este relato revelamos todos los detalles sobre {truncate_at_word_boundary(clean_topic, 60)}.\n\n"
+                "📌 Suscríbete y activa la campanita para más historias y confesiones.\n\n"
+                "⏱️ Marcas de tiempo:\n"
+                "0:00 Introducción y Dilema\n"
+                "0:15 El Conflicto Principal\n"
+                "0:45 Desenlace y Juicio Moral\n\n"
+                f"#{slug[:15]} #HistoriasReales #Confesiones #Viral"
+            )
+            tags = [
+                truncate_at_word_boundary(clean_topic.lower(), 40),
+                "historias de reddit",
+                "aita",
+                "relatos",
+                "confesiones",
+                "drama",
+                "dilemas morales",
+                target_format,
+            ]
+            hashtags = [f"#{slug[:15]}", "#HistoriasReales", "#Confesiones", "#Viral"]
+            pinned_comment = f"👇 ¿Tú qué habrías hecho en esta situación? ¡Déjame tu opinión en los comentarios!"
+            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
+            drama_headlines = [
+                "¡NO COMETAS ESTE ERROR! 🚨",
+                "EL SECRETO MEJOR GUARDADO ❌",
+                "TRAICIÓN AL DESCUBIERTO ⚡",
+                "LA VERDAD QUE OCULTABAN 💥",
+                "DESENMASCARADO ANTE TODOS ⚖️",
+                "TODO FUE UNA MENTIRA 💔",
+            ]
+            thumbnail_concepts = [
+                {
+                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación de recorte volumétrica de alto impacto, sujeto focal misterioso en primer plano sobre fondo oscuro",
+                    "big_headline": drama_headlines[seed_hash % len(drama_headlines)],
+                    "color_palette": ["#FF0000", "#FFFFFF", "#000000", "#FFD700"],
+                    "facial_expression": "Expresión de impacto y mirada directa intrigante",
+                },
+                {
+                    "visual_layout": "Composición Claroscuro de tensión: fondo oscuro minimalista con resplandor neón dorado y sujeto focal intrigante recortado",
+                    "big_headline": drama_headlines[(seed_hash + 1) % len(drama_headlines)],
+                    "color_palette": ["#00FF88", "#111827", "#F59E0B"],
+                    "facial_expression": "Sujeto focal en sombra señalando hacia el misterio",
+                },
+            ]
+        else:
+            if len(clean_topic) > 40:
+                viral_titles = [
+                    clean_topic,
+                    f"La verdad sobre {clean_topic}",
+                    f"Lo que ocultan de {clean_topic}",
+                ]
+            else:
+                viral_titles = [
+                    f"El Secreto Oculto de {clean_topic} que Nadie te Dice",
+                    f"NUNCA HAGAS ESTO con {clean_topic} (La Verdad Revelada)",
+                    f"Cómo Dominar {clean_topic} en Tiempo Récord [2026]",
+                ]
+            viral_titles = [truncate_at_word_boundary(t, 100) for t in viral_titles]
+            selected_title = viral_titles[0]
+            description = (
+                f"🔥 En este video revelamos todo lo que necesitas saber sobre {truncate_at_word_boundary(clean_topic, 60)}.\n\n"
                 "📌 Suscríbete y activa la campanita para más contenido exclusivo.\n\n"
                 "⏱️ Marcas de tiempo:\n"
                 "0:00 Introducción y Hook\n"
                 "0:15 El Gran Descubrimiento\n"
                 "0:45 Conclusión y Llamado a la Acción\n\n"
-                f"#{slug} #Historias #Relatos #Viral"
+                f"#{slug[:15]} #Historias #Relatos #Viral"
             )
             tags = [
-                clean_topic.lower(),
-                f"{clean_topic.lower()} explicacion",
+                truncate_at_word_boundary(clean_topic.lower(), 40),
+                f"{truncate_at_word_boundary(clean_topic.lower(), 30)} explicacion",
                 "curiosidades",
                 "historias",
                 "datos fascinantes",
                 niche.lower(),
                 target_format,
             ]
-            hashtags = [f"#{slug}", "#Curiosidades", "#YouTubeShorts" if target_format == "short" else "#YouTube", "#Viral"]
-            pinned_comment = f"👇 ¿Cuál fue el dato que más te sorprendió sobre {clean_topic}? ¡Déjalo abajo!"
+            hashtags = [f"#{slug[:15]}", "#Curiosidades", "#YouTubeShorts" if target_format == "short" else "#YouTube", "#Viral"]
+            pinned_comment = f"👇 ¿Cuál fue el dato que más te sorprendió sobre {truncate_at_word_boundary(clean_topic, 40)}? ¡Déjalo abajo!"
             seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
             drama_headlines = [
                 "¡NO COMETAS ESTE ERROR! 🚨",

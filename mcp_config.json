@@ -10,6 +10,13 @@
         "PYTHONPATH": ".",
         "YT_PROFILE": "cli"
       }
+    },
+    "engram": {
+      "command": "engram",
+      "args": [
+        "mcp",
+        "--tools=agent"
+      ]
     }
   }
 }

@@ -65,7 +65,10 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             fail_closed=False,
         )
         if seo_res.get("selected_title") and not is_test_environment():
-            ctx.youtube_title = str(seo_res["selected_title"]).strip()
+            ctx.youtube_title = ctx.branding.generate_title(str(seo_res["selected_title"]).strip())
+        if len(ctx.youtube_title) > 100:
+            from src.branding import truncate_at_word_boundary
+            ctx.youtube_title = truncate_at_word_boundary(ctx.youtube_title, 100)
         thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
         thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
         thumb_prompt = (

@@ -177,17 +177,29 @@ def publish(payload: Dict[str, Any]) -> Dict[str, Any]:
     branding = get_channel_branding(channel)
     title = str(payload.get("title") or "")
     description = str(payload.get("description") or "")
-    backup_fn = getattr(sys.modules[__name__], "_backup_drive", _backup_drive)
-    drive_backup = backup_fn(
-        job_id=job_id,
-        channel=channel,
-        original_video_path=original_video_path,
-        thumbnail_path=payload.get("thumbnail_path"),
-        version=version,
-        title=title,
-        description=description,
-        settings=settings,
-    )
+    drive_backup = None
+    try:
+        backup_fn = getattr(sys.modules[__name__], "_backup_drive", _backup_drive)
+        drive_backup = backup_fn(
+            job_id=job_id,
+            channel=channel,
+            original_video_path=original_video_path,
+            thumbnail_path=payload.get("thumbnail_path"),
+            version=version,
+            title=title,
+            description=description,
+            settings=settings,
+        )
+    except Exception as drive_err:
+        require_drive = (
+            os.environ.get("REQUIRE_DRIVE", "0").strip().lower() not in ("0", "false", "no")
+        )
+        if require_drive:
+            raise
+        logger.warning(
+            "Drive backup falló en review adapter (continuando a YouTube porque REQUIRE_DRIVE=0): %s",
+            drive_err,
+        )
     uploader_fn = getattr(sys.modules[__name__], "upload_video", upload_video)
     youtube_result = uploader_fn(
         video_path=original_video_path,

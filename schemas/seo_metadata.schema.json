@@ -21,12 +21,14 @@
       "minItems": 3,
       "items": {
         "type": "string",
-        "minLength": 5
+        "minLength": 5,
+        "maxLength": 100
       }
     },
     "selected_title": {
       "type": "string",
-      "minLength": 5
+      "minLength": 5,
+      "maxLength": 100
     },
     "description": {
       "type": "string",

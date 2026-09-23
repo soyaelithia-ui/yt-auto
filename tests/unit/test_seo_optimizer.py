@@ -42,5 +42,22 @@ class TestSeoOptimizerAgent(unittest.TestCase):
         self.assertTrue(any("scp" in t.lower() for t in data["viral_title_options"]))
 
 
+    def test_optimize_long_topic_never_exceeds_100_chars(self):
+        """Long topics (e.g. Reddit AITA questions > 80 chars) must strictly never exceed 100 chars."""
+        long_drama = "¿Soy la mala por negarme a prestar mis ahorros para un viaje familiar después de que me excluyeron de todas las decisiones?"
+        data = self.optimizer.optimize(long_drama, target_format="short", niche="drama")
+        self.optimizer.validate_metadata(data)
+        self.assertLessEqual(len(data["selected_title"]), 100)
+        for t in data["viral_title_options"]:
+            self.assertLessEqual(len(t), 100)
+
+        long_scp = "El horror acecha en laboratorios biológicos subterráneos en cuarentena durante la noche en una base polar desconocida"
+        data_scp = self.optimizer.optimize(long_scp, target_format="short", niche="scp")
+        self.optimizer.validate_metadata(data_scp)
+        self.assertLessEqual(len(data_scp["selected_title"]), 100)
+        for t in data_scp["viral_title_options"]:
+            self.assertLessEqual(len(t), 100)
+
+
 if __name__ == "__main__":
     unittest.main()

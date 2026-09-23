@@ -156,52 +156,90 @@ def _generate_procedural_title(
     themes_to_use: tuple[str, ...],
     existing_titles: set[str],
 ) -> tuple[str, str]:
-    """Generate a unique title and theme for dynamic story fallback."""
+    """Generate a unique, high-CTR title and theme for dynamic story fallback."""
     theme = themes_to_use[(seed + i) % len(themes_to_use)]
+    is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
+
     horror_hooks = (
-        "El terror de", "La misteriosa entidad en", "No debí entrar jamás a",
-        "La pesadilla olvidada en", "El horror acecha en", "La señal prohibida desde",
-        "El misterio sin resolver en", "El peligro oculto en", "Lo que encontramos en",
-        "La presencia siniestra en",
+        "El enigma sin resolver en",
+        "No debimos entrar jamás a",
+        "Lo que encontramos en",
+        "El secreto aterrador de",
+        "El peligro oculto en",
+        "La advertencia olvidada de",
+        "El registro prohibido de",
+        "La presencia inexplicable en",
+        "La criatura atrapada en",
+        "El informe clasificado sobre",
+    )
+    horror_qualifiers = (
+        "que nadie se atreve a investigar",
+        "donde desapareció la expedición",
+        "oculto bajo tierra durante décadas",
+        "que la fundación intentó borrar",
+        "del que nadie logró regresar",
+        "que los guardias juraron olvidar",
+        "tras romper el protocolo de seguridad",
+        "que encontramos en la grabación perdida",
+        "que la policía se negó a registrar",
     )
     drama_short_hooks = (
-        "cancelar mi boda por", "cortar contacto con mi familia por",
-        "negarme a prestar mis ahorros por", "vender la propiedad familiar por",
-        "echar a mis parientes por", "no invitar a mi hermana por",
-        "rechazar el chantaje ante", "renunciar al patrimonio por",
-        "expulsar a mi suegra tras", "bloquear las cuentas conjuntas tras",
-        "exigir el pago de la deuda ante", "cambiar las cerraduras de casa tras",
+        "cancelar mi boda tras descubrir",
+        "cortar contacto con mi familia por",
+        "negarme a prestar mis ahorros ante",
+        "vender el patrimonio que pretendían quitarme por",
+        "echar a mis parientes de casa tras",
+        "no invitar a mi hermana tras",
+        "rechazar el chantaje de mis suegros ante",
+        "renunciar al fideicomiso familiar por",
+        "expulsar a mi suegra de mi casa tras",
+        "bloquear las cuentas conjuntas tras",
+        "exigir el pago de la deuda ante",
+        "cambiar las cerraduras de casa tras",
     )
     drama_long_hooks = (
-        "mi decisión ante", "poner límites definitivos ante",
-        "negarme al chantaje familiar por", "cortar lazos de por vida tras",
-        "proteger mi patrimonio frente a", "rechazar la herencia tóxica de",
-        "revelar la verdad familiar tras", "defender mi hogar ante",
+        "poner límites definitivos ante",
+        "negarme al chantaje familiar por",
+        "cortar lazos de por vida tras",
+        "proteger mi patrimonio frente a",
+        "rechazar la herencia tóxica de",
+        "revelar la verdad oculta tras",
+        "defender mi hogar ante",
         "enfrentar las exigencias injustas de",
     )
-    qualifiers = (
-        "tras años de silencio", "ante toda la familia reunida",
-        "ante una traición inesperada", "por una deuda que no me correspondía",
-        "tras descubrir la verdad oculta", "después de poner límites claros",
-        "cuando exigieron lo imposible", "en el momento más difícil",
-        "a espaldas de todos", "tras un ultimátum injusto",
-        "sin pedir disculpas", "ante el chantaje de mis parientes",
+    drama_qualifiers = (
+        "tras años de mentiras",
+        "ante toda la familia reunida",
+        "tras una traición inesperada",
+        "por una deuda que no me correspondía",
+        "tras descubrir la verdad oculta",
+        "después de poner límites claros",
+        "cuando exigieron lo imposible",
+        "en el momento más difícil",
+        "a espaldas de todos",
+        "tras un ultimátum injusto",
+        "sin dar explicaciones",
     )
     attempts = 0
     while attempts < 30:
-        q_part = f" {qualifiers[(seed + i + attempts) % len(qualifiers)]}" if attempts > 0 else ""
-        if is_lane_long:
-            hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)] if "moku" in channel_key else drama_long_hooks[(seed + i + attempts) % len(drama_long_hooks)]
+        if is_horror:
+            hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)]
+            q_part = f" {horror_qualifiers[(seed + i + attempts) % len(horror_qualifiers)]}" if attempts % 2 == 1 else ""
+            cand = f"{hook} {theme}{q_part}"
         else:
-            hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)] if "moku" in channel_key else drama_short_hooks[(seed + i + attempts) % len(drama_short_hooks)]
-        cand = f"{hook} {theme}{q_part} en la noche" if "moku" in channel_key else f"¿Soy la mala por {hook} {theme}{q_part}?"
+            hook = drama_long_hooks[(seed + i + attempts) % len(drama_long_hooks)] if is_lane_long else drama_short_hooks[(seed + i + attempts) % len(drama_short_hooks)]
+            q_part = f" {drama_qualifiers[(seed + i + attempts) % len(drama_qualifiers)]}" if attempts % 2 == 1 else ""
+            cand = f"¿Soy la mala por {hook} {theme}{q_part}?"
         cand_clean = cand.strip().lower()
         if cand_clean not in existing_titles:
             existing_titles.add(cand_clean)
             return cand, theme
         attempts += 1
 
-    cand = f"¿Soy la mala por {drama_short_hooks[i % len(drama_short_hooks)]} {theme} #{seed % 10000}?" if "aelithia" in channel_key else f"{horror_hooks[i % len(horror_hooks)]} {theme} en la noche #{seed % 10000}"
+    if is_horror:
+        cand = f"{horror_hooks[i % len(horror_hooks)]} {theme} (Expediente {seed % 100})"
+    else:
+        cand = f"¿Soy la mala por {drama_short_hooks[i % len(drama_short_hooks)]} {theme} (La Verdad)?"
     existing_titles.add(cand.strip().lower())
     return cand, theme
 
@@ -219,7 +257,6 @@ async def _dynamic_procedural_fallback(
 
     director = get_narrative_director()
     is_lane_long = getattr(lane, "orientation", "") == "horizontal"
-    padding_themes = getattr(lane, "padding_themes", ())
     default_horror_themes = (
         "bosques con niebla", "casas abandonadas", "carreteras nocturnas",
         "hospitales psiquiátricos clausurados", "túneles subterráneos",
@@ -238,8 +275,9 @@ async def _dynamic_procedural_fallback(
         "chantaje de mi hermana menor", "secretos financieros de mi prometido",
         "viaje familiar cancelado a espaldas", "cuidado de padres ancianos delegado",
     )
-    default_themes = default_horror_themes if "moku" in channel_key else default_drama_themes
-    themes_to_use = tuple(padding_themes) + tuple(default_themes)
+    is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
+    default_themes = default_horror_themes if is_horror else default_drama_themes
+    themes_to_use = tuple(default_themes)
 
     existing_titles, existing_texts = _get_procedural_history(path, channel_key)
     needed = min(3, target_depth)

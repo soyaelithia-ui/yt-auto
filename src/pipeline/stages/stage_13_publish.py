@@ -143,6 +143,7 @@ def _handle_review_gate(
         drive_url=drive_url,
         metadata={"code_verdict": verdict_payload} if verdict_payload else None,
     )
+    ctx.review_job_version = getattr(review_job, "version", 1)
 
     auto_approve = (
         is_test_environment()
@@ -309,6 +310,36 @@ def _finalize_published_run(
             ctx.review_contract.published_url = proof.url
         except Exception:
             pass
+    try:
+        from review import ReviewJobManager
+        rm = ReviewJobManager()
+        r_ver = getattr(ctx, "review_job_version", 1)
+        if hasattr(rm, "store") and hasattr(rm.store, "confirm_publication"):
+            try:
+                rm.store.confirm_publication(
+                    ctx.story_id,
+                    r_ver,
+                    published_id=proof.video_id,
+                    published_url=proof.url,
+                )
+            except Exception as st_exc:
+                logger.debug("Review store publication confirmation notice: %s", st_exc)
+        if hasattr(rm, "_notify_published"):
+            rm._notify_published(ctx.story_id, r_ver, proof.url)
+        if hasattr(rm, "bot") and getattr(rm.bot, "chat_id", None) and getattr(rm.bot, "token", None):
+            rm.bot.send_message(
+                chat_id=rm.bot.chat_id,
+                text=(
+                    f"🚀 *Video publicado en YouTube*\n\n"
+                    f"🎬 *{proof.title}*\n"
+                    f"🔗 {proof.url}\n"
+                    f"📺 Canal: `{ctx.channel_name}`\n"
+                    f"🆔 Run: `{ctx.run_id[:8]}`"
+                ),
+                parse_mode="Markdown",
+            )
+    except Exception as notify_exc:
+        logger.warning("Telegram publication notification failed: %s", notify_exc)
     post_commit_errors: list[str] = []
     for kind, payload in ctx.text_fingerprints.items():
         try:
