@@ -1204,7 +1204,10 @@ class LoopStreamCopyMixin:
         category = getattr(self, "normalize_category")(base_env)
 
         loop_file: Optional[Path] = None
-        if hasattr(self, "resolve_loop_video"):
+        asset_cand = getattr(scene, "asset_path", None) or getattr(scene, "loop_path", None)
+        if asset_cand and Path(asset_cand).is_file():
+            loop_file = Path(asset_cand).resolve()
+        elif hasattr(self, "resolve_loop_video"):
             try:
                 cand = self.resolve_loop_video(
                     category=category,

@@ -9,14 +9,16 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.core.contracts.render import RenderSpec
 from src.core.contracts.review import ReviewContract
 from src.core.contracts.story import StoryRecord
 from src.core.domain import JobStatus, LeaseOwnershipError
 from src.core.profiling import PipelineProfiler
-from src.core.repository import QueueRepository
+
+if TYPE_CHECKING:
+    from src.core.repository import QueueRepository
 from src.log import get_logger
 
 logger = get_logger("core.contracts.pipeline")

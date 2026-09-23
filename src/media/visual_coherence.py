@@ -72,9 +72,116 @@ def timing_scales_to_audio(
     return scaled
 
 
+def build_coherent_color_grade(
+    accent_hex: str = "#00FF88",
+    primary_hex: str = "#030A14",
+    channel: str = "moku",
+) -> str:
+    """Generate subtle, filmic FFmpeg color harmony filter.
+
+    Unifies disparate stock loops into a single cohesive visual world matching
+    the channel brand identity without crushing blacks or blowing out highlights.
+    """
+    ch = (channel or "moku").lower()
+    if "drama" in ch or "aelithia" in ch or "aita" in ch:
+        # Warm, cinematic, gentle hearth tones, lifelike skin tones
+        return (
+            "eq=contrast=1.05:saturation=0.96:brightness=0.01:gamma=0.98,"
+            "colorbalance=rs=0.02:gs=0.01:bs=-0.03:rm=0.02:gm=0.01:bm=-0.02"
+        )
+    elif "scifi" in ch or "singularidad" in ch or "space" in ch:
+        # Deep space blacks, cool cyan shadow lift, high micro-contrast
+        return (
+            "eq=contrast=1.08:saturation=0.92:brightness=-0.01:gamma=0.95,"
+            "colorbalance=rs=-0.03:gs=0.01:bs=0.04:rh=-0.02:gh=0.02:bh=0.05"
+        )
+    else:
+        # Default Moku / Horror / SCP: moody dark ambient, subdued saturation, crisp shadow details
+        return (
+            "eq=contrast=1.06:saturation=0.88:brightness=0.00:gamma=0.97,"
+            "colorbalance=rs=-0.02:gs=0.01:bs=0.02:rm=-0.01:gm=0.02:bm=0.01"
+        )
+
+
+def harmonize_scene_transitions(
+    scenes: Sequence[Any],
+    default_transition: float = 0.5,
+) -> List[float]:
+    """Calculate pacing-aware transition durations based on tension differentials."""
+    if not scenes or len(scenes) < 2:
+        return []
+    transitions: List[float] = []
+    for i in range(len(scenes) - 1):
+        s_curr = scenes[i]
+        s_next = scenes[i + 1]
+        t_curr = int(getattr(s_curr, "tension_level", 2) or 2)
+        t_next = int(getattr(s_next, "tension_level", 2) or 2)
+        dur_curr = float(getattr(s_curr, "duration_sec", 4.0) or 4.0)
+        dur_next = float(getattr(s_next, "duration_sec", 4.0) or 4.0)
+        max_t = min(dur_curr, dur_next) * 0.30
+
+        # Big tension jump: quick, punchy cut/xfade (0.25 - 0.4s)
+        # Steady tension: atmospheric, gradual dissolve (0.5 - 0.75s)
+        diff = abs(t_next - t_curr)
+        if diff >= 2:
+            ideal = max(0.2, min(default_transition * 0.6, max_t))
+        elif diff == 1:
+            ideal = max(0.3, min(default_transition * 0.85, max_t))
+        else:
+            ideal = max(0.35, min(default_transition, max_t))
+        transitions.append(round(ideal, 2))
+    return transitions
+
+
+def enforce_shorts_safe_zone(width: int, height: int) -> Dict[str, int]:
+    """Compute YouTube Shorts / TikTok UI safe zone to prevent UI occlusion."""
+    is_vertical = height > width
+    if is_vertical:
+        top_margin = max(180, int(height * 0.10))
+        bottom_margin = max(460, int(height * 0.25))
+        right_margin = max(130, int(width * 0.15))
+        left_margin = max(64, int(width * 0.06))
+    else:
+        top_margin = max(80, int(height * 0.08))
+        bottom_margin = max(120, int(height * 0.12))
+        right_margin = max(80, int(width * 0.08))
+        left_margin = max(80, int(width * 0.08))
+
+    return {
+        "top": top_margin,
+        "bottom": bottom_margin,
+        "left": left_margin,
+        "right": right_margin,
+        "safe_width": width - (left_margin + right_margin),
+        "safe_height": height - (top_margin + bottom_margin),
+    }
+
+
+def validate_visual_continuity(scenes: Sequence[Any]) -> Dict[str, Any]:
+    """Validate visual continuity across scene sequence."""
+    if not scenes:
+        return {"valid": False, "reason": "empty_scenes"}
+    durations = [float(getattr(sc, "duration_sec", 0.0) or 0.0) for sc in scenes]
+    if any(d <= 0.0 for d in durations):
+        return {"valid": False, "reason": "zero_or_negative_duration"}
+    tensions = [int(getattr(sc, "tension_level", 1) or 1) for sc in scenes]
+    transitions = harmonize_scene_transitions(scenes)
+    return {
+        "valid": True,
+        "scene_count": len(scenes),
+        "total_duration": sum(durations),
+        "tensions": tensions,
+        "recommended_transitions": transitions,
+    }
+
+
 __all__ = [
+    "build_coherent_color_grade",
+    "enforce_shorts_safe_zone",
+    "harmonize_scene_transitions",
     "ordered_script_scene_ids",
     "plan_scenes_by_id",
     "timing_scales_to_audio",
+    "validate_visual_continuity",
     "visual_plan_palette",
 ]

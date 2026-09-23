@@ -66,6 +66,9 @@ def _bot_home_for_app_data(app_data_dir: Path) -> Path:
     return directory
 
 
+_SEEDED_SECRETS_CACHE: dict[tuple[str, str], float] = {}
+
+
 def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
     secrets_dir = Path(os.environ.get("SECRETS_DIR", str(PROJECT_ROOT / "secrets")))
     if _is_external_interactive_cli(secrets_dir):
@@ -78,19 +81,30 @@ def _seed_appdata_from_secrets(bot_appdata: Path) -> None:
         src = secrets_dir / name
         if not src.is_file() or _is_external_interactive_cli(src.parent):
             continue
+        try:
+            src_mtime = src.stat().st_mtime
+        except OSError:
+            continue
         for target_dir in targets:
+            cache_key = (str(target_dir.resolve()), name)
+            cached_mtime = _SEEDED_SECRETS_CACHE.get(cache_key)
+            if cached_mtime is not None and cached_mtime >= src_mtime:
+                continue
             try:
                 target_dir.mkdir(parents=True, exist_ok=True)
                 dst = target_dir / name
-                if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+                if dst.exists() and dst.stat().st_mtime >= src_mtime:
+                    _SEEDED_SECRETS_CACHE[cache_key] = src_mtime
                     continue
                 shutil.copy2(src, dst)
                 try:
                     os.chmod(dst, 0o600)
                 except OSError:
                     pass
+                _SEEDED_SECRETS_CACHE[cache_key] = src_mtime
             except OSError as exc:
                 if dst.exists() and dst.stat().st_size > 0:
+                    _SEEDED_SECRETS_CACHE[cache_key] = src_mtime
                     logger.debug("Reusing existing %s despite copy error: %s", dst, exc)
                 else:
                     logger.warning("Could not seed %s into %s: %s", name, target_dir, exc)
@@ -177,12 +191,22 @@ _RETRY_DELAYS = (5.0, 20.0)
 def _resolve_agy_bin() -> Path:
     """Resolve the Antigravity CLI binary from env/config/executable path."""
     configured = os.environ.get("AGY_BIN", "").strip()
-    if configured:
+    if configured and Path(configured).expanduser().is_file():
         return Path(configured).expanduser()
     found = shutil.which("agy")
     if found:
         return Path(found)
-    return PROJECT_ROOT / "agy"
+    candidates = [
+        PROJECT_ROOT / "build" / "agy",
+        PROJECT_ROOT / "agy",
+        Path.home() / ".local" / "bin" / "agy",
+        Path("/usr/local/bin/agy"),
+        Path("/home/moku/.local/bin/agy"),
+    ]
+    for cand in candidates:
+        if cand.is_file():
+            return cand
+    return PROJECT_ROOT / "build" / "agy"
 
 
 def _resolve_agy_bin_path() -> Path:
@@ -332,6 +356,14 @@ class AgyStreamClient:
         bot_appdata = Path(self.app_data_dir)
         bot_appdata.mkdir(parents=True, exist_ok=True)
         _seed_appdata_from_secrets(bot_appdata)
+        # Proactive OAuth token refresh to avoid 401 mid-render
+        tok_file = bot_appdata / "antigravity-oauth-token"
+        if tok_file.is_file():
+            try:
+                from scripts.lib.antigravity_auth import refresh_antigravity_token_if_needed
+                refresh_antigravity_token_if_needed(tok_file)
+            except Exception:
+                pass
         _scrub_external_antigravity_env(cli_env, isolated_root=bot_home)
         gemini_home = (
             bot_appdata.parent if bot_appdata.name == "antigravity-cli" else bot_home / ".gemini"
@@ -389,7 +421,40 @@ class AgyStreamClient:
                 self._process = None
 
 
-_GLOBAL_EXECUTION_LOCK = threading.Lock()
+_STREAM_CLIENTS_POOL: dict[tuple[str, str, str, str], "AgyStreamClient"] = {}
+_STREAM_CLIENTS_LOCK = threading.Lock()
+
+
+def _get_or_create_stream_client(
+    model: str,
+    reasoning_effort: str,
+    app_data_dir: Path,
+    agy_bin_path: Path,
+) -> "AgyStreamClient":
+    key = (str(model), str(reasoning_effort), str(app_data_dir.resolve()), str(agy_bin_path.resolve()))
+    with _STREAM_CLIENTS_LOCK:
+        if key not in _STREAM_CLIENTS_POOL:
+            _STREAM_CLIENTS_POOL[key] = AgyStreamClient(
+                model=model,
+                reasoning_effort=reasoning_effort,
+                app_data_dir=app_data_dir,
+                agy_bin_path=agy_bin_path,
+            )
+        return _STREAM_CLIENTS_POOL[key]
+
+
+_INSTANCE_EXECUTION_LOCKS: dict[str, threading.Lock] = {}
+_LOCK_REGISTRY_MUTEX = threading.Lock()
+
+
+def _get_instance_execution_lock(instance_id: str = "default") -> threading.Lock:
+    with _LOCK_REGISTRY_MUTEX:
+        if instance_id not in _INSTANCE_EXECUTION_LOCKS:
+            _INSTANCE_EXECUTION_LOCKS[instance_id] = threading.Lock()
+        return _INSTANCE_EXECUTION_LOCKS[instance_id]
+
+
+_GLOBAL_EXECUTION_LOCK = _get_instance_execution_lock("default")
 
 
 class ProgrammaticAgent:
@@ -473,12 +538,12 @@ class ProgrammaticAgent:
             }
 
     def _chat_cli_fallback(self, task: str) -> dict[str, Any]:
-        """Persistent stream or single-turn CLI invocation."""
+        """Persistent stream or single-turn CLI invocation with client pooling."""
         if not AGY_BIN_PATH.is_file():
             raise RuntimeError(f"Antigravity CLI binary not found at {AGY_BIN_PATH}")
 
         last_exc: Optional[Exception] = None
-        client = AgyStreamClient(
+        client = _get_or_create_stream_client(
             model=self.model,
             reasoning_effort=self.reasoning_effort,
             app_data_dir=self.app_data_dir,
@@ -519,10 +584,7 @@ class ProgrammaticAgent:
             status = "error"
         else:
             try:
-                if self._can_use_sdk():
-                    data = await self._chat_async(task)
-                else:
-                    data = self._chat_cli_fallback(task)
+                data = self._chat_cli_fallback(task)
 
                 reply = data.get("response", "")
                 conversation_id = data.get("conversation_id")
@@ -552,7 +614,7 @@ class ProgrammaticAgent:
         return self.task_result_path
 
     def run(self, task: str = DEFAULT_TASK, task_result_path: Optional[Union[Path, str]] = None) -> Path:
-        """Execute the agent task synchronously."""
+        """Execute the agent task synchronously with per-instance locking."""
         def _run_coro(coro):
             try:
                 loop = asyncio.get_running_loop()
@@ -564,7 +626,7 @@ class ProgrammaticAgent:
                     return executor.submit(asyncio.run, coro).result()
             return asyncio.run(coro)
 
-        with _GLOBAL_EXECUTION_LOCK:
+        with _get_instance_execution_lock(self.instance_id):
             if task_result_path is not None:
                 prev, self.task_result_path = self.task_result_path, Path(task_result_path)
                 try:

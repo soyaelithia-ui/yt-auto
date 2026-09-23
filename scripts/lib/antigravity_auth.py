@@ -183,6 +183,61 @@ def exchange_antigravity_code(code_or_url: str) -> dict:
     return token_data
 
 
+def refresh_antigravity_token_if_needed(token_path: Path | None = None) -> bool:
+    """Refresh the Antigravity OAuth access token using refresh_token if expired or close to expiry."""
+    path = token_path or TOKEN_PATH
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tok = data.get("token", {})
+        refresh_token = tok.get("refresh_token")
+        if not refresh_token:
+            return False
+
+        expiry_str = tok.get("expiry")
+        if expiry_str:
+            clean_exp = expiry_str.replace("Z", "+00:00")
+            exp_dt = datetime.fromisoformat(clean_exp)
+            if datetime.now(timezone.utc) < exp_dt - timedelta(minutes=5):
+                return True
+
+        client_id = _get_client_id()
+        if not client_id:
+            return False
+        client_secret = _get_client_secret()
+
+        post_params = {
+            "client_id": client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }
+        if client_secret:
+            post_params["client_secret"] = client_secret
+
+        post_data = urllib.parse.urlencode(post_params).encode("utf-8")
+        req = urllib.request.Request(
+            "https://oauth2.googleapis.com/token",
+            data=post_data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10.0) as response:
+            res_body = json.loads(response.read().decode("utf-8"))
+
+        if "access_token" in res_body:
+            tok["access_token"] = res_body["access_token"]
+            expires_in = res_body.get("expires_in", 3600)
+            expiry_dt = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            tok["expiry"] = expiry_dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            data["token"] = tok
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            return True
+    except Exception:
+        return False
+    return False
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "url":
         print(get_auth_url())

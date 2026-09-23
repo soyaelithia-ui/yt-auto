@@ -15,6 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
+      curl \
       ffmpeg \
       fonts-dejavu-core \
       libass-dev \
@@ -40,11 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY requirements.txt constraints.txt /app/
-COPY build/agy /usr/local/bin/agy
 COPY scripts/docker_entrypoint.sh /entrypoint.sh
 RUN pip install --no-cache-dir -r /app/requirements.txt \
     && playwright install chromium \
-    && chmod 755 /usr/local/bin/agy /entrypoint.sh \
+    && (curl -fsSL https://antigravity.google/cli/install.sh | bash 2>/dev/null || true) \
+    && (cp -f /root/.local/bin/agy /usr/local/bin/agy 2>/dev/null || true) \
+    && chmod +x /entrypoint.sh \
+    && ([ -f /usr/local/bin/agy ] && chmod 755 /usr/local/bin/agy || true) \
     && mkdir -p /app/data /app/work /app/artifacts /app/logs /app/output \
          /home/appuser/.gemini/antigravity-cli \
     && groupadd --gid 10001 appuser \

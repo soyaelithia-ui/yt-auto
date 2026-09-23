@@ -10,10 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from src.core.domain import CanonicalChannel, canonical_channel
-
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+from src.core.domain import CanonicalChannel, canonical_channel
 ENV_FILE = BASE_DIR / ".env"
 if ENV_FILE.exists():
     try:
