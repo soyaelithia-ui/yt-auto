@@ -1,6 +1,6 @@
 # Configuración, Variables de Entorno y Secretos
 
-> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git) | **Gobernanza:** Repositorio privado con resolución dinámica de identidades y secretos desacoplados.  
+> **Repositorio Oficial:** [https://github.com/soyaelithia-ui/yt-auto.git](https://github.com/soyaelithia-ui/yt-auto.git) | **Gobernanza:** Repositorio privado con resolución dinámica de identidades y secretos desacoplados.  
 > **Última actualización:** 2026-09  
 
 Inventario estructurado de variables de entorno, directivas de seguridad y políticas contra hardcoding para `yt-auto`.

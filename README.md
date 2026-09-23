@@ -1,6 +1,6 @@
 # Sistema Unificado de Automatización de YouTube — yt-auto
 
-> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
+> **Repositorio Oficial:** [https://github.com/soyaelithia-ui/yt-auto.git](https://github.com/soyaelithia-ui/yt-auto.git)  
 > **Gobernanza:** Repositorio privado para infraestructura, producción y publicación automatizada multi-canal.
 
 Sistema de producción y publicación automatizada para **YouTube Shorts verticales (9:16)** y **Videos Largos (16:9, 10+ min)** en español, con revisión interactiva en Telegram (`review`), respaldo verificado en Google Drive y control atómico en SQLite WAL.

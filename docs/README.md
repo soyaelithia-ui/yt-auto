@@ -1,7 +1,7 @@
 # Base de Conocimiento Técnica — yt-auto
 
 > **Estado:** OFICIAL (Índice Central)  
-> **Repositorio Oficial:** [https://github.com/Ade-ia2005/yt-auto.git](https://github.com/Ade-ia2005/yt-auto.git)  
+> **Repositorio Oficial:** [https://github.com/soyaelithia-ui/yt-auto.git](https://github.com/soyaelithia-ui/yt-auto.git)  
 > **Gobernanza:** Repositorio privado para infraestructura, producción y publicación automatizada multi-canal.  
 > **Última actualización:** 2026-09  
 
