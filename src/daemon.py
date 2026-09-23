@@ -621,6 +621,73 @@ def _run_auto_publish_sweep(channel: Optional[str] = None) -> None:
         logger.warning("auto-publish sweep failed: %s", exc, exc_info=True)
 
 
+def _run_24h_maintenance_sweep(
+    db_path: Optional[str] = None,
+    channel: str = "all",
+    dry_run: bool = False,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Execute automated 24-hour analytics synchronization and underperforming video pruning."""
+    database = db_path or DEFAULT_DB_PATH
+    now_ts = int(time.time())
+    try:
+        from src.core.repository.migrations import connect, migrate_database
+        migrate_database(database)
+
+        with connect(database) as conn:
+            row = conn.execute("SELECT last_24h_sweep_at FROM scheduler_state WHERE scheduler_id = 1").fetchone()
+            last_sweep = row["last_24h_sweep_at"] if row else None
+
+        if not force and last_sweep is not None and (now_ts - int(last_sweep)) < 86400:
+            return {"ok": True, "skipped": True, "reason": "less_than_24h_since_last_sweep"}
+
+        from src.analytics.scoring import sync_and_score_channel_publications
+        from src.analytics.pruner import execute_autonomous_prune
+        from src.core.channel_profile import ChannelProfileRegistry
+
+        channels_to_process = (
+            list(ChannelProfileRegistry.list_active_channel_ids())
+            if channel is None or channel == "all"
+            else [channel]
+        )
+        if not channels_to_process:
+            channels_to_process = ["moku", "aelithia"]
+
+        scoring_results = {}
+        prune_results = {}
+
+        for ch in channels_to_process:
+            score_res = sync_and_score_channel_publications(ch, db_path=database, dry_run=dry_run)
+            scoring_results[ch] = score_res
+
+            prune_res = execute_autonomous_prune(ch, db_path=database, dry_run=dry_run)
+            prune_results[ch] = {
+                "evaluated": prune_res.evaluated_count,
+                "pruned": prune_res.pruned_count,
+                "failed": prune_res.failed_count,
+            }
+
+        with connect(database) as conn:
+            conn.execute(
+                "UPDATE scheduler_state SET last_24h_sweep_at = ?, updated_at = CURRENT_TIMESTAMP WHERE scheduler_id = 1",
+                (now_ts,),
+            )
+            conn.commit()
+
+        logger.info("[24H-SWEEP] Completed maintenance sweep for channels: %s", channels_to_process)
+        return {
+            "ok": True,
+            "timestamp": now_ts,
+            "channels": channels_to_process,
+            "scoring": scoring_results,
+            "pruning": prune_results,
+            "dry_run": dry_run,
+        }
+    except Exception as exc:
+        logger.warning("[24H-SWEEP] Maintenance sweep encountered error: %s", exc, exc_info=True)
+        return {"ok": False, "error": str(exc)}
+
+
 def start_daemon(
     interval_seconds: int = 1800,
     max_runs: int | None = None,
@@ -1020,6 +1087,11 @@ def start_daemon_lanes(
                         clean_tts_cache(max_size_bytes=500 * 1024 * 1024)
                     except Exception:
                         logger.debug("periodic background cleanup skipped", exc_info=True)
+                if ticks % 60 == 0:
+                    try:
+                        _run_24h_maintenance_sweep(database, channel=target_channel)
+                    except Exception:
+                        logger.debug("periodic 24h maintenance sweep skipped", exc_info=True)
                 try:
                     touch_daemon_liveness(database)
                 except Exception:
