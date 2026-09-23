@@ -5,7 +5,7 @@ The `continuous-daemon-scheduler` capability manages the 24/7 autonomous continu
 
 ## Requirements
 
-### Requirement 1: 64-Bit SimHash Narrative Deduplication
+### Requirement: 64-Bit SimHash Narrative Deduplication
 The scheduler MUST compute a 64-bit SimHash fingerprint over generated script text and narrative concepts before initiating rendering. The scheduler MUST reject any candidate script whose 64-bit Hamming distance to any previously generated script within a rolling history window ($\ge 100$ items) is strictly less than 4 bits ($Hamming < 4$), triggering automated narrative regeneration.
 
 #### Scenario: Unique script passes 64-bit SimHash deduplication check (Happy Path)
@@ -20,7 +20,7 @@ The scheduler MUST compute a 64-bit SimHash fingerprint over generated script te
 - **Then** the scheduler MUST reject the duplicate script
 - **And** the scheduler MUST log a duplicate rejection event and request a fresh narrative generation.
 
-### Requirement 2: Bounded Concurrency Semaphore and Workload Throttling
+### Requirement: Bounded Concurrency Semaphore and Workload Throttling
 The scheduler MUST limit concurrent video rendering and GPU/FFmpeg tasks through a bounded concurrency semaphore (default limit $N = 1$ for heavy rendering, $N \le 2$ for light synthesis). The scheduler MUST NOT launch unbounded concurrent subprocesses that exceed system RAM or GPU VRAM limits.
 
 #### Scenario: Bounded execution of queued render jobs (Happy Path)
@@ -35,7 +35,7 @@ The scheduler MUST limit concurrent video rendering and GPU/FFmpeg tasks through
 - **Then** the scheduler MUST enqueue the request without spawning parallel FFmpeg encoders
 - **And** system memory and VRAM utilization MUST remain within safe operational bounds.
 
-### Requirement 3: Post-Render Temporary Artifact Sweeper and Disk Guard
+### Requirement: Post-Render Temporary Artifact Sweeper and Disk Guard
 The scheduler and cleanup subsystem MUST sweep all intermediate scratch assets (uncompressed raw frames, intermediate WAV files, temporary subtitle files) immediately upon successful render completion or run failure. Additionally, the scheduler MUST enforce a minimum free disk space watermark ($5.0\text{ GB}$). If free disk capacity drops below the floor, the daemon MUST pause processing and emit operational alerts.
 
 #### Scenario: Automatic post-render scratch cleanup (Happy Path)
@@ -50,7 +50,7 @@ The scheduler and cleanup subsystem MUST sweep all intermediate scratch assets (
 - **Then** the cleanup routine MUST execute in a `finally` block to sweep partial scratch files
 - **And** the disk space MUST NOT accumulate orphaned rawvideo buffers.
 
-### Requirement 4: Uninterrupted 24/7 Autonomous Daemon Lifecycle and Liveness Watchdog
+### Requirement: Uninterrupted 24/7 Autonomous Daemon Lifecycle and Liveness Watchdog
 The continuous daemon MUST run in an autonomous loop with non-blocking heartbeat updates, graceful shutdown handling on `SIGINT`/`SIGTERM`, and automatic recovery from transient exceptions via exponential backoff with jitter. The daemon MUST alert operators if heartbeat latency exceeds stale thresholds ($> 600\text{s}$).
 
 #### Scenario: Continuous autonomous loop with periodic heartbeat (Happy Path)
@@ -64,3 +64,20 @@ The continuous daemon MUST run in an autonomous loop with non-blocking heartbeat
 - **When** the error breaker evaluates the consecutive failure counter
 - **Then** the daemon MUST enter exponential backoff with randomized jitter
 - **And** the daemon process MUST remain alive and resume processing once connectivity is restored.
+### Requirement: Autonomous 24-Hour Analytics and Pruning Cadence Sweep
+The continuous daemon scheduler MUST maintain a persistent record of the last analytics and pruning sweep timestamp (`last_sweep_at`) in `scheduler_state`. During each scheduling cycle, if the elapsed time since `last_sweep_at` is $\ge 24\text{ hours}$ ($86,400\text{ seconds}$), the scheduler MUST trigger an automated analytics synchronization, empirical success scoring, and underperforming video pruning sweep for all active channels.
+
+The scheduler MUST isolate this maintenance sweep so that any transient network failure, YouTube Data API error, or quota limitation encountered during the sweep does NOT terminate, stall, or delay the primary video generation and rendering queues.
+
+#### Scenario: Daemon executes 24-hour maintenance sweep automatically (Happy Path)
+- **Given** the daemon running with a last sweep timestamp recorded 25 hours ago
+- **When** the daemon scheduling iteration checks periodic tasks
+- **Then** the scheduler MUST dispatch the 24-hour analytics sync and pruning workflow
+- **And** upon completion, the scheduler MUST update `last_sweep_at` in `scheduler_state` to the current timestamp
+- **And** the daemon MUST continue normal queue processing.
+
+#### Scenario: YouTube Data API failure during sweep does not crash daemon loop (Edge Case)
+- **Given** the 24-hour sweep is triggered during an upstream YouTube API outage (HTTP 503 or quota exceeded)
+- **When** the sweep catches the API exception
+- **Then** the sweep MUST log a warning and exit gracefully without raising an unhandled exception
+- **And** the daemon loop MUST remain active and proceed to process rendering jobs normally.

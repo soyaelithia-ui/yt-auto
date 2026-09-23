@@ -23,10 +23,12 @@ from src.cli.handlers import (
     handle_mcp,
     handle_migrate,
     handle_profile,
+    handle_prune_underperforming,
     handle_queue,
     handle_run,
     handle_service,
     handle_status,
+    handle_sweep_24h,
     handle_test,
 )
 from src.config import BASE_DIR, DEFAULT_DB_PATH, RUNTIME_PROFILE
@@ -50,6 +52,8 @@ CANONICAL_SUBCOMMANDS = {
     "benchmark",
     "test",
     "mcp",
+    "sweep-24h",
+    "prune-underperforming",
 }
 
 
@@ -345,6 +349,10 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_test(args, parser)
     if subcommand == "mcp":
         return handle_mcp(args, parser)
+    if subcommand == "sweep-24h":
+        return handle_sweep_24h(args, parser)
+    if subcommand == "prune-underperforming":
+        return handle_prune_underperforming(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

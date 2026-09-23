@@ -288,6 +288,30 @@ def register_test_and_mcp_subcommands(subparsers: argparse._SubParsersAction, pa
     mp.add_argument("--port", type=int, default=8000, help="Puerto de escucha para transporte SSE")
 
 
+def register_analytics_subcommands(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
+    """Register 'sweep-24h' and 'prune-underperforming' subcommands."""
+    sp = subparsers.add_parser(
+        "sweep-24h",
+        parents=[parent],
+        help="Ejecutar barrido de 24 horas de métricas de YouTube y purga autónoma",
+    )
+    sp.add_argument("--channel", type=str, default="all", help="Canal objetivo ('moku', 'aelithia', o 'all')")
+    sp.add_argument("--live", action="store_true", help="Ejecutar mutaciones en vivo (por defecto: dry-run)")
+    sp.add_argument("--force", action="store_true", help="Forzar ejecución ignorando el intervalo de 24h")
+
+    pp = subparsers.add_parser(
+        "prune-underperforming",
+        parents=[parent],
+        help="Evaluar y purgar videos con bajo rendimiento tras periodo de gracia",
+    )
+    pp.add_argument("--channel", type=str, default="moku", help="Canal objetivo ('moku' o 'aelithia')")
+    pp.add_argument("--live", action="store_true", help="Ejecutar eliminación real en YouTube (por defecto: dry-run)")
+    pp.add_argument("--min-score", type=float, default=25.0, help="Umbral mínimo de puntuación de éxito (por defecto: 25.0)")
+    pp.add_argument("--grace-hours", type=float, default=24.0, help="Horas mínimas de antigüedad requeridas (por defecto: 24.0)")
+    pp.add_argument("--max-delete", type=int, default=2, help="Límite máximo de videos a eliminar por canal (por defecto: 2)")
+    pp.add_argument("--force", action="store_true", help="Ignorar interruptor AUTO_PRUNE_ENABLED")
+
+
 def register_all_subcommands(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
     """Register all canonical subcommands on the main argument parser."""
     register_run_subcommand(subparsers, parent)
@@ -302,3 +326,4 @@ def register_all_subcommands(subparsers: argparse._SubParsersAction, parent: arg
     register_loop_subcommand(subparsers, parent)
     register_profile_and_benchmark_subcommands(subparsers, parent)
     register_test_and_mcp_subcommands(subparsers, parent)
+    register_analytics_subcommands(subparsers, parent)

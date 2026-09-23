@@ -5,7 +5,7 @@ The `channel-purge-control` capability provides interactive and programmatic mec
 
 ## Requirements
 
-### Requirement 1: Dry-Run Catalog Inspection
+### Requirement: Dry-Run Catalog Inspection
 The purge control tool MUST perform a non-destructive dry-run inspection by default or when `--dry-run` is explicitly provided, retrieving all video metadata without issuing mutation or deletion requests.
 
 #### Scenario: Successful dry-run inspection of channel catalog (Happy Path)
@@ -21,8 +21,9 @@ The purge control tool MUST perform a non-destructive dry-run inspection by defa
 - **Then** the system MUST return an empty candidate list with exit code 0
 - **And** the summary report MUST indicate 0 candidate items without error.
 
-### Requirement 2: Interactive Confirmation Safeguard
-The purge control tool MUST require explicit affirmative user confirmation before initiating non-dry-run video deletions, unless an explicit `--force` or `--non-interactive` override flag is supplied.
+### Requirement: Interactive Confirmation Safeguard and Autonomous Prune Override
+The purge control tool MUST require explicit affirmative user confirmation before initiating non-dry-run video deletions, unless an explicit `--force`, `--non-interactive`, or autonomous criteria-based pruning execution mode is active with all safety bounds verified.
+(Previously: Required interactive "DELETE" confirmation unless an explicit `--force` or `--non-interactive` override flag was supplied)
 
 #### Scenario: User confirms batch deletion interactively (Happy Path)
 - **Given** the purge CLI is executed in live execution mode without `--force`
@@ -35,7 +36,11 @@ The purge control tool MUST require explicit affirmative user confirmation befor
 - **Then** the purge process MUST immediately abort execution
 - **And** no video deletion API requests MUST be dispatched.
 
-### Requirement 3: Paced Batch Deletion with Quota Safeguards
+#### Scenario: Autonomous criteria-based pruning executes headlessly without terminal prompt (Happy Path)
+- **Given** the daemon or CLI running in autonomous criteria-prune mode with live credentials
+- **When** eligible underperforming videos meeting grace period and daily ceiling are scheduled for deletion
+- **Then** the deletion MUST proceed without blocking on `sys.stdin` or `input()` prompts.
+### Requirement: Paced Batch Deletion with Quota Safeguards
 The batch deletion engine MUST enforce rate-limiting pacing intervals between consecutive delete requests and MUST gracefully handle API rate limit responses (HTTP 429 or quota exceeded).
 
 #### Scenario: Paced batch deletion of multiple videos (Happy Path)
@@ -50,7 +55,7 @@ The batch deletion engine MUST enforce rate-limiting pacing intervals between co
 - **Then** the purge engine MUST stop further deletion attempts
 - **And** the engine MUST generate a failure report indicating 2 successes, 1 failure, and 7 skipped items.
 
-### Requirement 4: Channel Ownership Validation and Failure Reporting
+### Requirement: Channel Ownership Validation and Failure Reporting
 The purge control tool MUST verify that each candidate video ID belongs to the expected canonical channel ID before issuing deletion requests, recording per-video outcomes in a structured report.
 
 #### Scenario: Video ownership verification matches canonical channel (Happy Path)
@@ -63,3 +68,47 @@ The purge control tool MUST verify that each candidate video ID belongs to the e
 - **When** ownership validation is evaluated
 - **Then** the system MUST reject deletion with `PermissionError`
 - **And** the batch report MUST log the video as skipped/rejected without affecting remaining items.
+### Requirement: Automated Underperforming Video Pruning with Mandatory Grace Period
+The pruning engine MUST evaluate candidates for automated deletion using strict multi-tier safety checks:
+1. **Mandatory Grace Period**: Only videos with upload age $\ge 24\text{ hours}$ ($\ge 86,400\text{s}$) SHALL be eligible for underperformance evaluation; videos younger than 24 hours MUST NOT be deleted.
+2. **Threshold Violation**: A video SHALL qualify for pruning only if its computed empirical success score is strictly below the survival threshold (`actual_success_score < 25.0`) AND its total view count is below the threshold floor (`views < 50`).
+3. **Bounded Deletion Ceiling**: The engine MUST NOT delete more than 2 videos per canonical channel within any rolling 24-hour window, regardless of how many videos meet the threshold violation.
+4. **Kill Switch**: If the environment flag `AUTO_PRUNE_ENABLED=false` or CLI flag `--disable-prune` is set, all automated deletions MUST be halted immediately.
+
+#### Scenario: Underperforming video older than 24h is pruned safely (Happy Path)
+- **Given** a video uploaded 48 hours ago with 12 views, 0 likes, and an empirical score of 8.5
+- **And** fewer than 2 videos have been pruned for the target channel in the last 24 hours
+- **And** `AUTO_PRUNE_ENABLED` is true
+- **When** the automated pruning sweep executes
+- **Then** the video MUST be deleted via YouTube Data API `videos().delete()`
+- **And** the record in SQLite `publications` and `stories` MUST be marked with status `"PURGED_UNDERPERFORMING"`
+- **And** the daily channel prune counter MUST be incremented by 1.
+
+#### Scenario: Video younger than 24 hours is protected by grace period (Edge Case)
+- **Given** a video uploaded 6 hours ago with 4 views, 0 likes, and an empirical score of 5.0
+- **When** the automated pruning sweep executes
+- **Then** the video MUST be skipped and preserved intact
+- **And** zero deletion requests MUST be sent to YouTube Data API.
+
+#### Scenario: Daily deletion ceiling limits maximum deletions to 2 per day (Edge Case)
+- **Given** 5 videos all uploaded 3 days ago with 0 views and 0 score
+- **When** the pruning sweep evaluates the channel
+- **Then** at most 2 videos (the lowest scoring) MUST be deleted
+- **And** the remaining 3 videos MUST be skipped until the next rolling 24-hour cycle.
+
+#### Scenario: Kill switch halts all automated deletions (Edge Case)
+- **Given** 2 candidate videos eligible for deletion under score and age rules
+- **And** `AUTO_PRUNE_ENABLED` is set to `"false"`
+- **When** the pruning sweep runs
+- **Then** the pruner MUST log an operational notice and abort deletions without modifying YouTube or database state.
+
+### Requirement: Telegram Operational Audit Alert for Pruned Videos
+Upon completing an automated pruning sweep, the engine MUST dispatch a structured operational alert to the Telegram notification bus documenting the target channel, total evaluated videos, count of pruned videos, and specific video IDs/titles/scores that were removed.
+
+#### Scenario: Pruning action notifies Telegram channel (Happy Path)
+- **Given** a completed pruning sweep that safely removed 1 underperforming video
+- **When** post-prune notifications execute
+- **Then** a Telegram message MUST be sent containing channel name, video title, ID, calculated score, and reason `"Low 24h Engagement"`.
+
+---
+
