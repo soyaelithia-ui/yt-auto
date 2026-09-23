@@ -385,6 +385,14 @@ MIGRATION_006 = (
     "CREATE INDEX IF NOT EXISTS idx_publications_video_id ON publications(video_id)",
 )
 
+MIGRATION_007 = (
+    "ALTER TABLE publications ADD COLUMN actual_success_score REAL NOT NULL DEFAULT 0.0",
+    "ALTER TABLE publications ADD COLUMN music_track TEXT",
+    "ALTER TABLE scheduler_state ADD COLUMN last_24h_sweep_at INTEGER",
+    "CREATE INDEX IF NOT EXISTS idx_publications_score ON publications(channel, actual_success_score)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_sha256 ON publications(video_sha256)",
+)
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -518,6 +526,19 @@ def _apply_migration_005(conn: sqlite3.Connection) -> None:
 
 def _apply_migration_006(conn: sqlite3.Connection) -> None:
     for statement in MIGRATION_006:
+        try:
+            conn.execute(statement)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "duplicate column name" in msg:
+                continue
+            if "already exists" in msg:
+                continue
+            raise
+
+
+def _apply_migration_007(conn: sqlite3.Connection) -> None:
+    for statement in MIGRATION_007:
         try:
             conn.execute(statement)
         except sqlite3.OperationalError as exc:
@@ -665,6 +686,23 @@ def _apply_v6_publications_inventory(conn: sqlite3.Connection, applied: list[int
         applied.append(6)
 
 
+def _apply_v7_performance_scoring(conn: sqlite3.Connection, applied: list[int]) -> None:
+    m7_checksum = _migration_checksum("performance_scoring_and_cadence", MIGRATION_007)
+    existing_m7 = conn.execute(
+        "SELECT checksum FROM schema_migrations WHERE version = 7"
+    ).fetchone()
+    if existing_m7 and existing_m7["checksum"] != m7_checksum:
+        raise RuntimeError("Checksum de migración 7 no coincide")
+    if not existing_m7:
+        _apply_migration_007(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum, applied_at) "
+            "VALUES (7, 'performance_scoring_and_cadence', ?, ?)",
+            (m7_checksum, _utc_now()),
+        )
+        applied.append(7)
+
+
 def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
     indexes = (
         "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
@@ -694,6 +732,7 @@ def migrate_database(
             _apply_v4_observability(conn, applied)
             _apply_v5_production_lanes(conn, applied)
             _apply_v6_publications_inventory(conn, applied)
+            _apply_v7_performance_scoring(conn, applied)
             _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry

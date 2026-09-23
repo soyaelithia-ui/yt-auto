@@ -123,6 +123,8 @@ class PublishedVideoRecord:
     score_rationale: str | None = None
     used_resources: dict[str, Any] | None = None
     duration_sec: float = 0.0
+    actual_success_score: float = 0.0
+    music_track: str | None = None
 
     @classmethod
     def from_row(cls, row: Any) -> PublishedVideoRecord:
@@ -167,6 +169,8 @@ class PublishedVideoRecord:
             score_rationale=_get("score_rationale"),
             used_resources=used_res,
             duration_sec=float(_get("duration_sec", 0.0) or 0.0),
+            actual_success_score=float(_get("actual_success_score", 0.0) or 0.0),
+            music_track=_get("music_track"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -199,6 +203,8 @@ def record_published_inventory(
     score_rationale: str | None = None,
     used_resources: dict[str, Any] | None = None,
     duration_sec: float = 0.0,
+    actual_success_score: float = 0.0,
+    music_track: str | None = None,
 ) -> PublishedVideoRecord:
     """Record or update an inventory entry atomically in SQLite with AI-ready metadata."""
     now_iso = verified_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -219,6 +225,7 @@ def record_published_inventory(
     drive_meta_json = json.dumps(drive_backup_metadata) if drive_backup_metadata else None
     themes_json = json.dumps(themes) if themes else None
     resources_json = json.dumps(used_resources) if used_resources else None
+    resolved_music = music_track or (used_resources.get("music") if used_resources else None)
 
     migrate_database(db_path)
 
@@ -259,7 +266,8 @@ def record_published_inventory(
                         language = ?, source_language = ?, hook_summary = ?, synopsis = ?,
                         themes_json = ?, simhash = ?, full_script = ?,
                         predictive_success_score = ?, score_rationale = ?,
-                        used_resources = ?, duration_sec = ?
+                        used_resources = ?, duration_sec = ?,
+                        actual_success_score = ?, music_track = ?
                     WHERE publication_id = ?
                     """,
                     (
@@ -270,6 +278,7 @@ def record_published_inventory(
                         themes_json, simhash, clean_script,
                         predictive_success_score, score_rationale,
                         resources_json, duration_sec,
+                        actual_success_score, resolved_music,
                         existing["publication_id"],
                     ),
                 )
@@ -284,13 +293,15 @@ def record_published_inventory(
                         language, source_language, hook_summary, synopsis,
                         themes_json, simhash, full_script,
                         predictive_success_score, score_rationale,
-                        used_resources, duration_sec
+                        used_resources, duration_sec,
+                        actual_success_score, music_track
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, 1, ?,
                         ?, ?, ?,
                         ?, ?, ?, ?,
                         ?, ?, ?,
+                        ?, ?,
                         ?, ?,
                         ?, ?
                     )
@@ -303,6 +314,7 @@ def record_published_inventory(
                         themes_json, simhash, clean_script,
                         predictive_success_score, score_rationale,
                         resources_json, duration_sec,
+                        actual_success_score, resolved_music,
                     ),
                 )
                 pub_id = cursor.lastrowid
@@ -340,6 +352,8 @@ def record_published_inventory(
         score_rationale=score_rationale,
         used_resources=used_resources,
         duration_sec=duration_sec,
+        actual_success_score=actual_success_score,
+        music_track=resolved_music,
     )
 
 
