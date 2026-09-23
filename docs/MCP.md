@@ -165,24 +165,33 @@ El servidor registra 9 herramientas operativas:
 - **Respuesta**: Estructura de resultados según la acción ejecutada.
 
 ### 3.9. `verify_integrity`
+- **Propósito**: Ejecuta la auditoría unificada de invariantes del repositorio, higiene de worktrees, política Zero-Browser, aislamiento de subsistemas y sincronización MCP en un único proceso optimizado (< 1s en modo rápido).
 - **Parámetros**:
-  - `fast` (boolean, default `False`): Omite suites lentas de integración.
+  - `fast` (boolean, default `False`): Modo rápido que omite la verificación pesada de colección de pruebas para ejecuciones ágiles durante el desarrollo.
+  - `fail_closed` (boolean, default `False`): Lanza un error estricto de herramienta (`ToolError`) si alguna de las comprobaciones de integridad falla (código de salida 1).
 - **Respuesta**:
 ```json
 {
   "healthy": true,
+  "status": "HEALTHY",
   "exit_code": 0,
   "checks_passed": [
-    "git_worktrees",
-    "no_legacy_docs",
-    "zero_playwright_in_media",
-    "zero_procedural_shaders",
-    "anti_regression_tests",
-    "mcp_sync_parity"
+    "Git worktree hygiene: 3 valid worktree(s), zero stale/prunable.",
+    "Architecture docs: zero obsolete blueprints.",
+    "Subsystem isolation: zero legacy rendering directories and zero retired imports.",
+    "Zero-Browser Policy: zero Playwright imports in media and pipeline.",
+    "Zero-Procedural-Math Policy: zero WGSL shaders, zero legacy procedural files/imports.",
+    "Git pre-commit hook is active and enforced via .githooks.",
+    "Anti-Bloat: zero vendored skills or third-party minified libraries.",
+    "Agent homedirs and secret hygiene: zero tracked agent homes or credentials.",
+    "MCP Synchronization: 100% bidirectional parity across tools, resources, prompts, configs & docs."
   ],
   "checks_failed": [],
-  "commit_count": 87,
-  "output": "100% HEALTHY - All checks passed"
+  "commit_count": 325,
+  "duration_ms": 320,
+  "summary": "Repository invariants 100% HEALTHY",
+  "checks": "Invariant checks verified (Zero-Browser, Anti-Bloat, Zero-Legacy-Docs, Stream-Copy)",
+  "output": "{ ... }"
 }
 ```
 

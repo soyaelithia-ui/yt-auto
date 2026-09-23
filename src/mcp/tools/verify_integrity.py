@@ -3,8 +3,10 @@ src/mcp/tools/verify_integrity.py - Canonical MCP tool for repository invariant 
 """
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
+import sys
 from typing import Annotated, Any, Dict
 
 from mcp.server.mcpserver import MCPServer
@@ -34,11 +36,13 @@ def register_verify_integrity_tool(server: MCPServer) -> None:
             Field(description="Raise ToolError if integrity checks fail (code 1)"),
         ] = False,
     ) -> Dict[str, Any]:
-        script_path = BASE_DIR / "scripts" / "verify_integrity.sh"
+        script_path = BASE_DIR / "scripts" / "verify_integrity.py"
         if not script_path.is_file():
-            raise ToolError(f"Integrity script not found at {script_path}.")
+            script_path = BASE_DIR / "scripts" / "verify_integrity.sh"
+            if not script_path.is_file():
+                raise ToolError(f"Integrity script not found at {script_path}.")
 
-        cmd = [str(script_path)]
+        cmd = [sys.executable, str(script_path), "--json"]
         if fast:
             cmd.append("--fast")
 
@@ -52,42 +56,32 @@ def register_verify_integrity_tool(server: MCPServer) -> None:
                 check=False,
             )
 
-            healthy = (proc.returncode == 0)
+            data: Dict[str, Any] = {}
+            if proc.stdout.strip():
+                try:
+                    data = json.loads(proc.stdout)
+                except Exception:
+                    pass
+
+            healthy = data.get("healthy", (proc.returncode == 0))
+            status = data.get("status", "HEALTHY" if healthy else "FAILED")
+            checks_passed = data.get("checks_passed", [])
+            checks_failed = data.get("checks_failed", [])
+            commit_count = data.get("commit_count", 0)
+            duration_ms = data.get("duration_ms", 0)
+
             output_clean = proc.stdout.strip()
             if proc.stderr:
                 output_clean += f"\nSTDERR:\n{proc.stderr.strip()}"
 
-            checks_passed = []
-            checks_failed = []
-            for line in output_clean.splitlines():
-                line_s = line.strip()
-                if line_s.startswith("✅ [PASS]"):
-                    checks_passed.append(line_s[9:].strip())
-                elif line_s.startswith("❌ [FAIL]"):
-                    checks_failed.append(line_s[9:].strip())
-
-            commit_count = 0
-            try:
-                c_proc = subprocess.run(
-                    ["git", "rev-list", "--count", "HEAD"],
-                    cwd=str(BASE_DIR),
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    check=False,
-                )
-                if c_proc.returncode == 0:
-                    commit_count = int(c_proc.stdout.strip())
-            except Exception:
-                pass
-
             result = {
                 "healthy": healthy,
-                "status": "HEALTHY" if healthy else "FAILED",
+                "status": status,
                 "exit_code": proc.returncode,
                 "checks_passed": checks_passed,
                 "checks_failed": checks_failed,
                 "commit_count": commit_count,
+                "duration_ms": duration_ms,
                 "summary": "Repository invariants 100% HEALTHY" if healthy else "Integrity verification failed",
                 "checks": "Invariant checks verified (Zero-Browser, Anti-Bloat, Zero-Legacy-Docs, Stream-Copy)",
                 "output": output_clean,
