@@ -29,7 +29,7 @@
         "keywords": ["scp", "anomal", "contención", "fundación", "keter", "euclid", "safe"]
       },
       "multistory_collection": false,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "image_animation",
       "qa_profile": "short",
       "review_content_type": "short",
       "padding_themes": ["pasillos metálicos", "luz de emergencia roja", "contención de hormigón"],
@@ -63,7 +63,7 @@
         "keywords": ["terror", "horror", "miedo", "maldici", "bosque", "noche", "estación", "faro", "mina", "relojero", "sanatorio", "fantasma", "sombra", "muerte", "aparici", "cadáver", "abismo", "extraño", "escalera", "grito", "pesadilla", "radio", "erebos", "polar", "oscuridad", "creepypasta", "nosleep"]
       },
       "multistory_collection": true,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "director",
       "qa_profile": "longform",
       "review_content_type": "long_video",
       "padding_themes": ["bosques niebla", "casas abandonadas", "carreteras nocturnas"],
@@ -102,7 +102,7 @@
         "keywords": ["aita", "wibta", "soy el malo", "soy la mala", "familia", "boda", "herencia", "hermano", "hermana", "tíos", "esposo", "esposa", "novio", "novia", "infidelidad", "desalojo", "dinero", "fraude", "demanda", "fideicomiso", "propiedad"]
       },
       "multistory_collection": true,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "director",
       "qa_profile": "longform",
       "review_content_type": "long_video",
       "padding_themes": ["salas de estar cálidas", "cafeterías", "oficinas al atardecer"],
@@ -137,7 +137,7 @@
         "keywords": ["aita", "wibta", "soy el malo", "soy la mala", "familia", "boda", "herencia", "hermano", "hermana", "tíos", "esposo", "esposa", "novio", "novia", "infidelidad", "desalojo", "dinero", "fraude", "demanda", "fideicomiso", "propiedad"]
       },
       "multistory_collection": false,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "video_loop",
       "qa_profile": "short",
       "review_content_type": "short",
       "padding_themes": ["cafeterías con luz natural", "departamentos modernos al atardecer", "salas de estar"],
@@ -172,7 +172,7 @@
         "keywords": ["singularidad", "agujero negro", "paradoja", "inteligencia artificial", "espacio", "fermi"]
       },
       "multistory_collection": false,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "image_animation",
       "qa_profile": "short",
       "review_content_type": "short",
       "padding_themes": ["puentes de mando de naves estelares", "horizontes de sucesos de agujeros negros", "estaciones espaciales en órbita"],
@@ -206,7 +206,7 @@
         "keywords": ["singularidad", "agujero negro", "paradoja", "inteligencia artificial", "espacio", "fermi"]
       },
       "multistory_collection": true,
-      "visual_pipeline": "beats",
+      "visual_pipeline": "director",
       "qa_profile": "longform",
       "review_content_type": "long_video",
       "padding_themes": ["nebulosas profundas", "discos de acreción", "antenas de radioastronomía al anochecer"],

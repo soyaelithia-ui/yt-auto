@@ -157,6 +157,7 @@ def _run_all_channels(
                 generate_only=getattr(args, "generate_only", False),
                 dispatch_telegram=getattr(args, "dispatch_telegram", False),
                 skip_lock=True,
+                visual_pipeline=getattr(args, "visual_pipeline", None),
             )
             print(f"[{ch}] Result: {res.status}")
             ran_channels.append(ch)
@@ -191,6 +192,7 @@ def _run_single_channel(
             generate_only=getattr(args, "generate_only", False),
             dispatch_telegram=getattr(args, "dispatch_telegram", False),
             skip_lock=True,
+            visual_pipeline=getattr(args, "visual_pipeline", None),
         )
         print(f"[{ch}] Result: {res.status}")
         if res.telegram_delivery:

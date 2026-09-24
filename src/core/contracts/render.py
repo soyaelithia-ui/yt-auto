@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.core.lanes import ALLOWED_VISUAL_PIPELINES
+
 _FIELD_KEYS = frozenset([
     "manifest_path",
     "output_video_path",
@@ -20,6 +22,7 @@ _FIELD_KEYS = frozenset([
     "orientation",
     "include_subtitles",
     "stream_copy",
+    "visual_pipeline",
     "scene_images",
     "shot_durations",
     "shot_roles",
@@ -69,6 +72,7 @@ class RenderSpec(Mapping):
     orientation: str = "vertical"  # "vertical" | "horizontal"
     include_subtitles: bool = True
     stream_copy: bool = True
+    visual_pipeline: str = "beats"
     scene_images: list[str] = field(default_factory=list)
     shot_durations: list[float] = field(default_factory=list)
     shot_roles: list[str] = field(default_factory=list)
@@ -105,6 +109,7 @@ class RenderSpec(Mapping):
             "orientation": self.orientation,
             "include_subtitles": self.include_subtitles,
             "stream_copy": self.stream_copy,
+            "visual_pipeline": self.visual_pipeline,
             "scene_images": list(self.scene_images),
             "shot_durations": list(self.shot_durations),
             "shot_roles": list(self.shot_roles),
@@ -189,6 +194,7 @@ class RenderSpec(Mapping):
         orientation = str(d.pop("orientation", "vertical") or "vertical")
         include_subtitles = bool(d.pop("include_subtitles", True))
         stream_copy = bool(d.pop("stream_copy", True))
+        visual_pipeline = str(d.pop("visual_pipeline", "beats") or "beats")
         scene_images = list(d.pop("scene_images", None) or [])
         shot_durations = [_safe_float(x) for x in (d.pop("shot_durations", None) or [])]
         shot_roles = [str(x) for x in (d.pop("shot_roles", None) or [])]
@@ -215,6 +221,7 @@ class RenderSpec(Mapping):
             orientation=orientation,
             include_subtitles=include_subtitles,
             stream_copy=stream_copy,
+            visual_pipeline=visual_pipeline,
             scene_images=scene_images,
             shot_durations=shot_durations,
             shot_roles=shot_roles,
@@ -265,6 +272,8 @@ class RenderSpec(Mapping):
             width = _safe_int(expected_res[0], width)
             height = _safe_int(expected_res[1], height)
 
+        visual_pipeline = getattr(lane_obj, "visual_pipeline", "beats") or "beats"
+
         return cls(
             manifest_path=getattr(ctx, "manifest_path", None),
             output_video_path=getattr(ctx, "video_path", None),
@@ -278,6 +287,7 @@ class RenderSpec(Mapping):
             orientation=orientation,
             include_subtitles=getattr(ctx, "mux_subtitles", False),
             stream_copy=getattr(ctx, "stream_copy_mode", True),
+            visual_pipeline=visual_pipeline,
             scene_images=list(getattr(ctx, "scene_bg_list", []) or []),
             shot_durations=list(getattr(ctx, "shot_durations", []) or []),
             shot_roles=shot_roles,
@@ -295,3 +305,7 @@ class RenderSpec(Mapping):
             raise ValueError(f"threads cannot exceed 4 according to AGENTS.md guardrails: {self.threads}")
         if self.orientation not in ("vertical", "horizontal"):
             raise ValueError(f"orientation must be vertical or horizontal, got: {self.orientation}")
+        if self.visual_pipeline not in ALLOWED_VISUAL_PIPELINES:
+            raise ValueError(
+                f"visual_pipeline must be one of {sorted(ALLOWED_VISUAL_PIPELINES)}, got: {self.visual_pipeline}"
+            )

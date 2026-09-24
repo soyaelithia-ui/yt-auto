@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import pytest
 
 from src.media.hybrid_engine import (
     KEN_BURNS_FPS,
@@ -170,4 +171,100 @@ def test_direct_ken_burns_module_imports():
         pan_direction="center_to_top",
     )
     assert "zoompan=" in filt
+
+
+def test_ken_burns_zoompan_smoothstep_expression():
+    """Asserts generated zoompan contains smoothstep expression (on/{denom})*(on/{denom})*(3-2*(on/{denom})) and valid coordinate formulas."""
+    from src.media.ken_burns import build_ken_burns_zoompan_filter
+    total_frames = 120
+    denom = 119
+    expected_e = f"(on/{denom})*(on/{denom})*(3-2*(on/{denom}))"
+    filt = build_ken_burns_zoompan_filter(
+        width=1080,
+        height=1920,
+        fps=30,
+        total_frames=total_frames,
+        zoom_start=1.0,
+        zoom_end=1.1,
+        pan_direction="center_to_top",
+    )
+    assert expected_e in filt
+    assert "zoompan=z=" in filt
+    assert "d=120" in filt
+    assert "s=1080x1920" in filt
+
+
+def test_ken_burns_zoompan_pan_cycle_directions():
+    """Asserts correct x and y formulas for all directions in KEN_BURNS_PAN_CYCLE."""
+    from src.media.ken_burns import KEN_BURNS_PAN_CYCLE, build_ken_burns_zoompan_filter
+    total_frames = 60
+    denom = 59
+    e = f"(on/{denom})*(on/{denom})*(3-2*(on/{denom}))"
+
+    for direction in KEN_BURNS_PAN_CYCLE:
+        filt = build_ken_burns_zoompan_filter(
+            width=1080,
+            height=1920,
+            fps=30,
+            total_frames=total_frames,
+            zoom_start=1.0,
+            zoom_end=1.1,
+            pan_direction=direction,
+        )
+        if direction == "left_to_right":
+            assert f"x='(iw-iw/zoom)*{e}'" in filt
+            assert "y='(ih-ih/zoom)/2'" in filt
+        elif direction == "right_to_left":
+            assert f"x='(iw-iw/zoom)*(1-{e})'" in filt
+            assert "y='(ih-ih/zoom)/2'" in filt
+        elif direction == "center_to_top":
+            assert "x='(iw-iw/zoom)/2'" in filt
+            assert f"y='(ih-ih/zoom)*(1-0.5*{e})'" in filt
+        elif direction == "center_to_bottom":
+            assert "x='(iw-iw/zoom)/2'" in filt
+            assert f"y='(ih-ih/zoom)*(0.5*{e})'" in filt
+
+
+def test_ken_burns_zoompan_degenerate_frames():
+    """Asserts total_frames <= 1 clamps denominator to 1 to prevent division by zero."""
+    from src.media.ken_burns import build_ken_burns_zoompan_filter
+    for tf in [0, 1, -5]:
+        filt = build_ken_burns_zoompan_filter(
+            width=1080,
+            height=1920,
+            fps=30,
+            total_frames=tf,
+            zoom_start=1.0,
+            zoom_end=1.1,
+            pan_direction="center_to_top",
+        )
+        assert "(on/1)*(on/1)*(3-2*(on/1))" in filt
+
+
+def test_ken_burns_still_segments_split_threshold():
+    """Asserts still image of exactly 20.0s splits into 2 segments of 10.0s each;
+    still image > 15.0s splits into sub-segments between 10.0s and 15.0s with alternating pan directions;
+    still image of 9.0s remains 1 unsplit segment."""
+    from src.media.ken_burns import plan_ken_burns_still_segments
+
+    # 9.0s remains unsplit
+    segs_9 = plan_ken_burns_still_segments(9.0, fps=30)
+    assert len(segs_9) == 1
+    assert segs_9[0][0] == pytest.approx(9.0)
+
+    # 20.0s splits into 2 segments of 10.0s each
+    segs_20 = plan_ken_burns_still_segments(20.0, fps=30)
+    assert len(segs_20) == 2
+    assert segs_20[0][0] == pytest.approx(10.0)
+    assert segs_20[1][0] == pytest.approx(10.0)
+    assert segs_20[0][2] != segs_20[1][2]
+
+    # > 15.0s (e.g. 18.0s) splits into sub-segments between 10.0s and 15.0s with alternating directions
+    segs_18 = plan_ken_burns_still_segments(18.0, fps=30)
+    assert len(segs_18) >= 2
+    for dur, _frames, _pan in segs_18:
+        assert 8.0 <= dur <= 15.0
+    pans_18 = [p for _d, _f, p in segs_18]
+    assert len(set(pans_18)) >= 2
+
 

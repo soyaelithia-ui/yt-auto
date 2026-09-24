@@ -131,3 +131,46 @@ def test_render_overlay_arbitrary_aspect_ratios(engine):
 
         res_alloc = engine.render_overlay("scp_classification_stamp", width=width, height=height)
         assert res_alloc.shape == (height, width, 4)
+
+
+def test_svg_overlay_buffer_shape_mismatch(engine):
+    """Asserts render_overlay() with buffer having incorrect shape (e.g. (1280, 720, 4) vs 1080x1920) or incorrect dtype raises ValueError."""
+    # Shape mismatch: requested 1080x1920 (height=1920, width=1080), buffer is (1280, 720, 4)
+    bad_shape_buf = np.zeros((1280, 720, 4), dtype=np.uint8)
+    with pytest.raises(ValueError, match="out_buffer"):
+        engine.render_overlay("none", width=1080, height=1920, out_buffer=bad_shape_buf)
+
+    # Dtype mismatch: float32 instead of uint8
+    bad_dtype_buf = np.zeros((1920, 1080, 4), dtype=np.float32)
+    with pytest.raises(ValueError, match="out_buffer"):
+        engine.render_overlay("none", width=1080, height=1920, out_buffer=bad_dtype_buf)
+
+
+def test_svg_overlay_mustache_and_single_brace_interpolation(engine):
+    """Asserts interpolate_template() replaces both {{key}} and {key} without residual placeholders."""
+    template = '<svg><text>{{title}}</text><subtext>{subtitle}</subtext></svg>'
+    result = engine.interpolate_template(template, params={"title": "SCP FOUNDATION", "subtitle": "EUCLID CLASS"})
+    assert "{{title}}" not in result
+    assert "{subtitle}" not in result
+    assert "SCP FOUNDATION" in result
+    assert "EUCLID CLASS" in result
+
+
+def test_svg_overlay_raster_lru_cache_bounds(engine, monkeypatch):
+    """Asserts raster cache is bounded at 128 entries to prevent unbounded resident memory growth."""
+    import io
+    from types import SimpleNamespace
+    from PIL import Image
+    import src.media.svg_overlay as svg_mod
+
+    dummy_img = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    buf = io.BytesIO()
+    dummy_img.save(buf, format="PNG")
+    dummy_bytes = buf.getvalue()
+
+    fake_resvg = SimpleNamespace(svg_to_bytes=lambda **kwargs: dummy_bytes)
+    monkeypatch.setattr(svg_mod, "resvg_py", fake_resvg)
+
+    for i in range(130):
+        engine.render_overlay("hud_tactical_telemetry", width=64, height=64, params={"telemetry_text": f"VAL_{i}"})
+    assert len(engine._raster_cache) <= 128

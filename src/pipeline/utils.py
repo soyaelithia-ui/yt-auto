@@ -332,7 +332,7 @@ def _resolve_engine_mode(
         or getattr(SETTINGS, "short_compositor", None)
         or "loop"
     ).strip().lower()
-    is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "beats")
+    is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "beats", "video_loop")
     is_multiscene_mode = engine_mode in (
         "director",
         "multiscene",
@@ -341,16 +341,17 @@ def _resolve_engine_mode(
         "dual_engine",
         "hybrid",
         "procedural",
+        "image_animation",
     )
     force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
-    if is_multiscene_mode and not force_multiscene:
+    if is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
         logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
         engine_mode = "loop"
         is_loop_mode = True
         is_multiscene_mode = False
     if not (is_loop_mode or is_multiscene_mode):
         raise ValueError(
-            f"video_engine={engine_mode!r} is not supported. Supported engine modes: 'director', 'multiscene', 'hybrid', or 'loop'."
+            f"video_engine={engine_mode!r} is not supported. Supported engine modes: 'director', 'multiscene', 'hybrid', 'image_animation', or 'loop'."
         )
     return engine_mode, is_loop_mode, is_multiscene_mode
 

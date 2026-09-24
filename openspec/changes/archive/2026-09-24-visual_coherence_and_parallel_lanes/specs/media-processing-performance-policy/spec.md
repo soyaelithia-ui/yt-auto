@@ -1,54 +1,19 @@
-# Spec: Media Processing and Performance Policy
+# Media Processing and Performance Policy Specification (Delta)
 
-## Requirements
+## Purpose
+Codifies the strict resource governance envelope (hard target ceiling $\le 2.0$ CPU Cores, $\le 2.0$ GiB RAM), zero steady-state idle footprint, disk streaming without in-memory frame buffer loops, stream-copy priority with soft subtitle muxing, and single-pass atomic media composition.
 
-### Requirement: Volatile RAM-Based Audio Temp Storage (`/dev/shm`)
-Intermediate audio files, silence chunks, and dramatic pause concatenation buffers MUST be allocated in `/dev/shm` (or OS temp directory fallback) to prevent unnecessary SSD I/O wear and reduce latency during TTS processing.
+## RENAMED Requirements
 
-#### Scenario: RAM Temp Directory Resolution
-- **Given** a Linux host with a writable `/dev/shm` filesystem
-- **When** `_get_ram_temp_dir()` is invoked during audio generation
-- **Then** the returned directory path MUST reside inside `/dev/shm/yt_auto_audio`
-- **And** all intermediate chunk files MUST be deleted from RAM immediately after concatenation.
+### Requirement: Atomic Single-Pass Video Transcoding and Filtergraph Assembly -> Disk Streaming Without Buffer Loops (Zero In-Memory Video Arrays)
 
-### Requirement: Single-Pass FFmpeg Audio Mastering
-Audio mastering MUST execute in a single consolidated FFmpeg `filter_complex` pass combining voice highpass/lowpass equalization, sidechain ducking under background music, and EBU R128 loudness normalization (Integrated Loudness $I=-14.0\text{ LUFS}$, True Peak $TP=-1.5\text{ dBTP}$, Loudness Range $LRA=11.0$). Double-pass disk renders are strictly prohibited.
+(Reason: Explicitly codify prohibition of uncompressed in-memory video array accumulation and enforce single-pass disk streaming)
 
-#### Scenario: Single-Pass Mastering Execution
-- **Given** narration speech WAV and background music MP3 inputs
-- **When** `master_audio_track` runs
-- **Then** FFmpeg MUST emit a stereo 48 kHz master audio file in a single execution pass.
+### Requirement: Stream-Copy Preservation When Subtitles Inactive Across Modular Compositors -> Stream-Copy Priority and Soft Subtitle Muxing
 
-### Requirement: Native Procedural and Vector Rendering (Zero-Browser Policy)
-Production video synthesis MUST use FFmpeg (lavfi/catalog loops, concat demuxer `-c:v copy` when `stream_copy_mode`, `DIRECTOR_SINGLE_PASS` assembly, libass subtitles). wgpu-py, resvg-py, WebGPU, and GLSL MUST NOT be the production stack; they MAY run only when `ENABLE_NATIVE_PROCEDURAL` is explicitly enabled from `src/media/_legacy`. Headless browser runtimes (Playwright, Puppeteer, Chromium, SwiftShader) and HTML/CSS web templates are strictly prohibited in the media generation pipeline.
+(Reason: Enforce stream-copy priority with soft subtitle muxing on video-loop pathways)
 
-#### Scenario: Procedural Rendering without Browser Subprocesses
-- **Given** a video scene requiring procedural backgrounds or HUD telemetry
-- **When** the media pipeline generates visual frames
-- **Then** frames MUST be produced via FFmpeg lavfi/catalog (HUD via `drawtext`/`drawbox` when `niche_hud` is present)
-- **And** zero browser subprocesses or Chromium dependencies MUST be spawned
-- **And** wgpu-py and resvg-py MUST NOT be required on the production hot path.
-
-### Requirement: libass Subtitle Rendering and Safe Area
-Subtitles generated for 9:16 vertical Shorts MUST be compiled into Advanced SubStation Alpha (`.ass`) scripts and burned natively via FFmpeg `libass`. Subtitles generated for 9:16 vertical Shorts MUST enforce bottom UI Safe Area $MarginV \ge 480\text{px}$ (canonical $\ge 25\%$ of canvas height) and $MarginV \ge 130\text{px}$ for 16:9 horizontal video, scaled with procedural 2.5D camera drift offsets to ensure clearance above player UI controls. Subtitles MUST enforce word-level karaoke timing (`{\kf}`). Frame-by-frame Python/Pillow text rasterization loops are strictly prohibited.
-
-#### Scenario: Native libass subtitle burn for 9:16 vertical Shorts (Happy Path)
-- **Given** word-level narration timestamps for a 9:16 vertical Short ($1080\times 1920$)
-- **When** subtitles are generated
-- **Then** `ASSSubtitleGenerator` MUST emit a compliant `.ass` script with $MarginV \ge 480\text{px}$ (scaling to $\ge 510\text{px}$ under downward camera drift)
-- **And** FFmpeg MUST burn subtitles during video composition via `libass`.
-
-#### Scenario: Native libass subtitle burn for 16:9 horizontal video (Happy Path)
-- **Given** word-level narration timestamps for a 16:9 horizontal canvas ($1920\times 1080$)
-- **When** subtitles are generated
-- **Then** `ASSSubtitleGenerator` MUST emit a compliant `.ass` script with $MarginV \ge 130\text{px}$
-- **And** FFmpeg MUST burn subtitles during video composition via `libass`.
-
-#### Scenario: Downward camera drift compensation (Edge Case)
-- **Given** a 9:16 video scene with active downward procedural camera drift ($\Delta y = +30\text{px}$)
-- **When** subtitle margin calculation executes
-- **Then** $MarginV$ MUST be boosted dynamically to $\ge 510\text{px}$
-- **And** rendered text MUST remain strictly above the 450px bottom UI danger threshold.
+## MODIFIED Requirements
 
 ### Requirement: Disk Streaming Without Buffer Loops (Zero In-Memory Video Arrays)
 (Previously: Governed atomic single-pass transcoding in monolithic `hybrid_engine.py` and `MultiActVideoRenderer` without explicit prohibition of uncompressed in-memory video array accumulation)
@@ -102,21 +67,8 @@ When subtitles are enabled on stream-copy pathways, subtitles MUST be soft-muxed
 - **Then** subtitle inputs and filter clauses MUST be omitted completely
 - **And** stream-copy `-c:v copy` MUST be preserved.
 
-### Requirement: Volatile RAM Audio Temp Storage and Single-Pass Audio Mastering Invariant Retention
-Modularization of media composition, audio pipelines, and curator segmentation MUST strictly retain compliance with memory-backed temporary storage and audio mastering rules:
-1. **Volatile RAM Temp Audio (`/dev/shm`)**: All intermediate audio files, silence padding buffers, and dramatic pause concatenation buffers MUST be allocated inside volatile RAM (`/dev/shm/yt_auto_audio`, or OS temp directory fallback) to prevent SSD wear and minimize I/O latency. All intermediate chunks MUST be deleted from RAM immediately following concatenation.
-2. **Single-Pass Audio Mastering**: Narration audio mastering MUST execute in a single consolidated FFmpeg `filter_complex` pass combining voice equalization (highpass/lowpass), sidechain ducking under background music, and EBU R128 loudness normalization ($I=-14.0\text{ LUFS}$, $TP=-1.5\text{ dBTP}$, $LRA=11.0$). Double-pass disk renders are strictly prohibited.
+## ADDED Requirements
 
-#### Scenario: Intermediate audio temp storage resolves to RAM during decomposed audio pipeline execution (Happy Path)
-- **Given** a Linux host with a writable `/dev/shm` filesystem
-- **When** `_get_ram_temp_dir()` is invoked during audio generation in decomposed audio modules
-- **Then** the returned directory path MUST reside inside `/dev/shm/yt_auto_audio`
-- **And** intermediate chunk files MUST be purged from RAM immediately after concatenation.
-
-#### Scenario: Decomposed audio mastering executes in single FFmpeg pass (Happy Path)
-- **Given** narration speech WAV and background music MP3 inputs
-- **When** `master_audio_track` runs
-- **Then** FFmpeg MUST emit a stereo 48 kHz master audio file in a single execution pass combining ducking and EBU R128 normalization.
 ### Requirement: Hard Target Resource Ceiling Governance (2 Cores CPU, 2.0 GiB RAM)
 
 In strict accordance with Section 5 of `AGENTS.md` and anti-regression invariant `REG-14`, all media processing workflows, pipeline stages, and background daemons MUST operate within an inviolable hard target ceiling of:

@@ -141,7 +141,7 @@ def plan_ken_burns_still_segments(
     if pan0 not in KEN_BURNS_PAN_CYCLE:
         pan0 = "center_to_top"
 
-    if dur <= KEN_BURNS_SPLIT_THRESHOLD_SEC:
+    if dur <= KEN_BURNS_SEGMENT_MAX_SEC and dur < KEN_BURNS_SPLIT_THRESHOLD_SEC:
         frames = max(1, int(round(dur * use_fps)))
         return [(dur, frames, pan0)]
 

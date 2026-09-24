@@ -157,6 +157,7 @@ class PipelineOrchestrator:
         generate_only: bool = False,
         dispatch_telegram: bool = False,
         skip_lock: bool = False,
+        visual_pipeline: str | None = None,
     ) -> PipelineRunResult:
         """
         Execute a pipeline run for a single channel under exclusive lock.
@@ -199,6 +200,7 @@ class PipelineOrchestrator:
                     generate_only=generate_only,
                     story_id=story_to_claim,
                     lane_id=lane_id,
+                    visual_pipeline=visual_pipeline,
                 )
 
                 delivery_dict: Optional[dict[str, Any]] = None

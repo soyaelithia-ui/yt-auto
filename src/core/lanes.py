@@ -27,7 +27,9 @@ ALLOWED_RESOLUTIONS: Final[dict[str, tuple[int, int]]] = {
     "vertical": SHORT_RESOLUTION,
     "horizontal": LONGFORM_RESOLUTION,
 }
-ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset({"beats", "director"})
+ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset(
+    {"beats", "director", "image_animation", "video_loop"}
+)
 ALLOWED_STORY_TYPES: Final[frozenset[str]] = frozenset(
     {"scp", "horror", "reddit_aita", "reddit_generic", "scifi"}
 )
@@ -163,7 +165,7 @@ class LaneProfile:
     background_audio: LaneBackgroundAudioConfig = field(default_factory=LaneBackgroundAudioConfig)
     enabled: bool = True
     multistory_collection: bool = False
-    visual_pipeline: str = "beats"
+    visual_pipeline: str = "beats"  # "beats" | "director" | "image_animation" | "video_loop"
     qa_profile: str = ""
     review_content_type: str = ""
     topic_filter_mode: str = "off"
@@ -290,7 +292,10 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
 
     visual_pipeline = str(raw.get("visual_pipeline", "beats")).strip().lower()
     if visual_pipeline not in ALLOWED_VISUAL_PIPELINES:
-        raise ValueError(f"Lane '{lane_id}': visual_pipeline inválido {visual_pipeline!r}")
+        raise ValueError(
+            f"Lane '{lane_id}': visual_pipeline inválido {visual_pipeline!r} "
+            f"(válidos: {sorted(ALLOWED_VISUAL_PIPELINES)})"
+        )
 
     filter_raw = raw.get("topic_filter") or {}
     filter_mode = str(filter_raw.get("mode", "off")).strip().lower()

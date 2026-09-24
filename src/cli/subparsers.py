@@ -76,6 +76,13 @@ def register_run_subcommand(subparsers: argparse._SubParsersAction, parent: argp
         help="Carril de producción (config/lanes.json) que gobierna el formato; "
         "por defecto el carril persistido de la historia o el del canal",
     )
+    p.add_argument(
+        "--visual-pipeline",
+        type=str,
+        default=None,
+        choices=["beats", "director", "image_animation", "video_loop"],
+        help="Sobrescribir el pipeline visual del carril (beats, director, image_animation, video_loop)",
+    )
     p.add_argument("--generate-only", action="store_true", help="Generar artefactos localmente sin subir a Drive, Telegram o YouTube")
     p.add_argument("--dispatch-telegram", action="store_true", help="Enviar video generado a Telegram al finalizar")
     p.add_argument("--test-telegram", action="store_true", help="Ejecutar prueba E2E de canal y entrega por Telegram")

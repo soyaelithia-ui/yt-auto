@@ -120,16 +120,17 @@ def harmonize_scene_transitions(
         dur_next = float(getattr(s_next, "duration_sec", 4.0) or 4.0)
         max_t = min(dur_curr, dur_next) * 0.30
 
-        # Big tension jump: quick, punchy cut/xfade (0.25 - 0.4s)
-        # Steady tension: atmospheric, gradual dissolve (0.5 - 0.75s)
+        # Big tension jump: quick, punchy cut/xfade (0.20 - 0.35s)
+        # Steady tension: atmospheric, gradual dissolve (0.35 - 0.75s)
         diff = abs(t_next - t_curr)
         if diff >= 2:
-            ideal = max(0.2, min(default_transition * 0.6, max_t))
+            ideal = min(0.35, max(0.20, default_transition * 0.5))
         elif diff == 1:
-            ideal = max(0.3, min(default_transition * 0.85, max_t))
+            ideal = min(0.50, max(0.30, default_transition * 0.8))
         else:
-            ideal = max(0.35, min(default_transition, max_t))
-        transitions.append(round(ideal, 2))
+            ideal = min(0.75, max(0.35, default_transition))
+        capped = min(ideal, max_t)
+        transitions.append(round(capped, 2))
     return transitions
 
 
@@ -139,13 +140,23 @@ def enforce_shorts_safe_zone(width: int, height: int) -> Dict[str, int]:
     if is_vertical:
         top_margin = max(180, int(height * 0.10))
         bottom_margin = max(460, int(height * 0.25))
-        right_margin = max(130, int(width * 0.15))
-        left_margin = max(64, int(width * 0.06))
+        if width == 1080 and height == 1920:
+            right_margin = 130
+            left_margin = 64
+        else:
+            right_margin = max(130, int(width * 0.15))
+            left_margin = max(64, int(width * 0.06))
     else:
-        top_margin = max(80, int(height * 0.08))
-        bottom_margin = max(120, int(height * 0.12))
-        right_margin = max(80, int(width * 0.08))
-        left_margin = max(80, int(width * 0.08))
+        if width == 1920 and height == 1080:
+            top_margin = 80
+            bottom_margin = 120
+            left_margin = 80
+            right_margin = 80
+        else:
+            top_margin = max(80, int(height * 0.08))
+            bottom_margin = max(120, int(height * 0.12))
+            right_margin = max(80, int(width * 0.08))
+            left_margin = max(80, int(width * 0.08))
 
     return {
         "top": top_margin,
