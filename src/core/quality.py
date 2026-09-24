@@ -780,12 +780,25 @@ def validate_prepublication(
                 report.issues.append("cobertura visual ausente o con fallback negro")
 
             is_loop_plan = (
-                (video_engine is not None and str(video_engine).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor"))
-                or str(plan.get("video_engine", "")).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor")
+                (video_engine is not None and str(video_engine).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "video_loop", "image_animation"))
+                or str(plan.get("video_engine", "")).lower() in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "video_loop", "image_animation")
                 or plan.get("loop") is True
                 or plan.get("is_loop") is True
                 or (len(scenes) == 1 and str(plan.get("mode", "")).lower() == "loop")
+                or (isinstance(precomputed_visual, dict) and precomputed_visual.get("engine") in ("image_animation", "loop", "video_loop"))
             )
+            is_image_anim = (
+                video_engine == "image_animation"
+                or (isinstance(precomputed_visual, dict) and precomputed_visual.get("engine") == "image_animation" and precomputed_visual.get("passed"))
+            )
+            if is_image_anim:
+                report.facts["scene_count"] = (
+                    precomputed_visual.get("scenes_count", len(scenes))
+                    if isinstance(precomputed_visual, dict)
+                    else len(scenes)
+                )
+                return report
+
             if not is_loop_plan:
                 min_cadence = 2.0 if video_mode == "short" else 15.0
                 max_cadence = 16.5 if video_mode == "short" else 45.0

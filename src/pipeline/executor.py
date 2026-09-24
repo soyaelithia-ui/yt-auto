@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any, Callable
 
@@ -179,6 +180,7 @@ class PipelineExecutor:
         owner: str | None = None,
         story: dict[str, Any] | None = None,
         directed: bool | None = None,
+        visual_pipeline: str | None = None,
     ) -> dict[str, Any]:
         """Execute exactly one video production pass."""
         channel_key = canonical_channel(channel)
@@ -216,9 +218,18 @@ class PipelineExecutor:
         profiler.run_id = run_id
         profiler.story_id = story_id
         lane = claimed_ctx["lane"]
+        if visual_pipeline and hasattr(lane, "with_overrides"):
+            lane = lane.with_overrides({"visual_pipeline": visual_pipeline})
+            claimed_ctx["lane"] = lane
         repository = claimed_ctx["repository"]
 
         engine_mode, is_loop_mode, is_multiscene_mode = _resolve_engine_mode(lane, video_engine, compositor)
+        force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
+        if is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
+            logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
+            engine_mode = "loop"
+            is_loop_mode = True
+            is_multiscene_mode = False
 
         subtitles_active = bool(enable_subtitles)
 
@@ -330,6 +341,7 @@ def run_pipeline_once(
     owner: str | None = None,
     story: dict[str, Any] | None = None,
     directed: bool | None = None,
+    visual_pipeline: str | None = None,
 ) -> dict[str, Any]:
     """Produce exactly one video governed by its lane (config/lanes.json)."""
     return PipelineExecutor.execute(
@@ -346,4 +358,5 @@ def run_pipeline_once(
         owner=owner,
         story=story,
         directed=directed,
+        visual_pipeline=visual_pipeline,
     )
