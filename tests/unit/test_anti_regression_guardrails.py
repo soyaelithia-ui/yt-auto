@@ -467,6 +467,101 @@ class TestLoopHotPathNoBurnGuardrails:
         )
         assert result == str(out_video)
 
+    @pytest.mark.parametrize("lane_id", ["horror-horror-long", "drama-aita-long"])
+    def test_reg13_longform_horizontal_lanes_use_stream_copy_and_soft_mux(
+        self, lane_id: str, tmp_path: Path
+    ) -> None:
+        """Assert longform horizontal lanes enforce stream-copy (-c:v copy) and soft subtitle muxing."""
+        from unittest.mock import MagicMock
+        from src.core.lanes import get_lane
+        from src.pipeline.stages.stage_08_loop import stage_08_loop_scene
+        from src.pipeline.stages.stage_09_render import stage_09_video_rendering
+
+        lane = get_lane(lane_id)
+        assert lane.orientation == "horizontal"
+        assert lane.visual_pipeline == "director"
+
+        # Stage 08: Loop assembly configures stream-copy mode and soft muxing
+        ctx8 = MagicMock()
+        ctx8.profiler.phase.return_value.__enter__ = MagicMock()
+        ctx8.profiler.phase.return_value.__exit__ = MagicMock()
+        ctx8.lane = lane
+        ctx8.is_long_lane = True
+        ctx8.orientation = "horizontal"
+        ctx8.subtitles_active = True
+        sub_file = tmp_path / "test.ass"
+        sub_file.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+        ctx8.ass_path = sub_file
+        ctx8.work_dir = tmp_path
+        ctx8.story = {}
+        ctx8.channel_name = lane.channel
+        ctx8.title = "Longform Story"
+        ctx8.audio_path = tmp_path / "audio.wav"
+        ctx8.music_track_path = None
+        ctx8.audio = {"duration_sec": 600.0}
+        loop1 = tmp_path / "loop1.mp4"
+        loop1.write_bytes(b"dummy")
+        ctx8.scene_bg_list = [str(loop1)]
+        ctx8.shot_durations = [600.0]
+
+        stage_08_loop_scene(ctx8)
+
+        assert ctx8.stream_copy_mode is True, f"REG-13 VIOLATION: stage_08 did not enable stream_copy_mode for {lane_id}"
+        assert ctx8.mux_subtitles is True, f"REG-13 VIOLATION: stage_08 did not enable mux_subtitles for {lane_id}"
+        assert ctx8.loop_manifest_path is not None
+
+        # Stage 09: Video rendering routes to stream-copy LoopVideoEngine
+        ctx9 = MagicMock()
+        ctx9.profiler.phase.return_value.__enter__ = MagicMock()
+        ctx9.profiler.phase.return_value.__exit__ = MagicMock()
+        ctx9.lane = lane
+        ctx9.is_long_lane = True
+        ctx9.orientation = "horizontal"
+        ctx9.stream_copy_mode = True
+        ctx9.mux_subtitles = True
+        ctx9.loop_manifest_path = ctx8.loop_manifest_path
+        video_out = tmp_path / "video.mp4"
+        video_out.write_bytes(b"dummy")
+        ctx9.video_path = video_out
+        ctx9.audio_path = tmp_path / "audio.wav"
+        ctx9.ass_path = sub_file
+        ctx9.music_track_path = None
+        ctx9.bg_volume = 0.04
+        ctx9.audio = {"duration_sec": 600.0}
+        ctx9.target_category = "cosmic_horror"
+        ctx9.channel_name = lane.channel
+        ctx9.run_id = f"test_reg13_{lane_id}"
+        ctx9.burn_subtitles = False
+
+        stage_09_video_rendering(ctx9)
+
+        assert ctx9.loop_engine.render.called, f"REG-13 VIOLATION: loop_engine.render not called for {lane_id}"
+        call_kwargs = ctx9.loop_engine.render.call_args[1]
+        assert call_kwargs.get("stream_copy") is True, f"REG-13 VIOLATION: stream_copy not True for {lane_id}"
+        assert call_kwargs.get("include_subtitles") is True
+        assert "burn_subtitles" not in call_kwargs
+
+    def test_reg13_work_refusal_prohibits_libass_burning_on_horizontal_longform(
+        self, tmp_path: Path
+    ) -> None:
+        """Assert Resource Work Refusal strictly forbids libass burning or re-encoding on horizontal longform."""
+        from unittest.mock import MagicMock
+        from src.core.lanes import get_lane
+        from src.pipeline.stages.stage_09_render import stage_09_video_rendering
+
+        lane = get_lane("horror-horror-long")
+
+        ctx = MagicMock()
+        ctx.profiler.phase.return_value.__enter__ = MagicMock()
+        ctx.profiler.phase.return_value.__exit__.return_value = False
+        ctx.lane = lane
+        ctx.is_long_lane = True
+        ctx.orientation = "horizontal"
+        ctx.burn_subtitles = True
+
+        with pytest.raises(ValueError, match="RESOURCE WORK REFUSAL: Burning subtitles or re-encoding"):
+            stage_09_video_rendering(ctx)
+
 
 class TestResourceTargetGovernanceGuardrails:
     """Enforce strict 2 Cores and 2 GB RAM target governance in AGENTS.md and technical documentation."""
@@ -495,6 +590,22 @@ class TestResourceTargetGovernanceGuardrails:
         assert "Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)" in content, (
             "REG-14 VIOLATION: Target Resource Envelope rule missing in docs/FFMPEG_LOW_CPU.md"
         )
+
+    def test_reg14_multiact_stream_copy_turnaround_ceiling_documented(self) -> None:
+        """Assert multi-act stream-copy turnaround ceiling (≤ 45s) and resource envelope are documented."""
+        agents_content = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        assert "turnaround ceiling of ≤ 45s" in agents_content, (
+            "REG-14 VIOLATION: Multi-act stream-copy turnaround ceiling (≤ 45s) missing in AGENTS.md"
+        )
+        assert "≤ 2 CPU Cores" in agents_content
+        assert "≤ 2.0 GiB RAM" in agents_content
+
+        ffmpeg_doc = (REPO_ROOT / "docs" / "FFMPEG_LOW_CPU.md").read_text(encoding="utf-8")
+        assert "turnaround ceiling of ≤ 45s" in ffmpeg_doc, (
+            "REG-14 VIOLATION: Multi-act stream-copy turnaround ceiling (≤ 45s) missing in docs/FFMPEG_LOW_CPU.md"
+        )
+        assert "≤ 2 Cores CPU" in ffmpeg_doc or "≤ 2 CPU Cores" in ffmpeg_doc
+        assert "≤ 2.0 GiB RAM" in ffmpeg_doc
 
 
 # =============================================================================

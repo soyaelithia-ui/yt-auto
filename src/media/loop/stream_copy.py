@@ -234,7 +234,7 @@ class LoopStreamCopyMixin:
         extra_sub, sub_maps = subtitle_mux_ffmpeg_parts(subtitle_path, sub_input_index)
         cmd.extend(extra_sub)
 
-        threads = kwargs.get("threads") or default_ffmpeg_threads()
+        threads = kwargs.get("threads") or 2
         if has_music:
             audio_filter = getattr(self, "build_audio_filter")(
                 has_music=True,
@@ -1081,7 +1081,8 @@ class LoopStreamCopyMixin:
         )
 
         res_tuple = getattr(self, "parse_resolution")(p["orientation"])
-        quality_metrics = getattr(self, "get_loop_quality_metrics")(p["video_loop_path"] or rendered_file)
+        loop_candidate = p["video_loop_path"] or (p["scene_images"][0] if p.get("scene_images") else None) or rendered_file
+        quality_metrics = getattr(self, "get_loop_quality_metrics")(loop_candidate)
         return {
             "compositor": "loop",
             "render_time_sec": elapsed,

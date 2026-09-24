@@ -15,13 +15,22 @@ logger = get_logger("pipeline.stages.stage_09_render")
 
 def _render_video_loop(ctx: PipelineContext, render_spec: RenderSpec) -> None:
     """Execute stream-copy video composition with soft subtitle muxing (REG-13)."""
+    if getattr(ctx, "loop_engine", None) is None:
+        from src.media.loop_engine import LoopVideoEngine
+        ctx.loop_engine = LoopVideoEngine()
+
     mux_subtitles = render_spec.include_subtitles
+    bg_path = (
+        render_spec.background_path
+        or getattr(ctx, "resolved_loop_path", None)
+        or (ctx.scene_bg_list[0] if getattr(ctx, "scene_bg_list", None) else "")
+    )
     ctx.compositor_metrics = ctx.loop_engine.render(
         render_spec.manifest_path or ctx.manifest_path,
         render_spec.output_video_path or ctx.video_path,
         audio_path=render_spec.audio_path or ctx.audio_path,
         subtitle_path=render_spec.subtitle_path if mux_subtitles else None,
-        background_path=str(render_spec.background_path or ctx.resolved_loop_path),
+        background_path=str(bg_path),
         bg_music_path=render_spec.bg_music_path or ctx.music_track_path,
         music_volume=render_spec.music_volume,
         duration_sec=float(render_spec.duration_sec or ctx.audio["duration_sec"]),
@@ -151,11 +160,45 @@ def stage_09_video_rendering(ctx: PipelineContext) -> None:
             logger.warning("RenderSpec validation warning: %s", exc)
         ctx.render_spec = render_spec
 
+        raw_dur = getattr(ctx.lane, "duration_target_sec", None)
+        if raw_dur is None or isinstance(raw_dur, type(ctx)):
+            raw_dur = getattr(ctx.lane, "target_duration_sec", 0.0)
+        try:
+            target_dur = float(raw_dur)
+        except (TypeError, ValueError):
+            target_dur = 0.0
+
+        is_long = bool(
+            ctx.is_long_lane
+            or getattr(ctx.lane, "target_format", "") == "longform"
+            or target_dur >= 600.0
+        )
+        is_horizontal = getattr(ctx.lane, "orientation", "") == "horizontal"
+        is_horizontal_director = (
+            is_horizontal
+            and getattr(ctx.lane, "visual_pipeline", "") == "director"
+        )
+
+        # Resource Work Refusal check (Section 5 AGENTS.md, REG-14)
+        if (is_long or ctx.is_long_lane) and is_horizontal:
+            burn = (
+                getattr(render_spec, "burn_subtitles", False)
+                or getattr(ctx, "burn_subtitles", False)
+                or getattr(render_spec, "subtitles_burned", False)
+            )
+            reencode = bool(getattr(render_spec, "reencode", False))
+            if burn or reencode:
+                raise ValueError(
+                    "RESOURCE WORK REFUSAL: Burning subtitles or re-encoding video on 16:9 horizontal "
+                    "longform violates Section 5 of AGENTS.md and REG-14. Use stream-copy (-c:v copy) "
+                    "and soft-muxing (-c:s mov_text)."
+                )
+
         pipeline = getattr(getattr(ctx, "lane", None), "visual_pipeline", "beats")
 
-        render_sem = _LONG_RENDER_SEMAPHORE if ctx.is_long_lane else _SHORT_RENDER_SEMAPHORE
+        render_sem = _LONG_RENDER_SEMAPHORE if (is_long or ctx.is_long_lane) else _SHORT_RENDER_SEMAPHORE
         with render_sem, active_heartbeat_scope(ctx):
-            if pipeline == "video_loop":
+            if is_horizontal_director or pipeline == "video_loop":
                 _render_video_loop(ctx, render_spec)
             elif pipeline == "image_animation":
                 _render_image_animation(ctx, render_spec)

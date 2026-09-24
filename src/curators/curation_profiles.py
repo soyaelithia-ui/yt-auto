@@ -6,13 +6,28 @@ pointers, lane alias resolution, and deterministic fallback narrative generation
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.log import get_logger
 
 logger = get_logger("cinematic_script_curator.profiles")
+
+
+@dataclass(slots=True, frozen=True)
+class ActNarrativePlan:
+    """Strongly typed representation of an individual narrative act."""
+    act_index: int                       # 1-based sequential act index (1 <= act_index <= N)
+    act_title: str                       # Public title for YouTube chapters
+    dramatic_role: str                   # exposition_inception | rising_action_dread | confrontation_crisis | climax_confrontation | climax_breaking_point | aftermath_revelation
+    tension_level: int                   # Integer tension score from 1 (ambient) to 5 (peak climax)
+    narration_text: str                  # Dialogue and narration sentences allocated to this act
+    target_duration_sec: float           # Scaled duration in seconds matching TTS audio
+    word_count: int                      # Word count for duration estimation
+    environmental_moods: List[str] = field(default_factory=list)  # Thematic environment descriptions for catalog matching
+
 
 SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schemas" / "script_curator.schema.json"
 
@@ -113,9 +128,9 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
             },
             {
                 "act_number": 2,
-                "act_title": "Acto II: Tensión Creciente y Advertencias Ignoradas",
+                "act_title": "Acto II: Advertencias Ignoradas y Señales",
                 "dramatic_role": "rising_action_dread",
-                "tension_profile": [2, 3, 4],
+                "tension_profile": [2, 3],
                 "moods": [
                     "Consola de radio con luces fluorescentes parpadeando bajo pulso electromagnético",
                     "Sala de archivos con archivadores de acero y libretas de guardias desaparecidos",
@@ -124,9 +139,20 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
             },
             {
                 "act_number": 3,
-                "act_title": "Acto III: Confrontación Inexplicable y Ruptura",
+                "act_title": "Acto III: Escalada Inexorable de la Amenaza",
+                "dramatic_role": "rising_action_dread",
+                "tension_profile": [3, 4],
+                "moods": [
+                    "Corredores oscuros con sombras tridimensionales en los ángulos ciegos",
+                    "Muros de hormigón agrietados con señales de interferencia biológica",
+                    "Perímetro sellado bajo sirenas de emergencia lejanas",
+                ],
+            },
+            {
+                "act_number": 4,
+                "act_title": "Acto IV: Confrontación Inexplicable y Ruptura",
                 "dramatic_role": "climax_confrontation",
-                "tension_profile": [4, 5, 5],
+                "tension_profile": [4, 5],
                 "moods": [
                     "Cúpula de observación quebrada con ventanal astillado y fulgor de bengala roja",
                     "Puerta blindada cediendo con sombra tridimensional proyectada bajo el umbral",
@@ -134,14 +160,45 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
                 ],
             },
             {
-                "act_number": 4,
-                "act_title": "Acto IV: Secuela Psicológica y Trauma Permanente",
+                "act_number": 5,
+                "act_title": "Acto V: Clímax Crítico y Desesperación",
+                "dramatic_role": "climax_breaking_point",
+                "tension_profile": [5],
+                "moods": [
+                    "Zona cero de brecha total con luces estroboscópicas rojas y estática ensordecedora",
+                    "Abismo sensorial con fractura del espacio físico y colapso de mamparas",
+                    "Encuentro directo con la entidad en el umbral del refugio",
+                ],
+            },
+            {
+                "act_number": 6,
+                "act_title": "Acto VI: Secuela Psicológica y Trauma Permanente",
                 "dramatic_role": "aftermath_revelation",
-                "tension_profile": [3, 2],
+                "tension_profile": [2, 3],
                 "moods": [
                     "Amanecer brumoso desolado sobre carretera forestal con vehículos oficiales",
                     "Apartamento urbano en penumbra nocturna con receptor de radio emitiendo estática",
                     "Expediente sellado bajo reserva oficial y custodia permanente",
+                ],
+            },
+            {
+                "act_number": 7,
+                "act_title": "Acto VII: Expediente Clasificado y Silencio Oficial",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [2],
+                "moods": [
+                    "Archivador confidencial sellado con cinta forense bajo luz fluorescente",
+                    "Carretera desolada al crepúsculo con patrullas en retirada",
+                ],
+            },
+            {
+                "act_number": 8,
+                "act_title": "Acto VIII: Ecos del Abismo y Vigilia Eterna",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [1, 2],
+                "moods": [
+                    "Habitación en penumbra con receptor de onda corta transmitiendo susurros",
+                    "Horizonte oscuro donde la niebla nunca termina de disiparse",
                 ],
             },
         ],
@@ -171,9 +228,20 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
             },
             {
                 "act_number": 2,
-                "act_title": "Acto II: El Detonante y Escalada del Conflicto",
+                "act_title": "Acto II: Primeras Fricciones y Demandas Injustas",
                 "dramatic_role": "rising_action_dread",
-                "tension_profile": [2, 3, 4],
+                "tension_profile": [2, 3],
+                "moods": [
+                    "Mesa de café con murmullos y demandas económicas encubiertas",
+                    "Llamadas telefónicas insistentes con tono de exigencia moral",
+                    "Sala de estar con miradas esquivas y tensión en el aire",
+                ],
+            },
+            {
+                "act_number": 3,
+                "act_title": "Acto III: El Detonante y Escalada del Conflicto",
+                "dramatic_role": "rising_action_dread",
+                "tension_profile": [3, 4],
                 "moods": [
                     "Discusión tensa en sala familiar bajo luz tenue",
                     "Mesa de comedor hostil con parientes enfrentados",
@@ -181,8 +249,8 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
                 ],
             },
             {
-                "act_number": 3,
-                "act_title": "Acto III: Punto de Ruptura y Confrontación Directa",
+                "act_number": 4,
+                "act_title": "Acto IV: Punto de Ruptura y Confrontación Directa",
                 "dramatic_role": "climax_confrontation",
                 "tension_profile": [4, 5],
                 "moods": [
@@ -192,14 +260,45 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
                 ],
             },
             {
-                "act_number": 4,
-                "act_title": "Acto IV: Reflexión Comunitaria y Actualización Posterior",
+                "act_number": 5,
+                "act_title": "Acto V: Juicio Social y Veredicto Comunitario",
+                "dramatic_role": "climax_confrontation",
+                "tension_profile": [4, 5],
+                "moods": [
+                    "Mensajes de texto implacables y acusaciones en redes sociales",
+                    "Reunión de familiares divididos en bandos irreconciliables",
+                    "Asesoría legal notificando límites definitivos y medidas cautelares",
+                ],
+            },
+            {
+                "act_number": 6,
+                "act_title": "Acto VI: Reflexión Final y Actualización Posterior",
                 "dramatic_role": "aftermath_revelation",
-                "tension_profile": [2, 1],
+                "tension_profile": [1, 2],
                 "moods": [
                     "Cafetería reflexiva con luz natural",
                     "Amanecer de paz mental e independencia",
                     "Nuevo hogar con tranquilidad",
+                ],
+            },
+            {
+                "act_number": 7,
+                "act_title": "Acto VII: Consecuencias y Nuevos Límites",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [2, 1],
+                "moods": [
+                    "Sala de estar ordenada con silencio reparador",
+                    "Notificación de cierre de comunicaciones formales",
+                ],
+            },
+            {
+                "act_number": 8,
+                "act_title": "Acto VIII: Paz Mental y Reconstrucción",
+                "dramatic_role": "aftermath_revelation",
+                "tension_profile": [1],
+                "moods": [
+                    "Ventanal soleado en un hogar independiente y en calma",
+                    "Paseo sereno confirmando la decisión correcta",
                 ],
             },
         ],

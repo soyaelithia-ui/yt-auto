@@ -11,10 +11,53 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+from dataclasses import dataclass, field
 from src.config import SETTINGS
 from src.log import get_logger
 
 logger = get_logger("compositor_interface")
+
+
+@dataclass(slots=True, frozen=True)
+class MultiActVisualSpec:
+    """Strongly typed visual plan compiled by Stage 04 for multi-act stream-copy."""
+    video_engine: str
+    stream_copy: bool
+    lane_id: str
+    orientation: str
+    total_duration_sec: float
+    scene_bg_list: list[str]
+    shot_durations: list[float]
+    act_titles: list[str]
+    act_tensions: list[int]
+    is_killswitch_active: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        scenes = [
+            {
+                "source": bg,
+                "image_path": bg,
+                "duration": dur,
+                "duration_sec": dur,
+            }
+            for bg, dur in zip(self.scene_bg_list, self.shot_durations)
+        ]
+        return {
+            "video_engine": self.video_engine,
+            "stream_copy": self.stream_copy,
+            "is_loop": True,
+            "lane_id": self.lane_id,
+            "orientation": self.orientation,
+            "total_duration_sec": self.total_duration_sec,
+            "covered_seconds": self.total_duration_sec,
+            "duration_sec": self.total_duration_sec,
+            "scene_bg_list": list(self.scene_bg_list),
+            "shot_durations": list(self.shot_durations),
+            "act_titles": list(self.act_titles),
+            "act_tensions": list(self.act_tensions),
+            "scenes": scenes,
+            "is_killswitch_active": self.is_killswitch_active,
+        }
 
 
 class CompositorError(RuntimeError):

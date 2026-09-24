@@ -344,7 +344,11 @@ def _resolve_engine_mode(
         "image_animation",
     )
     force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
-    if is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
+    if is_multiscene_mode and getattr(lane, "orientation", None) == "horizontal" and getattr(lane, "visual_pipeline", None) == "director":
+        engine_mode = "director"
+        is_multiscene_mode = True
+        is_loop_mode = False
+    elif is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
         logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
         engine_mode = "loop"
         is_loop_mode = True

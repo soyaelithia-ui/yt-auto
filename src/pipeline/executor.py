@@ -224,12 +224,6 @@ class PipelineExecutor:
         repository = claimed_ctx["repository"]
 
         engine_mode, is_loop_mode, is_multiscene_mode = _resolve_engine_mode(lane, video_engine, compositor)
-        force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
-        if is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
-            logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
-            engine_mode = "loop"
-            is_loop_mode = True
-            is_multiscene_mode = False
 
         subtitles_active = bool(enable_subtitles)
 

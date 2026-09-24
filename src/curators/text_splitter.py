@@ -23,6 +23,7 @@ from src.curators.curation_profiles import (
     synthesize_hook_summary,
 )
 from src.curators.segmentation import (
+    _expand_scenes_to_minimum,
     distribute_scenes_across_acts,
     sanitize_text,
     slice_into_scenes,
@@ -49,6 +50,59 @@ class TextSegmentationEngine:
             with open(self.schema_path, "r", encoding="utf-8") as f:
                 self._schema = json.load(f)
 
+    @staticmethod
+    def scale_act_durations(
+        durations: List[float],
+        target_total_duration: float,
+        min_act_duration: float = 30.0,
+    ) -> List[float]:
+        """
+        Scales act durations proportionally to match target_total_duration with zero drift.
+        Enforces min_act_duration per act when possible and clamps final act precisely.
+        """
+        if not durations:
+            return []
+        n = len(durations)
+        if target_total_duration <= 0:
+            return [0.0] * n
+
+        raw_sum = sum(durations)
+        if raw_sum <= 0:
+            base = target_total_duration / n
+            return [round(base, 4)] * (n - 1) + [round(target_total_duration - (n - 1) * round(base, 4), 4)]
+
+        scale_factor = target_total_duration / raw_sum
+        scaled = [d * scale_factor for d in durations]
+
+        if target_total_duration >= n * min_act_duration:
+            for _ in range(5):
+                below_indices = [i for i, d in enumerate(scaled) if d < min_act_duration]
+                above_indices = [i for i, d in enumerate(scaled) if d > min_act_duration]
+                if not below_indices or not above_indices:
+                    break
+                deficit = sum(min_act_duration - scaled[i] for i in below_indices)
+                for i in below_indices:
+                    scaled[i] = min_act_duration
+                surplus_pool = sum(scaled[i] - min_act_duration for i in above_indices)
+                if surplus_pool > 0:
+                    for i in above_indices:
+                        reduce_amt = deficit * ((scaled[i] - min_act_duration) / surplus_pool)
+                        scaled[i] -= reduce_amt
+
+        result = [round(d, 4) for d in scaled[:-1]]
+        final_dur = round(target_total_duration - sum(result), 4)
+        result.append(final_dur)
+
+        if target_total_duration >= n * min_act_duration and result[-1] < min_act_duration:
+            shortfall = min_act_duration - result[-1]
+            for i in range(len(result) - 2, -1, -1):
+                if result[i] - shortfall >= min_act_duration:
+                    result[i] = round(result[i] - shortfall, 4)
+                    result[-1] = round(result[-1] + shortfall, 4)
+                    break
+
+        return result
+
     def curate(
         self,
         raw_text: str,
@@ -58,7 +112,8 @@ class TextSegmentationEngine:
         words_per_minute: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Curates raw text into structured 4-Act screenplay with progressive tension curve.
+        Curates raw text into structured screenplay with progressive tension curve.
+        Dynamically decomposes longform narratives into 4-8 acts.
         Enforces lane-specific timing, scene bounds, vocal cues, and Draft-07 schema validation.
         """
         lane_key, lane_cfg = resolve_lane_config(channel_lane, target_format)
@@ -68,7 +123,8 @@ class TextSegmentationEngine:
 
         clean_text = sanitize_text(raw_text, channel=channel)
         words = clean_text.split()
-        if len(words) < 25:
+        is_fallback = len(words) < 25
+        if is_fallback:
             clean_text = generate_fallback_narrative(title, lane_key, clean_text)
             words = clean_text.split()
 
@@ -83,11 +139,17 @@ class TextSegmentationEngine:
             target_format=target_fmt,
         )
 
+        if target_fmt == "longform" and len(scene_texts) < 4:
+            scene_texts = _expand_scenes_to_minimum(scene_texts, 4)
+
         acts_data, tension_curve = self._build_acts(
             lane_key=lane_key,
             lane_cfg=lane_cfg,
             scene_texts=scene_texts,
             wpm=wpm,
+            clean_text=clean_text,
+            target_fmt=target_fmt,
+            is_fallback=is_fallback,
         )
 
         output_payload = self._assemble_payload(
@@ -102,7 +164,44 @@ class TextSegmentationEngine:
         )
 
         if self._schema:
-            jsonschema.validate(instance=output_payload, schema=self._schema)
+            schema_to_use = self._schema
+            needs_extended = (
+                len(acts_data) > 4
+                or any(
+                    a.get("dramatic_role") not in {"exposition_inception", "rising_action_dread", "climax_confrontation", "aftermath_revelation"}
+                    or "tension_level" in a
+                    or "target_duration_sec" in a
+                    for a in acts_data
+                )
+            )
+            if needs_extended:
+                schema_to_use = json.loads(json.dumps(self._schema))
+                schema_to_use["properties"]["acts"]["maxItems"] = 8
+                schema_to_use["properties"]["acts"]["items"]["properties"]["act_number"]["maximum"] = 8
+                schema_to_use["properties"]["acts"]["items"]["properties"]["dramatic_role"]["enum"] = [
+                    "exposition_inception",
+                    "rising_action_dread",
+                    "confrontation_crisis",
+                    "climax_confrontation",
+                    "climax_breaking_point",
+                    "aftermath_revelation",
+                ]
+                schema_to_use["properties"]["acts"]["items"]["properties"]["tension_level"] = {
+                    "type": "integer", "minimum": 1, "maximum": 5
+                }
+                schema_to_use["properties"]["acts"]["items"]["properties"]["target_duration_sec"] = {
+                    "type": "number", "minimum": 0.0
+                }
+                schema_to_use["properties"]["acts"]["items"]["properties"]["estimated_duration_sec"] = {
+                    "type": "number", "minimum": 0.0
+                }
+                schema_to_use["properties"]["acts"]["items"]["properties"]["word_count"] = {
+                    "type": "integer", "minimum": 0
+                }
+                schema_to_use["properties"]["acts"]["items"]["properties"]["narration_text"] = {
+                    "type": "string"
+                }
+            jsonschema.validate(instance=output_payload, schema=schema_to_use)
 
         return output_payload
 
@@ -112,10 +211,45 @@ class TextSegmentationEngine:
         lane_cfg: Dict[str, Any],
         scene_texts: List[str],
         wpm: float,
+        clean_text: str = "",
+        target_fmt: str = "longform",
+        is_fallback: bool = False,
     ) -> Tuple[List[Dict[str, Any]], List[int]]:
-        """Assembles 4-act structure with scenes, tension curves, and audio pacing cues."""
+        """Assembles dynamic 4-8 act structure with scenes, tension curves, and audio pacing cues."""
         acts_specs = lane_cfg["acts"]
-        scene_distribution = distribute_scenes_across_acts(len(scene_texts), len(acts_specs))
+        is_longform = (target_fmt == "longform") or (lane_cfg.get("min_total_dur", 0) >= 600.0)
+
+        total_words = len(clean_text.split()) if clean_text else sum(len(s.split()) for s in scene_texts)
+
+        if is_longform and not is_fallback:
+            target_n = max(4, min(8, round(total_words / 500)))
+            if len(scene_texts) < target_n:
+                scene_texts = _expand_scenes_to_minimum(scene_texts, target_n)
+
+            if len(acts_specs) >= target_n:
+                if target_n == 4:
+                    selected_indices = [0, 1, 3, 5] if len(acts_specs) >= 6 else [0, 1, 2, 3]
+                elif target_n == 5:
+                    selected_indices = [0, 1, 2, 4, 5] if len(acts_specs) >= 6 else [0, 1, 2, 3, 4]
+                elif target_n == 6:
+                    selected_indices = [0, 1, 2, 3, 4, 5]
+                elif target_n == 7:
+                    selected_indices = [0, 1, 2, 3, 4, 5, 6] if len(acts_specs) >= 7 else list(range(len(acts_specs)))
+                else:
+                    selected_indices = list(range(min(target_n, len(acts_specs))))
+                active_acts_specs = [acts_specs[i] for i in selected_indices]
+            else:
+                active_acts_specs = acts_specs
+        elif is_longform and is_fallback:
+            target_n = 4
+            selected_indices = [0, 1, 3, 5] if len(acts_specs) >= 6 else [0, 1, 2, 3]
+            active_acts_specs = [acts_specs[i] for i in selected_indices] if len(acts_specs) >= 4 else acts_specs
+        else:
+            target_n = len(acts_specs)
+            active_acts_specs = acts_specs
+
+        ROMAN_NUMS = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"]
+        scene_distribution = distribute_scenes_across_acts(len(scene_texts), len(active_acts_specs))
         min_scene_dur = lane_cfg["min_scene_dur"]
         max_scene_dur = lane_cfg["max_scene_dur"]
 
@@ -124,9 +258,16 @@ class TextSegmentationEngine:
         global_idx = 1
         curr_idx = 0
 
-        for act_idx, act_spec in enumerate(acts_specs):
-            count_for_act = scene_distribution[act_idx]
+        for act_idx, raw_spec in enumerate(active_acts_specs, start=1):
+            count_for_act = scene_distribution[act_idx - 1]
             act_scenes: List[Dict[str, Any]] = []
+
+            raw_title = raw_spec["act_title"]
+            if ":" in raw_title:
+                title_suffix = raw_title.split(":", 1)[1].strip()
+                act_title = f"Acto {ROMAN_NUMS[act_idx]}: {title_suffix}"
+            else:
+                act_title = f"Acto {ROMAN_NUMS[act_idx]}: {raw_title}"
 
             for sc_offset in range(count_for_act):
                 if curr_idx >= len(scene_texts):
@@ -136,10 +277,10 @@ class TextSegmentationEngine:
                 raw_dur = (sc_words / wpm) * 60.0
                 sc_dur = round(max(min_scene_dur, min(max_scene_dur, raw_dur)), 2)
 
-                tension = interpolate_tension(act_spec["tension_profile"], sc_offset, count_for_act)
+                tension = interpolate_tension(raw_spec["tension_profile"], sc_offset, count_for_act)
                 tension_curve.append(tension)
-                pacing_cue = resolve_audio_pacing_cue(lane_key, act_spec["act_number"], tension, sc_offset, count_for_act)
-                mood = derive_semantic_environmental_mood(sc_text, act_spec["moods"][sc_offset % len(act_spec["moods"])], tension)
+                pacing_cue = resolve_audio_pacing_cue(lane_key, act_idx, tension, sc_offset, count_for_act)
+                mood = derive_semantic_environmental_mood(sc_text, raw_spec["moods"][sc_offset % len(raw_spec["moods"])], tension)
 
                 act_scenes.append({
                     "scene_id": f"scene_{global_idx:03d}",
@@ -150,18 +291,27 @@ class TextSegmentationEngine:
                     "estimated_duration_sec": sc_dur,
                     "environmental_mood": mood,
                     "audio_pacing_cue": pacing_cue,
-                    "transition_reason": derive_transition_reason(act_spec["act_number"], act_spec["dramatic_role"], tension, sc_offset),
+                    "transition_reason": derive_transition_reason(act_idx, raw_spec["dramatic_role"], tension, sc_offset),
                 })
                 global_idx += 1
                 curr_idx += 1
 
             if act_scenes:
-                acts_data.append({
-                    "act_number": act_spec["act_number"],
-                    "act_title": act_spec["act_title"],
-                    "dramatic_role": act_spec["dramatic_role"],
+                act_tension = max(s["tension_level"] for s in act_scenes)
+                act_dur = round(sum(s["estimated_duration_sec"] for s in act_scenes), 2)
+                act_dict: Dict[str, Any] = {
+                    "act_number": act_idx,
+                    "act_title": act_title,
+                    "dramatic_role": raw_spec["dramatic_role"],
                     "scenes": act_scenes,
-                })
+                }
+                if len(active_acts_specs) > 4:
+                    act_dict["tension_level"] = act_tension
+                    act_dict["target_duration_sec"] = act_dur
+                    act_dict["estimated_duration_sec"] = act_dur
+                    act_dict["word_count"] = sum(s["word_count"] for s in act_scenes)
+                    act_dict["narration_text"] = " ".join(s["narration_text"] for s in act_scenes)
+                acts_data.append(act_dict)
 
         return acts_data, tension_curve
 
@@ -179,6 +329,24 @@ class TextSegmentationEngine:
         """Assembles final curated script payload dictionary."""
         total_scene_duration = round(sum(s["estimated_duration_sec"] for a in acts_data for s in a["scenes"]), 2)
         final_total_duration = max(lane_cfg["min_total_dur"], min(lane_cfg["max_total_dur"], total_scene_duration))
+
+        if target_fmt == "longform" and acts_data:
+            act_raw_durs = [
+                a.get("estimated_duration_sec", sum(s["estimated_duration_sec"] for s in a["scenes"]))
+                for a in acts_data
+            ]
+            scaled_act_durs = self.scale_act_durations(act_raw_durs, final_total_duration, min_act_duration=30.0)
+            for a_idx, act in enumerate(acts_data):
+                if "target_duration_sec" in act or len(acts_data) > 4:
+                    act["target_duration_sec"] = scaled_act_durs[a_idx]
+                    act["estimated_duration_sec"] = scaled_act_durs[a_idx]
+                scenes_in_act = act["scenes"]
+                if scenes_in_act:
+                    scene_raw_durs = [s["estimated_duration_sec"] for s in scenes_in_act]
+                    scaled_scenes = self.scale_act_durations(scene_raw_durs, scaled_act_durs[a_idx], min_act_duration=1.0)
+                    for s_idx, sc in enumerate(scenes_in_act):
+                        sc["estimated_duration_sec"] = scaled_scenes[s_idx]
+
         hook_summary = synthesize_hook_summary(title, lane_key, clean_text)
         pred_score, pred_rationale = self.evaluate_predictive_success(clean_text, title, channel_lane)
 

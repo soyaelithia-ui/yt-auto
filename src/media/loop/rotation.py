@@ -371,6 +371,174 @@ class LoopRotationMixin:
         )
         return chosen
 
+    def resolve_multi_act_loops(
+        self,
+        acts: Sequence[dict | Any],
+        orientation: str | tuple[int, int] = "horizontal",
+        channel: str = "",
+        category: str = "",
+        allow_test_mock: bool = False,
+        candidate_pool: Sequence[Path] | None = None,
+    ) -> tuple[list[Path], list[float]]:
+        """
+        Resolves thematic horizontal catalog loops for each narrative act in a multi-act longform video.
+        Calibrates loops by dramatic role and tension level (1-5), avoids immediate adjacent repetitions,
+        and applies seeded modulo fallback rotation when unique catalog assets < act count.
+        """
+        if not acts:
+            return [], []
+
+        act_durations: list[float] = []
+        for act in acts:
+            d = (
+                act.get("target_duration_sec")
+                or act.get("estimated_duration_sec")
+                or act.get("duration_sec")
+                or 30.0
+            ) if isinstance(act, dict) else (
+                getattr(act, "target_duration_sec", None)
+                or getattr(act, "estimated_duration_sec", None)
+                or getattr(act, "duration_sec", 30.0)
+            )
+            act_durations.append(float(d))
+
+        if candidate_pool is not None:
+            candidates = [Path(p) for p in candidate_pool]
+        else:
+            candidates = []
+            folder = getattr(self, "longs_videos_dir", LONGS_VIDEOS_DIR)
+            if folder.exists():
+                candidates.extend(sorted([
+                    p for p in folder.iterdir()
+                    if p.is_file() and p.suffix.lower() == ".mp4" and p.stat().st_size > 0 and not p.name.startswith(".")
+                ]))
+            horiz_dir = BASE_DIR / "assets" / "loops" / "horizontal"
+            if horiz_dir.exists():
+                for sub in horiz_dir.rglob("*.mp4"):
+                    if sub.is_file() and sub.stat().st_size > 0 and sub not in candidates:
+                        candidates.append(sub)
+
+        if not candidates:
+            from src.config import is_test_environment
+            if allow_test_mock or is_test_environment():
+                candidates = [self._get_or_create_test_fixture_loop(orientation=orientation)]
+            else:
+                raise CatalogAssetNotFoundError(
+                    f"No horizontal video loops found in '{LONGS_VIDEOS_DIR}' or '{BASE_DIR / 'assets' / 'loops' / 'horizontal'}'."
+                )
+
+        norm_ctx = f"{category or ''} {channel or ''}".lower()
+        if candidate_pool is None:
+            if any(k in norm_ctx for k in ("drama", "aita", "aelithia", "interior", "romance", "family", "confession")):
+                drama_candidates = [
+                    p for p in candidates
+                    if not any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "monsters"))
+                    and any(k in p.name.lower() for k in ("drama", "interior", "cozy", "rain", "courtroom", "window", "hearth", "ambient"))
+                ]
+                if drama_candidates:
+                    candidates = drama_candidates
+            elif any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss", "wilderness")):
+                horror_candidates = [
+                    p for p in candidates
+                    if not any(k in p.name.lower() for k in ("drama", "aita", "aelithia", "romance", "family"))
+                    and any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "ambient", "forest", "containment", "facility", "emergency", "wilderness"))
+                ]
+                if horror_candidates:
+                    candidates = horror_candidates
+
+        manifest_tags: dict[str, set[str]] = {}
+        manifest_path = BASE_DIR / "assets" / "loops" / "bank_manifest.json"
+        if manifest_path.is_file():
+            try:
+                m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                for item in m_data.get("master_loops", []):
+                    fn = item.get("filename", "")
+                    tags = set(str(t).lower() for t in item.get("tags", []))
+                    if fn:
+                        manifest_tags[fn.lower()] = tags
+                        manifest_tags[Path(fn).stem.lower()] = tags
+            except Exception:
+                pass
+
+        def _get_candidate_tags(p: Path) -> set[str]:
+            tags = set(p.stem.lower().split("_"))
+            if p.name.lower() in manifest_tags:
+                tags.update(manifest_tags[p.name.lower()])
+            if p.stem.lower() in manifest_tags:
+                tags.update(manifest_tags[p.stem.lower()])
+            return tags
+
+        high_tokens = {"containment", "facility", "emergency", "crisis", "confrontation", "courtroom", "climax", "breaking_point", "ruptura"}
+        mid_tokens = {"dark_forest", "forest", "wilderness", "pines", "fricciones", "rising", "advertencias", "escalada"}
+        low_tokens = {"ambient", "cozy", "interior", "interiors", "home", "calm", "inception", "incepción", "aftermath", "secuela", "dilema", "reflexión"}
+
+        resolved_loops: list[Path] = []
+        last_chosen: Path | None = None
+        used_candidates: set[Path] = set()
+
+        for i, act in enumerate(acts):
+            tension = int(act.get("tension_level", 1) if isinstance(act, dict) else getattr(act, "tension_level", 1))
+            role = str(act.get("dramatic_role", "") if isinstance(act, dict) else getattr(act, "dramatic_role", "")).lower()
+            title = str(act.get("act_title", "") if isinstance(act, dict) else getattr(act, "act_title", "")).lower()
+
+            modulo_idx = i % len(candidates)
+            modulo_candidate = candidates[modulo_idx]
+
+            scored: list[tuple[float, int, Path]] = []
+            for c_idx, c in enumerate(candidates):
+                c_tags = _get_candidate_tags(c)
+                score = 0.0
+
+                if tension >= 4 or any(tok in role or tok in title for tok in ("climax", "crisis", "confrontation", "ruptura")):
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in high_tokens):
+                        score += 50.0
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in low_tokens):
+                        score -= 20.0
+                elif tension == 3 or any(tok in role or tok in title for tok in ("rising", "escalada", "advertencias")):
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in mid_tokens):
+                        score += 40.0
+                    elif any(tok in c_tags or tok in c.stem.lower() for tok in low_tokens):
+                        score += 10.0
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in high_tokens):
+                        score -= 30.0
+                else:
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in low_tokens):
+                        score += 40.0
+                    if any(tok in c_tags or tok in c.stem.lower() for tok in high_tokens):
+                        score -= 30.0
+
+                if len(candidates) > 1 and c == last_chosen:
+                    score -= 1000.0
+
+                if c not in used_candidates:
+                    score += 15.0
+
+                if c == modulo_candidate:
+                    score += 2.0
+
+                scored.append((score, c_idx, c))
+
+            scored.sort(key=lambda x: (x[0], -x[1] if x[2] != last_chosen else -9999), reverse=True)
+            chosen = scored[0][2]
+
+            if len(candidates) >= 2 and chosen == last_chosen:
+                for s, idx, cand in scored:
+                    if cand != last_chosen:
+                        chosen = cand
+                        break
+
+            resolved_loops.append(chosen)
+            used_candidates.add(chosen)
+            last_chosen = chosen
+
+        logger.info(
+            "Resolved multi-act loops (%d acts, %d distinct loops): %s",
+            len(acts),
+            len(set(resolved_loops)),
+            [p.name for p in resolved_loops],
+        )
+        return resolved_loops, act_durations
+
     @classmethod
     def _get_or_create_test_fixture_loop(cls, orientation: str | tuple[int, int] = "vertical") -> Path:
         """Provides a lightweight 10s (vertical) or 30s (horizontal) mock fixture mp4 loop for unit/integration tests with Main profile."""

@@ -98,6 +98,15 @@ def _build_legacy_manifest(ctx: PipelineContext) -> None:
     subtitles_active = ctx.subtitles_active
     ass_path = getattr(ctx, "ass_path", None)
     ctx.mux_subtitles = bool(subtitles_active and ass_path and ass_path.is_file())
+
+    is_horizontal_director = (
+        getattr(ctx.lane, "orientation", "") == "horizontal"
+        and getattr(ctx.lane, "visual_pipeline", "") == "director"
+    )
+    if is_horizontal_director:
+        _build_video_loop_manifest(ctx)
+        return
+
     ctx.stream_copy_mode = not ctx.is_multiscene_mode
 
     if ctx.is_multiscene_mode:
@@ -149,8 +158,12 @@ def stage_08_loop_scene(ctx: PipelineContext) -> None:
     with ctx.profiler.phase(CanonicalStage.LOOP_SCENE):
         memory_checkpoint("8_loop_scene")
         pipeline = getattr(getattr(ctx, "lane", None), "visual_pipeline", "beats")
+        is_horizontal_director = (
+            getattr(ctx.lane, "orientation", "") == "horizontal"
+            and getattr(ctx.lane, "visual_pipeline", "") == "director"
+        )
 
-        if pipeline == "video_loop":
+        if is_horizontal_director or pipeline == "video_loop":
             _build_video_loop_manifest(ctx)
         elif pipeline == "image_animation":
             _build_image_animation_manifest(ctx)

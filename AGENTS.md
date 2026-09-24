@@ -34,6 +34,7 @@
   - Media analysis and loudness probes must skip decoding video frames using `-vn`.
   - In-memory video/audio buffers or raw image loops (e.g. unconstrained Pillow loops) are strictly prohibited; stream assets from disk.
   - Concurrency is bounded by semaphores (`_SHORT_RENDER_SEMAPHORE = 2`, `_LONG_RENDER_SEMAPHORE = 1`).
+  - Longform horizontal multi-act assembly must complete via stream-copy within a turnaround ceiling of ≤ 45s under the ≤ 2 CPU Cores and ≤ 2.0 GiB RAM budget.
 - **Resource Work Refusal**: If any architectural change, library, dependency, or feature causes steady-state or peak resource usage to exceed the 2 Cores / 2 GB RAM target ceiling, agents MUST REFUSE the change and optimize the implementation before merging.
 
 ## 6. Architecture & Directory Responsibility Map (Single Line per Directory)
