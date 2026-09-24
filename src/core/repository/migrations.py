@@ -636,6 +636,7 @@ def _apply_v3_scene_assets(conn: sqlite3.Connection, applied: list[int]) -> None
     legacy_m3_checksums = {
         m3_checksum,
         "78f637e3595bbdac7f29a4a7c3e909591f1d8ad1da9c4f03b75011552dbd882f",
+        "01993a6db132c252ecaa4563873c67bfecdc2b958dbf272e0b1fa4a9f934d73d",
     }
     existing_m3 = conn.execute(
         "SELECT checksum FROM schema_migrations WHERE version = 3"

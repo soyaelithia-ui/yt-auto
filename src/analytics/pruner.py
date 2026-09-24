@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.config import DEFAULT_DB_PATH
-from src.core.domain import CanonicalChannel, canonical_channel
+from src.core.domain import CHANNEL_ALIASES, CanonicalChannel, canonical_channel
 from src.core.repository.migrations import connect
 from src.log import get_logger
 
@@ -76,12 +76,16 @@ def evaluate_prune_candidates(
     - Sorted ascending by score (worst first).
     - Capped to max_candidates.
     """
-    canon = canonical_channel(channel).value
-    query = """
+    canon = canonical_channel(channel)
+    aliases = {k for k, v in CHANNEL_ALIASES.items() if v == canon}
+    aliases.add(str(channel).lower())
+    aliases.add(canon.value)
+    placeholders = ",".join("?" for _ in aliases)
+    query = f"""
         SELECT publication_id, video_id, story_id, channel, title,
                actual_success_score, verified_at
         FROM publications
-        WHERE (channel = ? OR channel = ?)
+        WHERE channel IN ({placeholders})
           AND video_id IS NOT NULL
           AND video_id != ''
           AND story_id NOT IN (SELECT story_id FROM stories WHERE status = 'PURGED')
@@ -89,7 +93,7 @@ def evaluate_prune_candidates(
     """
     candidates: List[PruneCandidate] = []
     with connect(db_path, read_only=True) as conn:
-        rows = conn.execute(query, (channel, canon)).fetchall()
+        rows = conn.execute(query, tuple(aliases)).fetchall()
         for row in rows:
             v_id = row["video_id"]
             verified_at = row["verified_at"] or ""
@@ -106,7 +110,7 @@ def evaluate_prune_candidates(
                         publication_id=int(row["publication_id"]),
                         video_id=v_id,
                         story_id=str(row["story_id"]),
-                        channel=canon,
+                        channel=canon.value,
                         title=str(row["title"] or "Untitled"),
                         actual_success_score=score,
                         age_hours=round(age, 2),
