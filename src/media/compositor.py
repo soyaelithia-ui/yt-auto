@@ -173,6 +173,27 @@ class MultiSceneCompositor(BaseVideoCompositor):
             tmp_dir = Path(tmp_dir_str)
             video_only_assembled = tmp_dir / "video_assembled.mp4"
 
+            # 0. Early Subtitle Resolution — allow single-pass graph fusion to avoid 2-pass re-encodes
+            subtitle_file = extra_kwargs.get("subtitle_path") or extra_kwargs.get("subtitles_path") or extra_kwargs.get("ass_path")
+            sub_p: Optional[Path] = None
+            if subtitle_file and Path(subtitle_file).is_file():
+                sub_p = Path(subtitle_file).resolve()
+            elif (not force_pillow) and (word_timestamps or extra_kwargs.get("subtitle_cues")):
+                ass_tmp = tmp_dir / "multiscene_subs.ass"
+                write_ass_from_cues_or_words(
+                    output_path=ass_tmp,
+                    word_timestamps=word_timestamps if isinstance(word_timestamps, list) else None,
+                    cues=extra_kwargs.get("subtitle_cues"),
+                    video_width=width,
+                    video_height=height,
+                )
+                if ass_tmp.is_file():
+                    sub_p = ass_tmp.resolve()
+            if force_pillow and subtitle_cues:
+                sub_p = None
+            has_ass_burn = bool(sub_p and has_active_subtitles(sub_p))
+
+            self._single_pass_burned_subtitles = False
             used_single_pass = False
             if (
                 director_single_pass_enabled()
@@ -189,6 +210,7 @@ class MultiSceneCompositor(BaseVideoCompositor):
                         crf=crf,
                         preset=preset,
                         tmp_dir=tmp_dir,
+                        subtitle_path=sub_p,
                     )
                 except Exception as exc:
                     logger.warning(
@@ -268,34 +290,16 @@ class MultiSceneCompositor(BaseVideoCompositor):
             )
             music_audio = Path(manifest.audio_tracks.music_path).resolve() if manifest.audio_tracks.music_path and Path(manifest.audio_tracks.music_path).is_file() else None
 
-            # 4. Fast Master Assembly with FFmpeg — libass ASS burn when available
-            subtitle_file = extra_kwargs.get("subtitle_path") or extra_kwargs.get("subtitles_path") or extra_kwargs.get("ass_path")
-            sub_p: Optional[Path] = None
-            if subtitle_file and Path(subtitle_file).is_file():
-                sub_p = Path(subtitle_file).resolve()
-            elif (not force_pillow) and (word_timestamps or extra_kwargs.get("subtitle_cues")):
-                # Synthesize ASS from timestamps/cues so burn-in stays on libass, not Pillow.
-                ass_tmp = tmp_dir / "multiscene_subs.ass"
-                write_ass_from_cues_or_words(
-                    output_path=ass_tmp,
-                    word_timestamps=word_timestamps if isinstance(word_timestamps, list) else None,
-                    cues=extra_kwargs.get("subtitle_cues"),
-                    video_width=width,
-                    video_height=height,
-                )
-                if ass_tmp.is_file():
-                    sub_p = ass_tmp.resolve()
-            if force_pillow and subtitle_cues:
-                # Explicit legacy path: cues already burned per-frame; skip second burn.
-                sub_p = None
-            has_ass_burn = bool(sub_p and has_active_subtitles(sub_p))
+            # 4. Fast Master Assembly with FFmpeg — stream-copy if subtitles were burned in single pass
+            sub_p_master = None if getattr(self, "_single_pass_burned_subtitles", False) else sub_p
+            has_ass_burn = bool((sub_p and has_active_subtitles(sub_p)) or getattr(self, "_single_pass_burned_subtitles", False))
 
             self._master_assembly(
                 video_input=video_only_assembled,
                 narration_audio=narration_audio,
                 music_audio=music_audio,
                 music_volume=manifest.audio_tracks.music_volume,
-                subtitle_path=sub_p,
+                subtitle_path=sub_p_master,
                 total_duration=total_duration,
                 width=width,
                 height=height,
@@ -336,6 +340,10 @@ class MultiSceneCompositor(BaseVideoCompositor):
         lane_id: str,
     ) -> Optional[Path]:
         """Resolve a catalog/on-disk loop for a scene without re-encoding."""
+        asset_candidate = getattr(scene, "asset_path", None) or getattr(scene, "loop_path", None)
+        if asset_candidate and Path(asset_candidate).is_file():
+            return Path(asset_candidate).resolve()
+
         eng = self.loop_engine
         orientation = "vertical" if height > width else "horizontal"
         env_name = scene.environment_name or lane_id or "dark_ambient"
@@ -417,11 +425,13 @@ class MultiSceneCompositor(BaseVideoCompositor):
         crf: int,
         preset: str,
         tmp_dir: Path,
+        subtitle_path: Optional[Path] = None,
     ) -> bool:
         """Assemble all-procedural scenes from catalog loops without per-scene re-encodes.
 
         Planner ``niche_hud`` is applied as one FFmpeg filter_complex (drawtext/drawbox)
-        on the concat/xfade graph. No HUD + homogeneous geometry keeps ``-c:v copy``.
+        on the concat/xfade graph. Subtitles are fused into the single encode when present,
+        eliminating a secondary re-encode. No HUD/subs + homogeneous geometry keeps ``-c:v copy``.
 
         Returns True on success (output_mp4 written). Raises or returns False on ineligibility.
         """
@@ -524,6 +534,19 @@ class MultiSceneCompositor(BaseVideoCompositor):
             crf = default_render_crf()
             preset = default_render_preset()
 
+        # Fuse subtitles into the single encode to avoid a 2nd re-encode pass
+        if subtitle_path and has_active_subtitles(subtitle_path):
+            if str(subtitle_path).lower().endswith(".ass"):
+                fonts_dir = Path("assets/fonts").resolve()
+                fonts_arg = fonts_dir if fonts_dir.is_dir() else None
+                parts.append(f"{v_out}{libass_filter_clause(subtitle_path, fonts_arg)}[vsub]")
+            else:
+                parts.append(f"{v_out}subtitles=filename={escape_ffmpeg_filter_path(subtitle_path)}[vsub]")
+            v_out = "[vsub]"
+            self._single_pass_burned_subtitles = True
+        else:
+            self._single_pass_burned_subtitles = False
+
         cmd.extend([
             "-filter_complex", ";".join(parts),
             "-map", v_out,
@@ -590,14 +613,17 @@ class MultiSceneCompositor(BaseVideoCompositor):
         video_copy = not has_active_subtitles(subtitle_path)
 
         if not video_copy and subtitle_path:
-            vf_chain = f"scale={width}:{height}:flags=lanczos,deband=1thr=0.03:2thr=0.03:3thr=0.03:range=16:blur=false"
+            vf_parts = []
+            if not loop_matches_target_geometry(video_input, width, height):
+                vf_parts.append(f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}")
             if str(subtitle_path).lower().endswith(".ass"):
                 fonts_dir = Path("assets/fonts").resolve()
                 fonts_arg = fonts_dir if fonts_dir.is_dir() else None
-                vf_chain += f",{libass_filter_clause(subtitle_path, fonts_arg)}"
+                vf_parts.append(libass_filter_clause(subtitle_path, fonts_arg))
             else:
-                vf_chain += f",subtitles=filename={escape_ffmpeg_filter_path(subtitle_path)}"
-            vf_chain += ",format=yuv420p"
+                vf_parts.append(f"subtitles=filename={escape_ffmpeg_filter_path(subtitle_path)}")
+            vf_parts.append("format=yuv420p")
+            vf_chain = ",".join(vf_parts)
 
         # Audio handling (sample rate unified to 44100; loudnorm I=-16 per Experto YT)
         has_audio_map = False

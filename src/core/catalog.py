@@ -135,6 +135,8 @@ class LoopCatalogRepository:
     ) -> None:
         if db_path is None or db_path == DEFAULT_DB_PATH:
             db_path = self.DEFAULT_CATALOG_DB_PATH if os.path.isfile(self.DEFAULT_CATALOG_DB_PATH) else DEFAULT_DB_PATH
+        from src.core.repository.migrations import validate_db_path
+
         path_or_str = validate_db_path(db_path)
         self.db_path = ":memory:" if str(path_or_str) == ":memory:" else str(Path(path_or_str).expanduser().resolve())
         if auto_seed is not None:

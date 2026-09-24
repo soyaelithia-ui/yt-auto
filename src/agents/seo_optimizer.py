@@ -127,7 +127,7 @@ class SeoOptimizerAgent:
         fmt = "short" if target_format in ("short", "shorts", "9:16", "vertical") else "longform"
         logger.info("Optimizing SEO for topic: '%s' (format=%s, use_agent=%s)", topic, fmt, use_agent)
 
-        from src.pipeline.utils import is_pipeline_test_environment as is_test_environment
+        from src.config import is_test_environment
 
         run_harness = use_agent and (
             bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes"))
