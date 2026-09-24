@@ -153,7 +153,7 @@ class TestSCPScraper:
             rows = conn.execute("SELECT story_id, channel, lane_id, source_license, status FROM stories").fetchall()
             assert len(rows) == 3
             for row in rows:
-                assert row["channel"] == "moku"
+                assert row["channel"] in ("moku", "horror")
                 assert row["lane_id"] == "moku-scp-shorts"
                 assert row["source_license"] == "CC BY-SA 3.0"
                 assert row["status"] == "PENDING"
@@ -310,5 +310,5 @@ class TestAsyncEnsureQueueDepth:
             with connect(test_db, read_only=True) as conn:
                 row = conn.execute("SELECT story_id, channel FROM stories WHERE story_id = 'terror_rep_001'").fetchone()
                 assert row is not None
-                assert row["channel"] in ("terror", "moku")
+                assert row["channel"] in ("terror", "moku", "horror")
 

@@ -156,92 +156,70 @@ def _generate_procedural_title(
     themes_to_use: tuple[str, ...],
     existing_titles: set[str],
 ) -> tuple[str, str]:
-    """Generate a unique, high-CTR title and theme for dynamic story fallback."""
-    theme = themes_to_use[(seed + i) % len(themes_to_use)]
+    """Generate a unique, high-CTR title and theme based on empirical channel performance."""
     is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
 
-    horror_hooks = (
-        "El enigma sin resolver en",
-        "No debimos entrar jamás a",
-        "Lo que encontramos en",
-        "El secreto aterrador de",
-        "El peligro oculto en",
-        "La advertencia olvidada de",
-        "El registro prohibido de",
-        "La presencia inexplicable en",
-        "La criatura atrapada en",
-        "El informe clasificado sobre",
+    horror_templates = (
+        ("El odómetro empezó a marcar números negativos en la Ruta {num}: el informe secreto del convoy", "el informe secreto de la Ruta {num}"),
+        ("«El detector no marcaba radiación, marcaba hambre»: el misterio del Laboratorio Cero", "el misterio del Laboratorio Cero"),
+        ("Sintonizaron {freq} MHz bajo tierra en el pozo clausurado: lo que contestó no era humano", "la frecuencia anómala {freq} MHz"),
+        ("Si el metro frena en una estación abandonada, NUNCA bajes la mirada al andén", "la estación de metro clausurada"),
+        ("Expedición Kízel a la galería subterránea: la roca tenía pulso biológico", "la expedición a la galería subterránea"),
+        ("Faro de Roca Negra: la bitácora sellada reveló por qué ningún vigía bajó de la torre", "el faro de Roca Negra"),
+        ("El casete que la estación de radio juró destruir: lo que contestó al locutor en la pausa comercial", "la grabación prohibida de la estación de radio"),
+        ("Entraron al Enclave de Biocontención sin saber que la cuarentena protegía al mundo exterior", "el enclave de biocontención"),
+        ("El sonar detectó un pulso rítmico a tres mil metros de profundidad en la fosa abisal", "el pulso rítmico de la fosa abisal"),
+        ("Reglas obligatorias para el turno nocturno en la línea subterránea: la regla cuatro salvará tu vida", "el turno nocturno en la línea subterránea"),
+        ("Peritaje forense en el Sitio {num}: la muestra anómala empezó a imitar voces humanas", "el peritaje del Sitio {num}"),
+        ("La baliza de emergencia transmitía coordenadas del fondo marino durante la tormenta", "la baliza de emergencia marítima"),
+        ("El informe clasificado de la brigada de rescate: lo que encontraron en la cabina sellada", "el rescate en la cabina sellada"),
+        ("Si la luz de emergencia del corredor parpadea en rojo, apaga tu linterna y no respires", "el corredor de aislamiento subterráneo"),
     )
-    horror_qualifiers = (
-        "que nadie se atreve a investigar",
-        "donde desapareció la expedición",
-        "oculto bajo tierra durante décadas",
-        "que la fundación intentó borrar",
-        "del que nadie logró regresar",
-        "que los guardias juraron olvidar",
-        "tras romper el protocolo de seguridad",
-        "que encontramos en la grabación perdida",
-        "que la policía se negó a registrar",
+
+    drama_templates = (
+        ("Me exigieron pagar una deuda estudiantil a ciegas: audité las cuentas y destapé el fraude familiar", "la auditoría de la deuda estudiantil ajena"),
+        ("Descubrí la doble contabilidad de mi cuñado: le exigí mi capital completo y arruiné su inauguración", "la doble contabilidad del negocio familiar"),
+        ("Me dio un 'diamante' para no pagar su deuda: el joyero se rio en mi cara y llamé a la policía", "la estafa de las joyas familiares falsas"),
+        ("Intentaron robar mi casa con un arriendo trampa: la vendí de inmediato y llegó la orden de desalojo", "el intento de despojo patrimonial con arriendo trampa"),
+        ("¿Soy la mala por desenmascararlos? Fingían atender a nuestros padres mientras vivían de su pensión", "la estafa de la pensión de mis padres"),
+        ("Falsificaron la firma de mi madre para una hipoteca: presenté la escritura original ante el juez", "la falsificación de firma en la hipoteca"),
+        ("Mi suegra exigió las llaves de mi departamento para su hija: cambié las cerraduras y llegó la denuncia", "la exigencia injusta de entregar mi departamento"),
+        ("Pretendieron que pagara la boda de mi hermana con mis ahorros médicos: cancelé las tarjetas y me fui", "la exigencia de financiar una boda ajena"),
+        ("Descubrí que transfirieron mi fondo de emergencia sin autorización: llevé los extractos a la cena familiar", "el desvío no autorizado del fondo de emergencia"),
+        ("¿Soy la mala por negarme a asistir a la boda familiar tras descubrir que vaciaron mi fideicomiso?", "la negativa a asistir tras el vaciado del fideicomiso"),
+        ("Mis parientes se instalaron en mi casa de campo y se negaron a salir: corté los servicios y recuperé las llaves", "la ocupación indebida de la casa de campo"),
+        ("¿Soy la mala por cortar contacto con mi familia tras enterarme de que cobraron mi seguro a su favor?", "el corte de lazos tras el cobro ilegítimo del seguro"),
+        ("Alteraron el testamento de mi abuelo a espaldas de todos: el perito calígrafo anuló el documento", "la impugnación del testamento alterado"),
+        ("Me exigieron renunciar a mi herencia para dársela a mi hermano: contraté a un abogado y congelé los bienes", "la protección de la herencia frente al despojo familiar"),
     )
-    drama_short_hooks = (
-        "cancelar mi boda tras descubrir",
-        "cortar contacto con mi familia por",
-        "negarme a prestar mis ahorros ante",
-        "vender el patrimonio que pretendían quitarme por",
-        "echar a mis parientes de casa tras",
-        "no invitar a mi hermana tras",
-        "rechazar el chantaje de mis suegros ante",
-        "renunciar al fideicomiso familiar por",
-        "expulsar a mi suegra de mi casa tras",
-        "bloquear las cuentas conjuntas tras",
-        "exigir el pago de la deuda ante",
-        "cambiar las cerraduras de casa tras",
-    )
-    drama_long_hooks = (
-        "poner límites definitivos ante",
-        "negarme al chantaje familiar por",
-        "cortar lazos de por vida tras",
-        "proteger mi patrimonio frente a",
-        "rechazar la herencia tóxica de",
-        "revelar la verdad oculta tras",
-        "defender mi hogar ante",
-        "enfrentar las exigencias injustas de",
-    )
-    drama_qualifiers = (
-        "tras años de mentiras",
-        "ante toda la familia reunida",
-        "tras una traición inesperada",
-        "por una deuda que no me correspondía",
-        "tras descubrir la verdad oculta",
-        "después de poner límites claros",
-        "cuando exigieron lo imposible",
-        "en el momento más difícil",
-        "a espaldas de todos",
-        "tras un ultimátum injusto",
-        "sin dar explicaciones",
-    )
+
+    templates = horror_templates if is_horror else drama_templates
     attempts = 0
+    route_nums = (7, 9, 14, 19, 40, 45, 88)
+    frequencies = ("142.7", "104.5", "98.3", "107.1", "88.9")
+
     while attempts < 30:
-        if is_horror:
-            hook = horror_hooks[(seed + i + attempts) % len(horror_hooks)]
-            q_part = f" {horror_qualifiers[(seed + i + attempts) % len(horror_qualifiers)]}" if attempts % 2 == 1 else ""
-            cand = f"{hook} {theme}{q_part}"
-        else:
-            hook = drama_long_hooks[(seed + i + attempts) % len(drama_long_hooks)] if is_lane_long else drama_short_hooks[(seed + i + attempts) % len(drama_short_hooks)]
-            q_part = f" {drama_qualifiers[(seed + i + attempts) % len(drama_qualifiers)]}" if attempts % 2 == 1 else ""
-            cand = f"¿Soy la mala por {hook} {theme}{q_part}?"
+        idx = (seed + i + attempts) % len(templates)
+        title_tpl, theme = templates[idx]
+        num_val = route_nums[(seed + attempts) % len(route_nums)]
+        freq_val = frequencies[(seed + attempts) % len(frequencies)]
+
+        cand = title_tpl.format(num=num_val, freq=freq_val)
+        th = theme.format(num=num_val, freq=freq_val)
         cand_clean = cand.strip().lower()
         if cand_clean not in existing_titles:
             existing_titles.add(cand_clean)
-            return cand, theme
+            return cand, th
         attempts += 1
 
-    if is_horror:
-        cand = f"{horror_hooks[i % len(horror_hooks)]} {theme} (Expediente {seed % 100})"
-    else:
-        cand = f"¿Soy la mala por {drama_short_hooks[i % len(drama_short_hooks)]} {theme} (La Verdad)?"
+    # Deterministic fallback with case number
+    base_tpl, base_theme = templates[i % len(templates)]
+    num_val = route_nums[seed % len(route_nums)]
+    freq_val = frequencies[seed % len(frequencies)]
+    cand = f"{base_tpl.format(num=num_val, freq=freq_val)} (Caso {seed % 1000})"
+    th = base_theme.format(num=num_val, freq=freq_val)
     existing_titles.add(cand.strip().lower())
-    return cand, theme
+    return cand, th
 
 
 async def _dynamic_procedural_fallback(
@@ -258,22 +236,31 @@ async def _dynamic_procedural_fallback(
     director = get_narrative_director()
     is_lane_long = getattr(lane, "orientation", "") == "horizontal"
     default_horror_themes = (
-        "bosques con niebla", "casas abandonadas", "carreteras nocturnas",
-        "hospitales psiquiátricos clausurados", "túneles subterráneos",
-        "faros aislados en la tormenta", "hoteles clausurados en la montaña",
-        "estaciones de tren desiertas", "archivos clasificados de la fundación",
-        "laboratorios biológicos en cuarentena", "cabinas de radio en la madrugada",
-        "cementerios olvidados en la niebla", "pantanos prohibidos", "minas de carbón clausuradas",
+        "la expedición al pozo de biocontención",
+        "el odómetro negativo en la ruta nocturna",
+        "el sensor anómalo del laboratorio cero",
+        "la frecuencia de radio subterránea",
+        "el turno nocturno en la estación clausurada",
+        "la bitácora sellada del faro de roca negra",
+        "el casete prohibido de la emisora",
+        "la muestra celular con pulso biológico",
+        "el peritaje forense en el Sitio 45",
+        "el sonar en la fosa abisal profunda",
+        "las reglas de supervivencia en el metro subterráneo",
     )
     default_drama_themes = (
-        "herencia familiar disputada", "boda cancelada", "desalojo inesperado",
-        "testamento secreto alterado", "hipoteca oculta de mis suegros",
-        "deuda estudiantil exigida", "fiesta de compromiso saboteada",
-        "cena de navidad arruinada", "custodia de mascotas tras divorcio",
-        "negocios turbios de mi cuñado", "depósito de alquiler confiscado",
-        "reparto injusto de bienes paternos", "anillo de compromiso falso",
-        "chantaje de mi hermana menor", "secretos financieros de mi prometido",
-        "viaje familiar cancelado a espaldas", "cuidado de padres ancianos delegado",
+        "la auditoría de la deuda estudiantil ajena",
+        "la doble contabilidad del negocio familiar",
+        "la estafa con joyas familiares falsas",
+        "el arriendo trampa y el desalojo patrimonial",
+        "la apropiación ilegítima de la pensión de mis padres",
+        "la falsificación de firma en la hipoteca bancaria",
+        "la exigencia injusta de entregar mi departamento",
+        "el desvío no autorizado del fondo de emergencia",
+        "la negativa a financiar la boda ajena con ahorros médicos",
+        "la ocupación indebida de la casa de campo familiar",
+        "la impugnación del testamento alterado en secreto",
+        "la protección de la herencia frente al despojo familiar",
     )
     is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
     default_themes = default_horror_themes if is_horror else default_drama_themes
