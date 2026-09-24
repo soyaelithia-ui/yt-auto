@@ -279,6 +279,35 @@ def _finalize_published_run(
         expected_description=ctx.youtube_description,
     )
     ctx.repository.mark_published(ctx.story_id, ctx.run_id, proof, provider=str(result["method"]), owner=ctx.owner)
+
+    # Autonomous pinned comment dispatch and failure marking
+    comment_status = "none"
+    comment_error = None
+    pinned_comment_text = getattr(ctx, "pinned_comment", None)
+    if not pinned_comment_text and getattr(ctx, "metadata_path", None) and ctx.metadata_path.is_file():
+        try:
+            import json
+            m_data = json.loads(ctx.metadata_path.read_text(encoding="utf-8"))
+            pinned_comment_text = m_data.get("pinned_comment")
+        except Exception:
+            pass
+
+    if pinned_comment_text and proof.video_id:
+        try:
+            from src.youtube.comments import post_pinned_comment
+            c_res = post_pinned_comment(
+                video_id=proof.video_id,
+                comment_text=pinned_comment_text,
+                token_path=str(ctx.settings.youtube_token_path),
+                channel=ctx.channel_name,
+            )
+            comment_status = c_res.status
+            comment_error = c_res.error
+        except Exception as c_exc:
+            comment_status = "failed"
+            comment_error = str(c_exc)
+            logger.warning("Pinned comment dispatch failed for %s: %s", proof.video_id, c_exc)
+
     try:
         from src.core.inventory import record_published_inventory
         record_published_inventory(
@@ -300,6 +329,9 @@ def _finalize_published_run(
                 "music": str(getattr(ctx, "music_track_path", "")),
                 "voice": getattr(ctx.lane, "voice", ""),
             },
+            comment_status=comment_status,
+            comment_error=comment_error,
+            pinned_comment=pinned_comment_text,
         )
     except Exception as inv_exc:
         logger.warning("Failed to record publication in inventory: %s", inv_exc)

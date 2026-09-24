@@ -648,6 +648,7 @@ def _run_24h_maintenance_sweep(
         if not force and last_sweep is not None and (now_ts - int(last_sweep)) < 86400:
             return {"ok": True, "skipped": True, "reason": "less_than_24h_since_last_sweep"}
 
+        from src.analytics.link_collector import collect_channel_links
         from src.analytics.scoring import sync_and_score_channel_publications
         from src.analytics.pruner import execute_autonomous_prune
         from src.core.channel_profile import ChannelProfileRegistry
@@ -660,10 +661,14 @@ def _run_24h_maintenance_sweep(
         if not channels_to_process:
             channels_to_process = ["horror", "drama"]
 
+        collection_results = {}
         scoring_results = {}
         prune_results = {}
 
         for ch in channels_to_process:
+            col_res = collect_channel_links(ch, db_path=database, dry_run=dry_run)
+            collection_results[ch] = col_res
+
             score_res = sync_and_score_channel_publications(ch, db_path=database, dry_run=dry_run)
             scoring_results[ch] = score_res
 
@@ -686,6 +691,7 @@ def _run_24h_maintenance_sweep(
             "ok": True,
             "timestamp": now_ts,
             "channels": channels_to_process,
+            "collection": collection_results,
             "scoring": scoring_results,
             "pruning": prune_results,
             "dry_run": dry_run,
