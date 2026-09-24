@@ -1,6 +1,7 @@
 """Unit tests for src/core/inventory.py AI-native published video inventory."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -123,3 +124,86 @@ def test_backup_inventory_to_drive(db_path: str, monkeypatch):
     assert "digest_backup" in result
     assert result["database_backup"]["file_id"].startswith("mock-drive-")
     assert result["digest_backup"]["file_id"].startswith("mock-drive-")
+
+
+def test_update_publication_preserves_hook_synopsis_themes(db_path: str):
+    """Verify updating a publication with empty/None hook, synopsis, and themes preserves existing rich values."""
+    # 1. Create initial publication with curated hook, synopsis, and themes
+    initial = record_published_inventory(
+        db_path=db_path,
+        run_id="run_init_100",
+        story_id="story_init_100",
+        video_id="vid_preserve_hook_themes",
+        url="https://www.youtube.com/watch?v=vid_preserve_hook_themes",
+        channel="moku",
+        title="El misterio de la cabaña olvidada",
+        description="Una expedición nocturna en la cabaña olvidada con secretos oscuros.",
+        full_script="El grupo ingresó a la cabaña sin saber qué les esperaba en la oscuridad eterna.",
+        hook_summary="Nunca abras esa puerta después de medianoche.",
+        synopsis="Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural.",
+        themes=["paranormal", "cabaña", "misterio_profundo"],
+    )
+    assert initial.hook_summary == "Nunca abras esa puerta después de medianoche."
+    assert initial.synopsis == "Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural."
+    assert initial.themes == ["paranormal", "cabaña", "misterio_profundo"]
+
+    # 2. Update with empty string hook/synopsis and empty list themes
+    updated_empty = record_published_inventory(
+        db_path=db_path,
+        run_id="yt-sync-vid_preserve_hook_themes",
+        story_id="story-sync-vid_preserve_hook_themes",
+        video_id="vid_preserve_hook_themes",
+        url="https://www.youtube.com/watch?v=vid_preserve_hook_themes",
+        channel="moku",
+        title="El misterio de la cabaña olvidada (Updated Title)",
+        description="Una expedición nocturna en la cabaña olvidada con secretos oscuros.",
+        hook_summary="",
+        synopsis="",
+        themes=[],
+        view_count=1200,
+        like_count=95,
+    )
+    assert updated_empty.hook_summary == "Nunca abras esa puerta después de medianoche."
+    assert updated_empty.synopsis == "Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural."
+    assert updated_empty.themes == ["paranormal", "cabaña", "misterio_profundo"]
+    assert updated_empty.view_count == 1200
+
+    # Verify directly from database row
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT hook_summary, synopsis, themes_json FROM publications WHERE video_id = ?",
+            ("vid_preserve_hook_themes",),
+        ).fetchone()
+        assert row["hook_summary"] == "Nunca abras esa puerta después de medianoche."
+        assert row["synopsis"] == "Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural."
+        assert json.loads(row["themes_json"]) == ["paranormal", "cabaña", "misterio_profundo"]
+
+    # 3. Update with None hook/synopsis/themes (e.g. background link sync)
+    updated_none = record_published_inventory(
+        db_path=db_path,
+        run_id="yt-collect-vid_preserve_hook_themes",
+        story_id="story-collect-vid_preserve_hook_themes",
+        video_id="vid_preserve_hook_themes",
+        url="https://www.youtube.com/watch?v=vid_preserve_hook_themes",
+        channel="moku",
+        title="El misterio de la cabaña olvidada (Final Title)",
+        description="Una expedición nocturna en la cabaña olvidada con secretos oscuros.",
+        hook_summary=None,
+        synopsis=None,
+        themes=None,
+        comment_count=42,
+    )
+    assert updated_none.hook_summary == "Nunca abras esa puerta después de medianoche."
+    assert updated_none.synopsis == "Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural."
+    assert updated_none.themes == ["paranormal", "cabaña", "misterio_profundo"]
+    assert updated_none.comment_count == 42
+
+    with connect(db_path) as conn:
+        row2 = conn.execute(
+            "SELECT hook_summary, synopsis, themes_json FROM publications WHERE video_id = ?",
+            ("vid_preserve_hook_themes",),
+        ).fetchone()
+        assert row2["hook_summary"] == "Nunca abras esa puerta después de medianoche."
+        assert row2["synopsis"] == "Una expedición en una cabaña maldita desencadena una pesadilla sobrenatural."
+        assert json.loads(row2["themes_json"]) == ["paranormal", "cabaña", "misterio_profundo"]
+

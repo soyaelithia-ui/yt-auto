@@ -189,39 +189,207 @@ class PublishedVideoRecord:
         return asdict(self)
 
 
+def _reconcile_existing_publication(
+    conn: Any, existing: Any, data: dict[str, Any]
+) -> PublishedVideoRecord:
+    """Reconcile and update an existing publication record while preserving rich fields."""
+    keys = existing.keys() if hasattr(existing, "keys") else []
+    def _get(col: str) -> Any:
+        return existing[col] if col in keys else None
+
+    # 1. Resolve run_id and story_id
+    ex_run, in_run = _get("run_id"), data["run_id"]
+    if ex_run and (not in_run or in_run.startswith(("yt-collect-", "yt-sync-")) or not ex_run.startswith(("yt-collect-", "yt-sync-"))):
+        final_run = ex_run
+    else:
+        final_run = in_run or (ex_run or "")
+
+    ex_story, in_story = _get("story_id"), data["story_id"]
+    if ex_story and (not in_story or in_story.startswith(("story-collect-", "story-sync-")) or not ex_story.startswith(("story-collect-", "story-sync-"))):
+        final_story = ex_story
+    else:
+        final_story = in_story or (ex_story or "")
+
+    now_iso = data["verified_at"]
+    if final_story != ex_story:
+        conn.execute("INSERT OR IGNORE INTO stories(story_id, title, content, url, status, channel, created_at, updated_at) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)",
+                     (final_story, data["title"], data["full_script"] or data["description"], data["url"], data["channel"], now_iso, now_iso))
+    if final_run != ex_run:
+        conn.execute("INSERT OR IGNORE INTO runs(run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)",
+                     (final_run, data["channel"], final_story, now_iso, now_iso, now_iso))
+
+    # 2. Rich media and backup preservation
+    final_sha = data["video_sha256"] if (data["video_sha256"] and str(data["video_sha256"]).strip()) else _get("video_sha256")
+    final_drive_vid = data["drive_video_id"] if (data["drive_video_id"] and str(data["drive_video_id"]).strip()) else _get("drive_video_id")
+    ex_dmeta_raw = _get("drive_backup_metadata")
+    ex_dmeta = json.loads(ex_dmeta_raw) if (ex_dmeta_raw and isinstance(ex_dmeta_raw, str)) else (ex_dmeta_raw if isinstance(ex_dmeta_raw, dict) else None)
+    final_drive_meta = data["drive_backup_metadata"] if data["drive_backup_metadata"] else ex_dmeta
+
+    # 3. Script, Hook, Synopsis, Simhash, Themes (JD-CRIT-02: preserve existing when incoming is empty)
+    ex_script = _get("full_script")
+    final_script = data["full_script"] if data["full_script"] else (normalize_text_nfc(ex_script) if ex_script else None)
+
+    ex_hook, ex_syn = _get("hook_summary"), _get("synopsis")
+    final_hook = data["hook_summary"] if (data["hook_summary"] and str(data["hook_summary"]).strip()) else ex_hook
+    final_syn = data["synopsis"] if (data["synopsis"] and str(data["synopsis"]).strip()) else ex_syn
+    if not final_hook or not final_syn:
+        auto_h, auto_s = extract_hook_and_synopsis(data["title"], final_script or data["description"])
+        final_hook, final_syn = final_hook or auto_h, final_syn or auto_s
+
+    ex_simhash = _get("simhash")
+    final_simhash = ex_simhash if (not data["full_script"] and ex_simhash) else compute_simhash(final_script or f"{data['title']} {data['description']}")
+
+    ex_themes_raw = _get("themes_json")
+    ex_themes = json.loads(ex_themes_raw) if (ex_themes_raw and isinstance(ex_themes_raw, str)) else (ex_themes_raw if isinstance(ex_themes_raw, list) else None)
+    final_themes = data["themes"] if data["themes"] else ex_themes
+    if not final_themes:
+        final_themes = extract_thematic_tags(data["title"], data["description"])
+
+    # 4. Resources, Music, Comments, Scores
+    ex_res_raw = _get("used_resources")
+    ex_res = json.loads(ex_res_raw) if (ex_res_raw and isinstance(ex_res_raw, str)) else (ex_res_raw if isinstance(ex_res_raw, dict) else None)
+    final_res = data["used_resources"] if data["used_resources"] else ex_res
+
+    res_music = data["music_track"] or (final_res.get("music") if isinstance(final_res, dict) else None)
+    final_music = res_music or _get("music_track")
+
+    final_pinned = data["pinned_comment"] if (data["pinned_comment"] and str(data["pinned_comment"]).strip()) else _get("pinned_comment")
+    ex_cmt_status, in_cmt_status = str(_get("comment_status") or "none"), str(data["comment_status"] or "none")
+    final_cmt_status = ex_cmt_status if (in_cmt_status == "none" and ex_cmt_status != "none") else in_cmt_status
+    final_cmt_err = data["comment_error"] if (data["comment_error"] and str(data["comment_error"]).strip()) else _get("comment_error")
+
+    final_pred = data["predictive_success_score"] if data["predictive_success_score"] > 0.0 else float(_get("predictive_success_score") or 0.0)
+    final_rat = data["score_rationale"] if (data["score_rationale"] and str(data["score_rationale"]).strip()) else _get("score_rationale")
+    final_dur = data["duration_sec"] if data["duration_sec"] > 0.0 else float(_get("duration_sec") or 0.0)
+    final_act = data["actual_success_score"] if data["actual_success_score"] > 0.0 else float(_get("actual_success_score") or 0.0)
+    final_views = int(data["view_count"]) if int(data["view_count"]) > 0 else int(_get("view_count") or 0)
+    final_likes = int(data["like_count"]) if int(data["like_count"]) > 0 else int(_get("like_count") or 0)
+    final_comments = int(data["comment_count"]) if int(data["comment_count"]) > 0 else int(_get("comment_count") or 0)
+
+    drive_meta_json = json.dumps(final_drive_meta) if final_drive_meta else None
+    themes_json = json.dumps(final_themes) if final_themes else None
+    res_json = json.dumps(final_res) if final_res else None
+    pub_id = existing["publication_id"]
+
+    sql = (
+        "UPDATE publications SET run_id=?, story_id=?, provider=?, url=?, channel=?, "
+        "visibility=?, title=?, description=?, thumbnail_confirmed=1, verified_at=?, "
+        "video_sha256=?, drive_video_id=?, drive_backup_metadata=?, language=?, source_language=?, "
+        "hook_summary=?, synopsis=?, themes_json=?, simhash=?, full_script=?, "
+        "predictive_success_score=?, score_rationale=?, used_resources=?, duration_sec=?, "
+        "actual_success_score=?, music_track=?, comment_count=?, view_count=?, like_count=?, "
+        "comment_status=?, comment_error=?, pinned_comment=? WHERE publication_id=?"
+    )
+    conn.execute(sql, (
+        final_run, final_story, data["provider"], data["url"], data["channel"], data["visibility"], data["title"], data["description"], now_iso,
+        final_sha, final_drive_vid, drive_meta_json, data["language"], data["source_language"], final_hook, final_syn,
+        themes_json, final_simhash, final_script, final_pred, final_rat, res_json, final_dur, final_act, final_music,
+        final_comments, final_views, final_likes, final_cmt_status, final_cmt_err, final_pinned, pub_id,
+    ))
+    row = conn.execute("SELECT * FROM publications WHERE publication_id = ?", (pub_id,)).fetchone()
+    return PublishedVideoRecord.from_row(row)
+
+
+def _insert_new_publication(
+    conn: Any,
+    data: dict[str, Any],
+) -> PublishedVideoRecord:
+    """Insert a brand-new publication record into database with computed metadata defaults."""
+    now_iso = data["verified_at"]
+    st_row = conn.execute(
+        "SELECT story_id FROM stories WHERE story_id = ? OR url = ?",
+        (data["story_id"], data["url"]),
+    ).fetchone()
+    effective_story_id = st_row["story_id"] if st_row else data["story_id"]
+    if not st_row:
+        conn.execute(
+            """INSERT INTO stories(story_id, title, content, url, status, channel, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)""",
+            (effective_story_id, data["title"], data["full_script"] or data["description"], data["url"], data["channel"], now_iso, now_iso),
+        )
+
+    conn.execute(
+        """INSERT OR IGNORE INTO runs(run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at)
+           VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)""",
+        (data["run_id"], data["channel"], effective_story_id, now_iso, now_iso, now_iso),
+    )
+
+    final_hook = data["hook_summary"] if (data["hook_summary"] and str(data["hook_summary"]).strip()) else None
+    final_syn = data["synopsis"] if (data["synopsis"] and str(data["synopsis"]).strip()) else None
+    if not final_hook or not final_syn:
+        auto_h, auto_s = extract_hook_and_synopsis(data["title"], data["full_script"] or data["description"])
+        final_hook = final_hook or auto_h
+        final_syn = final_syn or auto_s
+
+    final_themes = data["themes"] if data["themes"] else None
+    if not final_themes:
+        final_themes = extract_thematic_tags(data["title"], data["description"])
+
+    final_simhash = compute_simhash(data["full_script"] or f"{data['title']} {data['description']}")
+    resolved_music = data["music_track"] or (data["used_resources"].get("music") if data["used_resources"] else None)
+
+    drive_meta_json = json.dumps(data["drive_backup_metadata"]) if data["drive_backup_metadata"] else None
+    themes_json = json.dumps(final_themes) if final_themes else None
+    res_json = json.dumps(data["used_resources"]) if data["used_resources"] else None
+
+    cursor = conn.execute(
+        """INSERT INTO publications(
+            run_id, story_id, provider, video_id, url, channel,
+            visibility, title, description, thumbnail_confirmed, verified_at,
+            video_sha256, drive_video_id, drive_backup_metadata,
+            language, source_language, hook_summary, synopsis,
+            themes_json, simhash, full_script,
+            predictive_success_score, score_rationale,
+            used_resources, duration_sec,
+            actual_success_score, music_track,
+            comment_count, view_count, like_count,
+            comment_status, comment_error, pinned_comment
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, 1, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?
+        )""",
+        (
+            data["run_id"], effective_story_id, data["provider"], data["video_id"], data["url"], data["channel"],
+            data["visibility"], data["title"], data["description"], now_iso,
+            data["video_sha256"], data["drive_video_id"], drive_meta_json,
+            data["language"], data["source_language"], final_hook, final_syn,
+            themes_json, final_simhash, data["full_script"],
+            data["predictive_success_score"], data["score_rationale"],
+            res_json, data["duration_sec"],
+            data["actual_success_score"], resolved_music,
+            int(data["comment_count"]), int(data["view_count"]), int(data["like_count"]),
+            str(data["comment_status"] or "none"), data["comment_error"], data["pinned_comment"],
+        ),
+    )
+    pub_id = cursor.lastrowid
+    row = conn.execute("SELECT * FROM publications WHERE publication_id = ?", (pub_id,)).fetchone()
+    return PublishedVideoRecord.from_row(row)
+
+
 def record_published_inventory(
     *,
     db_path: str = DEFAULT_DB_PATH,
-    run_id: str,
-    story_id: str,
-    video_id: str,
-    url: str,
-    channel: str,
-    title: str,
-    description: str,
-    provider: str = "YOUTUBE_DATA_API_V3",
-    visibility: str = "public",
-    verified_at: str | None = None,
-    video_sha256: str | None = None,
-    drive_video_id: str | None = None,
+    run_id: str, story_id: str, video_id: str, url: str, channel: str,
+    title: str, description: str, provider: str = "YOUTUBE_DATA_API_V3",
+    visibility: str = "public", verified_at: str | None = None,
+    video_sha256: str | None = None, drive_video_id: str | None = None,
     drive_backup_metadata: dict[str, Any] | None = None,
-    language: str = "es",
-    source_language: str = "es",
-    hook_summary: str | None = None,
-    synopsis: str | None = None,
-    themes: list[str] | None = None,
-    full_script: str | None = None,
-    predictive_success_score: float = 0.0,
-    score_rationale: str | None = None,
-    used_resources: dict[str, Any] | None = None,
-    duration_sec: float = 0.0,
-    actual_success_score: float = 0.0,
-    music_track: str | None = None,
-    comment_count: int = 0,
-    view_count: int = 0,
-    like_count: int = 0,
-    comment_status: str = "none",
-    comment_error: str | None = None,
+    language: str = "es", source_language: str = "es",
+    hook_summary: str | None = None, synopsis: str | None = None,
+    themes: list[str] | None = None, full_script: str | None = None,
+    predictive_success_score: float = 0.0, score_rationale: str | None = None,
+    used_resources: dict[str, Any] | None = None, duration_sec: float = 0.0,
+    actual_success_score: float = 0.0, music_track: str | None = None,
+    comment_count: int = 0, view_count: int = 0, like_count: int = 0,
+    comment_status: str = "none", comment_error: str | None = None,
     pinned_comment: str | None = None,
 ) -> PublishedVideoRecord:
     """Record or update an inventory entry atomically in SQLite with AI-ready metadata."""
@@ -230,319 +398,43 @@ def record_published_inventory(
     clean_desc = normalize_text_nfc(description)
     clean_script = normalize_text_nfc(full_script)
 
-    if not hook_summary or not synopsis:
-        auto_hook, auto_synopsis = extract_hook_and_synopsis(clean_title, clean_script or clean_desc)
-        hook_summary = hook_summary or auto_hook
-        synopsis = synopsis or auto_synopsis
-
-    if not themes:
-        themes = extract_thematic_tags(clean_title, clean_desc)
-
-    simhash = compute_simhash(clean_script or f"{clean_title} {clean_desc}")
-
-    drive_meta_json = json.dumps(drive_backup_metadata) if drive_backup_metadata else None
-    themes_json = json.dumps(themes) if themes else None
-    resources_json = json.dumps(used_resources) if used_resources else None
-    resolved_music = music_track or (used_resources.get("music") if used_resources else None)
+    data: dict[str, Any] = {
+        "run_id": run_id, "story_id": story_id, "video_id": video_id, "url": url,
+        "channel": channel, "title": clean_title, "description": clean_desc,
+        "full_script": clean_script or None, "provider": provider, "visibility": visibility,
+        "verified_at": now_iso, "video_sha256": video_sha256, "drive_video_id": drive_video_id,
+        "drive_backup_metadata": drive_backup_metadata, "language": language,
+        "source_language": source_language, "hook_summary": hook_summary,
+        "synopsis": synopsis, "themes": themes,
+        "predictive_success_score": predictive_success_score,
+        "score_rationale": score_rationale, "used_resources": used_resources,
+        "duration_sec": duration_sec, "actual_success_score": actual_success_score,
+        "music_track": music_track, "comment_count": comment_count,
+        "view_count": view_count, "like_count": like_count,
+        "comment_status": comment_status, "comment_error": comment_error,
+        "pinned_comment": pinned_comment,
+    }
 
     migrate_database(db_path)
-
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            # Check existing by video_id or run_id
             existing = conn.execute(
                 "SELECT * FROM publications WHERE video_id = ? OR (run_id = ? AND run_id != '')",
                 (video_id, run_id),
             ).fetchone()
 
             if existing:
-                existing_keys = existing.keys() if hasattr(existing, "keys") else []
-                def _get_existing(col: str) -> Any:
-                    return existing[col] if col in existing_keys else None
-
-                ex_run = _get_existing("run_id")
-                if ex_run and (not run_id or run_id.startswith(("yt-collect-", "yt-sync-"))):
-                    final_run_id = ex_run
-                elif ex_run and not ex_run.startswith(("yt-collect-", "yt-sync-")):
-                    final_run_id = ex_run
-                else:
-                    final_run_id = run_id or (ex_run or "")
-
-                ex_story = _get_existing("story_id")
-                if ex_story and (not story_id or story_id.startswith(("story-collect-", "story-sync-"))):
-                    final_story_id = ex_story
-                elif ex_story and not ex_story.startswith(("story-collect-", "story-sync-")):
-                    final_story_id = ex_story
-                else:
-                    final_story_id = story_id or (ex_story or "")
-
-                if final_story_id != ex_story:
-                    conn.execute(
-                        """
-                        INSERT OR IGNORE INTO stories(
-                            story_id, title, content, url, status, channel, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)
-                        """,
-                        (final_story_id, clean_title, clean_script or clean_desc, url, channel, now_iso, now_iso),
-                    )
-                if final_run_id != ex_run:
-                    conn.execute(
-                        """
-                        INSERT OR IGNORE INTO runs(
-                            run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at
-                        ) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)
-                        """,
-                        (final_run_id, channel, final_story_id, now_iso, now_iso, now_iso),
-                    )
-
-                ex_sha = _get_existing("video_sha256")
-                final_video_sha256 = video_sha256 if (video_sha256 and str(video_sha256).strip()) else ex_sha
-
-                ex_drive_vid = _get_existing("drive_video_id")
-                final_drive_video_id = drive_video_id if (drive_video_id and str(drive_video_id).strip()) else ex_drive_vid
-
-                ex_drive_meta_raw = _get_existing("drive_backup_metadata")
-                ex_drive_meta = json.loads(ex_drive_meta_raw) if (ex_drive_meta_raw and isinstance(ex_drive_meta_raw, str)) else (ex_drive_meta_raw if isinstance(ex_drive_meta_raw, dict) else None)
-                final_drive_meta = drive_backup_metadata if drive_backup_metadata else ex_drive_meta
-
-                ex_script = _get_existing("full_script")
-                final_script = clean_script if clean_script else (normalize_text_nfc(ex_script) if ex_script else None)
-
-                ex_hook = _get_existing("hook_summary")
-                ex_synopsis = _get_existing("synopsis")
-                final_hook = hook_summary or ex_hook
-                final_synopsis = synopsis or ex_synopsis
-                if not final_hook or not final_synopsis:
-                    auto_hook, auto_synopsis = extract_hook_and_synopsis(clean_title, final_script or clean_desc)
-                    final_hook = final_hook or auto_hook
-                    final_synopsis = final_synopsis or auto_synopsis
-
-                ex_simhash = _get_existing("simhash")
-                if not clean_script and ex_simhash:
-                    final_simhash = ex_simhash
-                else:
-                    final_simhash = compute_simhash(final_script or f"{clean_title} {clean_desc}")
-
-                ex_themes_raw = _get_existing("themes_json")
-                ex_themes = json.loads(ex_themes_raw) if (ex_themes_raw and isinstance(ex_themes_raw, str)) else (ex_themes_raw if isinstance(ex_themes_raw, list) else None)
-                final_themes = themes or ex_themes
-                if not final_themes:
-                    final_themes = extract_thematic_tags(clean_title, clean_desc)
-
-                ex_res_raw = _get_existing("used_resources")
-                ex_res = json.loads(ex_res_raw) if (ex_res_raw and isinstance(ex_res_raw, str)) else (ex_res_raw if isinstance(ex_res_raw, dict) else None)
-                final_used_resources = used_resources if used_resources else ex_res
-
-                ex_music = _get_existing("music_track")
-                if not ex_music and final_used_resources and isinstance(final_used_resources, dict):
-                    ex_music = final_used_resources.get("music")
-                final_music = resolved_music if resolved_music else ex_music
-
-                ex_pinned = _get_existing("pinned_comment")
-                final_pinned_comment = pinned_comment if (pinned_comment and str(pinned_comment).strip()) else ex_pinned
-
-                ex_comment_status = str(_get_existing("comment_status") or "none")
-                incoming_comment_status = str(comment_status or "none")
-                if incoming_comment_status == "none" and ex_comment_status != "none":
-                    final_comment_status = ex_comment_status
-                else:
-                    final_comment_status = incoming_comment_status
-
-                ex_comment_error = _get_existing("comment_error")
-                final_comment_error = comment_error if (comment_error and str(comment_error).strip()) else ex_comment_error
-
-                ex_pred_score = float(_get_existing("predictive_success_score") or 0.0)
-                final_predictive_score = predictive_success_score if predictive_success_score > 0.0 else ex_pred_score
-
-                ex_rationale = _get_existing("score_rationale")
-                final_score_rationale = score_rationale if (score_rationale and str(score_rationale).strip()) else ex_rationale
-
-                ex_duration = float(_get_existing("duration_sec") or 0.0)
-                final_duration_sec = duration_sec if duration_sec > 0.0 else ex_duration
-
-                ex_actual_score = float(_get_existing("actual_success_score") or 0.0)
-                final_actual_score = actual_success_score if actual_success_score > 0.0 else ex_actual_score
-
-                ex_views = int(_get_existing("view_count") or 0)
-                final_views = int(view_count) if int(view_count) > 0 else ex_views
-
-                ex_likes = int(_get_existing("like_count") or 0)
-                final_likes = int(like_count) if int(like_count) > 0 else ex_likes
-
-                ex_comments = int(_get_existing("comment_count") or 0)
-                final_comments = int(comment_count) if int(comment_count) > 0 else ex_comments
-
-                drive_meta_json = json.dumps(final_drive_meta) if final_drive_meta else None
-                themes_json = json.dumps(final_themes) if final_themes else None
-                resources_json = json.dumps(final_used_resources) if final_used_resources else None
-
-                conn.execute(
-                    """
-                    UPDATE publications SET
-                        run_id = ?, story_id = ?, provider = ?, url = ?, channel = ?,
-                        visibility = ?, title = ?, description = ?, thumbnail_confirmed = 1,
-                        verified_at = ?, video_sha256 = ?, drive_video_id = ?, drive_backup_metadata = ?,
-                        language = ?, source_language = ?, hook_summary = ?, synopsis = ?,
-                        themes_json = ?, simhash = ?, full_script = ?,
-                        predictive_success_score = ?, score_rationale = ?,
-                        used_resources = ?, duration_sec = ?,
-                        actual_success_score = ?, music_track = ?,
-                        comment_count = ?, view_count = ?, like_count = ?,
-                        comment_status = ?, comment_error = ?, pinned_comment = ?
-                    WHERE publication_id = ?
-                    """,
-                    (
-                        final_run_id, final_story_id, provider, url, channel,
-                        visibility, clean_title, clean_desc, now_iso,
-                        final_video_sha256, final_drive_video_id, drive_meta_json,
-                        language, source_language, final_hook, final_synopsis,
-                        themes_json, final_simhash, final_script,
-                        final_predictive_score, final_score_rationale,
-                        resources_json, final_duration_sec,
-                        final_actual_score, final_music,
-                        final_comments, final_views, final_likes,
-                        final_comment_status, final_comment_error, final_pinned_comment,
-                        existing["publication_id"],
-                    ),
-                )
-                pub_id = existing["publication_id"]
+                record = _reconcile_existing_publication(conn, existing, data)
             else:
-                # Ensure parent story and run exist to satisfy SQLite foreign keys
-                st_row = conn.execute(
-                    "SELECT story_id FROM stories WHERE story_id = ? OR url = ?",
-                    (story_id, url),
-                ).fetchone()
-                effective_story_id = st_row["story_id"] if st_row else story_id
-                if not st_row:
-                    conn.execute(
-                        """
-                        INSERT INTO stories(
-                            story_id, title, content, url, status, channel, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)
-                        """,
-                        (effective_story_id, clean_title, clean_script or clean_desc, url, channel, now_iso, now_iso),
-                    )
-
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO runs(
-                        run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at
-                    ) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)
-                    """,
-                    (run_id, channel, effective_story_id, now_iso, now_iso, now_iso),
-                )
-
-                final_run_id = run_id
-                final_story_id = effective_story_id
-                final_video_sha256 = video_sha256
-                final_drive_video_id = drive_video_id
-                final_drive_meta = drive_backup_metadata
-                final_script = clean_script or None
-                final_hook = hook_summary
-                final_synopsis = synopsis
-                final_themes = themes
-                final_simhash = simhash
-                final_used_resources = used_resources
-                final_music = resolved_music
-                final_pinned_comment = pinned_comment
-                final_comment_status = str(comment_status or "none")
-                final_comment_error = comment_error
-                final_predictive_score = predictive_success_score
-                final_score_rationale = score_rationale
-                final_duration_sec = duration_sec
-                final_actual_score = actual_success_score
-                final_views = int(view_count)
-                final_likes = int(like_count)
-                final_comments = int(comment_count)
-
-                drive_meta_json = json.dumps(final_drive_meta) if final_drive_meta else None
-                themes_json = json.dumps(final_themes) if final_themes else None
-                resources_json = json.dumps(final_used_resources) if final_used_resources else None
-
-                cursor = conn.execute(
-                    """
-                    INSERT INTO publications(
-                        run_id, story_id, provider, video_id, url, channel,
-                        visibility, title, description, thumbnail_confirmed, verified_at,
-                        video_sha256, drive_video_id, drive_backup_metadata,
-                        language, source_language, hook_summary, synopsis,
-                        themes_json, simhash, full_script,
-                        predictive_success_score, score_rationale,
-                        used_resources, duration_sec,
-                        actual_success_score, music_track,
-                        comment_count, view_count, like_count,
-                        comment_status, comment_error, pinned_comment
-                    ) VALUES (
-                        ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, 1, ?,
-                        ?, ?, ?,
-                        ?, ?, ?, ?,
-                        ?, ?, ?,
-                        ?, ?,
-                        ?, ?,
-                        ?, ?,
-                        ?, ?, ?,
-                        ?, ?, ?
-                    )
-                    """,
-                    (
-                        final_run_id, final_story_id, provider, video_id, url, channel,
-                        visibility, clean_title, clean_desc, now_iso,
-                        final_video_sha256, final_drive_video_id, drive_meta_json,
-                        language, source_language, final_hook, final_synopsis,
-                        themes_json, final_simhash, final_script,
-                        final_predictive_score, final_score_rationale,
-                        resources_json, final_duration_sec,
-                        final_actual_score, final_music,
-                        final_comments, final_views, final_likes,
-                        final_comment_status, final_comment_error, final_pinned_comment,
-                    ),
-                )
-                pub_id = cursor.lastrowid
+                record = _insert_new_publication(conn, data)
 
             conn.commit()
-            logger.info("Recorded publication in inventory: id=%d video_id=%s channel=%s", pub_id, video_id, channel)
+            logger.info("Recorded publication in inventory: id=%d video_id=%s channel=%s", record.publication_id, video_id, channel)
+            return record
         except Exception:
             conn.rollback()
             raise
-
-    return PublishedVideoRecord(
-        publication_id=pub_id,
-        run_id=final_run_id,
-        story_id=final_story_id,
-        provider=provider,
-        video_id=video_id,
-        url=url,
-        channel=channel,
-        visibility=visibility,
-        title=clean_title,
-        description=clean_desc,
-        thumbnail_confirmed=True,
-        verified_at=now_iso,
-        video_sha256=final_video_sha256,
-        drive_video_id=final_drive_video_id,
-        drive_backup_metadata=final_drive_meta,
-        language=language,
-        source_language=source_language,
-        hook_summary=final_hook,
-        synopsis=final_synopsis,
-        themes=final_themes,
-        simhash=final_simhash,
-        full_script=final_script,
-        predictive_success_score=final_predictive_score,
-        score_rationale=final_score_rationale,
-        used_resources=final_used_resources,
-        duration_sec=final_duration_sec,
-        actual_success_score=final_actual_score,
-        music_track=final_music,
-        comment_count=final_comments,
-        view_count=final_views,
-        like_count=final_likes,
-        comment_status=final_comment_status,
-        comment_error=final_comment_error,
-        pinned_comment=final_pinned_comment,
-    )
 
 
 def get_published_inventory(
@@ -598,9 +490,7 @@ def get_inventory_ai_digest(
 
 
 def sync_channel_publications_from_youtube(
-    channel: str,
-    db_path: str = DEFAULT_DB_PATH,
-    max_items: int = 100,
+    channel: str, db_path: str = DEFAULT_DB_PATH, max_items: int = 100
 ) -> dict[str, Any]:
     """
     Sync 100% of published videos from YouTube Data API v3 into local SQLite inventory.
@@ -670,19 +560,11 @@ def sync_channel_publications_from_youtube(
                 url = f"https://www.youtube.com/watch?v={vid}"
 
                 record = record_published_inventory(
-                    db_path=db_path,
-                    run_id=f"yt-sync-{vid}",
-                    story_id=f"story-sync-{vid}",
-                    video_id=vid,
-                    url=url,
-                    channel=channel,
-                    title=title,
-                    description=description,
-                    verified_at=published_at,
-                    provider="YOUTUBE_DATA_API_V3",
-                    visibility="public",
-                    language="es",
-                    source_language="es",
+                    db_path=db_path, run_id=f"yt-sync-{vid}", story_id=f"story-sync-{vid}",
+                    video_id=vid, url=url, channel=channel, title=title,
+                    description=description, verified_at=published_at,
+                    provider="YOUTUBE_DATA_API_V3", visibility="public",
+                    language="es", source_language="es",
                 )
                 synced_count += 1
                 new_added += 1
