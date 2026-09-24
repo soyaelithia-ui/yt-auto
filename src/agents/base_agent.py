@@ -585,7 +585,10 @@ class ProgrammaticAgent:
             status = "saturated"
         else:
             try:
-                data = self._chat_cli_fallback(task)
+                if self._can_use_sdk():
+                    data = await self._chat_async(task)
+                else:
+                    data = self._chat_cli_fallback(task)
 
                 reply = data.get("response", "")
                 conversation_id = data.get("conversation_id")
