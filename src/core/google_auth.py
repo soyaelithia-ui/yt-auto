@@ -179,7 +179,8 @@ def load_authorized_user_credentials(
     credentials = Credentials.from_authorized_user_info(normalized_info, scopes=parsed_scopes)
 
     # Refresh if expired and refresh_token is present
-    if auto_refresh and credentials.expired and credentials.refresh_token:
+    from src.config import is_test_environment
+    if auto_refresh and not is_test_environment() and credentials.expired and credentials.refresh_token:
         try:
             logger.info("Refreshing expired Google credentials for %s", path.name)
             credentials.refresh(Request())
@@ -270,7 +271,8 @@ def build_youtube_service(
         scopes=YOUTUBE_SCOPES,
         auto_refresh=True,
     )
-    return build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    import googleapiclient.discovery
+    return googleapiclient.discovery.build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
 
 def _gcloud_credentials() -> Credentials:

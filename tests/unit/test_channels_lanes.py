@@ -123,10 +123,10 @@ class TestPhase2MultiChannelLanesAndNarratives:
         active_lanes = load_lanes()
         active_ids = {lane.id for lane in active_lanes}
         expected_active_ids = {
-            "moku-scp-shorts",
-            "moku-horror-long",
-            "aelithia-drama-shorts",
-            "aelithia-aita-long",
+            "horror-scp-shorts",
+            "horror-horror-long",
+            "drama-drama-shorts",
+            "drama-aita-long",
         }
         assert active_ids == expected_active_ids, f"Expected {expected_active_ids}, got {active_ids}"
         assert len(active_lanes) == 4
@@ -135,10 +135,10 @@ class TestPhase2MultiChannelLanesAndNarratives:
         all_lanes = load_lanes(include_disabled=True)
         all_ids = {lane.id for lane in all_lanes}
         expected_all_ids = {
-            "moku-scp-shorts",
-            "moku-horror-long",
-            "aelithia-drama-shorts",
-            "aelithia-aita-long",
+            "horror-scp-shorts",
+            "horror-horror-long",
+            "drama-drama-shorts",
+            "drama-aita-long",
             "scifi-singularity-shorts",
             "scifi-singularity-long",
         }
@@ -225,4 +225,14 @@ class TestPhase2MultiChannelLanesAndNarratives:
 
         resolved_drama, _ = agent._resolve_lane_config("aelithia-drama-shorts", "short")
         assert resolved_drama == "aelithia-drama-shorts"
+
+    def test_legacy_lane_aliases_map_to_canonical_thematic_lanes(self):
+        """Legacy lane IDs map cleanly to canonical thematic lane IDs via LANE_ALIASES."""
+        from src.core.lanes import LANE_ALIASES
+
+        assert LANE_ALIASES.get("moku-scp-shorts") == "horror-scp-shorts"
+        assert LANE_ALIASES.get("moku-horror-long") == "horror-horror-long"
+        assert LANE_ALIASES.get("aelithia-drama-shorts") == "drama-drama-shorts"
+        assert LANE_ALIASES.get("aelithia-aita-long") == "drama-aita-long"
+
 

@@ -130,3 +130,35 @@ def test_record_and_get_analytics_snapshots(tmp_path):
     assert snapshots[0]["view_count"] == 150
     assert snapshots[1]["snapshot_interval"] == "24h"
     assert snapshots[1]["view_count"] == 1200
+
+
+def test_record_analytics_snapshots_canonical_channels(tmp_path):
+    """Verify video_analytics_snapshots accepts canonical channel identifiers ('horror', 'drama', 'scifi')
+    in addition to legacy fantasy identifiers ('moku', 'aelithia') without CHECK constraint violations."""
+    db_path = tmp_path / "test_queue.db"
+    repo = QueueRepository(db_path)
+    repo.initialize()
+
+    story_id = "story_canonical_test_001"
+    repo.enqueue(story_id=story_id, title="Canonical Test Story", content="Content", url="https://reddit.com/r/test", channel="moku")
+
+    with connect(db_path) as conn:
+        for ch in ("horror", "drama", "scifi", "moku", "aelithia"):
+            conn.execute(
+                """
+                INSERT INTO video_analytics_snapshots(
+                    video_id, story_id, channel, view_count, like_count,
+                    comment_count, avg_view_duration_sec, retention_rate_pct,
+                    snapshot_interval, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (f"yt_vid_{ch}", story_id, ch, 100, 10, 2, 30.0, 75.0, "1h", "2026-09-24T00:00:00Z"),
+            )
+            conn.commit()
+
+        rows = conn.execute(
+            "SELECT channel FROM video_analytics_snapshots WHERE story_id = ? ORDER BY snapshot_id",
+            (story_id,),
+        ).fetchall()
+        inserted_channels = [r["channel"] for r in rows]
+        assert inserted_channels == ["horror", "drama", "scifi", "moku", "aelithia"]

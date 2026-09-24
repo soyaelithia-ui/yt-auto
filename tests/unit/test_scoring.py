@@ -798,3 +798,82 @@ class TestScoringAdversarialAndBoundaries:
         score, pos, neg = detect_opening_hook_strength(title, content)
         assert score >= 0.70
         assert any("question" in p for p in pos)
+
+
+# ===========================================================================
+# 7. Modular Submodules Decomposition Tests
+# ===========================================================================
+class TestScoringDecompositionSubmodules:
+    """Verifies that subpackage modules models, heuristics, and semantic exist and operate correctly."""
+
+    def test_models_contracts(self):
+        from src.core.scoring.models import (
+            HeuristicScoreReport,
+            SemanticScoreReport,
+            StoryScoringVerdict,
+            DEFAULT_HEURISTIC_THRESHOLD,
+        )
+        h = HeuristicScoreReport(
+            engagement_score=0.8,
+            retention_length_score=0.9,
+            hook_score=0.85,
+            composite_heuristic_score=0.85,
+            passed_stage1=True,
+        )
+        assert h.passed_stage1 is True
+        s = SemanticScoreReport(
+            dramatic_potential=8.0,
+            viewer_retention=8.0,
+            surprise_factor=7.0,
+            tone_alignment=8.5,
+            overall_semantic_score=0.8,
+            verdict="ACCEPTED",
+            hook_quality="strong",
+        )
+        v = StoryScoringVerdict(
+            story_id="test-1",
+            passed=True,
+            hybrid_score=0.82,
+            db_rank_score=820,
+            heuristic_report=h,
+            semantic_report=s,
+        )
+        assert v.db_rank_score == 820
+        assert v.to_dict()["db_rank_score"] == 820
+
+    def test_heuristics_submodule(self):
+        from src.core.scoring.heuristics import (
+            detect_opening_hook_strength,
+            estimate_spoken_seconds,
+            evaluate_fast_heuristics,
+            evaluate_retention_length_score,
+        )
+        secs = estimate_spoken_seconds("Esto es una prueba de narración corta.")
+        assert secs > 0
+        h_score, pos, neg = detect_opening_hook_strength(
+            "¿Soy la mala por rechazar la herencia?",
+            "Descubrí un secreto terrible sobre mi familia...",
+        )
+        assert h_score > 0.6
+        rep = evaluate_fast_heuristics(
+            title="¿Soy la mala?",
+            content="Descubrí un secreto terrible... " * 20,
+            score=100,
+            upvote_ratio=0.9,
+            num_comments=30,
+        )
+        assert rep.passed_stage1 is True
+
+    def test_semantic_submodule(self):
+        from src.core.scoring.semantic import (
+            evaluate_semantic_viral_potential,
+            _evaluate_semantic_deterministically,
+        )
+        rep = _evaluate_semantic_deterministically(
+            title="SCP-173 Brecha de contención",
+            content="La criatura anómala escapó del búnker y causó pánico.",
+            channel_lane="horror-scp-shorts",
+        )
+        assert rep.dramatic_potential >= 5.0
+        assert rep.tone_alignment >= 5.0
+

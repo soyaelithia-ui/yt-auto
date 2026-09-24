@@ -1,11 +1,9 @@
 """
-src/media/hybrid_video_engine.py - Cinematic AI Hybrid Video Rendering Engine.
+src/media/hybrid_engine.py - Cinematic AI Hybrid Video Rendering Engine.
 
 Combines high-resolution 2K/4K background mattes with monocular depth estimation,
-2.5D multi-plane parallax, 3D Ken Burns camera trajectories (Cubic Bezier easing),
-volumetric lighting shaders (god rays, chiaroscuro, ambient flicker), and atmospheric
-particle simulations (dust motes, embers, spores, mist).
-Conforms to BaseVideoCompositor interface.
+2.5D multi-plane parallax, 3D Ken Burns camera trajectories, and atmospheric
+particle simulations. Conforms to BaseVideoCompositor interface.
 """
 from __future__ import annotations
 
@@ -22,7 +20,7 @@ from PIL import Image, ImageDraw
 from src.media.interface import BaseVideoCompositor, CompositorError, CatalogAssetNotFoundError
 from src.log import get_logger
 from src.media.subtitles import CodeSubtitleDrawer, SubtitleCue, SubtitleTheme
-from src.media.subtitles_ass import libass_filter_clause
+from src.media.subtitles_ass import libass_filter_clause, write_ass_from_cues_or_words
 from src.scene_manifest import (
     CameraMotionConfig,
     HybridAIConfig,
@@ -38,27 +36,62 @@ from src.media.encode_defaults import (
     default_render_preset,
     loop_matches_target_geometry,
 )
+from src.media.ken_burns import (
+    KEN_BURNS_FPS,
+    KEN_BURNS_MIN_DURATION_SEC,
+    KEN_BURNS_PAN_CYCLE,
+    KEN_BURNS_SEGMENT_MAX_SEC,
+    KEN_BURNS_SEGMENT_TARGET_SEC,
+    KEN_BURNS_SPLIT_THRESHOLD_SEC,
+    KEN_BURNS_ZOOM_END,
+    KEN_BURNS_ZOOM_START,
+    MAX_REENCODE_SHOTS_PER_MIN,
+    build_ken_burns_zoompan_filter,
+    canonical_ken_burns_params,
+    max_reencoded_shots,
+    plan_ken_burns_still_segments,
+)
+from src.media.overlays import (
+    ANIMATED_OVERLAY_SUFFIXES,
+    ATMOSPHERIC_OVERLAY_OPACITY,
+    ATMOSPHERIC_OVERLAY_OPACITY_MAX,
+    ATMOSPHERIC_OVERLAY_OPACITY_MIN,
+    MOTION_LOOP_SUFFIXES,
+    _hybrid_overlay_search_roots,
+    clamp_atmospheric_overlay_opacity,
+    is_motion_loop_path,
+    resolve_hybrid_motion_loop,
+    resolve_hybrid_overlay_asset,
+)
 
 logger = get_logger("hybrid_video_engine")
 
 __all__ = [
+    "ANIMATED_OVERLAY_SUFFIXES",
+    "ATMOSPHERIC_OVERLAY_OPACITY",
+    "ATMOSPHERIC_OVERLAY_OPACITY_MAX",
+    "ATMOSPHERIC_OVERLAY_OPACITY_MIN",
+    "HybridAIConfig",
     "HybridVideoEngine",
     "HybridVideoError",
+    "KEN_BURNS_FPS",
+    "KEN_BURNS_MIN_DURATION_SEC",
+    "KEN_BURNS_PAN_CYCLE",
+    "KEN_BURNS_SEGMENT_MAX_SEC",
+    "KEN_BURNS_SEGMENT_TARGET_SEC",
+    "KEN_BURNS_SPLIT_THRESHOLD_SEC",
+    "KEN_BURNS_ZOOM_END",
+    "KEN_BURNS_ZOOM_START",
+    "MAX_REENCODE_SHOTS_PER_MIN",
+    "MOTION_LOOP_SUFFIXES",
+    "_hybrid_overlay_search_roots",
     "build_ken_burns_zoompan_filter",
     "canonical_ken_burns_params",
-    "plan_ken_burns_still_segments",
-    "max_reencoded_shots",
-    "is_motion_loop_path",
-    "resolve_hybrid_motion_loop",
-    "KEN_BURNS_MIN_DURATION_SEC",
-    "KEN_BURNS_ZOOM_START",
-    "KEN_BURNS_ZOOM_END",
-    "KEN_BURNS_FPS",
-    "KEN_BURNS_SEGMENT_MAX_SEC",
-    "KEN_BURNS_SPLIT_THRESHOLD_SEC",
-    "MAX_REENCODE_SHOTS_PER_MIN",
-    "ATMOSPHERIC_OVERLAY_OPACITY",
     "clamp_atmospheric_overlay_opacity",
+    "is_motion_loop_path",
+    "max_reencoded_shots",
+    "plan_ken_burns_still_segments",
+    "resolve_hybrid_motion_loop",
     "resolve_hybrid_overlay_asset",
 ]
 
@@ -66,293 +99,6 @@ __all__ = [
 class HybridVideoError(CompositorError):
     """Base exception for HybridVideoEngine operations."""
     pass
-
-
-MOTION_LOOP_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
-ANIMATED_OVERLAY_SUFFIXES = {".gif", ".webp", ".mp4", ".webm", ".mov"}
-MAX_REENCODE_SHOTS_PER_MIN = 4
-
-
-def _hybrid_overlay_search_roots(kind_norm: str) -> List[Path]:
-    """CWD + repo assets/overlays, plus visual_bank overlays (PNG only)."""
-    from src.config import BASE_DIR
-
-    roots: List[Path] = [Path("assets/overlays")]
-    repo_overlays = BASE_DIR / "assets" / "overlays"
-    if repo_overlays not in roots:
-        roots.append(repo_overlays)
-    vb = BASE_DIR / "assets" / "visual_bank"
-    if vb.is_dir():
-        try:
-            channels = sorted(p for p in vb.iterdir() if p.is_dir() and not p.name.startswith("_"))
-        except OSError:
-            channels = []
-        for chan in channels:
-            roots.append(chan / "overlays")
-            # Never scan ambient_gifs: full-frame GIF decode is banned on the hot path.
-    seen: set[str] = set()
-    out: List[Path] = []
-    for root in roots:
-        key = str(root)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(root)
-    return out
-
-
-def resolve_hybrid_overlay_asset(
-    kind: str,
-    particle_type: Optional[str] = None,
-) -> Optional[Path]:
-    """Return a pre-made static overlay PNG (never a principal-plane background).
-
-    Conventions:
-    - particles: ``assets/overlays/particles_<type>.png`` then ``particles.png``
-    - god_rays: ``assets/overlays/god_rays.png``
-    - film_grain / vignette / tv_static: ``assets/overlays`` then
-      ``assets/visual_bank/*/overlays`` (PNG only; GIFs are skipped)
-    """
-    kind_norm = (kind or "").strip().lower()
-    candidates: List[Path] = []
-    for root in _hybrid_overlay_search_roots(kind_norm):
-        if kind_norm == "particles":
-            ptype = (particle_type or "none").strip().lower()
-            if ptype and ptype != "none":
-                candidates.append(root / f"particles_{ptype}.png")
-            candidates.append(root / "particles.png")
-        elif kind_norm in ("god_rays", "god-rays", "rays"):
-            candidates.append(root / "god_rays.png")
-        elif kind_norm in ("film_grain", "grain"):
-            candidates.append(root / "film_grain.png")
-        elif kind_norm in ("vignette", "dark_vignette"):
-            candidates.extend(
-                [
-                    root / "dark_vignette.png",
-                    root / "vignette.png",
-                    root / "soft_vignette.png",
-                ]
-            )
-        elif kind_norm in ("tv_static", "tv-static", "static"):
-            candidates.append(root / "tv_static.png")
-        else:
-            return None
-    for cand in candidates:
-        try:
-            if cand.suffix.lower() in ANIMATED_OVERLAY_SUFFIXES:
-                continue
-            if cand.is_file() and cand.stat().st_size > 0:
-                return cand.resolve()
-        except OSError:
-            continue
-    return None
-
-
-def build_ken_burns_zoompan_filter(
-    width: int,
-    height: int,
-    fps: int,
-    total_frames: int,
-    zoom_start: float,
-    zoom_end: float,
-    pan_direction: str,
-) -> str:
-    """Build an FFmpeg zoompan expression matching HybridVideoEngine camera easing.
-
-    Uses the same smoothstep easing as ``cubic_bezier_ease`` (t^2*(3-2t)).
-    """
-    denom = max(1, int(total_frames) - 1)
-    e = f"(on/{denom})*(on/{denom})*(3-2*(on/{denom}))"
-    z0 = float(zoom_start)
-    z1 = float(zoom_end)
-    z = f"({z0:.6f}+({z1:.6f}-{z0:.6f})*{e})"
-    pan = (pan_direction or "static").strip().lower()
-    if pan == "left_to_right":
-        x = f"(iw-iw/zoom)*{e}"
-        y = "(ih-ih/zoom)/2"
-    elif pan == "right_to_left":
-        x = f"(iw-iw/zoom)*(1-{e})"
-        y = "(ih-ih/zoom)/2"
-    elif pan == "center_to_top":
-        x = "(iw-iw/zoom)/2"
-        y = f"(ih-ih/zoom)*(1-0.5*{e})"
-    elif pan == "center_to_bottom":
-        x = "(iw-iw/zoom)/2"
-        y = f"(ih-ih/zoom)*(0.5*{e})"
-    else:
-        x = "(iw-iw/zoom)/2"
-        y = "(ih-ih/zoom)/2"
-    return (
-        f"zoompan=z='{z}':x='{x}':y='{y}':"
-        f"d={int(total_frames)}:s={int(width)}x{int(height)}:fps={int(fps)}"
-    )
-
-
-# Canonical Ken Burns for still backgrounds (not applied to motion loops).
-# Acceptance: zoom 1.00→1.10, duration ≥12 s, 30 fps when using defaults / still path.
-# A single zoompan must not span >20s; stills longer than that hard-cut at 12–15s.
-KEN_BURNS_ZOOM_START = 1.00
-KEN_BURNS_ZOOM_END = 1.10
-KEN_BURNS_MIN_DURATION_SEC = 12.0
-KEN_BURNS_FPS = 30
-KEN_BURNS_SEGMENT_TARGET_SEC = 13.0
-KEN_BURNS_SEGMENT_MAX_SEC = 15.0
-KEN_BURNS_SPLIT_THRESHOLD_SEC = 20.0
-KEN_BURNS_PAN_CYCLE: Tuple[str, ...] = (
-    "center_to_top",
-    "left_to_right",
-    "center_to_bottom",
-    "right_to_left",
-)
-ATMOSPHERIC_OVERLAY_OPACITY_MIN = 0.15
-ATMOSPHERIC_OVERLAY_OPACITY_MAX = 0.35
-ATMOSPHERIC_OVERLAY_OPACITY = 0.25
-
-
-def canonical_ken_burns_params(
-    *,
-    duration_sec: float | None = None,
-    fps: int | None = None,
-    zoom_start: float | None = None,
-    zoom_end: float | None = None,
-    enforce_min_duration: bool = False,
-) -> tuple[float, int, int, float, float]:
-    """Return (duration, fps, total_frames, zoom_start, zoom_end) for still Ken Burns.
-
-    Defaults match acceptance (1.00→1.10 @ 30 fps, ≥12 s). Scene renders keep the
-    caller duration unless ``enforce_min_duration`` is set (acceptance / smoke).
-    """
-    base_dur = float(duration_sec) if duration_sec is not None else float(KEN_BURNS_MIN_DURATION_SEC)
-    if enforce_min_duration:
-        dur = max(float(KEN_BURNS_MIN_DURATION_SEC), base_dur)
-    else:
-        dur = max(0.5, base_dur)
-    use_fps = int(fps) if fps and int(fps) > 0 else int(KEN_BURNS_FPS)
-    z0 = float(KEN_BURNS_ZOOM_START if zoom_start is None else zoom_start)
-    z1 = float(KEN_BURNS_ZOOM_END if zoom_end is None else zoom_end)
-    if z0 <= 0:
-        z0 = float(KEN_BURNS_ZOOM_START)
-    if z1 <= z0:
-        z1 = float(KEN_BURNS_ZOOM_END)
-    total_frames = max(1, int(round(dur * use_fps)))
-    return dur, use_fps, total_frames, z0, z1
-
-
-def plan_ken_burns_still_segments(
-    duration_sec: float,
-    fps: int | None = None,
-    pan_direction: str = "center_to_top",
-) -> List[Tuple[float, int, str]]:
-    """Split a still Ken Burns scene into 12–15s zoompan segments (never >20s).
-
-    Catalog motion loops are not Ken-Burned; this planner is still-path only.
-    Returns (duration_sec, frame_count, pan_direction) tuples whose durations
-    sum to ``duration_sec``.
-    """
-    dur = max(0.5, float(duration_sec))
-    use_fps = int(fps) if fps and int(fps) > 0 else int(KEN_BURNS_FPS)
-    pan0 = (pan_direction or "center_to_top").strip().lower()
-    if pan0 not in KEN_BURNS_PAN_CYCLE:
-        pan0 = "center_to_top"
-
-    if dur <= KEN_BURNS_SPLIT_THRESHOLD_SEC:
-        frames = max(1, int(round(dur * use_fps)))
-        return [(dur, frames, pan0)]
-
-    n = max(2, int(round(dur / KEN_BURNS_SEGMENT_TARGET_SEC)))
-    while dur / n > KEN_BURNS_SEGMENT_MAX_SEC:
-        n += 1
-    while dur / n < KEN_BURNS_MIN_DURATION_SEC and n > 2:
-        n -= 1
-    while dur / n > KEN_BURNS_SPLIT_THRESHOLD_SEC:
-        n += 1
-    cap = max_reencoded_shots(dur)
-    if n > cap:
-        n = cap
-        while dur / n > KEN_BURNS_SPLIT_THRESHOLD_SEC:
-            n += 1
-
-    base = round(dur / n, 3)
-    durs = [base] * (n - 1)
-    durs.append(round(dur - sum(durs), 3))
-    start_idx = KEN_BURNS_PAN_CYCLE.index(pan0)
-    segs: List[Tuple[float, int, str]] = []
-    for i, seg_dur in enumerate(durs):
-        pan = KEN_BURNS_PAN_CYCLE[(start_idx + i) % len(KEN_BURNS_PAN_CYCLE)]
-        frames = max(1, int(round(float(seg_dur) * use_fps)))
-        segs.append((float(seg_dur), frames, pan))
-    return segs
-
-
-def clamp_atmospheric_overlay_opacity(opacity: float | None = None) -> float:
-    """Keep film_grain / vignette / tv_static in the 15–35% overlay band."""
-    val = ATMOSPHERIC_OVERLAY_OPACITY if opacity is None else float(opacity)
-    return max(ATMOSPHERIC_OVERLAY_OPACITY_MIN, min(ATMOSPHERIC_OVERLAY_OPACITY_MAX, val))
-
-
-def max_reencoded_shots(
-    duration_sec: float,
-    per_minute: int = MAX_REENCODE_SHOTS_PER_MIN,
-) -> int:
-    """Cap libx264 Ken Burns encodes per minute of output (still path only)."""
-    dur = max(0.0, float(duration_sec))
-    minutes = 1 if dur <= 0 else int(math.ceil(dur / 60.0))
-    return max(1, int(per_minute) * minutes)
-
-
-def is_motion_loop_path(path: Union[Path, str, None]) -> bool:
-    """True when ``path`` is a non-empty motion video (never a still)."""
-    if not path:
-        return False
-    p = Path(path)
-    try:
-        return (
-            p.is_file()
-            and p.suffix.lower() in MOTION_LOOP_SUFFIXES
-            and p.stat().st_size > 0
-        )
-    except OSError:
-        return False
-
-
-def resolve_hybrid_motion_loop(
-    scene: SceneConfig,
-    extra: Optional[Dict[str, Any]] = None,
-) -> Optional[Path]:
-    """Pick a catalog/scenery motion loop for stream-copy planes (skip grey/overlays)."""
-    extra = extra or {}
-    cfg = scene.hybrid_ai_config or HybridAIConfig()
-    candidates: List[Any] = [
-        extra.get("video_loop_path"),
-        extra.get("loop_path"),
-        extra.get("background_video_path"),
-        cfg.background_image_path,
-        scene.image_path,
-        scene.asset_path,
-    ]
-    extra_loops = extra.get("loop_paths")
-    if isinstance(extra_loops, (list, tuple)):
-        candidates.extend(extra_loops)
-    seen: set[str] = set()
-    for raw in candidates:
-        if not raw:
-            continue
-        p = Path(str(raw))
-        key = str(p)
-        if key in seen:
-            continue
-        seen.add(key)
-        if not is_motion_loop_path(p):
-            continue
-        try:
-            from src.media.loop_engine import is_grey_procedural_plane, is_overlay_not_plane0
-
-            if is_overlay_not_plane0(p) or is_grey_procedural_plane(path=p):
-                continue
-        except Exception:
-            pass
-        return p.resolve()
-    return None
 
 
 class HybridVideoEngine(BaseVideoCompositor):
@@ -372,9 +118,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         output_video_path: Union[Path, str],
         **extra_kwargs: Any,
     ) -> Dict[str, Any]:
-        """
-        Renders a validated scene manifest or individual scene configuration.
-        """
+        """Renders a validated scene manifest or individual scene configuration."""
         manifest = parse_scene_manifest_model(manifest_path)
         out_p = Path(output_video_path).resolve()
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -409,11 +153,9 @@ class HybridVideoEngine(BaseVideoCompositor):
                 )
                 rendered_scene_paths.append(scene_out)
 
-            # If single scene, copy or rename directly
             if len(rendered_scene_paths) == 1:
                 shutil.copy2(rendered_scene_paths[0], out_p)
             else:
-                # Concatenate scene segments with stream copy
                 concat_list_file = tmp_dir / "concat_scenes.txt"
                 with open(concat_list_file, "w") as f:
                     for sc_path in rendered_scene_paths:
@@ -459,20 +201,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         subtitle_theme: Optional[SubtitleTheme] = None,
         **extra_kwargs: Any,
     ) -> Path:
-        """
-        Renders a single scene segment using 3D camera pan, volumetric lighting, and particle simulation.
-
-        Default path: FFmpeg ``zoompan`` for Ken Burns (no per-frame Pillow crop/resize
-        rawvideo pipe). Particles / god rays use a pre-made ``assets/overlays`` PNG when
-        present, otherwise lightweight FFmpeg lavfi ``noise``/``geq`` overlays — never
-        Pillow ``ImageDraw`` on the default path. Ambient flicker uses FFmpeg ``eq``.
-
-        Opt-in fallbacks:
-        - ``FORCE_PILLOW_HYBRID_FRAMES=1`` restores the legacy Pillow frame loop.
-        - ``FORCE_PILLOW_PARTICLES=1`` restores Pillow-drawn particle/god-ray PNGs on the
-          FFmpeg camera path (without the full rawvideo loop).
-        Pillow subtitle burn remains opt-in via ``FORCE_PILLOW_SUBTITLES``.
-        """
+        """Renders a single scene segment using 3D camera pan, volumetric lighting, and particle simulation."""
         out_path = Path(output_mp4).resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -480,8 +209,6 @@ class HybridVideoEngine(BaseVideoCompositor):
         camera = cfg.camera_motion or CameraMotionConfig()
         tension = max(1, min(5, scene.tension_level))
 
-        # Still background path uses Ken Burns (loops are assembled elsewhere — do not KB loops).
-        # Canonical defaults: zoom 1.00→1.10; keep scene duration for narration sync.
         zoom_start = float(camera.start_zoom)
         zoom_end = float(camera.end_zoom) + (0.02 * (tension - 1))
         if zoom_start <= 0:
@@ -496,10 +223,14 @@ class HybridVideoEngine(BaseVideoCompositor):
             crf = default_render_crf()
         preset = str(extra_kwargs.get("preset") or default_render_preset())
         threads_val = str(extra_kwargs.get("threads") or default_ffmpeg_threads())
-        from src.media.subtitles_ass import write_ass_from_cues_or_words
 
         motion_loop = resolve_hybrid_motion_loop(scene, extra_kwargs)
-        still_bg = getattr(cfg, "still_bg", None) or getattr(cfg, "background_image_path", None) or getattr(scene, "image_path", None) or getattr(scene, "asset_path", None)
+        still_bg = (
+            getattr(cfg, "still_bg", None)
+            or getattr(cfg, "background_image_path", None)
+            or getattr(scene, "image_path", None)
+            or getattr(scene, "asset_path", None)
+        )
 
         if motion_loop is not None:
             self._render_scene_loop_hard_cuts(
@@ -544,7 +275,6 @@ class HybridVideoEngine(BaseVideoCompositor):
                 crf=crf,
                 preset=preset,
                 threads_val=threads_val,
-                write_ass_from_cues_or_words=write_ass_from_cues_or_words,
             )
 
         return out_path
@@ -560,13 +290,14 @@ class HybridVideoEngine(BaseVideoCompositor):
         crf: int,
         preset: str,
         threads_val: str,
-        write_ass_from_cues_or_words: Any,
+        write_ass_from_cues_or_words: Any = None,
     ) -> None:
         """Native libass burn-in post-pass (avoids Pillow GIL frame bridge)."""
+        writer = write_ass_from_cues_or_words or globals()["write_ass_from_cues_or_words"]
         burned = out_path.with_name(out_path.stem + "_libass" + out_path.suffix)
         with tempfile.TemporaryDirectory(prefix="hybrid_ass_") as _ass_dir:
             ass_path = Path(_ass_dir) / "scene_subs.ass"
-            write_ass_from_cues_or_words(
+            writer(
                 output_path=ass_path,
                 cues=subtitle_cues,
                 video_width=width,
@@ -618,12 +349,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         threads_val: str,
         extra_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Ken Burns + FX via one FFmpeg filter_complex (no Python rawvideo frame loop).
-
-        Still backgrounds longer than 20s are split into 12–15s zoompan segments
-        with distinct pans, concatenated in a single graph. Catalog loops are not
-        Ken-Burned (stream-copy hard cuts on the loop path).
-        """
+        """Ken Burns + FX via one FFmpeg filter_complex (no Python rawvideo frame loop)."""
         segments = plan_ken_burns_still_segments(duration, fps=fps, pan_direction=str(pan_dir))
         if not segments:
             segments = [(duration, total_frames, pan_dir)]
@@ -710,33 +436,18 @@ class HybridVideoEngine(BaseVideoCompositor):
         ]
         run_ffmpeg(reenc_cmd)
 
-    def _encode_still_ken_burns_clip(
+    def _build_still_ken_burns_filter_parts(
         self,
         *,
-        scene: SceneConfig,
-        bg_path: Path,
-        tmp_dir: Path,
         width: int,
         height: int,
         fps: int,
         segments: List[Tuple[float, int, str]],
         zoom_start: float,
         zoom_end: float,
-        tension: int,
-        out_path: Path,
-        crf: int,
-        preset: str,
-        threads_val: str,
-    ) -> None:
-        """One zoompan (or split+concat zoompans) encode; overlays after concat."""
-        if not segments:
-            raise HybridVideoError("Ken Burns still encode produced no segments")
-        duration = sum(float(s[0]) for s in segments)
-        total_frames = sum(int(s[1]) for s in segments)
-        inputs: List[str] = ["-loop", "1", "-i", str(bg_path)]
+    ) -> List[str]:
+        """Construct filter parts for single or split Ken Burns zoompan graph."""
         filter_parts: List[str] = []
-        overlay_idx = 1
-
         if len(segments) == 1:
             _seg_dur, seg_frames, seg_pan = segments[0]
             zoompan = build_ken_burns_zoompan_filter(
@@ -767,9 +478,43 @@ class HybridVideoEngine(BaseVideoCompositor):
                 filter_parts.append(f"[i{i}]{zoompan},format=rgba[s{i}]")
                 concat_in += f"[s{i}]"
             filter_parts.append(f"{concat_in}concat=n={n}:v=1:a=0[base]")
+        return filter_parts
+
+    def _encode_still_ken_burns_clip(
+        self,
+        *,
+        scene: SceneConfig,
+        bg_path: Path,
+        tmp_dir: Path,
+        width: int,
+        height: int,
+        fps: int,
+        segments: List[Tuple[float, int, str]],
+        zoom_start: float,
+        zoom_end: float,
+        tension: int,
+        out_path: Path,
+        crf: int,
+        preset: str,
+        threads_val: str,
+    ) -> None:
+        """One zoompan (or split+concat zoompans) encode; overlays after concat."""
+        if not segments:
+            raise HybridVideoError("Ken Burns still encode produced no segments")
+        duration = sum(float(s[0]) for s in segments)
+        total_frames = sum(int(s[1]) for s in segments)
+        inputs: List[str] = ["-loop", "1", "-i", str(bg_path)]
+        filter_parts = self._build_still_ken_burns_filter_parts(
+            width=width,
+            height=height,
+            fps=fps,
+            segments=segments,
+            zoom_start=zoom_start,
+            zoom_end=zoom_end,
+        )
+        overlay_idx = 1
         current = "base"
 
-        # Pre-rendered asset overlays only
         god_rays_asset = resolve_hybrid_overlay_asset("god_rays")
         if god_rays_asset is not None:
             current, overlay_idx = self._attach_static_overlay_input(
@@ -868,7 +613,7 @@ class HybridVideoEngine(BaseVideoCompositor):
         tension: int,
         duration: float = 1.0,
     ) -> Tuple[str, int]:
-        """film_grain / vignette / tv_static as 15–35% overlays, never plane-0. Asset-only."""
+        """film_grain / vignette / tv_static as 15-35% overlays, never plane-0. Asset-only."""
         opacity = clamp_atmospheric_overlay_opacity()
         grain = resolve_hybrid_overlay_asset("film_grain")
         if grain is not None:

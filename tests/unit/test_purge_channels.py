@@ -16,7 +16,7 @@ def mock_expected_channel():
     with patch("src.cli.purge_channels.expected_channel_id") as mock_exp:
         def _get_id(ch):
             val = ch.value if hasattr(ch, "value") else str(ch)
-            if val == "moku":
+            if val in ("moku", "horror"):
                 return "UC8sStaR-cwz-x7MD4XKNUKA"
             return "UC_SCIFI_12345"
         mock_exp.side_effect = _get_id
@@ -47,7 +47,7 @@ class TestPurgeChannelsDryRun:
         report = purge_channel_videos(channel="moku", dry_run=True)
 
         assert isinstance(report, PurgeReport)
-        assert report.channel == "moku"
+        assert report.channel in ("moku", "horror")
         assert report.total_found == 5
         assert report.deleted_count == 0
         assert report.skipped_count == 0
@@ -69,10 +69,10 @@ class TestPurgeChannelsDryRun:
 
 
 class TestPurgeChannelsConfirmation:
-    """Requirement 2: Interactive Confirmation Safeguard."""
+    """Requirement 2: Explicit Confirmation Safeguard (Zero Blocking input())."""
 
     @patch("src.cli.purge_channels._service_for_channel")
-    @patch("builtins.input", return_value="DELETE")
+    @patch("builtins.input")
     @patch("time.sleep")
     def test_live_purge_confirmed_with_delete_token(
         self, mock_sleep, mock_input, mock_service
@@ -103,14 +103,20 @@ class TestPurgeChannelsConfirmation:
         }
         mock_yt.videos().delete().execute.return_value = {}
 
-        report = purge_channel_videos(channel="moku", dry_run=False, force=False)
+        report = purge_channel_videos(
+            channel="moku",
+            dry_run=False,
+            force=False,
+            confirm_input=lambda _msg: "DELETE",
+        )
 
         assert report.deleted_count == 1
         assert report.items[0].status == "deleted"
         assert mock_yt.videos().delete().execute.called
+        mock_input.assert_not_called()
 
     @patch("src.cli.purge_channels._service_for_channel")
-    @patch("builtins.input", return_value="no")
+    @patch("builtins.input")
     def test_live_purge_aborted_on_invalid_token(self, mock_input, mock_service):
         mock_yt = MagicMock()
         mock_service.return_value = mock_yt
@@ -126,11 +132,50 @@ class TestPurgeChannelsConfirmation:
             ]
         }
 
-        report = purge_channel_videos(channel="moku", dry_run=False, force=False)
+        report = purge_channel_videos(
+            channel="moku",
+            dry_run=False,
+            force=False,
+            confirm_input=lambda _msg: "no",
+        )
 
         assert report.deleted_count == 0
         assert report.skipped_count == 1
         assert not mock_yt.videos().delete().execute.called
+        mock_input.assert_not_called()
+
+    @patch("src.cli.purge_channels._service_for_channel")
+    @patch("builtins.input")
+    def test_live_purge_aborted_without_confirm_input_or_force(
+        self, mock_input, mock_service
+    ):
+        mock_yt = MagicMock()
+        mock_service.return_value = mock_yt
+        mock_yt.search().list().execute.return_value = {
+            "items": [
+                {
+                    "id": {"videoId": "vid_1"},
+                    "snippet": {
+                        "title": "Video 1",
+                        "channelId": "UC8sStaR-cwz-x7MD4XKNUKA",
+                    },
+                }
+            ]
+        }
+
+        report = purge_channel_videos(
+            channel="moku",
+            dry_run=False,
+            force=False,
+            confirm_input=None,
+        )
+
+        assert report.deleted_count == 0
+        assert report.skipped_count == 1
+        assert report.items[0].status == "skipped"
+        assert "Confirmacion requerida" in (report.items[0].error or "")
+        assert not mock_yt.videos().delete().execute.called
+        mock_input.assert_not_called()
 
 
 class TestPurgeChannelsOwnershipAndQuota:
@@ -262,5 +307,21 @@ class TestPurgeChannelsCLI:
             channel="moku",
             dry_run=False,
             force=True,
+            delay_sec=0.5,
+        )
+
+    @patch("src.cli.purge_channels.purge_channel_videos")
+    @patch("sys.argv", ["purge_channels"])
+    def test_cli_defaults_to_horror_channel(self, mock_purge):
+        from src.cli.purge_channels import main
+        mock_purge.return_value = PurgeReport(
+            channel="horror", total_found=0, deleted_count=0, skipped_count=0, failed_count=0
+        )
+        exit_code = main()
+        assert exit_code == 0
+        mock_purge.assert_called_once_with(
+            channel="horror",
+            dry_run=True,
+            force=False,
             delay_sec=0.5,
         )

@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 
 
 class CanonicalChannel(str, Enum):
-    MOKU = "moku"
-    AELITHIA = "aelithia"
+    HORROR = "horror"
+    DRAMA = "drama"
     SCIFI = "scifi"
 
     def __str__(self) -> str:
@@ -20,59 +20,60 @@ class CanonicalChannel(str, Enum):
     def _missing_(cls, value: object):
         val = str(value).lower()
         if val in (
-            "horror", "terror", "canal1", "canal_1", "canal-1", "canal 1",
+            "moku", "terror", "canal1", "canal_1", "canal-1", "canal 1",
             "channel1", "channel_1", "channel-1", "channel 1",
         ):
-            return cls.MOKU
+            return cls.HORROR
         if val in (
-            "drama", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2",
+            "aelithia", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2",
             "channel2", "channel_2", "channel-2", "channel 2",
         ):
-            return cls.AELITHIA
+            return cls.DRAMA
         return None
 
 
-CanonicalChannel.HORROR = CanonicalChannel.MOKU
-CanonicalChannel.DRAMA = CanonicalChannel.AELITHIA
+# Backwards compatibility aliases
+CanonicalChannel.MOKU = CanonicalChannel.HORROR
+CanonicalChannel.AELITHIA = CanonicalChannel.DRAMA
 
 
 CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
-    "horror": CanonicalChannel.MOKU,
-    "drama": CanonicalChannel.AELITHIA,
+    "horror": CanonicalChannel.HORROR,
+    "drama": CanonicalChannel.DRAMA,
     "scifi": CanonicalChannel.SCIFI,
-    "canal1": CanonicalChannel.MOKU,
-    "canal_1": CanonicalChannel.MOKU,
-    "canal-1": CanonicalChannel.MOKU,
-    "canal 1": CanonicalChannel.MOKU,
-    "channel1": CanonicalChannel.MOKU,
-    "channel_1": CanonicalChannel.MOKU,
-    "channel-1": CanonicalChannel.MOKU,
-    "channel 1": CanonicalChannel.MOKU,
-    "canal2": CanonicalChannel.AELITHIA,
-    "canal_2": CanonicalChannel.AELITHIA,
-    "canal-2": CanonicalChannel.AELITHIA,
-    "canal 2": CanonicalChannel.AELITHIA,
-    "channel2": CanonicalChannel.AELITHIA,
-    "channel_2": CanonicalChannel.AELITHIA,
-    "channel-2": CanonicalChannel.AELITHIA,
-    "channel 2": CanonicalChannel.AELITHIA,
-    "moku": CanonicalChannel.MOKU,
-    "terror": CanonicalChannel.MOKU,
-    "moku_terror": CanonicalChannel.MOKU,
-    "moku-terror": CanonicalChannel.MOKU,
-    "moku_shorts": CanonicalChannel.MOKU,
-    "scp": CanonicalChannel.MOKU,
-    "scp_shorts": CanonicalChannel.MOKU,
-    "scp-shorts": CanonicalChannel.MOKU,
-    "mokuredit": CanonicalChannel.MOKU,
-    "aelithia": CanonicalChannel.AELITHIA,
-    "aelithia-c1f": CanonicalChannel.AELITHIA,
-    "soy_el_malo": CanonicalChannel.AELITHIA,
-    "soy-el-malo": CanonicalChannel.AELITHIA,
-    "yo_soy_el_malo": CanonicalChannel.AELITHIA,
-    "aita": CanonicalChannel.AELITHIA,
-    "aita_drama": CanonicalChannel.AELITHIA,
-    "aita-drama": CanonicalChannel.AELITHIA,
+    "moku": CanonicalChannel.HORROR,
+    "aelithia": CanonicalChannel.DRAMA,
+    "canal1": CanonicalChannel.HORROR,
+    "canal_1": CanonicalChannel.HORROR,
+    "canal-1": CanonicalChannel.HORROR,
+    "canal 1": CanonicalChannel.HORROR,
+    "channel1": CanonicalChannel.HORROR,
+    "channel_1": CanonicalChannel.HORROR,
+    "channel-1": CanonicalChannel.HORROR,
+    "channel 1": CanonicalChannel.HORROR,
+    "canal2": CanonicalChannel.DRAMA,
+    "canal_2": CanonicalChannel.DRAMA,
+    "canal-2": CanonicalChannel.DRAMA,
+    "canal 2": CanonicalChannel.DRAMA,
+    "channel2": CanonicalChannel.DRAMA,
+    "channel_2": CanonicalChannel.DRAMA,
+    "channel-2": CanonicalChannel.DRAMA,
+    "channel 2": CanonicalChannel.DRAMA,
+    "terror": CanonicalChannel.HORROR,
+    "moku_terror": CanonicalChannel.HORROR,
+    "moku-terror": CanonicalChannel.HORROR,
+    "moku_shorts": CanonicalChannel.HORROR,
+    "scp": CanonicalChannel.HORROR,
+    "scp_shorts": CanonicalChannel.HORROR,
+    "scp-shorts": CanonicalChannel.HORROR,
+    "mokuredit": CanonicalChannel.HORROR,
+    "aelithia-c1f": CanonicalChannel.DRAMA,
+    "soy_el_malo": CanonicalChannel.DRAMA,
+    "soy-el-malo": CanonicalChannel.DRAMA,
+    "yo_soy_el_malo": CanonicalChannel.DRAMA,
+    "aita": CanonicalChannel.DRAMA,
+    "aita_drama": CanonicalChannel.DRAMA,
+    "aita-drama": CanonicalChannel.DRAMA,
     "singularidad_scifi": CanonicalChannel.SCIFI,
     "singularidad-scifi": CanonicalChannel.SCIFI,
 }

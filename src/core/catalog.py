@@ -1,37 +1,51 @@
 """
 src/core/catalog.py - SQLite-backed Catalog Repository for Video Loops.
 
-Manages video loops and scenery assets (pre-rendered loops and FFmpeg lavfi filters),
+Manages video loops and scenery assets (pre-rendered loops and cinematic masters),
 indexing their thematic tags, dimensions, usage metrics, and SHA-256 digests.
 Provides smart rotation (least-recently used / lowest usage count) and audit tools.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import random
 import re
 import sqlite3
-import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from src.config import BASE_DIR, DEFAULT_DB_PATH
+from src.core.catalog_audit import (
+    SYNTHETIC_MONOCHROME_LOOP_IDS,
+    audit_and_cleanup as audit_and_cleanup_func,
+    purge_synthetic_monochrome_loops as purge_synthetic_monochrome_loops_func,
+)
+from src.core.catalog_sync import (
+    _LEGACY_CHECKOUT_PREFIXES,
+    _catalog_repo_root,
+    compute_file_sha256,
+    probe_video_metadata,
+    resolve_loop_file_path,
+    sync_catalog_from_assets as sync_catalog_from_assets_func,
+)
+from src.core.repository.migrations import validate_db_path
 from src.log import get_logger
 
 logger = get_logger("loop_catalog")
 
 __all__ = [
-    "LoopRecord",
-    "LoopCatalogRepository",
-    "compute_file_sha256",
-    "resolve_loop_file_path",
     "CHANNEL_CATEGORIES",
     "CHANNEL_THEMES",
+    "LoopCatalogRepository",
+    "LoopRecord",
     "SYNTHETIC_MONOCHROME_LOOP_IDS",
+    "_LEGACY_CHECKOUT_PREFIXES",
+    "compute_file_sha256",
+    "probe_video_metadata",
+    "resolve_loop_file_path",
 ]
 
 CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
@@ -42,114 +56,7 @@ CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
     "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
 }
 
-# Back-compat alias used by main CI / tier-2 fallback callers
 CHANNEL_CATEGORIES: Dict[str, Tuple[str, ...]] = CHANNEL_THEMES
-
-SYNTHETIC_MONOCHROME_LOOP_IDS: Set[str] = {
-    "loop_maritime_lighthouse_h_544374",
-    "loop_arctic_desolation_v_800210",
-}
-
-# Migration remap only: SQLite `video_loops.file_path` may still store absolute
-# paths from prior host checkouts. These prefixes are NOT the live install root
-# (that is YT_AUTO_ROOT on VPS/systemd, else BASE_DIR for the current checkout).
-# Prefer repo-relative paths for new rows. Do not drop these until catalogs are
-# rewritten, or resolution of existing loop assets breaks after moves/clones.
-_LEGACY_CHECKOUT_PREFIXES = (
-    "/home/moku/projects/yt-auto",
-    "/srv/projects/yt-auto",
-)
-
-
-def _catalog_repo_root(repo_root: Path | None = None) -> Path:
-    """Prefer explicit arg, then YT_AUTO_ROOT env, then BASE_DIR (repo-relative)."""
-    if repo_root is not None:
-        return Path(repo_root)
-    env_root = os.environ.get("YT_AUTO_ROOT", "").strip()
-    if env_root:
-        return Path(env_root).expanduser()
-    return BASE_DIR
-
-
-def resolve_loop_file_path(path: str | Path, repo_root: Path | None = None) -> Path:
-    """Map a catalog path onto the current checkout.
-
-    Order: existing file as stored → strip legacy host prefixes onto
-    YT_AUTO_ROOT/BASE_DIR → join relative paths under that root.
-    Never rewrite a missing path onto a foreign host root.
-    """
-    root = _catalog_repo_root(repo_root)
-    p = Path(path)
-    if p.is_file():
-        return p
-    text = str(p)
-    for prefix in _LEGACY_CHECKOUT_PREFIXES:
-        if text == prefix or text.startswith(prefix + "/"):
-            alt = root / text[len(prefix):].lstrip("/")
-            if alt.is_file():
-                return alt
-    if not p.is_absolute():
-        alt = root / p
-        if alt.is_file():
-            return alt
-    return p
-
-
-
-def compute_file_sha256(path: str | Path) -> str:
-    """Computes standard SHA-256 hexadecimal digest for a file."""
-    p = Path(path)
-    if not p.is_file():
-        return ""
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def probe_video_metadata(file_path: Path) -> Optional[Tuple[int, int, float, int]]:
-    """Extract width, height, duration_sec, fps using ffprobe.
-
-    Returns (width, height, duration_sec, fps) if probe succeeds with valid
-    dimensions and duration, or None if ffprobe fails, produces no valid video stream,
-    or reports zero/negative dimensions.
-    """
-    cmd = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,r_frame_rate,duration",
-        "-show_entries", "format=duration",
-        "-of", "json", str(file_path)
-    ]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        if res.returncode != 0 or not res.stdout:
-            return None
-        data = json.loads(res.stdout)
-        streams = data.get("streams", [])
-        if not streams:
-            return None
-        stream = streams[0]
-        fmt = data.get("format", {})
-        w = int(stream.get("width") or 0)
-        h = int(stream.get("height") or 0)
-        if w <= 0 or h <= 0:
-            return None
-        dur = float(stream.get("duration") or fmt.get("duration") or 0.0)
-        if dur <= 0.0:
-            return None
-        fps_str = stream.get("r_frame_rate", "24/1")
-        if "/" in fps_str:
-            num, den = fps_str.split("/")
-            fps = round(float(num) / float(den)) if float(den) != 0 else 24
-        else:
-            fps = int(float(fps_str)) if fps_str else 24
-        if fps <= 0:
-            fps = 24
-        return w, h, dur, fps
-    except Exception:
-        return None
 
 
 @dataclass
@@ -173,8 +80,7 @@ class LoopRecord:
     id: Optional[int] = None
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        return d
+        return asdict(self)
 
     @property
     def channel(self) -> Optional[str]:
@@ -219,14 +125,7 @@ class LoopCatalogRepository:
     CREATE INDEX IF NOT EXISTS idx_video_loops_sha ON video_loops(sha256);
     """
 
-    CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
-        "horror": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
-        "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
-        "drama": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
-        "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
-        "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
-    }
-
+    CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = CHANNEL_THEMES
     DEFAULT_CATALOG_DB_PATH = str((BASE_DIR / "data" / "loop_catalog.db").resolve())
 
     def __init__(
@@ -260,7 +159,6 @@ class LoopCatalogRepository:
         if self.db_path != ":memory:":
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = sqlite3.connect(self.db_path, timeout=15.0)
-
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=15000;")
@@ -365,175 +263,21 @@ class LoopCatalogRepository:
         logger.info("Registered loop '%s' (cat=%s, orient=%s, tech=%s)", loop.loop_id, loop.category, loop.orientation, loop.technology)
         return True
 
-
     def sync_catalog_from_assets(
         self,
         assets_dir: Optional[Path | str] = None,
         force_rescan: bool = False,
     ) -> int:
-        """
-        Enumerate all .mp4 and .webm in assets/loops/horizontal/ and vertical/ (including atomic/ subfolders),
-        extract orientation, category, dimensions, duration, fps, technology, and SHA-256 digest,
-        and upsert into the video_loops table idempotently.
-        """
-        repo_root = _catalog_repo_root()
-        if assets_dir is None:
-            loops_root = repo_root / "assets" / "loops"
-        else:
-            p = Path(assets_dir)
-            if (p / "horizontal").is_dir() or (p / "vertical").is_dir():
-                loops_root = p
-            elif (p / "loops" / "horizontal").is_dir() or (p / "loops" / "vertical").is_dir():
-                loops_root = p / "loops"
-            else:
-                loops_root = p
-
-        if not loops_root.is_dir():
-            logger.warning("Loops root directory not found: %s", loops_root)
-            return 0
-
-        upsert_sql = """
-        INSERT INTO video_loops (
-            loop_id, category, technology, theme_tags, orientation,
-            width, height, duration_sec, fps, file_path,
-            file_size_bytes, sha256, generator_params_json,
-            usage_count, last_used_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(loop_id) DO UPDATE SET
-            category = excluded.category,
-            technology = excluded.technology,
-            theme_tags = excluded.theme_tags,
-            orientation = excluded.orientation,
-            width = excluded.width,
-            height = excluded.height,
-            duration_sec = excluded.duration_sec,
-            fps = excluded.fps,
-            file_path = excluded.file_path,
-            file_size_bytes = excluded.file_size_bytes,
-            sha256 = excluded.sha256,
-            generator_params_json = excluded.generator_params_json
-        """
-
-        rows_to_upsert: List[Tuple[Any, ...]] = []
-        now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-        for orient in ("horizontal", "vertical"):
-            orient_dir = loops_root / orient
-            if not orient_dir.is_dir():
-                continue
-
-            candidates = sorted([
-                f for f in orient_dir.rglob("*")
-                if f.is_file() and f.suffix.lower() in (".mp4", ".webm")
-            ])
-
-            for file_p in candidates:
-                if file_p.name.startswith("."):
-                    continue
-                try:
-                    file_size = file_p.stat().st_size
-                except OSError:
-                    continue
-                if file_size < 25_000:
-                    continue
-
-                rel = file_p.relative_to(orient_dir)
-                if len(rel.parts) > 1:
-                    category = rel.parts[0].strip().lower().replace("-", "_")
-                    if category == "atomic":
-                        category = "general"
-                else:
-                    category = "general"
-
-                is_atomic = "atomic" in rel.parts
-                is_master = "_master_60s" in file_p.name
-                stem = file_p.stem.lower()
-
-                # Channel attribution
-                channel = None
-                from src.core.channel_profile import ChannelProfileRegistry
-                for ch in ChannelProfileRegistry.list_active_channel_ids():
-                    if stem.startswith(f"{ch}_") or ch in rel.parts:
-                        channel = ch
-                        break
-
-                # Extract theme tags
-                tags = {category, orient}
-                if channel:
-                    tags.add(channel)
-                    tags.add(f"channel:{channel}")
-                if is_atomic:
-                    tags.add("atomic")
-                if is_master:
-                    tags.add("master")
-                    tags.add("60s")
-
-                tokens = [t.lower() for t in re.split(r"[_\W]+", stem) if t]
-                ignored_tokens = {"mp4", "webm", "master", "60s", "moku", "aelithia", "scifi", "vertical", "horizontal", "short", "loop"}
-                for t in tokens:
-                    if t not in ignored_tokens and len(t) > 1:
-                        tags.add(t)
-
-                # Dimensions, duration, fps
-                if is_master:
-                    duration_sec = 60.46
-                    fps = 24
-                    width, height = (1920, 1080) if orient == "horizontal" else (1080, 1920)
-                    technology = "cinematic_master"
-                elif is_atomic:
-                    duration_sec = 6.04
-                    fps = 24
-                    width, height = (736, 400) if orient == "horizontal" else (400, 736)
-                    technology = "cinematic_atomic"
-                else:
-                    meta = probe_video_metadata(file_p)
-                    if not meta or meta[0] <= 0 or meta[1] <= 0 or meta[2] <= 0:
-                        logger.warning("Skipping corrupt or unreadable video file: %s", file_p)
-                        continue
-                    width, height, duration_sec, fps = meta
-                    technology = "pre-rendered"
-
-                # Relative file path when within repo root, else absolute
-                try:
-                    stored_path = str(file_p.relative_to(repo_root))
-                except ValueError:
-                    stored_path = str(file_p.resolve())
-
-                loop_id = f"loop_{orient[:1]}_{category}_{file_p.stem}"
-                sha256 = compute_file_sha256(file_p)
-                gen_params = json.dumps(
-                    {"type": "atomic" if is_atomic else "master", "channel": channel, "source": "assets_dir"},
-                    ensure_ascii=False,
-                )
-                tags_json = json.dumps(sorted(list(tags)), ensure_ascii=False)
-
-                rows_to_upsert.append((
-                    loop_id, category, technology, tags_json,
-                    orient, width, height, duration_sec, fps, stored_path,
-                    file_size, sha256, gen_params, 0, None, now_iso,
-                ))
-
-        if rows_to_upsert:
-            with self._get_connection() as conn:
-                conn.executemany(upsert_sql, rows_to_upsert)
-                conn.commit()
-            logger.info("Successfully synced %d video loops from assets", len(rows_to_upsert))
-
-        return len(rows_to_upsert)
+        """Delegates asset discovery and indexing to catalog_sync module."""
+        return sync_catalog_from_assets_func(self, assets_dir=assets_dir, force_rescan=force_rescan)
 
     def purge_synthetic_monochrome_loops(self) -> int:
-        """Purges synthetic monochrome loops from the database."""
-        sql = """
-        DELETE FROM video_loops
-        WHERE loop_id IN ('loop_maritime_lighthouse_h_544374', 'loop_arctic_desolation_v_800210')
-           OR (technology = 'ffmpeg_lavfi' AND sha256 = 'procedural')
-        """
-        with self._get_connection() as conn:
-            cur = conn.execute(sql)
-            deleted = cur.rowcount
-            conn.commit()
-        logger.info("Purged %d synthetic monochrome loops from catalog", deleted)
-        return deleted
+        """Delegates synthetic monochrome loop cleanup to catalog_audit module."""
+        return purge_synthetic_monochrome_loops_func(self)
+
+    def audit_and_cleanup(self, auto_remove_missing: bool = False) -> Dict[str, Any]:
+        """Delegates catalog audit and orphan cleanup to catalog_audit module."""
+        return audit_and_cleanup_func(self, auto_remove_missing=auto_remove_missing)
 
     def get_loop_by_id(self, loop_id: str) -> Optional[LoopRecord]:
         """Fetches a loop record by its unique ID."""
@@ -557,12 +301,34 @@ class LoopCatalogRepository:
         **kwargs: Any,
     ) -> Optional[LoopRecord]:
         """
-        Retrieves the optimal video loop matching category, orientation, motifs, and channel constraints.
-        Applies semantic motif ranking, 3-tier fallback, PR CHANNEL_THEMES isolation, exclude filters,
-        path-dedup, seeded rotation (multi-scene), and skips missing/synthetic media.
+        Retrieves optimal video loop matching category, orientation, motifs, and channel constraints.
         """
         orient_clean = "horizontal" if orientation in ("horizontal", "16:9", "longform", (1920, 1080)) else "vertical"
         cat_clean = category.strip().lower().replace("-", "_").replace(" ", "_") if category else "dark_ambient"
+        exclude_set = self._build_exclude_set(exclude_loop_ids)
+        eff_channel = self._resolve_effective_channel(channel, requested_tags, cat_clean)
+
+        candidates = self._query_tier_candidates(
+            orient_clean=orient_clean,
+            cat_clean=cat_clean,
+            eff_channel=eff_channel,
+            motifs=motifs,
+            exclude_set=exclude_set,
+            seed=seed,
+        )
+        if not candidates:
+            return None
+
+        return self._rank_and_select_best(
+            candidates=candidates,
+            cat_clean=cat_clean,
+            clean_motifs=[str(m).strip().lower() for m in (motifs or []) if str(m).strip()],
+            requested_tags=requested_tags,
+            seed=seed,
+        )
+
+    def _build_exclude_set(self, exclude_loop_ids: Optional[Sequence[str]]) -> Set[str]:
+        """Helper to build normalized exclude set with dev/inode tracking."""
         exclude_set = {str(e).strip() for e in (exclude_loop_ids or []) if e}
         for raw in list(exclude_set):
             p_ex = Path(raw)
@@ -573,100 +339,108 @@ class LoopCatalogRepository:
                     exclude_set.add(p_ex.name)
             except OSError:
                 exclude_set.add(p_ex.name)
+        return exclude_set
 
-        # Deduce channel from explicit arg, requested_tags, or category (PR #69)
+    def _resolve_effective_channel(
+        self,
+        channel: Optional[str],
+        requested_tags: Optional[Sequence[str]],
+        cat_clean: str,
+    ) -> Optional[str]:
+        """Deduce channel from explicit argument, requested tags, or category."""
         eff_channel = channel.lower().strip() if channel else None
         if not eff_channel and requested_tags:
             for t in requested_tags:
                 t_low = t.lower().strip()
                 if t_low in self.CHANNEL_THEMES:
-                    eff_channel = t_low
-                    break
+                    return t_low
         if not eff_channel:
             for ch_name, themes in self.CHANNEL_THEMES.items():
                 if cat_clean in themes:
-                    eff_channel = ch_name
-                    break
+                    return ch_name
+        return eff_channel
 
-        def _is_foreign_channel(rec: LoopRecord) -> bool:
-            if not eff_channel:
-                return False
-            from src.core.channel_profile import ChannelProfileRegistry
-            eff_norm = ChannelProfileRegistry.normalize_channel_id(eff_channel)
-            rec_ch = rec.channel
-            if rec_ch:
-                rec_norm = ChannelProfileRegistry.normalize_channel_id(rec_ch)
-                if rec_norm != eff_norm:
-                    return True
-            if not rec_ch and eff_channel in self.CHANNEL_THEMES:
-                tags = {t.lower().strip() for t in rec.theme_tags}
-                for oc in self.CHANNEL_THEMES:
-                    oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
-                    if oc_norm != eff_norm and (oc in tags or f"channel:{oc}" in tags):
-                        return True
-                for oc, themes in self.CHANNEL_THEMES.items():
-                    oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
-                    if oc_norm != eff_norm and rec.category in themes:
-                        return True
+    def _is_foreign_channel(self, rec: LoopRecord, eff_channel: Optional[str]) -> bool:
+        """Determines if a loop belongs to a conflicting foreign channel."""
+        if not eff_channel:
             return False
+        from src.core.channel_profile import ChannelProfileRegistry
+        eff_norm = ChannelProfileRegistry.normalize_channel_id(eff_channel)
+        rec_ch = rec.channel
+        if rec_ch:
+            rec_norm = ChannelProfileRegistry.normalize_channel_id(rec_ch)
+            if rec_norm != eff_norm:
+                return True
+        if not rec_ch and eff_channel in self.CHANNEL_THEMES:
+            tags = {t.lower().strip() for t in rec.theme_tags}
+            for oc in self.CHANNEL_THEMES:
+                oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
+                if oc_norm != eff_norm and (oc in tags or f"channel:{oc}" in tags):
+                    return True
+            for oc, themes in self.CHANNEL_THEMES.items():
+                oc_norm = ChannelProfileRegistry.normalize_channel_id(oc)
+                if oc_norm != eff_norm and rec.category in themes:
+                    return True
+        return False
 
-        def _filter_and_validate(rows: List[sqlite3.Row]) -> List[LoopRecord]:
-            valid_recs: List[LoopRecord] = []
-            for r in rows:
-                rec = self._row_to_record(r)
-                # Never select grey lavfi / synthetic monochrome as plane-0.
-                is_synthetic_mono = (
-                    rec.loop_id in SYNTHETIC_MONOCHROME_LOOP_IDS
-                    or rec.category in ("maritime_lighthouse", "arctic_desolation")
-                    or rec.technology == "synthetic_monochrome"
-                    or (rec.technology == "ffmpeg_lavfi" and rec.sha256 == "procedural")
-                )
-                if is_synthetic_mono:
+    def _filter_and_validate(
+        self,
+        rows: List[sqlite3.Row],
+        exclude_set: Set[str],
+        eff_channel: Optional[str],
+    ) -> List[LoopRecord]:
+        """Filters out missing, corrupt, synthetic monochrome, and foreign channel loops."""
+        valid_recs: List[LoopRecord] = []
+        for r in rows:
+            rec = self._row_to_record(r)
+            is_synthetic_mono = (
+                rec.loop_id in SYNTHETIC_MONOCHROME_LOOP_IDS
+                or rec.category in ("maritime_lighthouse", "arctic_desolation")
+                or rec.technology == "synthetic_monochrome"
+                or (rec.technology == "ffmpeg_lavfi" and rec.sha256 == "procedural")
+            )
+            if is_synthetic_mono or self._is_foreign_channel(rec, eff_channel):
+                continue
+            if (
+                rec.loop_id in exclude_set
+                or rec.file_path in exclude_set
+                or Path(rec.file_path).name in exclude_set
+                or str(resolve_loop_file_path(rec.file_path)) in exclude_set
+            ):
+                continue
+            p = resolve_loop_file_path(rec.file_path)
+            if p.is_file() and p.stat().st_size >= 25_000:
+                st = p.stat()
+                if f"ino:{st.st_dev}:{st.st_ino}" in exclude_set:
                     continue
+                rec.file_path = str(p)
+                valid_recs.append(rec)
+        return valid_recs
 
-                # Channel isolation: reject foreign channel
-                if _is_foreign_channel(rec):
-                    continue
-                if (
-                    rec.loop_id in exclude_set
-                    or rec.file_path in exclude_set
-                    or Path(rec.file_path).name in exclude_set
-                    or str(resolve_loop_file_path(rec.file_path)) in exclude_set
-                ):
-                    continue
-                p = resolve_loop_file_path(rec.file_path)
-                if p.is_file() and p.stat().st_size >= 25_000:
-                    st = p.stat()
-                    if f"ino:{st.st_dev}:{st.st_ino}" in exclude_set:
-                        continue
-                    rec.file_path = str(p)
-                    valid_recs.append(rec)
-            return valid_recs
-
-        # --- Tier 0: Semantic Story Motifs Match ---
+    def _query_tier_candidates(
+        self,
+        orient_clean: str,
+        cat_clean: str,
+        eff_channel: Optional[str],
+        motifs: Optional[Sequence[str]],
+        exclude_set: Set[str],
+        seed: Any,
+    ) -> List[LoopRecord]:
+        """Queries database across Tier 0 (motifs), Tier 1 (exact), Tier 2 (channel fallback), Tier 3 (generic)."""
         clean_motifs = [str(m).strip().lower() for m in (motifs or []) if str(m).strip()]
         motif_hits: List[LoopRecord] = []
         if clean_motifs:
             motif_clauses = " OR ".join(["theme_tags LIKE ?" for _ in clean_motifs] + ["file_path LIKE ?" for _ in clean_motifs] + ["category LIKE ?" for _ in clean_motifs])
-            sql_motifs = f"""
-            SELECT * FROM video_loops
-            WHERE orientation = ? AND ({motif_clauses})
-            ORDER BY usage_count ASC, last_used_at ASC, id ASC
-            """
+            sql_motifs = f"SELECT * FROM video_loops WHERE orientation = ? AND ({motif_clauses}) ORDER BY usage_count ASC, last_used_at ASC, id ASC"
             params = [orient_clean] + [f'%"{m}"%' for m in clean_motifs] + [f'%{m}%' for m in clean_motifs] + [f'%{m}%' for m in clean_motifs]
             with self._get_connection() as conn:
                 cur = conn.execute(sql_motifs, params)
-                motif_hits = _filter_and_validate(cur.fetchall())
+                motif_hits = self._filter_and_validate(cur.fetchall(), exclude_set, eff_channel)
 
-        # --- Tier 1: Exact category match ---
-        sql_exact = """
-        SELECT * FROM video_loops
-        WHERE category = ? AND orientation = ?
-        ORDER BY usage_count ASC, last_used_at ASC, id ASC
-        """
+        sql_exact = "SELECT * FROM video_loops WHERE category = ? AND orientation = ? ORDER BY usage_count ASC, last_used_at ASC, id ASC"
         with self._get_connection() as conn:
             cur = conn.execute(sql_exact, (cat_clean, orient_clean))
-            candidates = _filter_and_validate(cur.fetchall())
+            candidates = self._filter_and_validate(cur.fetchall(), exclude_set, eff_channel)
 
         if motif_hits:
             seen_motif_ids = {c.loop_id for c in candidates}
@@ -675,7 +449,7 @@ class LoopCatalogRepository:
                     candidates.append(mh)
                     seen_motif_ids.add(mh.loop_id)
 
-        # --- Tier 2: Same-channel compatible fallback / multi-scene expansion ---
+        # Tier 2: Channel compatible fallback
         from src.core.channel_profile import ChannelProfileRegistry
         ch_key = eff_channel if (eff_channel and eff_channel in self.CHANNEL_THEMES) else (
             ChannelProfileRegistry.normalize_channel_id(eff_channel) if eff_channel else None
@@ -700,7 +474,7 @@ class LoopCatalogRepository:
             """
             with self._get_connection() as conn:
                 cur = conn.execute(sql_ch, (cat_clean, orient_clean, f'%"{eff_channel}"%', *ch_cats))
-                channel_hits = _filter_and_validate(cur.fetchall())
+                channel_hits = self._filter_and_validate(cur.fetchall(), exclude_set, eff_channel)
             if not candidates:
                 candidates = channel_hits
             else:
@@ -710,29 +484,25 @@ class LoopCatalogRepository:
                         candidates.append(rec)
                         seen_ids.add(rec.loop_id)
 
-        # --- Tier 3: Generic orientation fallback (still channel-isolated via filter) ---
+        # Tier 3: Generic fallback
         if not candidates:
-            sql_fb = """
-            SELECT * FROM video_loops
-            WHERE orientation = ?
-            ORDER BY usage_count ASC, last_used_at ASC, id ASC
-            """
+            sql_fb = "SELECT * FROM video_loops WHERE orientation = ? ORDER BY usage_count ASC, last_used_at ASC, id ASC"
             with self._get_connection() as conn:
                 cur = conn.execute(sql_fb, (orient_clean,))
-                candidates = _filter_and_validate(cur.fetchall())
+                candidates = self._filter_and_validate(cur.fetchall(), exclude_set, eff_channel)
 
-        if not candidates:
-            return None
+        preferred = [c for c in candidates if (c.technology or "").strip().lower() not in ("ffmpeg_lavfi", "synthetic_monochrome")]
+        return preferred or candidates
 
-        preferred = [
-            c
-            for c in candidates
-            if (c.technology or "").strip().lower() not in ("ffmpeg_lavfi", "synthetic_monochrome")
-        ]
-        if preferred:
-            candidates = preferred
-
-        # Motif & tag ranking with category priority
+    def _rank_and_select_best(
+        self,
+        candidates: List[LoopRecord],
+        cat_clean: str,
+        clean_motifs: List[str],
+        requested_tags: Optional[Sequence[str]],
+        seed: Any,
+    ) -> LoopRecord:
+        """Ranks candidates by semantic motifs, tags, and selects with seeded rotation."""
         def candidate_sort_key(rec: LoopRecord) -> Tuple[int, int, int, int, str]:
             m_score = 0
             if clean_motifs:
@@ -755,7 +525,7 @@ class LoopCatalogRepository:
 
         candidates.sort(key=candidate_sort_key)
 
-        # Deduplicate by physical filename for multi-scene seeded rotation (PR)
+        # Deduplicate by physical filename
         seen_paths: set[str] = set()
         distinct_records: list[LoopRecord] = []
         for rec in candidates:
@@ -766,7 +536,6 @@ class LoopCatalogRepository:
         if not distinct_records:
             distinct_records = candidates
 
-        # When story motifs are present and matched, candidate pool prioritizes them
         matching_motif_records = [
             r for r in distinct_records
             if clean_motifs and any(
@@ -783,12 +552,10 @@ class LoopCatalogRepository:
             if len(matching_cat_records) > 1:
                 candidate_pool = matching_cat_records
             elif seed is not None and len(distinct_records) > 1:
-                # PR multi-scene: rotate across channel pool when category has a single hit
                 candidate_pool = distinct_records
             else:
                 candidate_pool = matching_cat_records or distinct_records
 
-        # Main: lowest usage_count strictly precedes seed randomization
         min_usage = min(r.usage_count for r in candidate_pool)
         tied = [r for r in candidate_pool if r.usage_count == min_usage]
 
@@ -796,7 +563,6 @@ class LoopCatalogRepository:
             try:
                 idx = int(seed)
                 tied_sorted = sorted(tied, key=lambda r: r.loop_id)
-                # Prefer stable idx modulo for multi-scene (PR); works for equal-usage banks too
                 return tied_sorted[idx % len(tied_sorted)]
             except (ValueError, TypeError):
                 return random.Random(seed).choice(sorted(tied, key=lambda r: r.loop_id))
@@ -906,39 +672,4 @@ class LoopCatalogRepository:
             "by_category": {r[0]: r[1] for r in by_cat},
             "by_orientation": {r[0]: r[1] for r in by_orient},
             "by_technology": {r[0]: r[1] for r in by_tech},
-        }
-
-    def audit_and_cleanup(self, auto_remove_missing: bool = False) -> Dict[str, Any]:
-        """
-        Audits physical file existence and SHA-256 integrity for all cataloged loops.
-        Optionally removes database records pointing to missing files.
-        """
-        all_loops = self.list_loops(limit=10000)
-        valid_count = 0
-        missing_count = 0
-        corrupted_count = 0
-        removed_ids = []
-
-        for rec in all_loops:
-            p = Path(rec.file_path)
-            if not p.is_file() or p.stat().st_size == 0:
-                missing_count += 1
-                if auto_remove_missing:
-                    self.delete_loop(rec.loop_id, delete_file=False)
-                    removed_ids.append(rec.loop_id)
-                continue
-
-            current_sha = compute_file_sha256(p)
-            if current_sha != rec.sha256:
-                corrupted_count += 1
-                logger.warning("SHA mismatch for loop '%s': expected %s, got %s", rec.loop_id, rec.sha256, current_sha)
-            else:
-                valid_count += 1
-
-        return {
-            "total_checked": len(all_loops),
-            "valid": valid_count,
-            "missing": missing_count,
-            "corrupted": corrupted_count,
-            "removed_ids": removed_ids,
         }

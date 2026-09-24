@@ -123,7 +123,7 @@ def register_manage_queue_tool(server: MCPServer) -> None:
         ],
         channel: Annotated[
             Optional[str],
-            Field(description="Target channel for pause/resume or filtering ('moku', 'aelithia', 'scifi')"),
+            Field(description="Target channel for pause/resume or filtering ('horror', 'drama', 'scifi')"),
         ] = None,
         pause_reason: Annotated[
             Optional[str],

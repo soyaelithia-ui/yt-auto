@@ -36,7 +36,7 @@ def register_query_loop_catalog_tool(server: MCPServer) -> None:
         ] = None,
         channel: Annotated[
             Optional[str],
-            Field(description="Filter by channel compatibility ('moku', 'aelithia', 'scifi')"),
+            Field(description="Filter by channel compatibility ('horror', 'drama', 'scifi')"),
         ] = None,
         limit: Annotated[
             int,

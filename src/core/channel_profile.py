@@ -172,12 +172,15 @@ class ChannelProfileRegistry:
         use_generic_env = (active_cid == cid or not active_channel_env)
 
         def _get_env(suffix: str, generic_var: Optional[str] = None) -> Optional[str]:
-            if generic_var and use_generic_env and generic_var in os.environ:
-                return os.environ[generic_var]
             for pfx in prefixes:
                 var_name = f"{pfx}_{suffix}"
-                if var_name in os.environ:
-                    return os.environ[var_name]
+                val = os.environ.get(var_name)
+                if val is not None and val.strip():
+                    return val.strip()
+            if generic_var and use_generic_env:
+                val = os.environ.get(generic_var)
+                if val is not None and val.strip():
+                    return val.strip()
             return None
 
         handle = _get_env("HANDLE", "CHANNEL_HANDLE") or profile.editorial.handle

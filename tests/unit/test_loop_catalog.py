@@ -189,6 +189,44 @@ class TestLoopCatalogRepository(unittest.TestCase):
         self.assertIsNone(self.repo.get_loop_by_id("ghost_loop"))
         self.assertIsNotNone(self.repo.get_loop_by_id("real_loop"))
 
+    def test_audit_and_cleanup_resolves_relative_file_paths(self):
+        from unittest.mock import patch
+        import hashlib
+
+        repo_root = Path(self.temp_dir.name) / "repo"
+        rel_target = Path("assets/loops/rel_loop.mp4")
+        full_dest = repo_root / rel_target
+        full_dest.parent.mkdir(parents=True, exist_ok=True)
+        content = b"0" * 1024
+        full_dest.write_bytes(content)
+
+        expected_sha = hashlib.sha256(content).hexdigest()
+
+        self.repo.register_loop(LoopRecord(
+            loop_id="rel_loop",
+            category="space_abyss",
+            technology="webgl_shader",
+            orientation="vertical",
+            width=1080,
+            height=1920,
+            duration_sec=8.0,
+            fps=30,
+            file_path=str(rel_target),
+            file_size_bytes=1024,
+            sha256=expected_sha,
+        ))
+
+        with patch("src.core.catalog_sync.BASE_DIR", repo_root), \
+             patch("src.core.catalog.BASE_DIR", repo_root):
+            audit = self.repo.audit_and_cleanup(auto_remove_missing=True)
+
+        self.assertEqual(audit["total_checked"], 1)
+        self.assertEqual(audit["valid"], 1)
+        self.assertEqual(audit["missing"], 0)
+        self.assertEqual(audit["corrupted"], 0)
+        self.assertNotIn("rel_loop", audit["removed_ids"])
+        self.assertIsNotNone(self.repo.get_loop_by_id("rel_loop"))
+
     def test_get_best_loop_rewrites_legacy_absolute_paths_to_repo_root(self):
         from unittest.mock import patch
 
@@ -834,4 +872,70 @@ class TestLoopCatalogRepository(unittest.TestCase):
         deleted = self.repo.purge_synthetic_monochrome_loops()
         self.assertGreaterEqual(deleted, 1)
         self.assertIsNone(self.repo.get_loop_by_id("loop_maritime_lighthouse_h_544374"))
+
+
+class TestCatalogDecompositionSubmodules(unittest.TestCase):
+    """Verifies that catalog_sync and catalog_audit submodules exist and operate correctly."""
+
+    def setUp(self):
+        import shutil
+        self.tmp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmp_dir, "test_cat.db")
+        self.repo = LoopCatalogRepository(db_path=self.db_path, auto_seed=False)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_catalog_sync_functions(self):
+        from src.core.catalog_sync import (
+            compute_file_sha256,
+            probe_video_metadata,
+            resolve_loop_file_path,
+            sync_catalog_from_assets,
+        )
+        dummy_file = os.path.join(self.tmp_dir, "dummy.txt")
+        with open(dummy_file, "w") as f:
+            f.write("test content")
+        digest = compute_file_sha256(dummy_file)
+        self.assertEqual(len(digest), 64)
+        resolved = resolve_loop_file_path(dummy_file)
+        self.assertTrue(resolved.is_file())
+
+    def test_catalog_audit_functions(self):
+        from src.core.catalog_audit import (
+            SYNTHETIC_MONOCHROME_LOOP_IDS,
+            audit_and_cleanup,
+            purge_synthetic_monochrome_loops,
+        )
+        self.assertIn("loop_maritime_lighthouse_h_544374", SYNTHETIC_MONOCHROME_LOOP_IDS)
+        audit_res = audit_and_cleanup(self.repo)
+        self.assertIn("total_checked", audit_res)
+
+    def test_query_latency(self):
+        import time
+        # Register a dummy loop
+        dummy_vid = os.path.join(self.tmp_dir, "video.mp4")
+        with open(dummy_vid, "wb") as f:
+            f.write(b"\x00" * 30000)
+        rec = LoopRecord(
+            loop_id="latency_test_loop",
+            category="dark_ambient",
+            technology="pre-rendered",
+            orientation="vertical",
+            width=1080,
+            height=1920,
+            duration_sec=10.0,
+            fps=30,
+            file_path=dummy_vid,
+            file_size_bytes=30000,
+            sha256="abc",
+        )
+        self.repo.register_loop(rec)
+        t0 = time.perf_counter()
+        best = self.repo.get_best_loop("dark_ambient", "vertical")
+        t_query = (time.perf_counter() - t0) * 1000
+        self.assertIsNotNone(best)
+        self.assertLess(t_query, 50.0)  # relaxed for test runner environment
+
 

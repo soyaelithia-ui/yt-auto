@@ -136,7 +136,7 @@ def sync_and_score_channel_publications(
     """
     canon = canonical_channel(channel).value
     syncer = YouTubeAnalyticsSyncer(db_path=db_path, api_key=api_key, dry_run=dry_run)
-    records = get_published_inventory(db_path=db_path, channel=canon, limit=200)
+    records = get_published_inventory(db_path=db_path, channel=channel, limit=200)
 
     updated_count = 0
     scored_items: List[Dict[str, Any]] = []

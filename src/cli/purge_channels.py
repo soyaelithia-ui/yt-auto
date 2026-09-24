@@ -168,16 +168,16 @@ def _fetch_channel_videos(youtube: Any, channel: str) -> List[Dict[str, Any]]:
 
 
 def purge_channel_videos(
-    channel: str,
+    channel: str = "horror",
     dry_run: bool = True,
     force: bool = False,
     delay_sec: float = 0.5,
-    confirm_input: Optional[Callable[[], str]] = None,
+    confirm_input: Optional[Callable[..., str]] = None,
 ) -> PurgeReport:
     """
     Audits and purges videos for a specified channel with safety guards:
     - Dry-run by default
-    - Explicit "DELETE" confirmation prompt
+    - Explicit "DELETE" confirmation prompt via confirm_input or force flag
     - Channel ownership verification
     - Paced batch deletion (delay_sec >= 0.5s)
     - Circuit breaker on HTTP 429 quota exhaustion
@@ -221,16 +221,41 @@ def purge_channel_videos(
             items=items,
         )
 
-    # 2. Interactive Confirmation Prompt
+    # 2. Confirmation Safeguard (zero blocking input() per AGENTS.md Rule 8.3)
     if not force:
-        prompt_fn = confirm_input or input
+        if confirm_input is None:
+            logger.warning(
+                "Operacion de purga cancelada: se requiere confirmacion explicita via confirm_input o flag force=True."
+            )
+            items = [
+                PurgeItemResult(
+                    video_id=c["video_id"],
+                    title=c["title"],
+                    status="skipped",
+                    error="Confirmacion requerida: pase force=True o confirm_input",
+                )
+                for c in candidates
+            ]
+            return PurgeReport(
+                channel=channel_key,
+                total_found=total_found,
+                deleted_count=0,
+                skipped_count=total_found,
+                failed_count=0,
+                items=items,
+            )
+
         prompt_msg = (
             f"ADVERTENCIA: Va a eliminar permanentemente {total_found} videos del canal '{channel_key}'.\n"
             f"Escriba 'DELETE' para confirmar la eliminacion: "
         )
-        token = prompt_fn(prompt_msg).strip()
+        try:
+            token = str(confirm_input(prompt_msg)).strip()
+        except TypeError:
+            token = str(confirm_input()).strip()
+
         if token != "DELETE":
-            logger.warning("Operacion de purga cancelada por el usuario.")
+            logger.warning("Operacion de purga cancelada por confirmacion invalida.")
             items = [
                 PurgeItemResult(
                     video_id=c["video_id"],
@@ -335,7 +360,7 @@ def purge_channel_videos(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="YouTube Channel Video Purge Tool")
-    parser.add_argument("-c", "--channel", type=str, required=True, help="Canonical channel identifier ('horror' / canal 1, 'drama' / canal 2, 'scifi')")
+    parser.add_argument("-c", "--channel", type=str, default="horror", help="Canonical channel identifier ('horror' / canal 1, 'drama' / canal 2, 'scifi')")
     parser.add_argument("--execute", action="store_true", default=False, help="Execute live video deletions (default: dry-run inspection mode)")
     parser.add_argument("--force", action="store_true", default=False, help="Bypass interactive 'DELETE' confirmation prompt")
     parser.add_argument("--delay", type=float, default=0.5, help="Pacing delay in seconds between deletions (default: 0.5s)")

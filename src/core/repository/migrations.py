@@ -262,7 +262,7 @@ MIGRATION_003 = (
         snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
         video_id TEXT NOT NULL,
         story_id TEXT NOT NULL,
-        channel TEXT NOT NULL CHECK(channel IN ('moku', 'aelithia')),
+        channel TEXT NOT NULL CHECK(channel IN ('horror', 'drama', 'scifi', 'moku', 'aelithia')),
         view_count INTEGER NOT NULL DEFAULT 0,
         like_count INTEGER NOT NULL DEFAULT 0,
         comment_count INTEGER NOT NULL DEFAULT 0,

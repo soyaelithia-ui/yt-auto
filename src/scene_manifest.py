@@ -161,8 +161,8 @@ class SubtitleCue(BaseModel):
 
 
 class BrandingConfig(BaseModel):
-    stamp_text: Optional[str] = "[MOKU]"
-    channel_name: Optional[str] = "moku"
+    stamp_text: Optional[str] = None
+    channel_name: Optional[str] = "horror"
 
 
 class SceneManifestV2(BaseModel):
@@ -335,8 +335,8 @@ def parse_scene_manifest_model(
     return SceneManifestV2(
         manifest_version="2.0",
         story_id=story_meta.get("story_id", "story_001"),
-        lane_id=story_meta.get("slot", "moku-horror-long"),
-        channel_name=branding_meta.get("channel_name", "moku"),
+        lane_id=story_meta.get("slot", "horror-horror-long"),
+        channel_name=branding_meta.get("channel_name", "horror"),
         resolution=res,
         fps=int(data.get("fps", 30)),
         total_duration_sec=dur,
@@ -387,8 +387,8 @@ def build_scene_manifest_v2(
     *,
     work_dir: Union[Path, str],
     story_id: str = "story_001",
-    lane_id: str = "moku-horror-long",
-    channel_name: str = "moku",
+    lane_id: str = "horror-horror-long",
+    channel_name: str = "horror",
     total_duration_sec: float,
     narration_path: Union[Path, str],
     music_path: Optional[Union[Path, str]] = None,
@@ -511,7 +511,7 @@ def build_scene_manifest(
     work_dir: Union[Path, str],
     scp_id: str = "story-000",
     title: str = "Historia",
-    object_class: str = "moku",
+    object_class: str = "horror",
     attribution: str = "Fuente original",
     narration_path: Union[Path, str],
     music_path: Optional[Union[Path, str]] = None,
@@ -520,8 +520,8 @@ def build_scene_manifest(
     subtitles: List[Dict[str, Any]],
     resolution: Tuple[int, int] = SHORT_RESOLUTION,
     fps: int = 30,
-    stamp_text: str = "[MOKU]",
-    channel_name: str = "moku",
+    stamp_text: Optional[str] = None,
+    channel_name: str = "horror",
     thumbnail_candidate_timestamp: float = 5.0,
     shot_durations: Optional[List[float]] = None,
 ) -> Path:

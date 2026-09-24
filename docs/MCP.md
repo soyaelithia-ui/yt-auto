@@ -90,7 +90,7 @@ El servidor registra 9 herramientas operativas:
 
 ### 3.2. `list_lanes`
 - **Parámetros**:
-  - `channel` (string opcional): Filtrar por canal (`"horror"`, `"drama"`).
+  - `channel` (string opcional): Filtrar por canal (`"horror"`, `"drama"`, `"scifi"`).
   - `include_disabled` (boolean, default `False`): Incluir carriles desactivados.
 - **Respuesta**:
 ```json

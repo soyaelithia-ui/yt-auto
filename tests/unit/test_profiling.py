@@ -430,3 +430,42 @@ class TestPipelineErrorTelemetry:
             assert "PIPELINE_PROFILED" in row[0]
             data = json.loads(row[1])
             assert data["failed_phases"] >= 1
+
+
+class TestProfilingModularDecomposition:
+    """Verify modular decomposition of profiling into metrics_sampler and benchmarking."""
+
+    def test_metrics_sampler_direct_imports_and_sampling(self):
+        from src.core.profiling.metrics_sampler import (
+            _get_cpu_times,
+            _get_peak_rss_bytes,
+            _read_vm_rss_bytes,
+            _sync_bytes_mb,
+            _utc_now_iso,
+            is_profiling_enabled,
+        )
+        assert _read_vm_rss_bytes() >= 0
+        assert _get_peak_rss_bytes() >= 0
+        times = _get_cpu_times()
+        assert len(times) == 4
+        assert all(t >= 0.0 for t in times)
+        b, mb = _sync_bytes_mb(1048576, None)
+        assert b == 1048576
+        assert mb == 1.0
+        assert isinstance(_utc_now_iso(), str)
+        assert isinstance(is_profiling_enabled(), bool)
+
+    def test_benchmarking_direct_import_and_resource_bounds(self):
+        from src.core.profiling.benchmarking import run_benchmark_cycle
+        summaries = run_benchmark_cycle(iterations=1, mock_mode=True)
+        assert isinstance(summaries, list)
+        assert len(summaries) == 1
+        summary = summaries[0]
+        assert summary.phases_count == 13
+        assert summary.successful_phases == 13
+        assert summary.failed_phases == 0
+        # Peak RSS budget: <= 2.0 GiB (2048 MB)
+        assert summary.peak_rss_mb <= 2048.0
+        # Overall CPU percent budget: <= 200% (2 cores)
+        assert summary.overall_cpu_percent <= 200.0
+
