@@ -33,6 +33,7 @@ def handle_inventory(args: argparse.Namespace, parser: argparse.ArgumentParser |
             print(f"=== INVENTARIO DE VIDEOS PUBLICADOS ({len(records)} encontrados) ===")
             for r in records:
                 print(f"[{r.channel}] {r.video_id} | {r.verified_at[:10]} | {r.title}")
+                print(f"   Puntuación: {r.actual_success_score:.1f}/100 | Vistas: {r.view_count} | Likes: {r.like_count} | Comentarios: {r.comment_count}")
                 if r.hook_summary:
                     print(f"   Hook: {r.hook_summary}")
                 if r.themes:
