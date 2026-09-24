@@ -41,6 +41,16 @@ class SessionUploader:
         self.expiring_soon_hours = float(expiring_soon_hours)
         self._cookie_path: Optional[Path] = None
 
+    @property
+    def cookies_path(self) -> Optional[Path]:
+        """Convenience property resolving the cookie path."""
+        return self.resolve_cookie_path()
+
+    @property
+    def cookie_path(self) -> Optional[Path]:
+        """Convenience property resolving the cookie path."""
+        return self.resolve_cookie_path()
+
     def resolve_cookie_path(self) -> Optional[Path]:
         """Resolve cookie file path for the active channel."""
         if not self._cookie_path or not self._cookie_path.exists():

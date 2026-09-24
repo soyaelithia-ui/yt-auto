@@ -91,3 +91,31 @@ def test_session_uploader_dry_run(tmp_path):
         dry_run=True,
     )
     assert res["status"] == "DRY_RUN"
+
+
+def test_session_uploader_canonical_horror_and_drama(tmp_path):
+    dummy_video = tmp_path / "video.mp4"
+    dummy_video.write_bytes(b"content")
+
+    cookie_file_horror = tmp_path / "cookies_horror.json"
+    cookie_file_horror.write_text('[{"name": "LOGIN_INFO", "value": "h"}]', encoding="utf-8")
+
+    uploader_horror = SessionUploader(channel="horror", secrets_dir=tmp_path)
+    assert uploader_horror.channel == "horror"
+    assert uploader_horror.resolve_cookie_path() == cookie_file_horror
+
+    res = uploader_horror.upload(
+        video_path=dummy_video,
+        title="Horror Title",
+        description="Horror Desc",
+        dry_run=True,
+    )
+    assert res["status"] == "DRY_RUN"
+
+    cookie_file_drama = tmp_path / "cookies_drama.json"
+    cookie_file_drama.write_text('[{"name": "LOGIN_INFO", "value": "d"}]', encoding="utf-8")
+
+    uploader_drama = SessionUploader(channel="drama", secrets_dir=tmp_path)
+    assert uploader_drama.channel == "drama"
+    assert uploader_drama.resolve_cookie_path() == cookie_file_drama
+
