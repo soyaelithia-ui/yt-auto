@@ -374,3 +374,91 @@ class TestDeterministicFallback:
         validate(instance=script, schema=curator_schema)
         all_text = " ".join(sc["narration_text"] for act in script["acts"] for sc in act["scenes"])
         assert "087" in all_text or "escalera" in all_text.lower()
+
+
+# ============================================================================
+# 6. CANONICAL THEMATIC LANES & DECOMPOSED MODULES TESTS
+# ============================================================================
+
+class TestCanonicalThematicLanesAndDecomposition:
+    """Tests canonical thematic lane resolution and modular curator components."""
+
+    @pytest.mark.parametrize(
+        "canonical_lane,expected_channel,expected_fmt",
+        [
+            ("horror-scp-shorts", "horror", "short"),
+            ("horror-horror-long", "horror", "longform"),
+            ("drama-drama-shorts", "drama", "short"),
+            ("drama-aita-long", "drama", "longform"),
+            ("scifi-singularity-shorts", "scifi", "short"),
+            ("scifi-singularity-long", "scifi", "longform"),
+        ],
+    )
+    def test_canonical_lane_profiles_exist_and_validate(
+        self, agent, curator_schema, canonical_lane, expected_channel, expected_fmt
+    ):
+        from src.curators.curation_profiles import resolve_lane_config, LANE_CURATION_CONFIGS
+        assert canonical_lane in LANE_CURATION_CONFIGS
+        resolved_key, cfg = resolve_lane_config(canonical_lane, expected_fmt)
+        assert cfg["channel"] == expected_channel
+        assert cfg["target_format"] == expected_fmt
+
+        script = agent.curate(
+            raw_text="",
+            title=f"Test {canonical_lane}",
+            channel_lane=canonical_lane,
+            target_format=expected_fmt,
+        )
+        validate(instance=script, schema=curator_schema)
+        assert len(script["acts"]) == 4
+
+    @pytest.mark.parametrize(
+        "legacy_lane,expected_key",
+        [
+            ("moku-scp-shorts", "horror-scp-shorts"),
+            ("moku-horror-long", "horror-horror-long"),
+            ("aelithia-drama-shorts", "drama-drama-shorts"),
+            ("aelithia-aita-long", "drama-aita-long"),
+        ],
+    )
+    def test_legacy_lane_aliases_resolve_cleanly(self, legacy_lane, expected_key):
+        from src.curators.curation_profiles import resolve_lane_config
+        resolved_key, cfg = resolve_lane_config(legacy_lane, "short" if "short" in legacy_lane else "longform")
+        assert resolved_key in (expected_key, legacy_lane)
+        assert cfg is not None
+
+    def test_abbreviation_splitting_expanded(self):
+        from src.curators.segmentation import split_into_sentences
+        text = (
+            "El Sr. López y el Dr. Jones examinaron el ítem SCP-096. "
+            "P.D. Se notificó al Cap. Ramírez a las 4:30 p.m. "
+            "La anomalía reaccionó de inmediato."
+        )
+        sentences = split_into_sentences(text)
+        assert len(sentences) == 3
+        assert "Sr. López" in sentences[0]
+        assert "Dr. Jones" in sentences[0]
+        assert "SCP-096" in sentences[0]
+        assert "P.D." in sentences[1]
+        assert "Cap. Ramírez" in sentences[1]
+
+    def test_progressive_tension_and_pacing_resolution(self):
+        from src.curators.tension import interpolate_tension, resolve_audio_pacing_cue
+        # 4 scenes in act with [1, 2] profile
+        tensions = [interpolate_tension([1, 2], i, 4) for i in range(4)]
+        assert tensions[0] == 1
+        assert tensions[-1] == 2
+        for t in tensions:
+            assert 1 <= t <= 5
+
+        # Peak act tension
+        peak_tension = interpolate_tension([5], 0, 1)
+        assert peak_tension == 5
+
+        # Pacing cue
+        cue_climax = resolve_audio_pacing_cue("horror-scp-shorts", act_num=3, tension=5, offset=0, total_in_act=1)
+        assert cue_climax == "intense_urgent"
+
+        cue_epilogue = resolve_audio_pacing_cue("horror-scp-shorts", act_num=4, tension=2, offset=0, total_in_act=1)
+        assert cue_epilogue in ("whispered_grave", "calm_slow")
+
