@@ -498,7 +498,8 @@ class ProgrammaticAgent:
 
     def _build_config(self):
         """LocalAgentConfig for the native SDK path."""
-        from google.antigravity import LocalAgentConfig, policy
+        from google.antigravity import LocalAgentConfig
+        from google.antigravity.hooks import policy
 
         api_key = os.environ.get("GEMINI_API_KEY")
         return LocalAgentConfig(
@@ -581,10 +582,13 @@ class ProgrammaticAgent:
                 f"Circuit breaker open for instance '{self.instance_id}' "
                 f"(cooldown {self.circuit_breaker.retry_after()}s). Skipping call."
             )
-            status = "error"
+            status = "saturated"
         else:
             try:
-                data = self._chat_cli_fallback(task)
+                if self._can_use_sdk():
+                    data = await self._chat_async(task)
+                else:
+                    data = self._chat_cli_fallback(task)
 
                 reply = data.get("response", "")
                 conversation_id = data.get("conversation_id")
@@ -598,7 +602,7 @@ class ProgrammaticAgent:
             except Exception as exc:
                 self.circuit_breaker.record_failure(str(exc))
                 error = str(exc)
-                status = "error"
+                status = "saturated" if is_saturation_text(str(exc)) else "error"
             else:
                 self.circuit_breaker.record_success()
 

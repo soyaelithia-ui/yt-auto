@@ -295,3 +295,50 @@ def test_seed_appdata_from_secrets_updates_newer(tmp_path, monkeypatch):
     assert token_dst.read_text() == "token_v2"
 
 
+def test_programmatic_agent_circuit_breaker_on_saturation(tmp_path):
+    CircuitBreaker.reset_all()
+    cb = CircuitBreaker.get("test_sat")
+    assert not cb.is_open()
+
+    agent = ProgrammaticAgent(
+        task_result_path=tmp_path / "sat_result.json",
+        instance_id="test_sat",
+        app_data_dir=tmp_path / "sat_appdata",
+    )
+    with patch.object(agent, "_chat_cli_fallback") as mock_cli:
+        mock_cli.side_effect = Exception("429 Resource has been exhausted (e.g. check quota).")
+        import asyncio
+        out_path = asyncio.run(agent._run_async("Test quota exhaustion"))
+        assert out_path.exists()
+        doc = json.loads(out_path.read_text(encoding="utf-8"))
+        assert doc["result"] == "saturated"
+        assert "429" in doc["output"]["error"]
+        assert cb.is_open()
+
+
+def test_story_director_fallback_on_saturation(tmp_path):
+    CircuitBreaker.reset_all()
+    agent = StoryDirectorAgent(instance_id="story_sat")
+
+    # When circuit breaker is open, should return procedural fallback
+    agent.circuit_breaker.record_failure("429 RESOURCE_EXHAUSTED")
+    story = agent.generate_story(topic="El Susurro en la Niebla", channel="horror", target_format="short")
+    assert story["fallback_used"] is True
+    assert story["status"] == "procedural_fallback"
+    assert "Susurro" in story["title"] or story["title"] == "El Susurro en la Niebla"
+    assert story["channel"] == "horror"
+
+
+def test_seo_optimizer_fallback_on_saturation(tmp_path):
+    CircuitBreaker.reset_all()
+    agent = SeoOptimizerAgent(instance_id="seo_sat")
+
+    # Trip breaker
+    agent.circuit_breaker.record_failure("HTTP 429 quota reached")
+    meta = agent.optimize(topic="SCP-096", target_format="short", niche="Horror", use_agent=True)
+    assert meta["selected_title"]
+    assert len(meta["viral_title_options"]) >= 3
+    assert len(meta["hashtags"]) >= 3
+    assert any("scp" in tag.lower() for tag in meta["hashtags"])
+
+

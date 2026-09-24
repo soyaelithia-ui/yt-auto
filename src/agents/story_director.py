@@ -131,11 +131,27 @@ class StoryDirectorAgent(ProgrammaticAgent):
             "- Incluye visual_motifs (3-5 descriptores atmosféricos clave)."
         )
 
+        # Check circuit breaker before making expensive calls
+        if self.circuit_breaker.is_open():
+            logger.warning(
+                "Circuit breaker open for %s (%ds remaining). Using procedural fallback.",
+                self.instance_id,
+                self.circuit_breaker.retry_after(),
+            )
+            return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
+
         logger.info("StoryDirectorAgent generating story for '%s' (%s, format=%s)", clean_topic, channel, fmt)
         try:
             result_path = self.run(prompt)
             res = self.consume(result_path)
+            if res.get("result") == "saturated":
+                logger.warning("StoryDirectorAgent harness saturated. Using procedural fallback.")
+                return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
         except Exception as exc:
+            if is_saturation_text(str(exc)):
+                self.circuit_breaker.record_failure(str(exc))
+                logger.warning("StoryDirectorAgent saturated (%s). Using procedural fallback.", exc)
+                return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             logger.error("StoryDirectorAgent invocation failed: %s", exc)
             raise AIProviderChainExhausted(f"StoryDirectorAgent fallo de ejecucion: {exc}") from exc
 
@@ -150,6 +166,9 @@ class StoryDirectorAgent(ProgrammaticAgent):
 
         if not data or not data.get("script"):
             error_detail = res.get("output", {}).get("error") or "Respuesta sin guion utilizable"
+            if is_saturation_text(str(error_detail)) or self.circuit_breaker.is_open():
+                logger.warning("StoryDirectorAgent empty reply due to saturation. Using procedural fallback.")
+                return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             raise AIProviderChainExhausted(f"StoryDirectorAgent sin guion valido ({error_detail})")
 
         # Canonical lore validation for SCP
@@ -162,6 +181,31 @@ class StoryDirectorAgent(ProgrammaticAgent):
 
         data.setdefault("channel", channel)
         return data
+
+    def _procedural_fallback_story(
+        self,
+        topic: str,
+        channel: str = "moku",
+        target_format: str = "short",
+        target_words: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Generates a high-retention fallback story when AI providers are saturated."""
+        from src.templates.narratives import get_fallback_story
+        is_short = target_format in ("short", "shorts", "vertical", "9:16")
+        script = get_fallback_story(channel=channel, topic=topic, is_short=is_short)
+        title = topic.strip() or ("Relato de Terror" if channel in ("moku", "horror") else "Dilema Moral")
+        first_sentence = script.split(".")[0] if "." in script else script[:80]
+        return {
+            "title": title,
+            "script": script,
+            "hook_0_3s": first_sentence.strip(),
+            "climax": "El momento culminante de la revelación.",
+            "loop_hook": "¿Qué habrías hecho tú?",
+            "visual_motifs": ["sombras profundas", "iluminación cinematográfica", "tensión psicológica"],
+            "fallback_used": True,
+            "channel": channel,
+            "status": "procedural_fallback",
+        }
 
 
 # Backward-compatibility facade

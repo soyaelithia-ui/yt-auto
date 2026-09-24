@@ -72,7 +72,8 @@ def test_compose_keeps_hardening_flags():
 
 def test_dockerfile_installs_agy_and_drops_root():
     docker = _dockerfile()
-    assert "COPY build/agy /usr/local/bin/agy" in docker
+    assert "https://antigravity.google/cli/install.sh" in docker
+    assert "COPY build/agy" not in docker
     assert "USER 10001:10001" in docker
     assert "AGY_BIN=/usr/local/bin/agy" in docker
     assert "scripts/docker_entrypoint.sh" in docker
@@ -90,11 +91,17 @@ def test_dockerignore_keeps_secrets_and_host_gemini_out_of_image():
     assert "build/agy" not in ignore.replace("!build/agy", "")
 
 
-def test_stage_agy_script_exists_and_is_fail_closed():
-    script = (REPO_ROOT / "scripts" / "stage_agy.sh").read_text(encoding="utf-8")
-    assert "set -euo pipefail" in script
-    assert "build/agy" in script
-    assert "exit 1" in script
+def test_stage_agy_script_is_decommissioned():
+    assert not (REPO_ROOT / "scripts" / "stage_agy.sh").exists()
+    assert not (REPO_ROOT / "build" / "agy").exists()
+
+
+def test_entrypoint_does_not_execute_arbitrary_scripts():
+    entrypoint = (REPO_ROOT / "scripts" / "docker_entrypoint.sh").read_text(encoding="utf-8")
+    assert "eval" not in entrypoint
+    assert "source" not in entrypoint
+    assert ". /app" not in entrypoint
+    assert 'exec "$@"' in entrypoint
 
 
 def test_small_compose_override_caps_memory():

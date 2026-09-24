@@ -42,28 +42,24 @@ def _openspec_context_block(content: str) -> str:
     return "\n".join(collected)
 
 
-class ImportScanner(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.imports: list[str] = []
-
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            self.imports.append(alias.name)
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.module:
-            self.imports.append(node.module)
-        self.generic_visit(node)
-
-
-def scan_module_imports(file_path: Path) -> list[str]:
-    if not file_path.exists() or not file_path.suffix == ".py":
-        return []
-    tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-    scanner = ImportScanner()
-    scanner.visit(tree)
-    return scanner.imports
+from src.verification.guardrails import (
+    CheckResult,
+    ImportScanner,
+    IntegrityReport,
+    check_agent_homes_and_secrets,
+    check_anti_bloat,
+    check_architecture_docs,
+    check_git_hooks,
+    check_legacy_subsystems,
+    check_mcp_sync,
+    check_test_collectability,
+    check_worktrees,
+    check_zero_browser_policy,
+    check_zero_procedural_math,
+    run_integrity_audit,
+    scan_module_imports,
+    scan_source_imports,
+)
 
 
 # ==============================================================================
@@ -499,5 +495,228 @@ class TestResourceTargetGovernanceGuardrails:
         assert "Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)" in content, (
             "REG-14 VIOLATION: Target Resource Envelope rule missing in docs/FFMPEG_LOW_CPU.md"
         )
+
+
+# =============================================================================
+# Streamlined Integrity Engine & Unified Guardrails Core
+# =============================================================================
+
+class TestVerificationCoreModule:
+    """Tests for src/verification/guardrails.py SSOT module."""
+
+    def test_import_scanner_ast_parsing_and_docstring_immunity(self, tmp_path: Path) -> None:
+        """Assert ImportScanner captures aliased and multiline imports while ignoring comments and docstrings."""
+        from src.verification.guardrails import ImportScanner, scan_module_imports, scan_source_imports
+
+        snippet = '''# A comment mentioning import playwright
+"""
+Docstring with from src.rendering import ObsoleteRenderer
+"""
+import os
+import sys as system
+from pathlib import Path
+from src.media import (
+    subtitles_ass,
+    proc_engine,
+)
+from src import compositing
+'''
+        test_file = tmp_path / "test_snippet.py"
+        test_file.write_text(snippet, encoding="utf-8")
+
+        imports = scan_module_imports(test_file)
+        assert "os" in imports
+        assert "sys" in imports
+        assert "pathlib" in imports
+        assert "src.media" in imports
+        assert "src.media.proc_engine" in imports
+        assert "src.compositing" in imports
+
+        # Ensure comments and docstrings are ignored
+        assert not any("playwright" in imp for imp in imports)
+        assert not any("src.rendering" in imp for imp in imports)
+
+        # scan_source_imports should return the same
+        src_imports = scan_source_imports(snippet)
+        assert "src.media.proc_engine" in src_imports
+        assert not any("playwright" in imp for imp in src_imports)
+
+    def test_verify_integrity_cli_safe_subprocesses_and_metacharacters(self) -> None:
+        """Threat Matrix: subprocess execution boundary - metacharacters are safely handled without shell injection."""
+        import subprocess
+        import sys
+
+        script = REPO_ROOT / "scripts" / "verify_integrity.py"
+        assert script.exists(), "scripts/verify_integrity.py must exist"
+
+        proc = subprocess.run(
+            [sys.executable, str(script), ";", "echo", "PWNED"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        assert "PWNED" not in proc.stdout
+        assert proc.returncode != 0
+
+    def test_staged_mode_handles_spaces_and_unicode_paths(self, tmp_path: Path) -> None:
+        """Threat Matrix: git cached path parsing boundary - handles spaces and unicode characters."""
+        from src.verification.guardrails import run_integrity_audit
+
+        arch_file = tmp_path / "docs" / "architecture" / "01_diseño obsoleto.md"
+        arch_file.parent.mkdir(parents=True, exist_ok=True)
+        arch_file.write_text("obsolete", encoding="utf-8")
+
+        staged_paths = [
+            "docs/architecture/01_diseño obsoleto.md",
+            "src/valid path with spaces.py",
+        ]
+        report = run_integrity_audit(tmp_path, staged=True, staged_paths=staged_paths)
+        assert report.healthy is False
+        assert report.exit_code == 1
+        assert any("01_diseño obsoleto.md" in err["message"] or any("01_diseño obsoleto.md" in d for d in err.get("details", [])) for err in report.checks_failed)
+
+    def test_staged_mode_empty_index_exits_under_50ms(self) -> None:
+        """Threat Matrix: commit state boundary - empty index exits immediately with code 0 in < 50ms."""
+        import time
+        from src.verification.guardrails import run_integrity_audit
+
+        t0 = time.time()
+        report = run_integrity_audit(REPO_ROOT, staged=True, staged_paths=[])
+        elapsed_ms = (time.time() - t0) * 1000
+
+        assert report.healthy is True
+        assert report.exit_code == 0
+        assert elapsed_ms < 50.0
+
+    def test_shell_shim_forwards_arguments_with_spaces_intact(self) -> None:
+        """Threat Matrix: shell script arguments boundary - forwards arguments with spaces intact."""
+        import subprocess
+
+        shim = REPO_ROOT / "scripts" / "verify_integrity.sh"
+        assert shim.exists(), "scripts/verify_integrity.sh must exist"
+
+        # Pass an argument containing spaces; python runner should see the intact argument string
+        proc = subprocess.run(
+            [str(shim), "--bogus arg with spaces"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 2, f"Expected argparse exit 2, got {proc.returncode}"
+        assert "--bogus arg with spaces" in (proc.stderr + proc.stdout)
+
+    def test_exit_code_propagation_on_invariant_violations(self) -> None:
+        """Threat Matrix: exit code propagation boundary - invariant violations exit with status code 1."""
+        import subprocess
+        import sys
+
+        py_script = REPO_ROOT / "scripts" / "verify_integrity.py"
+        sh_script = REPO_ROOT / "scripts" / "verify_integrity.sh"
+
+        test_doc = REPO_ROOT / "docs" / "architecture" / "09_temporary_test_violation.md"
+        try:
+            test_doc.parent.mkdir(parents=True, exist_ok=True)
+            test_doc.write_text("violation", encoding="utf-8")
+
+            # Python runner must exit 1
+            py_proc = subprocess.run(
+                [sys.executable, str(py_script), "--fast"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+            )
+            assert py_proc.returncode == 1, f"Python runner returned {py_proc.returncode}, expected 1"
+
+            # Shell shim must exit 1
+            sh_proc = subprocess.run(
+                [str(sh_script), "--fast"],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+            )
+            assert sh_proc.returncode == 1, f"Shell shim returned {sh_proc.returncode}, expected 1"
+        finally:
+            if test_doc.exists():
+                test_doc.unlink()
+
+    @pytest.mark.asyncio
+    async def test_mcp_tool_parses_structured_json_payload(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Assert MCP tool verify_integrity consumes structured JSON without scraping stdout emojis."""
+        import json
+        import subprocess
+        from unittest.mock import MagicMock
+        from mcp.server.mcpserver import MCPServer
+        from src.mcp.tools.verify_integrity import register_verify_integrity_tool
+
+        sample_json = json.dumps({
+            "healthy": True,
+            "status": "HEALTHY",
+            "exit_code": 0,
+            "checks_passed": ["Zero-Browser Policy: zero Playwright imports in media and pipeline."],
+            "checks_failed": [],
+            "commit_count": 325,
+            "duration_ms": 42,
+        })
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = sample_json
+        mock_proc.stderr = ""
+
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: mock_proc)
+
+        server = MCPServer("test")
+        register_verify_integrity_tool(server)
+
+        result = await server.call_tool("verify_integrity", {"fast": True})
+        content_text = result[0].text if isinstance(result, list) else result.content[0].text
+        data = json.loads(content_text)
+        assert data["healthy"] is True
+        assert data.get("duration_ms") == 42
+        assert data["checks_passed"] == ["Zero-Browser Policy: zero Playwright imports in media and pipeline."]
+
+    def test_guardrail_check_functions_direct_invocation(self) -> None:
+        """Affirm REG-01 through REG-14 invariants by calling guardrail check functions directly."""
+        res_wt = check_worktrees(REPO_ROOT)
+        assert res_wt.passed is True, f"Worktree check failed: {res_wt.message}"
+
+        res_docs = check_architecture_docs(REPO_ROOT)
+        assert res_docs.passed is True, f"Architecture docs check failed: {res_docs.message}"
+
+        res_subsys = check_legacy_subsystems(REPO_ROOT)
+        assert res_subsys.passed is True, f"Legacy subsystems check failed: {res_subsys.message}"
+
+        res_browser = check_zero_browser_policy(REPO_ROOT)
+        assert res_browser.passed is True, f"Zero browser check failed: {res_browser.message}"
+
+        res_proc = check_zero_procedural_math(REPO_ROOT)
+        assert res_proc.passed is True, f"Zero procedural math check failed: {res_proc.message}"
+
+        res_hooks = check_git_hooks(REPO_ROOT)
+        assert res_hooks.passed is True, f"Git hooks check failed: {res_hooks.message}"
+
+        res_bloat = check_anti_bloat(REPO_ROOT)
+        assert res_bloat.passed is True, f"Anti-bloat check failed: {res_bloat.message}"
+
+        res_secrets = check_agent_homes_and_secrets(REPO_ROOT)
+        assert res_secrets.passed is True, f"Agent homes and secrets check failed: {res_secrets.message}"
+
+        res_tests = check_test_collectability(REPO_ROOT)
+        assert res_tests.passed is True, f"Test collectability check failed: {res_tests.message}"
+
+    def test_full_integrity_audit_passes_cleanly(self) -> None:
+        """Verify full run_integrity_audit produces a 100% HEALTHY report with exit code 0."""
+        report = run_integrity_audit(REPO_ROOT, fast=True)
+        assert report.healthy is True
+        assert report.status == "HEALTHY"
+        assert report.exit_code == 0
+        assert len(report.checks_failed) == 0
+        assert len(report.checks_passed) >= 8
+
+
+
+
+
 
 

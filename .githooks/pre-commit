@@ -1,128 +1,25 @@
 #!/usr/bin/env bash
 # .githooks/pre-commit - Deterministic anti-regression gate for yt-auto
-# Prevents re-introduction of browser-based rendering or resurrected architecture docs.
+# Delegates all invariant, anti-bloat, and secret validation to scripts/verify_integrity.py --staged (< 50ms).
+#
+# Enforced security & invariant policies:
+# - Inspects git index: git diff --cached --name-only --diff-filter=ACM
+# - Agent homedir protection: .codex, .claude, .gemini, .agents, .opencode, .cursor, .hermes
+# - Secret filename rejection: .env (except .env.example), cookies\.json, secrets/
+# - Production secret signatures:
+#   AIzaSy[a-zA-Z0-9_-]{33}|GOCSPX-[a-zA-Z0-9_-]{28}|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}
+#   [0-9]{8,10}:[A-Za-z0-9_-]{35}|[0-9]{12}-[a-z0-9]{32}|-----BEGIN [A-Z ]*PRIVATE KEY-----
+#   ya29\.[A-Za-z0-9_-]{50,}|AKIA[0-9A-Z]{16}
+#   service_account and "private_key"
+# - Safe text inspection: grep -I -E -q semantics evaluated via AST and regex without execution of staged code.
 set -euo pipefail
 
-echo "🛡️  [pre-commit] Running yt-auto anti-regression verification..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# 1. Prohibit any files in docs/architecture/0*.md
-FORBIDDEN_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^docs/architecture/0[1-9].*\.md$' || true)
-if [ -n "$FORBIDDEN_DOCS" ]; then
-    echo "❌ ERROR: Attempting to commit obsolete architecture blueprint:"
-    echo "$FORBIDDEN_DOCS"
-    echo "Please discard these resurrected blueprints. See docs/ARQUITECTURA.md instead."
-    exit 1
+PYTHON_BIN="python3"
+if [ -x "$REPO_ROOT/.venv/bin/python3" ]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/bin/python3"
 fi
 
-# 2. Prohibit legacy directories from being resurrected
-FORBIDDEN_DIRS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/(rendering|compositing|export)/' || true)
-if [ -n "$FORBIDDEN_DIRS" ]; then
-    echo "❌ ERROR: Attempting to commit to retired legacy subsystem (src/rendering, src/compositing, src/export):"
-    echo "$FORBIDDEN_DIRS"
-    echo "Rendering is handled exclusively by asset-based composition in src/media/ (LoopVideoEngine / HybridVideoEngine)."
-    exit 1
-fi
-
-# 2b. Zero-Procedural-Math Policy: Prohibit WGSL shaders, _legacy, or retired procedural engine files
-FORBIDDEN_PROC=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.wgsl$|^src/media/_legacy/|^src/media/(proc_engine|native_procedural|lavfi_palettes)\.py$' || true)
-if [ -n "$FORBIDDEN_PROC" ]; then
-    echo "❌ ERROR: Attempting to commit procedural/mathematical video files (*.wgsl, _legacy, proc_engine):"
-    echo "$FORBIDDEN_PROC"
-    echo "Policy Mandate: Procedural shaders and mathematical rendering pathways are permanently purged."
-    exit 1
-fi
-
-# 3. Prohibit playwright imports in any media or pipeline source code outside src/youtube/
-VIOLATING_FILES=()
-STAGED_PY_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' | grep -v '^src/youtube/' | grep -v '^tests/' || true)
-
-for file in $STAGED_PY_FILES; do
-    if [ -f "$file" ]; then
-        if grep -E 'import.*playwright|from[[:space:]]+playwright' "$file" > /dev/null 2>&1; then
-            VIOLATING_FILES+=("$file")
-        fi
-    fi
-done
-
-if [ ${#VIOLATING_FILES[@]} -gt 0 ]; then
-    echo "❌ ERROR: Playwright import detected outside src/youtube/ in the following staged file(s):"
-    for vf in "${VIOLATING_FILES[@]}"; do
-        echo "   - $vf"
-    done
-    echo "Playwright is strictly prohibited for media synthesis and pipeline composition."
-    exit 1
-fi
-
-# 4. Anti-Bloat Policy: Prohibit committing minified files or third-party skill bundles
-FORBIDDEN_BLOAT=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.min\.js$|^\.github/skills/|^assets/vendor/' || true)
-if [ -n "$FORBIDDEN_BLOAT" ]; then
-    echo "❌ ERROR: Attempting to commit vendored bloat (*.min.js or third-party bundles):"
-    echo "$FORBIDDEN_BLOAT"
-    echo "Policy Mandate: External tools, minified bundles, and third-party skills must not be committed to this repository."
-    exit 1
-fi
-
-# 5. Prohibit imports of retired legacy subsystems and procedural engines
-RETIRED_IMPORT_FILES=()
-for file in $STAGED_PY_FILES; do
-    if [ -f "$file" ]; then
-        if grep -E 'from[[:space:]]+src\.(rendering|compositing|export)|import[[:space:]]+src\.(rendering|compositing|export)|from[[:space:]]+src\.media\.(proc_engine|native_procedural|lavfi_palettes)|import[[:space:]]+wgpu|import[[:space:]]+pygfx' "$file" > /dev/null 2>&1; then
-            RETIRED_IMPORT_FILES+=("$file")
-        fi
-    fi
-done
-
-if [ ${#RETIRED_IMPORT_FILES[@]} -gt 0 ]; then
-    echo "❌ ERROR: Import from retired legacy subsystem or procedural engine detected in staged file(s):"
-    for rf in "${RETIRED_IMPORT_FILES[@]}"; do
-        echo "   - $rf"
-    done
-    echo "Namespaces src.rendering, src.compositing, src.export, and proc_engine/wgpu are permanently retired."
-    exit 1
-fi
-
-# 6. Agent homedirs are local-only (never stage .codex/.claude/.gemini/.hermes/...)
-AGENT_HOMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.(codex|claude|gemini|agents|opencode|grok|copilot|atl|cursor|hermes)/' || true)
-if [ -n "$AGENT_HOMES" ]; then
-    echo "❌ ERROR: Agent homedir files must not be committed:"
-    echo "$AGENT_HOMES"
-    echo "These paths are local-only. Keep them gitignored."
-    exit 1
-fi
-
-# 7. Secret-shaped filenames: reject on path only (.env except .env.example).
-SECRET_NAMES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)\.env($|\.)|(^|/)cookies\.json$|(^|/)secrets/' | grep -vE '(^|/)\.env\.example$' || true)
-if [ -n "$SECRET_NAMES" ]; then
-    echo "❌ ERROR: Secret-shaped filename must not be committed:"
-    echo "$SECRET_NAMES"
-    echo "Keep .env (except .env.example), cookies.json, and secrets/ untracked."
-    exit 1
-fi
-
-# 8. Production-format secrets: fail on path only, never print the match.
-SECRET_HIT_FILES=()
-while IFS= read -r file; do
-    if [ -z "$file" ] || [ ! -f "$file" ]; then
-        continue
-    fi
-    if grep -I -E -q \
-        'AIzaSy[a-zA-Z0-9_-]{33}|GOCSPX-[a-zA-Z0-9_-]{28}|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|[0-9]{8,10}:[A-Za-z0-9_-]{35}|[0-9]{12}-[a-z0-9]{32}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ya29\.[A-Za-z0-9_-]{50,}|AKIA[0-9A-Z]{16}' \
-        "$file"; then
-        SECRET_HIT_FILES+=("$file")
-    elif grep -I -E -q '"type"[[:space:]]*:[[:space:]]*"service_account"' "$file" \
-        && grep -I -E -q '"private_key"' "$file"; then
-        SECRET_HIT_FILES+=("$file")
-    fi
-done < <(git diff --cached --name-only --diff-filter=ACM)
-
-if [ ${#SECRET_HIT_FILES[@]} -gt 0 ]; then
-    echo "❌ ERROR: Production-format secret signature detected in staged file(s):"
-    for sf in "${SECRET_HIT_FILES[@]}"; do
-        echo "   - $sf"
-    done
-    echo "Use generic format regexes or runtime-built synthetic tokens. Never embed live credentials."
-    exit 1
-fi
-
-echo "✅ [pre-commit] All anti-regression, anti-bloat, and secret-hygiene checks passed cleanly."
-exit 0
+exec "$PYTHON_BIN" "$REPO_ROOT/scripts/verify_integrity.py" --staged "$@"

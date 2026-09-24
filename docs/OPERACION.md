@@ -58,21 +58,20 @@ Camino feliz **sin sudo**. Contenedor autocontenido (FFmpeg, Chromium, `agy` en 
 - **Límites de Recursos y Presupuesto Objetivo (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)**: El sistema está diseñado para que todas las operaciones normales (renderizado Stream-Copy, QA Gatekeeper, síntesis TTS y despachador reactivo) se mantengan bajo una **meta objetivo estricta de ≤ 2 Cores de CPU y ≤ 2.0 GiB de RAM**. El archivo `docker-compose.yml` base define un techo de emergencia de `mem_limit: 6g` y `cpus: 4.0` exclusivamente como red de seguridad para evitar terminaciones OOM bruscas ante picos transitorios, pero el software y los agentes deben optimizar y mantenerse dentro de la envolvente de 2 Cores / 2 GB RAM.
 - **Aislamiento y Seguridad**: Rootfs de solo lectura (`read_only: true`), tmpfs `/tmp` (2 GB en base; 512m con small), `cap_drop: ALL`, usuario no-root `appuser:10001`, named volumes (no bind del workdir). Secretos solo en `./secrets:/run/secrets:ro`.
 - **Servidor Telegram Local**: Puerto `127.0.0.1:8081`, hasta 2 GB, zero-copy `file:///`.
-- **Antigravity**: AppData en el volumen `yt_agy_home` (`/home/appuser/.gemini`). El token OAuth se copia desde `secrets/antigravity-oauth-token` (login `agy` en una máquina con navegador; el contenedor no abre OAuth interactivo).
+- **Antigravity**: Instalado directamente en la imagen Docker mediante el instalador oficial (`curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin`). AppData y sesión persistente residen en el volumen `yt_agy_home` (`/home/appuser/.gemini`). Prioriza el consumo de la cuota Pro del usuario mediante el arnés CLI sin cobros por token de API.
 
-### Checklist deploy (pasos 0→8)
+### Checklist deploy (pasos 0→7)
 
 | Paso | Acción | Criterio de OK |
 |---|---|---|
 | **0** | Árbol vacío / clone limpio; `cp .env.example .env` y editar (sin secretos en git). | `.env` local `chmod 600`; no commitear. |
 | **1** | Layout `secrets/`: `drive_key.json`, `tokens/<canal>.json` (`tokens/horror.json`, `tokens/drama.json`), `cookies.json`, `cookies_aelithia.json`, opcional `antigravity-oauth-token`. | Archivos presentes; montaje compose `ro`. |
 | **2** | Completar `.env`: Telegram (`TELEGRAM_*` + `TELEGRAM_ALLOWED_CHAT_ID`), Drive IDs (`DRIVE_FOLDER_ID`, `DRIVE_APPROVED_VIDEO_FOLDER_ID`, …), channel IDs; `TELEGRAM_API_ID`/`HASH` para sidecar. | Placeholders secretos no vacíos en runtime. |
-| **3** | `./scripts/stage_agy.sh` | `build/agy` existe (gitignored). |
-| **4** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |
-| **5** | Preferir path low-RAM: `docker compose -f docker-compose.yml -f docker-compose.small.yml build` | Build OK (`yt-automation:local`). |
-| **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados e iniciados (`yt-moku` + `yt-aelithia`). |
-| **7** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-moku` + `yt-aelithia` (+ opcional sidecar) healthy/up. |
-| **8** | Logs por canal: `… logs --follow yt-moku` / `… logs --follow yt-aelithia` | Daemons autónomos desacoplados en intervalo. |
+| **3** | Preflight: `python3 main.py run --preflight` | `Production preflight: PASS` (ver [CONFIGURACION_SECRETOS.md](CONFIGURACION_SECRETOS.md) §3). |
+| **4** | Preferir path low-RAM: `docker compose -f docker-compose.yml -f docker-compose.small.yml build` | Build OK (`yt-automation:local`), CLI `agy` instalado automáticamente. |
+| **5** | `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d` | Contenedores creados e iniciados (`yt-moku` + `yt-aelithia`). |
+| **6** | `docker compose -f docker-compose.yml -f docker-compose.small.yml ps` | `yt-moku` + `yt-aelithia` (+ opcional sidecar) healthy/up. |
+| **7** | Logs por canal: `… logs --follow yt-moku` / `… logs --follow yt-aelithia` | Daemons autónomos desacoplados en intervalo. |
 
 Preferir overlay low-RAM (`2g` / `2` CPU, `shm 256m`, tmpfs `/tmp` 512m): `docker compose -f docker-compose.yml -f docker-compose.small.yml up -d`. Defaults: `AUTO_APPROVE: "0"`, `ENABLE_AUTO_PUBLISH_SWEEP: "0"`.
 
@@ -83,7 +82,7 @@ Preferir overlay low-RAM (`2g` / `2` CPU, `shm 256m`, tmpfs `/tmp` 512m): `docke
 - Modo monolítico clásico: `docker compose --profile all-in-one up -d yt-automation`
 - Failover de Telegram Poller: Si el contenedor que sostiene el poller se detiene, el segundo canal asume automáticamente la escucha de callbacks.
 
-Si `build/agy: not found` → paso 3. Si uid 10001 no escribe → `docker compose down -v` y `up` de nuevo.
+Si uid 10001 no escribe → `docker compose down -v` y `up` de nuevo.
 
 ---
 

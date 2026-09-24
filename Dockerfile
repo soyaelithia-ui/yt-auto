@@ -42,7 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt constraints.txt /app/
 COPY scripts/docker_entrypoint.sh /entrypoint.sh
-RUN pip install --no-cache-dir -r /app/requirements.txt \
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /usr/local/bin \
+    && pip install --no-cache-dir -r /app/requirements.txt \
     && playwright install chromium \
     && (curl -fsSL https://antigravity.google/cli/install.sh | bash 2>/dev/null || true) \
     && (cp -f /root/.local/bin/agy /usr/local/bin/agy 2>/dev/null || true) \

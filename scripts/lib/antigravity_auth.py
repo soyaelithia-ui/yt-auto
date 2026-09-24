@@ -31,12 +31,19 @@ SCOPES = (
 
 
 def _extract_embedded_credential(marker_start: bytes, marker_end: bytes | None = None, length: int | None = None) -> str:
-    """Dynamically read embedded client values from the agy binary (zero live literals in source)."""
-    for candidate in [
-        Path(os.environ.get("AGY_BIN", "/home/moku/.local/bin/agy")),
-        PROJECT_ROOT / "build" / "agy",
+    """[DEPRECATED] Dynamically read embedded client values from the agy binary.
+
+    Official sessions should be managed natively via `agy` CLI in `~/.gemini/antigravity-cli/`.
+    """
+    candidates = [
+        Path(os.environ.get("AGY_BIN", "/usr/local/bin/agy")),
         Path("/usr/local/bin/agy"),
-    ]:
+    ]
+    custom_bin = os.environ.get("AGY_BIN_PATH")
+    if custom_bin:
+        candidates.insert(0, Path(custom_bin))
+
+    for candidate in candidates:
         if candidate.is_file():
             try:
                 data = candidate.read_bytes()
@@ -170,16 +177,7 @@ def exchange_antigravity_code(code_or_url: str) -> dict:
         dest.write_text(json.dumps(token_data, indent=2), encoding="utf-8")
         os.chmod(dest, 0o644)
 
-    # Sync to running docker container if active
-    try:
-        subprocess.run(
-            ["docker", "cp", str(TOKEN_PATH), "yt-automation:/home/appuser/.gemini/antigravity-cli/antigravity-oauth-token"],
-            check=False,
-            capture_output=True,
-        )
-    except Exception:
-        pass
-
+    # Token file saved to disk; official session volume handles container mount
     return token_data
 
 

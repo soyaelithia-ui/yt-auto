@@ -131,14 +131,14 @@ services:
     container_name: yt-moku
     hostname: yt-moku
     profiles: ["split-channels-legacy"]
-    command: ["python", "main.py", "daemon", "--channel", "horror", "--interval", "60"]
+    command: ["python", "main.py", "daemon", "--channel", "moku", "--interval", "60"]
 
   yt-aelithia:
     <<: *yt-base
     container_name: yt-aelithia
     hostname: yt-aelithia
     profiles: ["split-channels-legacy"]
-    command: ["python", "main.py", "daemon", "--channel", "drama", "--interval", "60"]
+    command: ["python", "main.py", "daemon", "--channel", "aelithia", "--interval", "60"]
 
   telegram-bot-api:
     profiles: ["local-telegram"]
