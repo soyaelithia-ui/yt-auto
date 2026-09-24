@@ -109,6 +109,13 @@ class TestCLIParserAndSubcommands:
         assert args.limit == 10
         assert args.live is True
 
+    def test_collect_links_help_formatting(self):
+        """Verify collect-links help string formats cleanly without format string errors."""
+        parser = build_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["collect-links", "--help"])
+        assert exc_info.value.code == 0
+
     def test_run_subcommand_flags_and_aliases(self):
         """Verify run subcommand flags; format flags are gone (lane-driven now)."""
         parser = build_parser()

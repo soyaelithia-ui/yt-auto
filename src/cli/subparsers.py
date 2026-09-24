@@ -317,7 +317,7 @@ def register_analytics_subcommands(subparsers: argparse._SubParsersAction, paren
         help="Recolección automática nativa de enlaces y métricas de videos en YouTube",
     )
     cl.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('horror', 'drama', 'all')")
-    cl.add_argument("-l", "--limit", type=int, default=0, help="Límite de videos a recolectar (0 = 100% de la cuenta)")
+    cl.add_argument("-l", "--limit", type=int, default=0, help="Límite de videos a recolectar (0 = 100%% de la cuenta)")
     cl.add_argument("--live", action="store_true", help="Consultar directamente a YouTube API (por defecto: dry-run)")
 
 
