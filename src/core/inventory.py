@@ -250,31 +250,133 @@ def record_published_inventory(
     with connect(db_path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            # Ensure parent story and run exist to satisfy SQLite foreign keys
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO stories(
-                    story_id, title, content, url, status, channel, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)
-                """,
-                (story_id, clean_title, clean_script or clean_desc, url, channel, now_iso, now_iso),
-            )
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO runs(
-                    run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at
-                ) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)
-                """,
-                (run_id, channel, story_id, now_iso, now_iso, now_iso),
-            )
-
             # Check existing by video_id or run_id
             existing = conn.execute(
-                "SELECT publication_id FROM publications WHERE video_id = ? OR (run_id = ? AND run_id != '')",
+                "SELECT * FROM publications WHERE video_id = ? OR (run_id = ? AND run_id != '')",
                 (video_id, run_id),
             ).fetchone()
 
             if existing:
+                existing_keys = existing.keys() if hasattr(existing, "keys") else []
+                def _get_existing(col: str) -> Any:
+                    return existing[col] if col in existing_keys else None
+
+                ex_run = _get_existing("run_id")
+                if ex_run and (not run_id or run_id.startswith(("yt-collect-", "yt-sync-"))):
+                    final_run_id = ex_run
+                elif ex_run and not ex_run.startswith(("yt-collect-", "yt-sync-")):
+                    final_run_id = ex_run
+                else:
+                    final_run_id = run_id or (ex_run or "")
+
+                ex_story = _get_existing("story_id")
+                if ex_story and (not story_id or story_id.startswith(("story-collect-", "story-sync-"))):
+                    final_story_id = ex_story
+                elif ex_story and not ex_story.startswith(("story-collect-", "story-sync-")):
+                    final_story_id = ex_story
+                else:
+                    final_story_id = story_id or (ex_story or "")
+
+                if final_story_id != ex_story:
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO stories(
+                            story_id, title, content, url, status, channel, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)
+                        """,
+                        (final_story_id, clean_title, clean_script or clean_desc, url, channel, now_iso, now_iso),
+                    )
+                if final_run_id != ex_run:
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO runs(
+                            run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at
+                        ) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)
+                        """,
+                        (final_run_id, channel, final_story_id, now_iso, now_iso, now_iso),
+                    )
+
+                ex_sha = _get_existing("video_sha256")
+                final_video_sha256 = video_sha256 if (video_sha256 and str(video_sha256).strip()) else ex_sha
+
+                ex_drive_vid = _get_existing("drive_video_id")
+                final_drive_video_id = drive_video_id if (drive_video_id and str(drive_video_id).strip()) else ex_drive_vid
+
+                ex_drive_meta_raw = _get_existing("drive_backup_metadata")
+                ex_drive_meta = json.loads(ex_drive_meta_raw) if (ex_drive_meta_raw and isinstance(ex_drive_meta_raw, str)) else (ex_drive_meta_raw if isinstance(ex_drive_meta_raw, dict) else None)
+                final_drive_meta = drive_backup_metadata if drive_backup_metadata else ex_drive_meta
+
+                ex_script = _get_existing("full_script")
+                final_script = clean_script if clean_script else (normalize_text_nfc(ex_script) if ex_script else None)
+
+                ex_hook = _get_existing("hook_summary")
+                ex_synopsis = _get_existing("synopsis")
+                final_hook = hook_summary or ex_hook
+                final_synopsis = synopsis or ex_synopsis
+                if not final_hook or not final_synopsis:
+                    auto_hook, auto_synopsis = extract_hook_and_synopsis(clean_title, final_script or clean_desc)
+                    final_hook = final_hook or auto_hook
+                    final_synopsis = final_synopsis or auto_synopsis
+
+                ex_simhash = _get_existing("simhash")
+                if not clean_script and ex_simhash:
+                    final_simhash = ex_simhash
+                else:
+                    final_simhash = compute_simhash(final_script or f"{clean_title} {clean_desc}")
+
+                ex_themes_raw = _get_existing("themes_json")
+                ex_themes = json.loads(ex_themes_raw) if (ex_themes_raw and isinstance(ex_themes_raw, str)) else (ex_themes_raw if isinstance(ex_themes_raw, list) else None)
+                final_themes = themes or ex_themes
+                if not final_themes:
+                    final_themes = extract_thematic_tags(clean_title, clean_desc)
+
+                ex_res_raw = _get_existing("used_resources")
+                ex_res = json.loads(ex_res_raw) if (ex_res_raw and isinstance(ex_res_raw, str)) else (ex_res_raw if isinstance(ex_res_raw, dict) else None)
+                final_used_resources = used_resources if used_resources else ex_res
+
+                ex_music = _get_existing("music_track")
+                if not ex_music and final_used_resources and isinstance(final_used_resources, dict):
+                    ex_music = final_used_resources.get("music")
+                final_music = resolved_music if resolved_music else ex_music
+
+                ex_pinned = _get_existing("pinned_comment")
+                final_pinned_comment = pinned_comment if (pinned_comment and str(pinned_comment).strip()) else ex_pinned
+
+                ex_comment_status = str(_get_existing("comment_status") or "none")
+                incoming_comment_status = str(comment_status or "none")
+                if incoming_comment_status == "none" and ex_comment_status != "none":
+                    final_comment_status = ex_comment_status
+                else:
+                    final_comment_status = incoming_comment_status
+
+                ex_comment_error = _get_existing("comment_error")
+                final_comment_error = comment_error if (comment_error and str(comment_error).strip()) else ex_comment_error
+
+                ex_pred_score = float(_get_existing("predictive_success_score") or 0.0)
+                final_predictive_score = predictive_success_score if predictive_success_score > 0.0 else ex_pred_score
+
+                ex_rationale = _get_existing("score_rationale")
+                final_score_rationale = score_rationale if (score_rationale and str(score_rationale).strip()) else ex_rationale
+
+                ex_duration = float(_get_existing("duration_sec") or 0.0)
+                final_duration_sec = duration_sec if duration_sec > 0.0 else ex_duration
+
+                ex_actual_score = float(_get_existing("actual_success_score") or 0.0)
+                final_actual_score = actual_success_score if actual_success_score > 0.0 else ex_actual_score
+
+                ex_views = int(_get_existing("view_count") or 0)
+                final_views = int(view_count) if int(view_count) > 0 else ex_views
+
+                ex_likes = int(_get_existing("like_count") or 0)
+                final_likes = int(like_count) if int(like_count) > 0 else ex_likes
+
+                ex_comments = int(_get_existing("comment_count") or 0)
+                final_comments = int(comment_count) if int(comment_count) > 0 else ex_comments
+
+                drive_meta_json = json.dumps(final_drive_meta) if final_drive_meta else None
+                themes_json = json.dumps(final_themes) if final_themes else None
+                resources_json = json.dumps(final_used_resources) if final_used_resources else None
+
                 conn.execute(
                     """
                     UPDATE publications SET
@@ -291,21 +393,73 @@ def record_published_inventory(
                     WHERE publication_id = ?
                     """,
                     (
-                        run_id, story_id, provider, url, channel,
+                        final_run_id, final_story_id, provider, url, channel,
                         visibility, clean_title, clean_desc, now_iso,
-                        video_sha256, drive_video_id, drive_meta_json,
-                        language, source_language, hook_summary, synopsis,
-                        themes_json, simhash, clean_script,
-                        predictive_success_score, score_rationale,
-                        resources_json, duration_sec,
-                        actual_success_score, resolved_music,
-                        int(comment_count), int(view_count), int(like_count),
-                        str(comment_status or "none"), comment_error, pinned_comment,
+                        final_video_sha256, final_drive_video_id, drive_meta_json,
+                        language, source_language, final_hook, final_synopsis,
+                        themes_json, final_simhash, final_script,
+                        final_predictive_score, final_score_rationale,
+                        resources_json, final_duration_sec,
+                        final_actual_score, final_music,
+                        final_comments, final_views, final_likes,
+                        final_comment_status, final_comment_error, final_pinned_comment,
                         existing["publication_id"],
                     ),
                 )
                 pub_id = existing["publication_id"]
             else:
+                # Ensure parent story and run exist to satisfy SQLite foreign keys
+                st_row = conn.execute(
+                    "SELECT story_id FROM stories WHERE story_id = ? OR url = ?",
+                    (story_id, url),
+                ).fetchone()
+                effective_story_id = st_row["story_id"] if st_row else story_id
+                if not st_row:
+                    conn.execute(
+                        """
+                        INSERT INTO stories(
+                            story_id, title, content, url, status, channel, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, 'PUBLISHED', ?, ?, ?)
+                        """,
+                        (effective_story_id, clean_title, clean_script or clean_desc, url, channel, now_iso, now_iso),
+                    )
+
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO runs(
+                        run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at, finished_at
+                    ) VALUES (?, ?, ?, 'publish', 'published', 'inventory_sync', ?, ?, ?)
+                    """,
+                    (run_id, channel, effective_story_id, now_iso, now_iso, now_iso),
+                )
+
+                final_run_id = run_id
+                final_story_id = effective_story_id
+                final_video_sha256 = video_sha256
+                final_drive_video_id = drive_video_id
+                final_drive_meta = drive_backup_metadata
+                final_script = clean_script or None
+                final_hook = hook_summary
+                final_synopsis = synopsis
+                final_themes = themes
+                final_simhash = simhash
+                final_used_resources = used_resources
+                final_music = resolved_music
+                final_pinned_comment = pinned_comment
+                final_comment_status = str(comment_status or "none")
+                final_comment_error = comment_error
+                final_predictive_score = predictive_success_score
+                final_score_rationale = score_rationale
+                final_duration_sec = duration_sec
+                final_actual_score = actual_success_score
+                final_views = int(view_count)
+                final_likes = int(like_count)
+                final_comments = int(comment_count)
+
+                drive_meta_json = json.dumps(final_drive_meta) if final_drive_meta else None
+                themes_json = json.dumps(final_themes) if final_themes else None
+                resources_json = json.dumps(final_used_resources) if final_used_resources else None
+
                 cursor = conn.execute(
                     """
                     INSERT INTO publications(
@@ -333,16 +487,16 @@ def record_published_inventory(
                     )
                     """,
                     (
-                        run_id, story_id, provider, video_id, url, channel,
+                        final_run_id, final_story_id, provider, video_id, url, channel,
                         visibility, clean_title, clean_desc, now_iso,
-                        video_sha256, drive_video_id, drive_meta_json,
-                        language, source_language, hook_summary, synopsis,
-                        themes_json, simhash, clean_script,
-                        predictive_success_score, score_rationale,
-                        resources_json, duration_sec,
-                        actual_success_score, resolved_music,
-                        int(comment_count), int(view_count), int(like_count),
-                        str(comment_status or "none"), comment_error, pinned_comment,
+                        final_video_sha256, final_drive_video_id, drive_meta_json,
+                        language, source_language, final_hook, final_synopsis,
+                        themes_json, final_simhash, final_script,
+                        final_predictive_score, final_score_rationale,
+                        resources_json, final_duration_sec,
+                        final_actual_score, final_music,
+                        final_comments, final_views, final_likes,
+                        final_comment_status, final_comment_error, final_pinned_comment,
                     ),
                 )
                 pub_id = cursor.lastrowid
@@ -355,8 +509,8 @@ def record_published_inventory(
 
     return PublishedVideoRecord(
         publication_id=pub_id,
-        run_id=run_id,
-        story_id=story_id,
+        run_id=final_run_id,
+        story_id=final_story_id,
         provider=provider,
         video_id=video_id,
         url=url,
@@ -366,28 +520,28 @@ def record_published_inventory(
         description=clean_desc,
         thumbnail_confirmed=True,
         verified_at=now_iso,
-        video_sha256=video_sha256,
-        drive_video_id=drive_video_id,
-        drive_backup_metadata=drive_backup_metadata,
+        video_sha256=final_video_sha256,
+        drive_video_id=final_drive_video_id,
+        drive_backup_metadata=final_drive_meta,
         language=language,
         source_language=source_language,
-        hook_summary=hook_summary,
-        synopsis=synopsis,
-        themes=themes,
-        simhash=simhash,
-        full_script=clean_script,
-        predictive_success_score=predictive_success_score,
-        score_rationale=score_rationale,
-        used_resources=used_resources,
-        duration_sec=duration_sec,
-        actual_success_score=actual_success_score,
-        music_track=resolved_music,
-        comment_count=int(comment_count),
-        view_count=int(view_count),
-        like_count=int(like_count),
-        comment_status=str(comment_status or "none"),
-        comment_error=comment_error,
-        pinned_comment=pinned_comment,
+        hook_summary=final_hook,
+        synopsis=final_synopsis,
+        themes=final_themes,
+        simhash=final_simhash,
+        full_script=final_script,
+        predictive_success_score=final_predictive_score,
+        score_rationale=final_score_rationale,
+        used_resources=final_used_resources,
+        duration_sec=final_duration_sec,
+        actual_success_score=final_actual_score,
+        music_track=final_music,
+        comment_count=final_comments,
+        view_count=final_views,
+        like_count=final_likes,
+        comment_status=final_comment_status,
+        comment_error=final_comment_error,
+        pinned_comment=final_pinned_comment,
     )
 
 

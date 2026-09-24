@@ -16,7 +16,7 @@ from src.analytics.link_collector import (
     collect_all_channel_links,
     collect_channel_links,
 )
-from src.core.inventory import get_published_inventory
+from src.core.inventory import get_published_inventory, record_published_inventory
 from src.core.repository.migrations import migrate_database
 
 
@@ -183,3 +183,84 @@ def test_collect_all_channel_links():
         assert "moku" in res["channels"]
         assert "aelithia" in res["channels"]
         assert res["total_synced"] > 0
+
+
+def test_collect_channel_links_mock_respects_max_items():
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        migrate_database(db_path)
+
+        res1 = collect_channel_links(channel="horror", max_items=1, db_path=db_path, dry_run=True)
+        assert res1["ok"] is True
+        assert len(res1["items"]) == 1
+
+        res2 = collect_channel_links(channel="horror", max_items=2, db_path=db_path, dry_run=True)
+        assert res2["ok"] is True
+        assert len(res2["items"]) == 2
+
+
+def test_collect_channel_links_preserves_rich_inventory_fields():
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        migrate_database(db_path)
+
+        # 1. Create an initial publication record with rich metadata
+        initial_record = record_published_inventory(
+            db_path=db_path,
+            run_id="run-original-1234",
+            story_id="story-original-5678",
+            video_id="mock_moku_001",
+            url="https://www.youtube.com/watch?v=mock_moku_001",
+            channel="moku",
+            title="Historia del Bosque",
+            description="Una historia escalofriante",
+            full_script="Este es el guion completo que no debe ser sobreescrito ni eliminado.",
+            video_sha256="sha256_mock_moku_001_hash",
+            drive_video_id="drive_mock_file_001",
+            drive_backup_metadata={"drive_id": "drive_mock_file_001", "size": 1024},
+            used_resources={"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"},
+            music_track="creepy_ambient.mp3",
+            pinned_comment="¿Qué harías en este bosque?",
+            comment_status="pinned",
+            comment_error=None,
+            predictive_success_score=0.88,
+            score_rationale="Gancho fuerte de suspenso",
+        )
+
+        assert initial_record.publication_id > 0
+        assert initial_record.full_script == "Este es el guion completo que no debe ser sobreescrito ni eliminado."
+        assert initial_record.video_sha256 == "sha256_mock_moku_001_hash"
+        assert initial_record.used_resources == {"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"}
+        assert initial_record.pinned_comment == "¿Qué harías en este bosque?"
+        assert initial_record.comment_status == "pinned"
+        assert initial_record.run_id == "run-original-1234"
+        assert initial_record.story_id == "story-original-5678"
+
+        # 2. Re-collect channel links (which generates mock_moku_001 and calls record_published_inventory
+        # without full_script, video_sha256, used_resources, or pinned_comment)
+        res = collect_channel_links(channel="horror", max_items=1, db_path=db_path, dry_run=False)
+        assert res["ok"] is True
+        assert res["synced_count"] == 1
+
+        # 3. Query inventory to verify rich fields were completely preserved
+        records = get_published_inventory(db_path=db_path, channel="moku")
+        assert len(records) == 1
+        updated = records[0]
+
+        assert updated.video_id == "mock_moku_001"
+        assert updated.full_script == "Este es el guion completo que no debe ser sobreescrito ni eliminado."
+        assert updated.video_sha256 == "sha256_mock_moku_001_hash"
+        assert updated.used_resources == {"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"}
+        assert updated.music_track == "creepy_ambient.mp3"
+        assert updated.pinned_comment == "¿Qué harías en este bosque?"
+        assert updated.comment_status == "pinned"
+        assert updated.drive_video_id == "drive_mock_file_001"
+        assert updated.drive_backup_metadata == {"drive_id": "drive_mock_file_001", "size": 1024}
+        assert updated.run_id == "run-original-1234"
+        assert updated.story_id == "story-original-5678"
+        assert updated.predictive_success_score == 0.88
+        assert updated.score_rationale == "Gancho fuerte de suspenso"
+
+        # Metrics should have been updated by link collection
+        assert updated.view_count > 0
+        assert updated.actual_success_score > 0.0

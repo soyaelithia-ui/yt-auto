@@ -135,6 +135,89 @@ def _fetch_video_details_batch(youtube: Any, video_ids: List[str]) -> Dict[str, 
     return details
 
 
+def _generate_mock_raw_items(canon: str, max_items: int = 0) -> List[Dict[str, Any]]:
+    """Generates deterministic mock fixtures honoring max_items (min(max_items, 3) when max_items > 0)."""
+    count = min(max_items, 3) if max_items > 0 else 3
+    raw_items: List[Dict[str, Any]] = []
+    for i in range(1, count + 1):
+        mock_id = f"mock_{canon}_{i:03d}"
+        raw_items.append({
+            "video_id": mock_id,
+            "title": f"Video {canon} {i}",
+            "description": f"Descripción de prueba para {mock_id}",
+            "published_at": "2026-09-24T00:00:00Z",
+        })
+    return raw_items
+
+
+def _process_and_record_video(
+    item: Dict[str, Any],
+    detail: Dict[str, Any],
+    canon: str,
+    db_path: str,
+    is_dry: bool,
+    dry_run: bool,
+) -> Dict[str, Any]:
+    """Processes a harvested video item, calculates performance metrics, and records to inventory."""
+    vid = item["video_id"]
+    stats = detail.get("statistics", {})
+    content_details = detail.get("contentDetails", {})
+    snippet = detail.get("snippet", {})
+
+    title = snippet.get("title") or item.get("title") or f"Video {vid}"
+    desc = snippet.get("description") or item.get("description") or ""
+    pub_at = snippet.get("publishedAt") or item.get("published_at") or ""
+
+    if is_dry or not stats:
+        mock_stats = generate_mock_statistics(vid)
+        views = mock_stats.get("view_count", 1500)
+        likes = mock_stats.get("like_count", 75)
+        comments = mock_stats.get("comment_count", 12)
+        duration_sec = 45.0
+        retention_pct = 78.5
+    else:
+        views = int(stats.get("viewCount", 0))
+        likes = int(stats.get("likeCount", 0))
+        comments = int(stats.get("commentCount", 0))
+        duration_sec = parse_iso8601_duration(content_details.get("duration"))
+        _, retention_pct = estimate_retention_metrics(duration_sec, views, likes, comments)
+
+    score = calculate_empirical_score(views, likes, comments, retention_pct)
+    comment_lvl = classify_comment_level(comments, views)
+    urls = build_video_urls(vid)
+
+    if not dry_run:
+        record_published_inventory(
+            db_path=db_path,
+            run_id=f"yt-collect-{vid}",
+            story_id=f"story-collect-{vid}",
+            video_id=vid,
+            url=urls["watch"],
+            channel=canon,
+            title=title,
+            description=desc,
+            verified_at=pub_at,
+            provider="YOUTUBE_DATA_API_V3",
+            visibility="public",
+            duration_sec=duration_sec,
+            actual_success_score=score,
+            comment_count=comments,
+            view_count=views,
+            like_count=likes,
+        )
+
+    return {
+        "video_id": vid,
+        "title": title,
+        "urls": urls,
+        "views": views,
+        "likes": likes,
+        "comments": comments,
+        "comment_level": comment_lvl,
+        "score": score,
+    }
+
+
 def collect_channel_links(
     channel: str | CanonicalChannel,
     max_items: int = 0,
@@ -164,80 +247,22 @@ def collect_channel_links(
         if uploads_id:
             raw_items = _harvest_playlist_video_ids(youtube, uploads_id, max_items=max_items)
     else:
-        # Dry-run / test fixture generation
-        for i in range(1, 4):
-            mock_id = f"mock_{canon}_{i:03d}"
-            raw_items.append({
-                "video_id": mock_id,
-                "title": f"Video {canon} {i}",
-                "description": f"Descripción de prueba para {mock_id}",
-                "published_at": "2026-09-24T00:00:00Z",
-            })
+        raw_items = _generate_mock_raw_items(canon, max_items=max_items)
 
     video_ids = [it["video_id"] for it in raw_items]
     details_map = _fetch_video_details_batch(youtube, video_ids) if youtube else {}
 
-    collected_records: List[Dict[str, Any]] = []
-
-    for item in raw_items:
-        vid = item["video_id"]
-        detail = details_map.get(vid, {})
-        stats = detail.get("statistics", {})
-        content_details = detail.get("contentDetails", {})
-        snippet = detail.get("snippet", {})
-
-        title = snippet.get("title") or item.get("title") or f"Video {vid}"
-        desc = snippet.get("description") or item.get("description") or ""
-        pub_at = snippet.get("publishedAt") or item.get("published_at") or ""
-
-        if is_dry or not stats:
-            mock_stats = generate_mock_statistics(vid)
-            views = mock_stats.get("view_count", 1500)
-            likes = mock_stats.get("like_count", 75)
-            comments = mock_stats.get("comment_count", 12)
-            duration_sec = 45.0
-            retention_pct = 78.5
-        else:
-            views = int(stats.get("viewCount", 0))
-            likes = int(stats.get("likeCount", 0))
-            comments = int(stats.get("commentCount", 0))
-            duration_sec = parse_iso8601_duration(content_details.get("duration"))
-            _, retention_pct = estimate_retention_metrics(duration_sec, views, likes, comments)
-
-        score = calculate_empirical_score(views, likes, comments, retention_pct)
-        comment_lvl = classify_comment_level(comments, views)
-        urls = build_video_urls(vid)
-
-        if not dry_run:
-            record_published_inventory(
-                db_path=db_path,
-                run_id=f"yt-collect-{vid}",
-                story_id=f"story-collect-{vid}",
-                video_id=vid,
-                url=urls["watch"],
-                channel=canon,
-                title=title,
-                description=desc,
-                verified_at=pub_at,
-                provider="YOUTUBE_DATA_API_V3",
-                visibility="public",
-                duration_sec=duration_sec,
-                actual_success_score=score,
-                comment_count=comments,
-                view_count=views,
-                like_count=likes,
-            )
-
-        collected_records.append({
-            "video_id": vid,
-            "title": title,
-            "urls": urls,
-            "views": views,
-            "likes": likes,
-            "comments": comments,
-            "comment_level": comment_lvl,
-            "score": score,
-        })
+    collected_records: List[Dict[str, Any]] = [
+        _process_and_record_video(
+            item=item,
+            detail=details_map.get(item["video_id"], {}),
+            canon=canon,
+            db_path=db_path,
+            is_dry=is_dry,
+            dry_run=dry_run,
+        )
+        for item in raw_items
+    ]
 
     logger.info("Channel %s: link collection completed (%d links collected)", canon, len(collected_records))
     return {
