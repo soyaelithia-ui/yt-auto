@@ -132,6 +132,16 @@ def _record_production_metrics_lineage(ctx: PipelineContext, profiler: PipelineP
             else (render_phase.duration_sec if render_phase else 0.0)
         )
         video_size = ctx.video_path.stat().st_size if ctx.video_path.exists() else 0
+        lufs_val = None
+        try:
+            from src.audio_quality import AudioQualityAnalyzer
+            probe_target = ctx.video_path if (ctx.video_path and ctx.video_path.exists()) else ctx.audio_path
+            if probe_target and Path(probe_target).is_file():
+                lufs_res = AudioQualityAnalyzer().analyze_ebur128_loudness(str(probe_target))
+                lufs_val = lufs_res.get("integrated_lufs")
+        except Exception as lufs_exc:
+            logger.debug("EBUR128 loudness probe for production metrics skipped: %s", lufs_exc)
+
         ctx.repository.record_production_metrics(
             run_id=ctx.run_id,
             story_id=ctx.story_id,
@@ -139,7 +149,7 @@ def _record_production_metrics_lineage(ctx: PipelineContext, profiler: PipelineP
             render_time_sec=float(render_elapsed),
             tts_time_sec=tts_sec,
             video_size_bytes=int(video_size),
-            integrated_lufs=None,
+            integrated_lufs=float(lufs_val) if lufs_val is not None else None,
             qa_audit_passed=(
                 bool(ctx.visual_integrity_report.get("passed", True))
                 if isinstance(ctx.visual_integrity_report, dict)

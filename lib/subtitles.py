@@ -177,9 +177,26 @@ def _dangling_base(word: str) -> bool:
 
 def _chunk_cues(word_timestamps, max_words: int) -> list[list[dict]]:
     """Partition words into cues never ending on a dangling word/preposition."""
+    normalized_stamps: list[dict] = []
+    for stamp in (word_timestamps or []):
+        txt = _word_text(stamp).strip()
+        tokens = [t for t in re.split(r"\s+", txt) if t]
+        if len(tokens) <= 1:
+            normalized_stamps.append(stamp)
+        else:
+            s_time, e_time = _word_stamp_range(stamp)
+            dur = max(0.001, e_time - s_time)
+            step = dur / len(tokens)
+            for idx, tok in enumerate(tokens):
+                normalized_stamps.append({
+                    "word": tok,
+                    "start": round(s_time + idx * step, 3),
+                    "end": round(s_time + (idx + 1) * step, 3),
+                })
+
     chunks: list[list[dict]] = []
     current: list[dict] = []
-    for stamp in word_timestamps:
+    for stamp in normalized_stamps:
         current.append(stamp)
         word = _word_text(stamp).strip()
         if word.endswith((".", "!", "?")) and len(current) >= 2:

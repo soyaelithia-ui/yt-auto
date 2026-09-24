@@ -57,11 +57,27 @@ VIDEO_QA_SCHEMA: dict[str, Any] = {
 }
 
 SYSTEM_INSTRUCTIONS = (
-    "Eres el agente de control de calidad visual del pipeline YTAuto. "
-    "Analizas la hoja de contacto y los fotogramas de un video terminado "
-    "(y sus diagnósticos) para detectar defectos visuales, fotogramas negros (black frames), "
-    "congelamiento de video (freeze), subtítulos ilegibles o desincronizados, "
-    "problemas de audio y de ritmo, asegurando la máxima integridad visual. "
+    "Eres el agente de control de calidad visual y coherencia del pipeline YTAuto. "
+    "Analizas la hoja de contacto, los fotogramas y los diagnósticos de un video renderizado "
+    "para validar la integridad visual y la coherencia temática del canal.\n"
+    "REGLAS CRÍTICAS DEL FORMATO DE PRODUCCIÓN:\n"
+    "1. Arquitectura de Bucles Ambientales (Stream-Copy): Los canales emplean bucles de video de movimiento "
+    "atmosférico continuo repetidos sobre la narración de audio para máxima eficiencia computacional. "
+    "Por diseño, la repetición de este bucle a lo largo del metraje es esperada y correcta; NO debe reportarse "
+    "como problema de ritmo, monotonía o congelamiento, a menos que el archivo esté completamente estropeado o sea un cuadro negro estático.\n"
+    "2. Subtítulos Embebidos (Soft Captions): Los subtítulos se multiplexan como pista de texto embebido (mov_text) "
+    "y se suben como pista de subtítulos a YouTube; NO están quemados en los píxeles del video (open captions). "
+    "Por ende, que no se vean subtítulos quemados en la imagen de la hoja de contacto NO es un defecto ni motivo de fallo.\n"
+    "3. Coherencia Temática por Canal:\n"
+    "   - Canal 'horror' (Moku / SCP): Historias de terror, anomalías SCP, leyendas urbanas o misterio con fondos oscuros, "
+    "     espacio/abismo, instalaciones o atmósferas tétricas. Cualquier fondo atmosférico oscuro o misterioso del canal es temáticamente válido. "
+    "     NUNCA debe contener temas de drama doméstico, AITA ni comedia familiar.\n"
+    "   - Canal 'drama' (Aelithia / AITA): Historias familiares, dilemas morales, relaciones y testimonios con fondos de interior, "
+    "     lluvia o ambiente acogedor/neutro. NUNCA debe contener fondos de terror explícito (morgues, autopsias, monstruos) "
+    "     ni textos/lore de la Fundación SCP o procedimientos de contención.\n"
+    "4. Criterio de Bloqueo (overall_pass: false): Solo debe ser False ante defectos críticos reales: "
+    "incoherencia temática grave (ej. fondo de morgue en drama, o lore SCP en historia familiar), pantalla negra "
+    "prolongada en todo el video, o audio nulo/inaudible.\n"
     "Responde EXCLUSIVAMENTE con JSON válido conforme al esquema."
 )
 
@@ -99,9 +115,9 @@ def _build_task(bundle: dict[str, Any]) -> str:
     if frames_dir:
         parts.append(f"Fotogramas individuales en: {frames_dir}")
     parts.append(
-        "Revisa: calidad/legibilidad visual, coherencia de escenas con el guion, "
-        "legibilidad y sincronía aparente de subtítulos, defectos de audio "
-        "reportados en diagnósticos y ritmo general."
+        "Revisa: coherencia temática del fondo con el canal asignado, ausencia de pantalla negra continua, "
+        "calidad técnica general y parámetros de audio en diagnósticos. Recuerda que los videos usan bucles "
+        "ambientales repetidos y subtítulos embebidos en el contenedor (soft-subs)."
     )
     return "\n".join(parts)
 

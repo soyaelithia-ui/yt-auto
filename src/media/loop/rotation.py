@@ -336,21 +336,31 @@ class LoopRotationMixin:
 
         # Context-aware candidate filtering (Horror vs Drama vs Scifi)
         candidates = mp4_files
+        from src.core.domain import CanonicalChannel, canonical_channel
+        canon = None
+        if channel:
+            try:
+                canon = canonical_channel(channel)
+            except Exception:
+                pass
+
         norm_ctx = f"{category or ''} {channel or ''}".lower()
-        if any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss")):
-            horror_matches = [
-                p for p in mp4_files
-                if any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy"))
-            ]
-            if horror_matches:
-                candidates = horror_matches
-        elif any(k in norm_ctx for k in ("drama", "aita", "aelithia", "interior", "romance", "family", "confession")):
+        if canon == CanonicalChannel.DRAMA or (canon is None and any(k in norm_ctx for k in ("drama", "aita", "aelithia", "interior", "romance", "family", "confession"))):
             drama_matches = [
                 p for p in mp4_files
-                if any(k in p.name.lower() for k in ("drama", "interior", "cozy", "rain", "window", "hearth", "ambient_01"))
+                if not any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "monsters"))
+                and any(k in p.name.lower() for k in ("drama", "interior", "cozy", "rain", "window", "hearth", "ambient"))
             ]
             if drama_matches:
                 candidates = drama_matches
+        elif canon == CanonicalChannel.HORROR or (canon is None and any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss"))):
+            horror_matches = [
+                p for p in mp4_files
+                if not any(k in p.name.lower() for k in ("drama", "aita", "aelithia", "romance", "family"))
+                and any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "ambient"))
+            ]
+            if horror_matches:
+                candidates = horror_matches
 
         rotation_key = f"{mode}_{candidates[0].stem.split('_')[0]}" if len(candidates) < len(mp4_files) else mode
         idx = self.get_rotation_index(rotation_key, len(candidates), persist=persist)

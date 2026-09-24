@@ -294,9 +294,12 @@ def _expand_narrative_to_target_words(
 
     # 1. Canonical SCP lore enrichment
     try:
+        from src.core.domain import CanonicalChannel, canonical_channel
         from src.core.scp_lore import get_scp_canonical_lore, is_scp_topic
-        if is_scp_topic(main_title) or is_scp_topic(main_content) or channel == "moku":
-            lore = get_scp_canonical_lore(main_title) or get_scp_canonical_lore(main_content)
+
+        canon = canonical_channel(channel)
+        if canon == CanonicalChannel.HORROR and is_scp_topic(main_title):
+            lore = get_scp_canonical_lore(main_title)
             if lore:
                 parts: list[str] = []
                 if usable_content.strip():

@@ -726,7 +726,7 @@ def generate_audio(
                     async for chunk in comm.stream():
                         if chunk.get("type") == "audio":
                             f.write(chunk["data"])
-                        elif chunk.get("type") in ("WordBoundary", "SentenceBoundary"):
+                        elif chunk.get("type") == "WordBoundary":
                             words.append({
                                 "word": chunk.get("text", ""),
                                 "start": chunk.get("offset", 0) / 10000000.0,
@@ -775,7 +775,7 @@ def generate_audio(
                             async for chunk in comm.stream():
                                 if chunk.get("type") == "audio":
                                     f.write(chunk["data"])
-                                elif chunk.get("type") in ("WordBoundary", "SentenceBoundary"):
+                                elif chunk.get("type") == "WordBoundary":
                                     ret_words.append({
                                         "word": chunk.get("text", ""),
                                         "start": chunk.get("offset", 0) / 10000000.0,

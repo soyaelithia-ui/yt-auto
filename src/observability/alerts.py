@@ -49,18 +49,20 @@ def send_operational_alert(
     subject: str,
     body: str,
     *,
+    photo_path: str | None = None,
     min_interval_seconds: int | None = None,
     force: bool = False,
 ) -> bool:
     """Send a Telegram operational alert; returns True when sent.
 
     Dedupe is keyed on ``subject``. Pass ``force=True`` to bypass it
-    (e.g. manual CLI diagnostics).
+    (e.g. manual CLI diagnostics). If ``photo_path`` is provided and valid,
+    it delivers the screenshot with the alert caption.
     """
     from src.config import is_test_environment
 
     if is_test_environment():
-        logger.info("[alert suppressed:test] %s — %s", subject, body)
+        logger.info("[alert suppressed:test] %s — %s (photo: %s)", subject, body, photo_path)
         return False
 
     interval = (
@@ -73,11 +75,17 @@ def send_operational_alert(
         logger.debug("alert deduped: %s", subject)
         return False
 
-    text = f"⚠️ {subject}\n\n{body}"[:3900]
+    text = f"⚠️ {subject}\n\n{body}"
     try:
         from src.telegram.notifier import TelegramNotifier
 
-        result = TelegramNotifier().send_message(text)
+        notifier = TelegramNotifier()
+        if photo_path and os.path.isfile(photo_path):
+            result = notifier.send_photo(photo_path, caption=text[:1024])
+            if not bool(getattr(result, "success", getattr(result, "ok", True))):
+                result = notifier.send_message(text[:3900])
+        else:
+            result = notifier.send_message(text[:3900])
         ok = bool(getattr(result, "success", getattr(result, "ok", True)))
     except Exception:
         logger.warning("operational alert delivery failed", exc_info=True)

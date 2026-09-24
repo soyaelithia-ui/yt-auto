@@ -331,7 +331,7 @@ def _navigate_and_check_auth(
     target_url = "https://youtube.com/upload"
     if expected_channel_id and str(expected_channel_id).strip():
         cid = str(expected_channel_id).strip()
-        target_url = f"https://studio.youtube.com/channel/{cid}/videos/upload"
+        target_url = f"https://studio.youtube.com/channel/{cid}/videos/upload?d=ud"
 
     logger.info("Navigating to %s...", target_url)
     page.goto(target_url)
@@ -341,6 +341,12 @@ def _navigate_and_check_auth(
 
     if "accounts.google.com" in page.url:
         raise RuntimeError("Authentication failed. Cookies are expired or invalid.")
+
+    body_text = page.locator("body").inner_text().lower()
+    if any(p in body_text for p in ("no tienes permiso", "sin permiso", "access denied", "permission denied")):
+        if screenshot_dir:
+            page.screenshot(path=f"{screenshot_dir}/permission_error.png")
+        raise RuntimeError("No tienes permiso para ver esta página en YouTube Studio. Verifica el canal de la cuenta.")
 
     identity_candidates = [
         value.strip().lower().lstrip("@")
@@ -369,9 +375,19 @@ def _upload_file_payload(
     channel: str = "default",
     screenshot_dir: Optional[str] = None,
 ) -> None:
-    """Stage 3: Hook file chooser, dispatch video payload, and handle 2FA challenge if presented."""
     logger.info("Uploading video file: %s...", video_path)
-    page.wait_for_selector('input[type="file"]', state="attached", timeout=30000)
+    try:
+        page.wait_for_selector('input[type="file"]', state="attached", timeout=8000)
+    except Exception:
+        create_btn = page.locator('#create-icon, button:has-text("Crear"), [aria-label*="Crear"], ytcp-button#create-icon').first
+        if int(create_btn.count()) > 0:
+            create_btn.click()
+            page.wait_for_timeout(1500)
+            upload_item = page.locator('text=Subir vídeos, text=Subir videos, #text-item-0').first
+            if int(upload_item.count()) > 0:
+                upload_item.click()
+                page.wait_for_timeout(2000)
+        page.wait_for_selector('input[type="file"]', state="attached", timeout=25000)
     file_input = page.locator('input[type="file"]').first
     file_input.set_input_files(video_path)
     page.wait_for_timeout(5000)
@@ -768,6 +784,25 @@ def upload_video_via_playwright(
                     "verified": bool(video_id),
                 }
             except Exception as upload_exc:
+                err_img = f"{screenshot_dir}/upload_failure_{int(time.time())}.png"
+                try:
+                    if page and not page.is_closed():
+                        page.screenshot(path=err_img)
+                except Exception:
+                    err_img = None
+
+                if err_img and os.path.isfile(err_img):
+                    try:
+                        from src.observability.alerts import send_operational_alert
+                        send_operational_alert(
+                            f"Fallo de Subida YouTube ({channel})",
+                            f"Error: {upload_exc}\nCanal: {channel}\nURL: {getattr(page, 'url', 'desconocida')}",
+                            photo_path=err_img,
+                            force=True,
+                        )
+                    except Exception as alert_err:
+                        logger.warning("No se pudo despachar captura a Telegram: %s", alert_err)
+
                 if not video_published and not isinstance(upload_exc, PlaywrightPrePublishError):
                     raise PlaywrightPrePublishError(f"Playwright pre-publish failed: {upload_exc}") from upload_exc
                 raise

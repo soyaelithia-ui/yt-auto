@@ -27,8 +27,8 @@ Restart=always
 RestartSec=15
 Nice=10
 IOSchedulingClass=idle
-CPUQuota=150%
-MemoryMax=6G
+CPUQuota=200%
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target
