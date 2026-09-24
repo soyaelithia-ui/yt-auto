@@ -1,9 +1,16 @@
-# Multi-Channel Lanes and Smoke Test Specification
+# Delta for Multi-Channel Lanes and Smoke Test
 
-## Purpose
-Defines 3-channel lane parity across 9:16 Shorts and 16:9 Longform formats, registers canonical SciFi channel contracts, verifies stream-copy composition via smoke tests, and validates daemon readiness.
+## RENAMED Requirements
 
-## Requirements
+### Requirement: Canonical SciFi Channel and Safe Enum Resolution -> Canonical Thematic Channels and Bidirectional Alias Resolution
+
+(Reason: Generalize SciFi enum resolution to all canonical thematic channels and bidirectional aliases)
+
+### Requirement: Six-Lane Configuration Parity -> Canonical Thematic Six-Lane Configuration Parity
+
+(Reason: Canonicalize six-lane IDs to thematic prefixes)
+
+## MODIFIED Requirements
 
 ### Requirement: Canonical Thematic Channels and Bidirectional Alias Resolution
 (Previously: Defined `CanonicalChannel` with `MOKU = "moku"`, `AELITHIA = "aelithia"`, and `SCIFI = "scifi"`)
@@ -27,19 +34,6 @@ The system SHALL establish canonical thematic identifiers `HORROR = "horror"`, `
 - **Given** a lane profile or raw channel dictionary where `channel` is either a `CanonicalChannel` enum or a string
 - **When** `parse_lane` or `resolve_voice_profile_for_lane` accesses the channel
 - **Then** it SHALL extract string identifiers safely without raising `AttributeError`.
-
-### Requirement: SciFi Story Type and Voice Profile Registration
-The system SHALL include `"scifi"` in `ALLOWED_STORY_TYPES` in `src/core/lanes.py` and register voice profile `scifi_documentary_es` in `config/voice_profiles.json` using approved Edge-TTS neural voices at 0% speed.
-
-#### Scenario: SciFi story type validation
-- GIVEN a lane configuration with `"story_type": "scifi"`
-- WHEN `parse_lane` validates the lane definition
-- THEN validation SHALL pass without raising `ValueError`.
-
-#### Scenario: SciFi voice profile lookup
-- GIVEN a lane requesting profile `"scifi_documentary_es"`
-- WHEN `resolve_voice_profile_for_lane` queries voice profiles
-- THEN it SHALL return approved documentary voices complying with -14 LUFS loudness and ducking rules.
 
 ### Requirement: Canonical Thematic Six-Lane Configuration Parity
 (Previously: Defined six production lanes with fantasy prefix IDs `moku-scp-shorts`, `moku-horror-long`, `aelithia-drama-shorts`, `aelithia-aita-long`, `scifi-singularity-shorts`, `scifi-singularity-long`)
@@ -71,19 +65,6 @@ The lane registry SHALL register bidirectional alias resolution (`LANE_ALIASES`)
 - **When** `resolve_lane_for_run` executes
 - **Then** it SHALL raise `ValueError` listing valid canonical lane IDs.
 
-### Requirement: SciFi Narrative Generation and Curation Rules
-The system SHALL implement SciFi narrative generators in `src/templates/narratives.py` and register lane curation profiles in `src/agents/script_curator.py` for `scifi-singularity-shorts`, `scifi-singularity-long`, and `aelithia-drama-shorts`.
-
-#### Scenario: SciFi narrative routing
-- GIVEN channel `scifi` and mode `short` or `longform`
-- WHEN `build_channel_narrative` executes
-- THEN it SHALL invoke the dedicated SciFi narrative builder.
-
-#### Scenario: Lane curation configuration lookup
-- GIVEN lane `scifi-singularity-shorts` or `aelithia-drama-shorts`
-- WHEN `LANE_CURATION_CONFIGS` is queried
-- THEN it SHALL return dramatic roles and scene duration bounds matching the lane.
-
 ### Requirement: End-to-End Generate-Only Smoke Test
 (Previously: Verified stream-copy video generation using legacy lane IDs)
 
@@ -99,18 +80,8 @@ The system SHALL execute offline video generation across all six canonical thema
 - **When** media generation runs in `--generate-only` mode
 - **Then** the system SHALL resolve the alias to `horror-horror-long` and produce the target MP4 file cleanly.
 
-### Requirement: Production Supervisor Daemon Readiness
-`deploy/ctl.sh` SHALL manage `yt-lanes-daemon` and `yt-review-bot` workers, enforcing singleton locks and reporting active operational status.
+## ADDED Requirements
 
-#### Scenario: Supervisor daemon lifecycle
-- GIVEN the operator executes `./deploy/ctl.sh start all`
-- WHEN supervisor sessions start
-- THEN `./deploy/ctl.sh status` SHALL report active status with valid PIDs.
-
-#### Scenario: Singleton lock protection
-- GIVEN an active daemon holding the scheduler lock
-- WHEN a second process attempts startup
-- THEN the second process SHALL exit cleanly without state corruption.
 ### Requirement: Parameter Signature Sanitization and Dynamic Manifest Defaults
 Public function signatures, CLI entrypoints, and manifest models in `src/scene_manifest.py`, `src/daemon.py`, and `src/core/lanes.py` SHALL NOT default to fantasy channel names (`"moku"`). Default channel parameters MUST specify canonical `"horror"` or resolve dynamically based on the requested lane or context. Scene manifest defaults SHALL derive channel stamp overlays dynamically or default to empty/canonical stamps, removing `stamp_text="[MOKU]"`.
 

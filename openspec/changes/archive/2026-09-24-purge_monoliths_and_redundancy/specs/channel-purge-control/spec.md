@@ -1,9 +1,12 @@
-# Specification: Channel Purge Control
+# Delta for Channel Purge Control
 
-## Capability Overview
-The `channel-purge-control` capability provides interactive and programmatic mechanisms to inspect, audit, and safely delete YouTube video catalogs associated with managed channels while preventing unauthorized cross-channel deletion and API quota exhaustion.
+## RENAMED Requirements
 
-## Requirements
+### Requirement: Dry-Run Catalog Inspection -> Dry-Run Catalog Inspection with Canonical Channel Default
+
+(Reason: Standardize default target channel parameter to canonical horror)
+
+## MODIFIED Requirements
 
 ### Requirement: Dry-Run Catalog Inspection with Canonical Channel Default
 (Previously: Defaulted candidate target channel to `"moku"` in CLI arguments and inspection examples)
@@ -33,40 +36,6 @@ The purge control tool MUST standardize its default target channel parameter to 
 - **Given** an invalid channel identifier (e.g. `--channel unknown_channel`)
 - **When** `canonical_channel()` resolution is attempted
 - **Then** the system MUST raise `ValueError` listing valid canonical channels and accepted aliases.
-
-### Requirement: Interactive Confirmation Safeguard and Autonomous Prune Override
-The purge control tool MUST require explicit affirmative user confirmation before initiating non-dry-run video deletions, unless an explicit `--force`, `--non-interactive`, or autonomous criteria-based pruning execution mode is active with all safety bounds verified.
-(Previously: Required interactive "DELETE" confirmation unless an explicit `--force` or `--non-interactive` override flag was supplied)
-
-#### Scenario: User confirms batch deletion interactively (Happy Path)
-- **Given** the purge CLI is executed in live execution mode without `--force`
-- **When** the tool prompts for confirmation and the user inputs `"DELETE"`
-- **Then** the system MUST proceed with the scheduled batch deletion sequence.
-
-#### Scenario: User rejects or provides invalid confirmation input (Edge Case)
-- **Given** the purge CLI prompts for confirmation before deleting 10 videos
-- **When** the user inputs `"no"`, an empty string, or any string other than the required confirmation token
-- **Then** the purge process MUST immediately abort execution
-- **And** no video deletion API requests MUST be dispatched.
-
-#### Scenario: Autonomous criteria-based pruning executes headlessly without terminal prompt (Happy Path)
-- **Given** the daemon or CLI running in autonomous criteria-prune mode with live credentials
-- **When** eligible underperforming videos meeting grace period and daily ceiling are scheduled for deletion
-- **Then** the deletion MUST proceed without blocking on `sys.stdin` or `input()` prompts.
-### Requirement: Paced Batch Deletion with Quota Safeguards
-The batch deletion engine MUST enforce rate-limiting pacing intervals between consecutive delete requests and MUST gracefully handle API rate limit responses (HTTP 429 or quota exceeded).
-
-#### Scenario: Paced batch deletion of multiple videos (Happy Path)
-- **Given** a verified candidate list of 5 videos to delete
-- **When** batch deletion executes
-- **Then** each video deletion MUST be separated by a configurable delay interval ($\ge 0.5\text{s}$)
-- **And** each deletion event MUST be logged with video ID and timestamp.
-
-#### Scenario: API quota exhaustion during batch deletion (Edge Case)
-- **Given** a batch deletion in progress on item 3 of 10
-- **When** YouTube Data API returns a quota exceeded error or HTTP 429
-- **Then** the purge engine MUST stop further deletion attempts
-- **And** the engine MUST generate a failure report indicating 2 successes, 1 failure, and 7 skipped items.
 
 ### Requirement: Channel Ownership Validation and Failure Reporting
 (Previously: Validated channel ownership against legacy channel configurations)
@@ -113,13 +82,3 @@ The pruning engine MUST evaluate candidates for automated deletion using strict 
 - **Then** the video MUST be deleted via YouTube Data API `videos().delete()`
 - **And** the database record MUST be marked `"PURGED_UNDERPERFORMING"`
 - **And** the daily canonical channel prune counter MUST be incremented by 1.
-### Requirement: Telegram Operational Audit Alert for Pruned Videos
-Upon completing an automated pruning sweep, the engine MUST dispatch a structured operational alert to the Telegram notification bus documenting the target channel, total evaluated videos, count of pruned videos, and specific video IDs/titles/scores that were removed.
-
-#### Scenario: Pruning action notifies Telegram channel (Happy Path)
-- **Given** a completed pruning sweep that safely removed 1 underperforming video
-- **When** post-prune notifications execute
-- **Then** a Telegram message MUST be sent containing channel name, video title, ID, calculated score, and reason `"Low 24h Engagement"`.
-
----
-

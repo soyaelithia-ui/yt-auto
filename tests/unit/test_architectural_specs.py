@@ -33,7 +33,6 @@ class TestArchitecturalDocumentation:
         "FLUJO_VIDEOS.md",
         "INTEGRACIONES_Y_SERVICIOS.md",
         "PLAN_MAESTRO_PIPELINE_VISUAL.md",
-        "PLAN_ARQUITECTURA_V3_1.md",
     ]
 
     @pytest.mark.parametrize("doc_filename", EXPECTED_DOCS)
@@ -76,6 +75,17 @@ class TestArchitecturalDocumentation:
         ]
         for sec in mandatory_sections:
             assert sec.lower() in content.lower(), f"Missing section '{sec}' in PLAN_MAESTRO_PIPELINE_VISUAL.md"
+
+    def test_plan_arquitectura_v3_1_is_purged(self):
+        """Assert docs/PLAN_ARQUITECTURA_V3_1.md is permanently purged and absent from EXPECTED_DOCS."""
+        purged_path = REPO_ROOT / "docs" / "PLAN_ARQUITECTURA_V3_1.md"
+        assert not purged_path.is_file(), (
+            "docs/PLAN_ARQUITECTURA_V3_1.md must be permanently deleted per Zero Resurrected Docs"
+        )
+        assert "PLAN_ARQUITECTURA_V3_1.md" not in self.EXPECTED_DOCS, (
+            "PLAN_ARQUITECTURA_V3_1.md must be absent from EXPECTED_DOCS"
+        )
+
 
 
 # ---------------------------------------------------------------------------

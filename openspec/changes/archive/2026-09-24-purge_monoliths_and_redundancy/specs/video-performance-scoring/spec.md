@@ -1,9 +1,12 @@
-# Specification: Video Performance Scoring & Song Attribution
+# Delta for Video Performance Scoring & Song Attribution
 
-## Purpose
-The `video-performance-scoring` capability computes normalized empirical success scores ($0-100$) for published YouTube Shorts based on real-world audience metrics (views, like ratio, comment velocity, and estimated retention). It automatically attributes empirical performance to the underlying background music tracks and physical assets, providing sub-millisecond query capabilities for AI agents and the autonomous pipeline.
+## RENAMED Requirements
 
-## Requirements
+### Requirement: Normalized Empirical Success Score Calculation -> Normalized Empirical Success Score Calculation Across Modular Architecture
+
+(Reason: Reflect modularized scoring architecture)
+
+## MODIFIED Requirements
 
 ### Requirement: Normalized Empirical Success Score Calculation Across Modular Architecture
 (Previously: Executed within monolithic `src/core/scoring.py` coupling regex heuristics, LLM prompts, and SQLite persistence)
@@ -34,20 +37,6 @@ Across this modular architecture, the scoring engine MUST calculate composite em
 - **Then** it MUST fall back deterministically to rule-based heuristics
 - **And** the returned `StoryScoringVerdict` MUST contain a valid score in $[0.0, 100.0]$ with `semantic_evaluated=False`.
 
-### Requirement: Background Music and Asset Attribution
-The scoring subsystem MUST extract the background audio track identifier (`used_resources.music`) from the publication record and attribute the computed video success score to that track. The subsystem MUST provide aggregated performance statistics (total uses, average score, top-performing video ID) for each music track across the channel catalog.
-
-#### Scenario: Song attribution tracks performance across multiple videos (Happy Path)
-- **Given** a music track `"assets/audio/music/dark_ambient_01.mp3"` used in 3 published videos with scores 60.0, 80.0, and 70.0
-- **When** the music attribution aggregator is queried for the channel
-- **Then** the average success score for `"dark_ambient_01.mp3"` MUST be $70.0$
-- **And** the usage count MUST be reported as 3.
-
-#### Scenario: Video record without music track metadata is handled gracefully (Edge Case)
-- **Given** an older publication record where `used_resources` is null or does not contain a `"music"` key
-- **When** attribution aggregation runs
-- **Then** the aggregator MUST classify the track as `"unknown"` or skip track attribution without throwing errors.
-
 ### Requirement: Microsecond Performance Indexing and Sub-Millisecond Lookups
 (Previously: Maintained SQLite indices on `publications` with $< 5\text{ ms}$ query latency)
 
@@ -63,6 +52,8 @@ The decomposition of `src/core/scoring.py` and separation of catalog asset sync 
 - **Given** a 64-character SHA256 hash of a rendered video file
 - **When** `get_video_by_sha256()` is invoked
 - **Then** the system MUST retrieve the corresponding `PublishedVideoRecord` in $< 2\text{ ms}$.
+
+## ADDED Requirements
 
 ### Requirement: Modular Scoring Data Contract and Granularity Enforcement
 All inter-module communication between `models.py`, `heuristics.py`, `semantic.py`, and `scoring.py` MUST use strongly-typed contracts (`@dataclass(slots=True)` or Pydantic models). Each individual function across these modules MUST adhere to the ~100 executable line budget mandated by AGENTS.md Rule 8.1. Untyped dictionaries (`dict[str, Any]`) are strictly prohibited across modular scoring interfaces.

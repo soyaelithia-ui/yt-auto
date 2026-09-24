@@ -23,7 +23,6 @@
 | Documento | Ámbito y Contenido Clave |
 |---|---|
 | [ARQUITECTURA](ARQUITECTURA.md) | Diseño multiformato (Shorts 9:16 y Longform 16:9), persistencia SQLite WAL y máquina de estados. |
-| [PLAN_ARQUITECTURA_V3_1](PLAN_ARQUITECTURA_V3_1.md) | Plan maestro de arquitectura v3.1: Resiliencia de sesiones, reaper de PIDs, reconciliador 2PC y audio en RAM. |
 | [FLUJO_VIDEOS](FLUJO_VIDEOS.md) | Las 13 etapas canónicas de producción, desde la extracción hasta la publicación. |
 | [MULTICHANNEL_PIPELINE](MULTICHANNEL_PIPELINE.md) | Especificaciones visuales, márgenes y renderizado zero-copy. |
 | [CANALES](CANALES.md) | Arquitectura modular de perfiles de canal (`config/channels/`), variables genéricas y adición de nuevos canales. |
