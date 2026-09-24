@@ -1,7 +1,8 @@
 """
-src/core/profiling.py - Diagnostics, Profiling & Telemetry Facade.
+src/core/profiling - Diagnostics, Profiling & Telemetry Subpackage.
 
-Backward-compatible facade delegating directly to the modular `src.core.profiling` subpackage.
+Exposes canonical production stages, telemetry models, PhaseTimer context manager,
+PipelineProfiler aggregator, and benchmark runner.
 """
 from __future__ import annotations
 
