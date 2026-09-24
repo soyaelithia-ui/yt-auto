@@ -31,7 +31,6 @@ from src.core.catalog_sync import (
     resolve_loop_file_path,
     sync_catalog_from_assets as sync_catalog_from_assets_func,
 )
-from src.core.repository.migrations import validate_db_path
 from src.log import get_logger
 
 logger = get_logger("loop_catalog")
