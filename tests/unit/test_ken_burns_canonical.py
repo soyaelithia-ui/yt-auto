@@ -141,3 +141,33 @@ def test_45s_still_render_emits_multiple_zoompan_segments(tmp_path: Path, monkey
     assert "concat=n=" in joined
     libx264_cmds = [c for c in seen["cmds"] if "libx264" in c]
     assert len(libx264_cmds) == 1
+
+
+def test_direct_ken_burns_module_imports():
+    from src.media.ken_burns import (
+        KEN_BURNS_FPS,
+        KEN_BURNS_MIN_DURATION_SEC,
+        KEN_BURNS_SEGMENT_MAX_SEC,
+        KEN_BURNS_SPLIT_THRESHOLD_SEC,
+        KEN_BURNS_ZOOM_END,
+        KEN_BURNS_ZOOM_START,
+        MAX_REENCODE_SHOTS_PER_MIN,
+        build_ken_burns_zoompan_filter,
+        canonical_ken_burns_params,
+        max_reencoded_shots,
+        plan_ken_burns_still_segments,
+    )
+    assert KEN_BURNS_FPS == 30
+    assert KEN_BURNS_ZOOM_START == 1.00
+    assert KEN_BURNS_ZOOM_END == 1.10
+    filt = build_ken_burns_zoompan_filter(
+        width=1920,
+        height=1080,
+        fps=30,
+        total_frames=60,
+        zoom_start=1.0,
+        zoom_end=1.1,
+        pan_direction="center_to_top",
+    )
+    assert "zoompan=" in filt
+

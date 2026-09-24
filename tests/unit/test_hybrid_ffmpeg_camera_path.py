@@ -337,3 +337,23 @@ def test_motion_loop_stream_copy_skips_zoompan(tmp_path: Path, monkeypatch):
     assert "zoompan=" not in joined
     assert "-c:v" in seen["cmds"][0] and "copy" in seen["cmds"][0]
     assert not any("libx264" in c for c in seen["cmds"])
+
+
+def test_direct_overlays_module_imports():
+    from src.media.overlays import (
+        ATMOSPHERIC_OVERLAY_OPACITY,
+        ATMOSPHERIC_OVERLAY_OPACITY_MAX,
+        ATMOSPHERIC_OVERLAY_OPACITY_MIN,
+        clamp_atmospheric_overlay_opacity,
+        resolve_hybrid_overlay_asset,
+        is_motion_loop_path,
+        resolve_hybrid_motion_loop,
+        _hybrid_overlay_search_roots,
+    )
+    assert ATMOSPHERIC_OVERLAY_OPACITY_MIN == 0.15
+    assert ATMOSPHERIC_OVERLAY_OPACITY_MAX == 0.35
+    assert clamp_atmospheric_overlay_opacity(0.01) == 0.15
+    assert clamp_atmospheric_overlay_opacity(0.99) == 0.35
+    roots = _hybrid_overlay_search_roots("particles")
+    assert any("assets/overlays" in str(r) for r in roots)
+
