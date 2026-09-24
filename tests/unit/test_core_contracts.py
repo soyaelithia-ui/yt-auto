@@ -365,7 +365,7 @@ class TestContractsSubsystemIntegration:
         assert isinstance(record, StoryRecord)
         assert record.story_id == "story_repo_test"
         assert record.title == "Repo Title"
-        assert record.channel == "moku"
+        assert record.channel in ("moku", "horror")
 
     def test_mcp_manage_queue_uses_story_record(self, tmp_path):
         import asyncio

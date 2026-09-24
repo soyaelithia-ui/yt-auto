@@ -30,7 +30,7 @@ def register_system_preflight_tool(server: MCPServer) -> None:
     async def system_preflight(
         channel: Annotated[
             str,
-            Field(description="Target channel identifier ('moku', 'aelithia', 'scifi', or 'all')"),
+            Field(description="Target channel identifier ('horror', 'drama', 'scifi', or 'all')"),
         ] = "all",
         require_publish: Annotated[
             bool,

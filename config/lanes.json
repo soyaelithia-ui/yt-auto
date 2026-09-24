@@ -6,9 +6,9 @@
   },
   "lanes": [
     {
-      "id": "moku-scp-shorts",
+      "id": "horror-scp-shorts",
       "enabled": true,
-      "channel": "moku",
+      "channel": "horror",
       "story_type": "scp",
       "orientation": "vertical",
       "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },
@@ -41,9 +41,9 @@
       }
     },
     {
-      "id": "moku-horror-long",
+      "id": "horror-horror-long",
       "enabled": true,
-      "channel": "moku",
+      "channel": "horror",
       "story_type": "horror",
       "orientation": "horizontal",
       "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
@@ -75,9 +75,9 @@
       }
     },
     {
-      "id": "aelithia-aita-long",
+      "id": "drama-aita-long",
       "enabled": true,
-      "channel": "aelithia",
+      "channel": "drama",
       "story_type": "reddit_aita",
       "orientation": "horizontal",
       "duration": { "min_sec": 600, "target_sec": 600, "max_sec": 1800 },
@@ -114,9 +114,9 @@
       }
     },
     {
-      "id": "aelithia-drama-shorts",
+      "id": "drama-drama-shorts",
       "enabled": true,
-      "channel": "aelithia",
+      "channel": "drama",
       "story_type": "reddit_aita",
       "orientation": "vertical",
       "duration": { "min_sec": 60, "target_sec": 90, "max_sec": 180 },

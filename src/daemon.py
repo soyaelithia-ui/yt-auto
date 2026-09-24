@@ -48,7 +48,7 @@ def evaluate_script_simhash(
     min_hamming_distance: int = 4,
     *,
     repository: Any = None,
-    channel: str = "moku",
+    channel: str = "horror",
 ) -> bool:
     """Returns True if candidate text is sufficiently distinct (Hamming >= min_hamming_distance) against history."""
     candidate_hash = compute_simhash_64(candidate_text)
@@ -142,18 +142,25 @@ def _startup_incident_check(
 
 def _friendly_name(identifier: str) -> str:
     name_map = {
-        "moku": "Expedientes de Terror",
         "horror": "Expedientes de Terror",
+        "moku": "Expedientes de Terror",
+        "horror-scp-shorts": "Expedientes de Terror (Shorts)",
+        "horror-horror-long": "Expedientes de Terror (Largos)",
         "moku-scp-shorts": "Expedientes de Terror (Shorts)",
         "moku-horror-long": "Expedientes de Terror (Largos)",
         "horror-long": "Expedientes de Terror (Largos)",
         "horror-shorts": "Expedientes de Terror (Shorts)",
-        "aelithia": "Dilemas Morales",
         "drama": "Dilemas Morales",
+        "aelithia": "Dilemas Morales",
+        "drama-drama-shorts": "Dilemas Morales (Shorts)",
+        "drama-aita-long": "Dilemas Morales (Largos)",
         "aelithia-aita-long": "Dilemas Morales (Largos)",
         "aelithia-drama-shorts": "Dilemas Morales (Shorts)",
         "drama-long": "Dilemas Morales (Largos)",
         "drama-shorts": "Dilemas Morales (Shorts)",
+        "scifi": "Crónicas de la Singularidad",
+        "scifi-singularity-shorts": "Crónicas de la Singularidad (Shorts)",
+        "scifi-singularity-long": "Crónicas de la Singularidad (Largos)",
     }
     return name_map.get(str(identifier).lower(), str(identifier))
 
@@ -200,7 +207,7 @@ def _preflight_disk_or_pause(
 
 
 def run_pipeline_once(
-    channel: str = "moku",
+    channel: str = "horror",
     db_path: str | None = None,
     generate_only: bool = False,
     story_id: str | None = None,
@@ -214,7 +221,7 @@ def run_pipeline_once(
     work_dir = None
     try:
         res = safe_run(
-            channel=canonical_channel(channel or "moku").value,
+            channel=canonical_channel(channel or "horror").value,
             db_path=db_path,
             generate_only=generate_only,
             story_id=story_id,
@@ -651,7 +658,7 @@ def _run_24h_maintenance_sweep(
             else [channel]
         )
         if not channels_to_process:
-            channels_to_process = ["moku", "aelithia"]
+            channels_to_process = ["horror", "drama"]
 
         scoring_results = {}
         prune_results = {}

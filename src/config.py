@@ -209,39 +209,46 @@ def _resolve_dynamic_channel(key: str | CanonicalChannel) -> ChannelSettings:
     from src.core.channel_profile import ChannelProfileRegistry
     profile = ChannelProfileRegistry.get_channel(cid)
     prefix = cid.upper()
+    prefixes = [cid.upper()] + [a.upper() for a in profile.aliases]
     active_channel_env = os.environ.get("CHANNEL_KEY", "").strip().lower()
     use_generic_env = (active_channel_env == cid or not active_channel_env)
 
-    handle = (
-        os.environ.get(f"{prefix}_HANDLE")
-        or (os.environ.get("CHANNEL_HANDLE") if use_generic_env and "CHANNEL_HANDLE" in os.environ else None)
-        or profile.editorial.handle
-    )
+    def _get_cfg_env(suffix: str, generic_var: Optional[str] = None) -> Optional[str]:
+        for pfx in prefixes:
+            val = os.environ.get(f"{pfx}_{suffix}")
+            if val is not None and val.strip():
+                return val.strip()
+        if generic_var and use_generic_env:
+            val = os.environ.get(generic_var)
+            if val is not None and val.strip():
+                return val.strip()
+        return None
+
+    handle = _get_cfg_env("HANDLE", "CHANNEL_HANDLE") or profile.editorial.handle
     public_name = (
-        os.environ.get(f"{prefix}_NAME")
-        or os.environ.get(f"{prefix}_PUBLIC_NAME")
-        or (os.environ.get("CHANNEL_NAME") if use_generic_env and "CHANNEL_NAME" in os.environ else None)
+        _get_cfg_env("NAME", "CHANNEL_NAME")
+        or _get_cfg_env("PUBLIC_NAME")
         or profile.editorial.public_name
     )
-    voice = os.environ.get(f"{prefix}_TTS_VOICE") or profile.audio.default_voice_profile
-    tts_provider = os.environ.get(f"{prefix}_TTS_PROVIDER") or profile.audio.default_tts_provider
+    voice = _get_cfg_env("TTS_VOICE", "CHANNEL_TTS_VOICE") or profile.audio.default_voice_profile
+    tts_provider = _get_cfg_env("TTS_PROVIDER", "CHANNEL_TTS_PROVIDER") or profile.audio.default_tts_provider
+    cookies_override = _get_cfg_env("COOKIES_PATH", "CHANNEL_COOKIES_PATH") or (
+        os.environ.get("COOKIES_PATH") if cid in ("moku", "horror") and "COOKIES_PATH" in os.environ else None
+    )
     cookies_path = (
-        _env_path(f"{prefix}_COOKIES_PATH", profile.auth.cookies_path)
-        if f"{prefix}_COOKIES_PATH" in os.environ
-        else (
-            _env_path("COOKIES_PATH", profile.auth.cookies_path)
-            if cid == "moku" and "COOKIES_PATH" in os.environ
-            else profile.auth.cookies_path
-        )
+        _env_path(cookies_override, profile.auth.cookies_path)
+        if cookies_override
+        else profile.auth.cookies_path
     )
     if not cookies_path.exists() and "SECRETS_DIR" in os.environ:
         cand = Path(os.environ["SECRETS_DIR"]) / cookies_path.name
         if cand.exists():
             cookies_path = cand
 
+    token_override = _get_cfg_env("YOUTUBE_TOKEN_PATH", "CHANNEL_YOUTUBE_TOKEN_PATH")
     youtube_token_path = (
-        _env_path(f"{prefix}_YOUTUBE_TOKEN_PATH", profile.auth.youtube_token_path)
-        if f"{prefix}_YOUTUBE_TOKEN_PATH" in os.environ
+        _env_path(token_override, profile.auth.youtube_token_path)
+        if token_override
         else profile.auth.youtube_token_path
     )
     if not youtube_token_path.exists() and "SECRETS_DIR" in os.environ:
@@ -253,10 +260,10 @@ def _resolve_dynamic_channel(key: str | CanonicalChannel) -> ChannelSettings:
             if cand_alt.exists():
                 youtube_token_path = cand_alt
     expected_channel_id = (
-        os.environ.get(f"{prefix}_YOUTUBE_CHANNEL_ID")
+        _get_cfg_env("YOUTUBE_CHANNEL_ID", "CHANNEL_YOUTUBE_CHANNEL_ID")
         or profile.auth.expected_youtube_channel_id
     ).strip()
-    source_feed = os.environ.get(f"{prefix}_SOURCE_FEED") or profile.auth.source_feed
+    source_feed = _get_cfg_env("SOURCE_FEED", "CHANNEL_SOURCE_FEED") or profile.auth.source_feed
 
     return ChannelSettings(
         key=CanonicalChannel(cid) if cid in [c.value for c in CanonicalChannel] else cid,

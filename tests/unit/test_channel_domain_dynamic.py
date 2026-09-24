@@ -11,18 +11,18 @@ from src.config import SETTINGS, ChannelSettings
 
 
 def test_canonical_channel_legacy_channels():
-    assert canonical_channel("moku") == "moku"
-    assert canonical_channel("aelithia") == "aelithia"
-    assert canonical_channel(CanonicalChannel.MOKU) == "moku"
-    assert canonical_channel(CanonicalChannel.AELITHIA) == "aelithia"
+    assert canonical_channel("moku") == CanonicalChannel.HORROR
+    assert canonical_channel("aelithia") == CanonicalChannel.DRAMA
+    assert canonical_channel(CanonicalChannel.MOKU) == CanonicalChannel.HORROR
+    assert canonical_channel(CanonicalChannel.AELITHIA) == CanonicalChannel.DRAMA
 
 
 def test_canonical_channel_legacy_aliases():
-    assert canonical_channel("terror") == "moku"
-    assert canonical_channel("scp") == "moku"
-    assert canonical_channel("mokuredit") == "moku"
-    assert canonical_channel("aita") == "aelithia"
-    assert canonical_channel("soy_el_malo") == "aelithia"
+    assert canonical_channel("terror") == CanonicalChannel.HORROR
+    assert canonical_channel("scp") == CanonicalChannel.HORROR
+    assert canonical_channel("mokuredit") == CanonicalChannel.HORROR
+    assert canonical_channel("aita") == CanonicalChannel.DRAMA
+    assert canonical_channel("soy_el_malo") == CanonicalChannel.DRAMA
 
 
 def test_canonical_channel_dynamic_scifi():
@@ -127,4 +127,24 @@ def test_channel_profile_registry_audio_and_auth_env_overrides(monkeypatch):
     assert prof.auth.source_feed == "r/custom_feed"
 
     ChannelProfileRegistry._ensure_loaded(force_reload=True)
+
+
+def test_canonical_thematic_channel_enums_and_aliases():
+    """CanonicalChannel defines canonical thematic members (HORROR, DRAMA, SCIFI)
+    and backward-compatible legacy aliases (MOKU, AELITHIA)."""
+    assert CanonicalChannel.HORROR.value == "horror"
+    assert CanonicalChannel.DRAMA.value == "drama"
+    assert CanonicalChannel.SCIFI.value == "scifi"
+    assert CanonicalChannel.MOKU == CanonicalChannel.HORROR
+    assert CanonicalChannel.AELITHIA == CanonicalChannel.DRAMA
+
+
+def test_canonical_channel_bidirectional_resolution():
+    """Bidirectional resolution maps both canonical and legacy identifiers cleanly."""
+    assert canonical_channel("horror") == CanonicalChannel.HORROR
+    assert canonical_channel("moku") == CanonicalChannel.HORROR
+    assert canonical_channel("drama") == CanonicalChannel.DRAMA
+    assert canonical_channel("aelithia") == CanonicalChannel.DRAMA
+    assert canonical_channel("scifi") == CanonicalChannel.SCIFI
+
 

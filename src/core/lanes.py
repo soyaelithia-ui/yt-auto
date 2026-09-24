@@ -35,23 +35,23 @@ ALLOWED_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"reddit", "scp_wiki"})
 MIN_GAP_SECONDS = 60
 
 LANE_ALIASES: Final[dict[str, str]] = {
-    # Thematic horror -> moku-scp-shorts / moku-horror-long
-    "horror-scp-shorts": "moku-scp-shorts",
-    "terror-scp-shorts": "moku-scp-shorts",
-    "scp-shorts": "moku-scp-shorts",
-    "horror-shorts": "moku-scp-shorts",
-    "horror-long": "moku-horror-long",
-    "horror-horror-long": "moku-horror-long",
-    "terror-long": "moku-horror-long",
-    "creepypasta-long": "moku-horror-long",
-    # Thematic drama -> aelithia-drama-shorts / aelithia-aita-long
-    "drama-shorts": "aelithia-drama-shorts",
-    "drama-drama-shorts": "aelithia-drama-shorts",
-    "relatos-shorts": "aelithia-drama-shorts",
-    "drama-aita-long": "aelithia-aita-long",
-    "drama-long": "aelithia-aita-long",
-    "aita-long": "aelithia-aita-long",
-    "relatos-long": "aelithia-aita-long",
+    # Legacy horror -> horror-scp-shorts / horror-horror-long
+    "moku-scp-shorts": "horror-scp-shorts",
+    "moku-horror-long": "horror-horror-long",
+    "terror-scp-shorts": "horror-scp-shorts",
+    "scp-shorts": "horror-scp-shorts",
+    "horror-shorts": "horror-scp-shorts",
+    "horror-long": "horror-horror-long",
+    "terror-long": "horror-horror-long",
+    "creepypasta-long": "horror-horror-long",
+    # Legacy drama -> drama-drama-shorts / drama-aita-long
+    "aelithia-drama-shorts": "drama-drama-shorts",
+    "aelithia-aita-long": "drama-aita-long",
+    "drama-shorts": "drama-drama-shorts",
+    "relatos-shorts": "drama-drama-shorts",
+    "drama-long": "drama-aita-long",
+    "aita-long": "drama-aita-long",
+    "relatos-long": "drama-aita-long",
     # Legacy aliases
     "scifi-chronicles-shorts": "scifi-singularity-shorts",
 }
@@ -60,8 +60,8 @@ LANE_ALIASES: Final[dict[str, str]] = {
 # config/lanes.json is missing or corrupt so the daemon never crashes on config.
 FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
     {
-        "id": "moku-scp-shorts",
-        "channel": "moku",
+        "id": "horror-scp-shorts",
+        "channel": "horror",
         "story_type": "scp",
         "orientation": "vertical",
         "duration": {"min_sec": 60, "target_sec": 150, "max_sec": 180},
@@ -78,8 +78,8 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "background_audio": {"enabled": True, "volume": 0.04, "mode": "auto", "theme": "scp"},
     },
     {
-        "id": "moku-horror-long",
-        "channel": "moku",
+        "id": "horror-horror-long",
+        "channel": "horror",
         "story_type": "horror",
         "orientation": "horizontal",
         "duration": {"min_sec": 600, "target_sec": 600, "max_sec": 1800},
@@ -97,8 +97,8 @@ FALLBACK_LANE_DOCUMENTS: Final[tuple[dict[str, Any], ...]] = (
         "background_audio": {"enabled": True, "volume": 0.04, "mode": "auto", "theme": "cosmic_horror"},
     },
     {
-        "id": "aelithia-aita-long",
-        "channel": "aelithia",
+        "id": "drama-aita-long",
+        "channel": "drama",
         "story_type": "reddit_aita",
         "orientation": "horizontal",
         "duration": {"min_sec": 600, "target_sec": 600, "max_sec": 1800},
@@ -564,7 +564,7 @@ def resolve_voice_profile_for_lane(
         if not profile_name:
             if lane.story_type == "scp":
                 profile_name = "scp_documentary_es"
-            elif ch_key == "aelithia" or lane.story_type == "reddit_aita":
+            elif ch_key in ("aelithia", "drama") or lane.story_type == "reddit_aita":
                 profile_name = "aelithia_reddit"
             elif ch_key == "scifi" or lane.story_type == "scifi":
                 profile_name = "scifi_documentary_es"
@@ -581,7 +581,7 @@ def resolve_voice_profile_for_lane(
                 )
             if "scp" in lane.lower():
                 profile_name = "scp_documentary_es"
-            elif "aelithia" in lane.lower() or "aita" in lane.lower():
+            elif any(k in lane.lower() for k in ("aelithia", "drama", "aita")):
                 profile_name = "aelithia_reddit"
             elif "scifi" in lane.lower() or "singularity" in lane.lower():
                 profile_name = "scifi_documentary_es"
@@ -593,7 +593,7 @@ def resolve_voice_profile_for_lane(
         ch_key = getattr(ch, "value", str(ch))
 
     if not profile_name:
-        if ch_key == "aelithia":
+        if ch_key in ("aelithia", "drama"):
             profile_name = "aelithia_reddit"
         elif ch_key == "scifi":
             profile_name = "scifi_documentary_es"
@@ -612,8 +612,11 @@ def resolve_voice_profile_for_lane(
         res["profile_name"] = profile_name
         return res
 
-    if ch_key == "aelithia":
-        fallback_voice = os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural")
+    if ch_key in ("aelithia", "drama"):
+        fallback_voice = (
+            os.environ.get("DRAMA_TTS_VOICE")
+            or os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural")
+        )
         return {
             "id": fallback_voice,
             "speed": "+6%",
@@ -622,7 +625,10 @@ def resolve_voice_profile_for_lane(
             "pauses": "conversational",
             "profile_name": profile_name,
         }
-    fallback_voice = os.environ.get("MOKU_TTS_VOICE", "es-ES-AlvaroNeural")
+    fallback_voice = (
+        os.environ.get("HORROR_TTS_VOICE")
+        or os.environ.get("MOKU_TTS_VOICE", "es-ES-AlvaroNeural")
+    )
     return {
         "id": fallback_voice,
         "speed": "+0%",

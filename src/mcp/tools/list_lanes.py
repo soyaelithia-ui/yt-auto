@@ -30,7 +30,7 @@ def register_list_lanes_tool(server: MCPServer) -> None:
     async def list_lanes(
         channel: Annotated[
             Optional[str],
-            Field(description="Filter by channel ('moku', 'aelithia', 'scifi', or None for all)"),
+            Field(description="Filter by channel ('horror', 'drama', 'scifi', or None for all)"),
         ] = None,
         include_paused: Annotated[
             bool,
