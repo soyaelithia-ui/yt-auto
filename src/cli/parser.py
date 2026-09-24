@@ -16,6 +16,7 @@ from src.cli.handlers import (
     handle_auth,
     handle_backup,
     handle_clean,
+    handle_collect_links,
     handle_daemon,
     handle_inventory,
     handle_lanes,
@@ -54,6 +55,7 @@ CANONICAL_SUBCOMMANDS = {
     "mcp",
     "sweep-24h",
     "prune-underperforming",
+    "collect-links",
 }
 
 
@@ -353,6 +355,8 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_sweep_24h(args, parser)
     if subcommand == "prune-underperforming":
         return handle_prune_underperforming(args, parser)
+    if subcommand == "collect-links":
+        return handle_collect_links(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

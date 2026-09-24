@@ -125,6 +125,12 @@ class PublishedVideoRecord:
     duration_sec: float = 0.0
     actual_success_score: float = 0.0
     music_track: str | None = None
+    comment_count: int = 0
+    view_count: int = 0
+    like_count: int = 0
+    comment_status: str = "none"
+    comment_error: str | None = None
+    pinned_comment: str | None = None
 
     @classmethod
     def from_row(cls, row: Any) -> PublishedVideoRecord:
@@ -171,6 +177,12 @@ class PublishedVideoRecord:
             duration_sec=float(_get("duration_sec", 0.0) or 0.0),
             actual_success_score=float(_get("actual_success_score", 0.0) or 0.0),
             music_track=_get("music_track"),
+            comment_count=int(_get("comment_count", 0) or 0),
+            view_count=int(_get("view_count", 0) or 0),
+            like_count=int(_get("like_count", 0) or 0),
+            comment_status=str(_get("comment_status", "none") or "none"),
+            comment_error=_get("comment_error"),
+            pinned_comment=_get("pinned_comment"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -205,6 +217,12 @@ def record_published_inventory(
     duration_sec: float = 0.0,
     actual_success_score: float = 0.0,
     music_track: str | None = None,
+    comment_count: int = 0,
+    view_count: int = 0,
+    like_count: int = 0,
+    comment_status: str = "none",
+    comment_error: str | None = None,
+    pinned_comment: str | None = None,
 ) -> PublishedVideoRecord:
     """Record or update an inventory entry atomically in SQLite with AI-ready metadata."""
     now_iso = verified_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -267,7 +285,9 @@ def record_published_inventory(
                         themes_json = ?, simhash = ?, full_script = ?,
                         predictive_success_score = ?, score_rationale = ?,
                         used_resources = ?, duration_sec = ?,
-                        actual_success_score = ?, music_track = ?
+                        actual_success_score = ?, music_track = ?,
+                        comment_count = ?, view_count = ?, like_count = ?,
+                        comment_status = ?, comment_error = ?, pinned_comment = ?
                     WHERE publication_id = ?
                     """,
                     (
@@ -279,6 +299,8 @@ def record_published_inventory(
                         predictive_success_score, score_rationale,
                         resources_json, duration_sec,
                         actual_success_score, resolved_music,
+                        int(comment_count), int(view_count), int(like_count),
+                        str(comment_status or "none"), comment_error, pinned_comment,
                         existing["publication_id"],
                     ),
                 )
@@ -294,7 +316,9 @@ def record_published_inventory(
                         themes_json, simhash, full_script,
                         predictive_success_score, score_rationale,
                         used_resources, duration_sec,
-                        actual_success_score, music_track
+                        actual_success_score, music_track,
+                        comment_count, view_count, like_count,
+                        comment_status, comment_error, pinned_comment
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, 1, ?,
@@ -303,7 +327,9 @@ def record_published_inventory(
                         ?, ?, ?,
                         ?, ?,
                         ?, ?,
-                        ?, ?
+                        ?, ?,
+                        ?, ?, ?,
+                        ?, ?, ?
                     )
                     """,
                     (
@@ -315,6 +341,8 @@ def record_published_inventory(
                         predictive_success_score, score_rationale,
                         resources_json, duration_sec,
                         actual_success_score, resolved_music,
+                        int(comment_count), int(view_count), int(like_count),
+                        str(comment_status or "none"), comment_error, pinned_comment,
                     ),
                 )
                 pub_id = cursor.lastrowid
@@ -354,6 +382,12 @@ def record_published_inventory(
         duration_sec=duration_sec,
         actual_success_score=actual_success_score,
         music_track=resolved_music,
+        comment_count=int(comment_count),
+        view_count=int(view_count),
+        like_count=int(like_count),
+        comment_status=str(comment_status or "none"),
+        comment_error=comment_error,
+        pinned_comment=pinned_comment,
     )
 
 

@@ -4,6 +4,7 @@ import pytest
 
 from src.analytics.scoring import (
     calculate_empirical_score,
+    classify_comment_level,
     get_top_performing_music_tracks,
     get_video_by_sha256,
     sync_and_score_channel_publications,
@@ -172,3 +173,22 @@ def test_sync_and_score_channel_publications_live_no_database_lock():
             assert len(res["items"]) == 1
             assert res["items"][0]["video_id"] == "vid-lock-test"
             assert res["items"][0]["score"] > 50.0
+
+
+def test_classify_comment_level():
+    # 0 comments -> "none"
+    assert classify_comment_level(0, 1000) == "none"
+    assert classify_comment_level(0, 0) == "none"
+
+    # low comments (< 6 and ratio < 3%)
+    assert classify_comment_level(2, 1000) == "low"
+    assert classify_comment_level(5, 500) == "low"
+
+    # moderate comments (6-30 comments, >= 0.5% ratio)
+    assert classify_comment_level(10, 1000) == "moderate"  # 1% ratio
+    assert classify_comment_level(6, 0) == "moderate"
+
+    # viral comments (> 30 comments or > 3% ratio)
+    assert classify_comment_level(35, 2000) == "viral"
+    assert classify_comment_level(5, 100) == "viral"  # 5% ratio > 3%
+

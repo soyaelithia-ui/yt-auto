@@ -70,6 +70,26 @@ def calculate_empirical_score(
     return round(max(0.0, min(100.0, composite)), 2)
 
 
+def classify_comment_level(comments: int, views: int = 0) -> str:
+    """
+    Classifies video audience comment engagement into discrete operational levels:
+    - 'none': 0 comments
+    - 'low': 1-5 comments or engagement ratio < 0.5%
+    - 'moderate': 6-30 comments with engagement ratio between 0.5% and 3.0%
+    - 'viral': >30 comments or engagement ratio > 3.0%
+    """
+    c = max(0, int(comments))
+    v = max(0, int(views))
+    if c == 0:
+        return "none"
+    ratio = (c / max(1.0, float(v))) * 100.0 if v > 0 else 0.0
+    if c > 30 or ratio > 3.0:
+        return "viral"
+    if c >= 6 and (v == 0 or ratio >= 0.5):
+        return "moderate"
+    return "low"
+
+
 def get_top_performing_music_tracks(
     channel: str | CanonicalChannel,
     db_path: str = DEFAULT_DB_PATH,
@@ -160,8 +180,8 @@ def sync_and_score_channel_publications(
         if not dry_run:
             with connect(db_path) as conn:
                 conn.execute(
-                    "UPDATE publications SET actual_success_score = ? WHERE publication_id = ?",
-                    (score, rec.publication_id),
+                    "UPDATE publications SET actual_success_score = ?, view_count = ?, like_count = ?, comment_count = ? WHERE publication_id = ?",
+                    (score, views, likes, comments, rec.publication_id),
                 )
                 conn.commit()
             syncer.sync_video_metrics(
@@ -172,6 +192,7 @@ def sync_and_score_channel_publications(
             )
 
         updated_count += 1
+        comment_level = classify_comment_level(comments, views)
         scored_items.append({
             "video_id": rec.video_id,
             "title": rec.title,
@@ -179,6 +200,7 @@ def sync_and_score_channel_publications(
             "views": views,
             "likes": likes,
             "comments": comments,
+            "comment_level": comment_level,
         })
 
     return {

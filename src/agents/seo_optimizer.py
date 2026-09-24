@@ -116,6 +116,9 @@ class SeoOptimizerAgent:
         topic: str,
         target_format: str = "short",
         niche: str = "General",
+        script_text: str = "",
+        synopsis: str = "",
+        channel_tone: str = "",
         use_agent: bool = True,
         fail_closed: bool = False,
     ) -> Dict[str, Any]:
@@ -151,10 +154,25 @@ class SeoOptimizerAgent:
                 except Exception:
                     recent_titles_prompt = ""
 
+                story_context_prompt = ""
+                if synopsis or script_text:
+                    excerpt = (script_text or "")[:800]
+                    story_context_prompt = (
+                        f"\n\nNARRATIVE SCRIPT CONTEXT:\n"
+                        f"Synopsis: {synopsis}\n"
+                        f"Excerpt: {excerpt}\n"
+                        f"Channel Tone: {channel_tone or niche}\n"
+                        "MANDATORY REQUIREMENT: Generate a completely bespoke, intelligent storytelling description "
+                        "reflecting the specific plot and moral dilemma/mystery above. "
+                        "DO NOT use generic boilerplate templates. Include an emotional hook, the synopsis, a natural CTA, "
+                        "and a debate-sparking pinned comment."
+                    )
+
                 task_prompt = (
                     f"Generate YouTube SEO metadata for topic '{topic}' in format '{fmt}' and niche '{niche}'.\n"
                     "Include 3 viral titles, description with timestamps, tags, hashtags, pinned comment, and thumbnail concepts."
                     f"{recent_titles_prompt}"
+                    f"{story_context_prompt}"
                 )
                 agent = ProgrammaticAgent(
                     system_instructions=SYSTEM_INSTRUCTIONS,
@@ -182,9 +200,16 @@ class SeoOptimizerAgent:
                     raise AIProviderChainExhausted(f"SeoOptimizerAgent fallo en optimizacion: {exc}") from exc
                 logger.warning("Antigravity SEO agent fallback to algorithmic engine: %s", exc)
 
-        return self._deterministic_seo(topic, fmt, niche)
+        return self._deterministic_seo(topic, fmt, niche, synopsis=synopsis, script_text=script_text)
 
-    def _deterministic_seo(self, topic: str, target_format: str, niche: str) -> Dict[str, Any]:
+    def _deterministic_seo(
+        self,
+        topic: str,
+        target_format: str,
+        niche: str,
+        synopsis: str = "",
+        script_text: str = "",
+    ) -> Dict[str, Any]:
         """Algorithmic viral formulas with zero API dependencies, ported from Temp-."""
         from src.branding import truncate_at_word_boundary
 
@@ -227,27 +252,29 @@ class SeoOptimizerAgent:
                     ]
             viral_titles = [truncate_at_word_boundary(t, 100) for t in viral_titles]
             selected_title = viral_titles[0]
+            narrative_body = (synopsis or f"Descubre los expedientes y la verdad sobre {truncate_at_word_boundary(clean_topic, 60)}.").strip()
             description = (
-                f"⚠️ ARCHIVO CLASIFICADO: Descubre los expedientes secretos sobre {truncate_at_word_boundary(clean_topic, 60)}.\n\n"
-                "📌 Suscríbete y activa la campana para más accesos autorizados de la Fundación SCP.\n\n"
+                f"⚠️ {selected_title}\n\n"
+                f"{narrative_body}\n\n"
+                "📌 Suscríbete y activa la campana para más expedientes de misterio y suspenso.\n\n"
                 "⏱️ Marcas de tiempo:\n"
                 "0:00 Entrada y Hook de Contención\n"
                 "0:15 Los Procedimientos Especiales\n"
                 "0:45 Revelación Final y Conclusión\n\n"
-                f"#{slug[:15]} #SCPFoundation #Misterio #Viral"
+                f"#{slug[:15]} #Misterio #Suspense #Viral"
             )
             tags = [
                 truncate_at_word_boundary(clean_topic.lower(), 40),
-                "scp",
-                "scp foundation",
-                "archivos secretos",
-                "documental scp",
-                "contencion",
+                *(["scp", "fundacion scp"] if is_scp else []),
                 "misterio",
+                "relatos",
+                "archivos secretos",
+                "suspenso",
+                "narracion",
                 target_format,
             ]
-            hashtags = [f"#{slug[:15]}", "#SCPFoundation", "#Misterio", "#Viral"]
-            pinned_comment = f"👇 ¿Crees que la Fundación tomó la decisión correcta con {truncate_at_word_boundary(clean_topic, 40)}? ¡Debatamos en los comentarios!"
+            hashtags = [f"#{slug[:15]}", "#Misterio", "#Suspense", "#Viral"]
+            pinned_comment = f"👇 ¿Cuál fue el momento más inquietante de esta historia? ¡Debatamos en los comentarios!"
             seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
             horror_headlines = [
                 "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
@@ -286,9 +313,11 @@ class SeoOptimizerAgent:
                 ]
             viral_titles = [truncate_at_word_boundary(t, 100) for t in viral_titles]
             selected_title = viral_titles[0]
+            narrative_body = (synopsis or f"En este relato revelamos todos los detalles sobre {truncate_at_word_boundary(clean_topic, 60)}.").strip()
             description = (
-                f"💭 En este relato revelamos todos los detalles sobre {truncate_at_word_boundary(clean_topic, 60)}.\n\n"
-                "📌 Suscríbete y activa la campanita para más historias y confesiones.\n\n"
+                f"💭 {selected_title}\n\n"
+                f"{narrative_body}\n\n"
+                "📌 Suscríbete y activa la campanita para más historias y confesiones de la vida real.\n\n"
                 "⏱️ Marcas de tiempo:\n"
                 "0:00 Introducción y Dilema\n"
                 "0:15 El Conflicto Principal\n"

@@ -1,5 +1,9 @@
 """CLI subcommand handlers package."""
-from src.cli.handlers.analytics import handle_prune_underperforming, handle_sweep_24h
+from src.cli.handlers.analytics import (
+    handle_collect_links,
+    handle_prune_underperforming,
+    handle_sweep_24h,
+)
 from src.cli.handlers.auth import handle_auth
 from src.cli.handlers.backup import handle_backup
 from src.cli.handlers.clean import handle_clean
@@ -34,5 +38,6 @@ __all__ = [
     "handle_mcp",
     "handle_sweep_24h",
     "handle_prune_underperforming",
+    "handle_collect_links",
 ]
 

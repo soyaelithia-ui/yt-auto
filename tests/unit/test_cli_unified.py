@@ -91,6 +91,23 @@ class TestCLIParserAndSubcommands:
         assert "backup" in subparser_action.choices
         assert "migrate" in subparser_action.choices
         assert "service" in subparser_action.choices
+        assert "collect-links" in subparser_action.choices
+        assert "sweep-24h" in subparser_action.choices
+        assert "prune-underperforming" in subparser_action.choices
+
+    def test_collect_links_subcommand_flags(self):
+        """Verify collect-links subcommand flag parsing and dispatch."""
+        parser = build_parser()
+        args = parser.parse_args([
+            "collect-links",
+            "-c", "horror",
+            "--limit", "10",
+            "--live",
+        ])
+        assert args.subcommand == "collect-links"
+        assert args.channel == "horror"
+        assert args.limit == 10
+        assert args.live is True
 
     def test_run_subcommand_flags_and_aliases(self):
         """Verify run subcommand flags; format flags are gone (lane-driven now)."""

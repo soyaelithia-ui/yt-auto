@@ -58,3 +58,32 @@ def handle_prune_underperforming(args: argparse.Namespace, parser: argparse.Argu
     for it in report.items:
         print(f"  • {it.get('video_id', '?')}: {it.get('title', 'Untitled')} [{it.get('status', '?')}]")
     return 0 if report.failed_count == 0 else 1
+
+
+def handle_collect_links(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> int:
+    """CLI handler for native automated YouTube link collection."""
+    from src.analytics.link_collector import collect_all_channel_links, collect_channel_links
+
+    channel = getattr(args, "channel", "all") or "all"
+    db_path = getattr(args, "db_path", DEFAULT_DB_PATH) or DEFAULT_DB_PATH
+    dry_run = not getattr(args, "live", False)
+    limit = int(getattr(args, "limit", 0) or 0)
+
+    print(f"Collecting video links (channel={channel}, limit={limit}, dry_run={dry_run})...")
+    if channel in ("all", "both"):
+        res = collect_all_channel_links(
+            channels=("horror", "drama"),
+            max_items_per_channel=limit,
+            db_path=db_path,
+            dry_run=dry_run,
+        )
+    else:
+        res = collect_channel_links(
+            channel=channel,
+            max_items=limit,
+            db_path=db_path,
+            dry_run=dry_run,
+        )
+
+    print(json.dumps(res, indent=2, default=str))
+    return 0 if res.get("ok", True) else 1

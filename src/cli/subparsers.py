@@ -311,6 +311,15 @@ def register_analytics_subcommands(subparsers: argparse._SubParsersAction, paren
     pp.add_argument("--max-delete", type=int, default=2, help="Límite máximo de videos a eliminar por canal (por defecto: 2)")
     pp.add_argument("--force", action="store_true", help="Ignorar interruptor AUTO_PRUNE_ENABLED")
 
+    cl = subparsers.add_parser(
+        "collect-links",
+        parents=[parent],
+        help="Recolección automática nativa de enlaces y métricas de videos en YouTube",
+    )
+    cl.add_argument("-c", "--channel", type=str, default="all", help="Canal objetivo ('horror', 'drama', 'all')")
+    cl.add_argument("-l", "--limit", type=int, default=0, help="Límite de videos a recolectar (0 = 100% de la cuenta)")
+    cl.add_argument("--live", action="store_true", help="Consultar directamente a YouTube API (por defecto: dry-run)")
+
 
 def register_all_subcommands(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
     """Register all canonical subcommands on the main argument parser."""

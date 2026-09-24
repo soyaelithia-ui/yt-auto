@@ -25,8 +25,13 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             if is_test_environment()
             else src.llm.clean_title(src.llm.translate_title(ctx.title, provider="A"))
         )
-        ctx.youtube_title = ctx.branding.generate_title(ctx.spanish_title)
-        ctx.youtube_description = ctx.branding.generate_description(ctx.spanish_title)
+        from src.branding import truncate_at_word_boundary
+        from src.core.inventory import extract_hook_and_synopsis
+
+        story_hook, story_synopsis = extract_hook_and_synopsis(
+            ctx.spanish_title or ctx.title or "",
+            ctx.script or "",
+        )
 
         motifs_for_thumb = extract_story_motifs(ctx.spanish_title or ctx.title or "")
         thumb_hook = getattr(ctx.lane, "hook_text", None) or (
@@ -61,14 +66,24 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             topic=ctx.spanish_title or ctx.title,
             target_format=target_fmt,
             niche=getattr(ctx.lane, "story_type", "") or ctx.channel_name,
+            script_text=ctx.script or "",
+            synopsis=story_synopsis,
+            channel_tone=getattr(ctx.branding, "narration_style", "") or ctx.channel_name,
             use_agent=use_agent_real,
             fail_closed=False,
         )
-        if seo_res.get("selected_title") and not is_test_environment():
-            ctx.youtube_title = ctx.branding.generate_title(str(seo_res["selected_title"]).strip())
-        if len(ctx.youtube_title) > 100:
-            from src.branding import truncate_at_word_boundary
-            ctx.youtube_title = truncate_at_word_boundary(ctx.youtube_title, 100)
+
+        # 100% AI-driven metadata without hardcoded string concatenation templates
+        ai_title = str(seo_res.get("selected_title") or ctx.spanish_title or ctx.title).strip()
+        ctx.youtube_title = truncate_at_word_boundary(ai_title, 100)
+        ctx.youtube_description = str(seo_res.get("description") or "").strip()
+        if not ctx.youtube_description:
+            ctx.youtube_description = f"{ctx.youtube_title}\n\n{story_synopsis}\n\n#{ctx.channel_name} #Shorts"
+        ctx.pinned_comment = str(seo_res.get("pinned_comment") or "").strip()
+        ai_tags = seo_res.get("tags")
+        if ai_tags and isinstance(ai_tags, list):
+            ctx.branding.tags = [str(t).strip() for t in ai_tags if str(t).strip()]
+
         thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
         thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
         thumb_prompt = (
@@ -105,6 +120,7 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
                     "title": ctx.youtube_title,
                     "description": ctx.youtube_description,
                     "tags": ctx.branding.tags,
+                    "pinned_comment": ctx.pinned_comment,
                     "visibility": "public",
                     "story_id": ctx.story_id,
                     "thumbnail_candidate_timestamp": 5.0,

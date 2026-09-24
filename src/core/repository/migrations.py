@@ -393,6 +393,18 @@ MIGRATION_007 = (
     "CREATE INDEX IF NOT EXISTS idx_publications_sha256 ON publications(video_sha256)",
 )
 
+MIGRATION_008 = (
+    "ALTER TABLE publications ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE publications ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE publications ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE publications ADD COLUMN comment_status TEXT DEFAULT 'none'",
+    "ALTER TABLE publications ADD COLUMN comment_error TEXT",
+    "ALTER TABLE publications ADD COLUMN pinned_comment TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_publications_comment_status ON publications(comment_status)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_comment_count ON publications(channel, comment_count)",
+    "CREATE INDEX IF NOT EXISTS idx_publications_views ON publications(channel, view_count)",
+)
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -539,6 +551,19 @@ def _apply_migration_006(conn: sqlite3.Connection) -> None:
 
 def _apply_migration_007(conn: sqlite3.Connection) -> None:
     for statement in MIGRATION_007:
+        try:
+            conn.execute(statement)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "duplicate column name" in msg:
+                continue
+            if "already exists" in msg:
+                continue
+            raise
+
+
+def _apply_migration_008(conn: sqlite3.Connection) -> None:
+    for statement in MIGRATION_008:
         try:
             conn.execute(statement)
         except sqlite3.OperationalError as exc:
@@ -703,6 +728,23 @@ def _apply_v7_performance_scoring(conn: sqlite3.Connection, applied: list[int]) 
         applied.append(7)
 
 
+def _apply_v8_comment_lifecycle_and_metrics(conn: sqlite3.Connection, applied: list[int]) -> None:
+    m8_checksum = _migration_checksum("comment_lifecycle_and_metrics", MIGRATION_008)
+    existing_m8 = conn.execute(
+        "SELECT checksum FROM schema_migrations WHERE version = 8"
+    ).fetchone()
+    if existing_m8 and existing_m8["checksum"] != m8_checksum:
+        raise RuntimeError("Checksum de migración 8 no coincide")
+    if not existing_m8:
+        _apply_migration_008(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum, applied_at) "
+            "VALUES (8, 'comment_lifecycle_and_metrics', ?, ?)",
+            (m8_checksum, _utc_now()),
+        )
+        applied.append(8)
+
+
 def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
     indexes = (
         "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
@@ -733,6 +775,7 @@ def migrate_database(
             _apply_v5_production_lanes(conn, applied)
             _apply_v6_publications_inventory(conn, applied)
             _apply_v7_performance_scoring(conn, applied)
+            _apply_v8_comment_lifecycle_and_metrics(conn, applied)
             _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry
