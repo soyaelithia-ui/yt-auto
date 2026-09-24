@@ -98,7 +98,7 @@ def test_collect_channel_links_mock_environment():
         res = collect_channel_links(channel="horror", max_items=3, db_path=db_path, dry_run=False)
 
         assert res["ok"] is True
-        assert res["channel"] == "moku"
+        assert res["channel"] == "horror"
         assert res["synced_count"] == 3
         assert len(res["items"]) == 3
 
@@ -107,13 +107,13 @@ def test_collect_channel_links_mock_environment():
         assert "watch" in first_item["urls"]
         assert "shorts" in first_item["urls"]
         assert first_item["views"] >= 0
-        assert first_item["comment_level"] in ("none", "low", "moderate", "viral")
+        assert first_item["comment_level"] in ("none", "low", "high")
 
         # Verify DB records
         records = get_published_inventory(db_path=db_path, channel="horror")
         assert len(records) == 3
         vids = {r.video_id for r in records}
-        assert vids == {"mock_moku_001", "mock_moku_002", "mock_moku_003"}
+        assert vids == {"mock_horror_001", "mock_horror_002", "mock_horror_003"}
         assert first_item["video_id"] in vids
 
 
@@ -170,7 +170,7 @@ def test_collect_channel_links_live_mocked_youtube():
             assert item["views"] == 5000
             assert item["likes"] == 250
             assert item["comments"] == 35
-            assert item["comment_level"] == "viral"  # 35 comments > 30 is viral
+            assert item["comment_level"] == "high"  # 35 comments >= 6 is high
             assert item["score"] > 50.0
 
 
@@ -180,8 +180,8 @@ def test_collect_all_channel_links():
 
         res = collect_all_channel_links(channels=["horror", "drama"], max_items_per_channel=2, db_path=db_path, dry_run=True)
         assert res["ok"] is True
-        assert "moku" in res["channels"]
-        assert "aelithia" in res["channels"]
+        assert "horror" in res["channels"]
+        assert "drama" in res["channels"]
         assert res["total_synced"] > 0
 
 
@@ -209,13 +209,13 @@ def test_collect_channel_links_preserves_rich_inventory_fields():
             db_path=db_path,
             run_id="run-original-1234",
             story_id="story-original-5678",
-            video_id="mock_moku_001",
-            url="https://www.youtube.com/watch?v=mock_moku_001",
-            channel="moku",
+            video_id="mock_horror_001",
+            url="https://www.youtube.com/watch?v=mock_horror_001",
+            channel="horror",
             title="Historia del Bosque",
             description="Una historia escalofriante",
             full_script="Este es el guion completo que no debe ser sobreescrito ni eliminado.",
-            video_sha256="sha256_mock_moku_001_hash",
+            video_sha256="sha256_mock_horror_001_hash",
             drive_video_id="drive_mock_file_001",
             drive_backup_metadata={"drive_id": "drive_mock_file_001", "size": 1024},
             used_resources={"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"},
@@ -229,27 +229,27 @@ def test_collect_channel_links_preserves_rich_inventory_fields():
 
         assert initial_record.publication_id > 0
         assert initial_record.full_script == "Este es el guion completo que no debe ser sobreescrito ni eliminado."
-        assert initial_record.video_sha256 == "sha256_mock_moku_001_hash"
+        assert initial_record.video_sha256 == "sha256_mock_horror_001_hash"
         assert initial_record.used_resources == {"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"}
         assert initial_record.pinned_comment == "¿Qué harías en este bosque?"
         assert initial_record.comment_status == "pinned"
         assert initial_record.run_id == "run-original-1234"
         assert initial_record.story_id == "story-original-5678"
 
-        # 2. Re-collect channel links (which generates mock_moku_001 and calls record_published_inventory
+        # 2. Re-collect channel links (which generates mock_horror_001 and calls record_published_inventory
         # without full_script, video_sha256, used_resources, or pinned_comment)
         res = collect_channel_links(channel="horror", max_items=1, db_path=db_path, dry_run=False)
         assert res["ok"] is True
         assert res["synced_count"] == 1
 
         # 3. Query inventory to verify rich fields were completely preserved
-        records = get_published_inventory(db_path=db_path, channel="moku")
+        records = get_published_inventory(db_path=db_path, channel="horror")
         assert len(records) == 1
         updated = records[0]
 
-        assert updated.video_id == "mock_moku_001"
+        assert updated.video_id == "mock_horror_001"
         assert updated.full_script == "Este es el guion completo que no debe ser sobreescrito ni eliminado."
-        assert updated.video_sha256 == "sha256_mock_moku_001_hash"
+        assert updated.video_sha256 == "sha256_mock_horror_001_hash"
         assert updated.used_resources == {"music": "creepy_ambient.mp3", "voice": "es-ES-AlvaroNeural"}
         assert updated.music_track == "creepy_ambient.mp3"
         assert updated.pinned_comment == "¿Qué harías en este bosque?"

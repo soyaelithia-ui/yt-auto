@@ -62,10 +62,35 @@ def _parse_iso_age_hours(dt_str: str) -> float:
         return 0.0
 
 
+def classify_video_failure(
+    title: str,
+    channel: str,
+    views: int,
+    likes: int,
+    age_hours: float,
+    score: float,
+) -> str:
+    """Determines the specific failure code for an underperforming or corrupted video."""
+    t_clean = (title or "").strip()
+    t_lower = t_clean.lower()
+    if not t_clean or len(t_clean) < 2 or t_lower in ("test", "video", "untitled", "video sin título", "sin título"):
+        return "EMPTY_TITLE_ARTIFACT"
+    c_lower = str(channel).lower()
+    if "horror" in c_lower and any(kw in t_lower for kw in ("soy el malo", "aita", "dilema", "¿soy el malo")):
+        return "CROSS_CONTAMINATED_TITLE"
+    if "drama" in c_lower and any(kw in t_lower for kw in ("relato de terror", "scp-", "scp ", "misterio de ultratumba")):
+        return "CROSS_CONTAMINATED_TITLE"
+    if age_hours >= 48.0 and views < 50 and likes == 0:
+        return "ZERO_ENGAGEMENT_STALE"
+    if score < 40.0:
+        return "UNDERPERFORMING_SCORE"
+    return "UNKNOWN_FAILURE"
+
+
 def evaluate_prune_candidates(
     channel: str | CanonicalChannel,
     db_path: str = DEFAULT_DB_PATH,
-    min_score: float = 25.0,
+    min_score: float = 40.0,
     grace_hours: float = 24.0,
     max_candidates: int = 2,
 ) -> List[PruneCandidate]:
@@ -150,7 +175,7 @@ def execute_autonomous_prune(
     db_path: str = DEFAULT_DB_PATH,
     dry_run: bool = True,
     force: bool = False,
-    min_score: float = 25.0,
+    min_score: float = 40.0,
     grace_hours: float = 24.0,
     max_delete: int = 2,
     youtube_service: Any = None,
@@ -274,3 +299,154 @@ def execute_autonomous_prune(
         failed_count=len(failed_items),
         items=pruned_items + failed_items,
     )
+
+
+def mark_underperforming_candidates(
+    channel: str | CanonicalChannel,
+    db_path: str = DEFAULT_DB_PATH,
+    min_score: float = 40.0,
+    grace_hours: float = 24.0,
+    max_candidates: int = 100,
+) -> List[Dict[str, Any]]:
+    """
+    Diagnoses and marks eligible underperforming videos with status 'MARKED_FOR_PURGE'
+    and assigns deterministic failure codes before any deletion.
+    """
+    canon = canonical_channel(channel)
+    aliases = {k for k, v in CHANNEL_ALIASES.items() if v == canon}
+    aliases.add(str(channel).lower())
+    aliases.add(canon.value)
+    placeholders = ",".join("?" for _ in aliases)
+
+    query = f"""
+        SELECT p.publication_id, p.video_id, p.story_id, p.channel, p.title,
+               p.actual_success_score, p.verified_at, p.view_count, p.like_count
+        FROM publications p
+        JOIN stories s ON p.story_id = s.story_id
+        WHERE p.channel IN ({placeholders})
+          AND p.video_id IS NOT NULL
+          AND p.video_id != ''
+          AND s.status NOT IN ('PURGED', 'MARKED_FOR_PURGE')
+        ORDER BY p.actual_success_score ASC
+    """
+    marked: List[Dict[str, Any]] = []
+    with connect(db_path) as conn:
+        rows = conn.execute(query, tuple(aliases)).fetchall()
+        for row in rows:
+            v_id = row["video_id"]
+            title = str(row["title"] or "")
+            verified_at = row["verified_at"] or ""
+            age = _parse_iso_age_hours(verified_at)
+            score = float(row["actual_success_score"] or 0.0)
+            views = int(row["view_count"] or 0)
+            likes = int(row["like_count"] or 0)
+
+            fail_code = classify_video_failure(
+                title=title,
+                channel=canon.value,
+                views=views,
+                likes=likes,
+                age_hours=age,
+                score=score,
+            )
+
+            # Skip if younger than grace period unless it is an obvious artifact/cross-contamination
+            if age < grace_hours and fail_code not in ("EMPTY_TITLE_ARTIFACT", "CROSS_CONTAMINATED_TITLE"):
+                continue
+
+            if score < min_score or fail_code in ("EMPTY_TITLE_ARTIFACT", "CROSS_CONTAMINATED_TITLE", "ZERO_ENGAGEMENT_STALE"):
+                conn.execute(
+                    "UPDATE stories SET status = 'MARKED_FOR_PURGE', failure_code = ? WHERE story_id = ?",
+                    (fail_code, str(row["story_id"])),
+                )
+                marked.append({
+                    "video_id": v_id,
+                    "story_id": str(row["story_id"]),
+                    "title": title,
+                    "score": score,
+                    "views": views,
+                    "likes": likes,
+                    "age_hours": round(age, 2),
+                    "failure_code": fail_code,
+                })
+                if len(marked) >= max_candidates:
+                    break
+        conn.commit()
+    return marked
+
+
+def purge_marked_videos(
+    channel: str | CanonicalChannel,
+    db_path: str = DEFAULT_DB_PATH,
+    max_delete: int = 50,
+    youtube_service: Any = None,
+) -> Dict[str, Any]:
+    """
+    Deletes batch of pre-marked videos via YouTube Data API and transitions
+    their status from 'MARKED_FOR_PURGE' to 'PURGED'.
+    """
+    canon = canonical_channel(channel)
+    aliases = {k for k, v in CHANNEL_ALIASES.items() if v == canon}
+    aliases.add(str(channel).lower())
+    aliases.add(canon.value)
+    placeholders = ",".join("?" for _ in aliases)
+
+    service = youtube_service
+    if service is None:
+        from src.youtube.control import _service_for_channel
+        service = _service_for_channel(canon.value)
+
+    query = f"""
+        SELECT s.story_id, p.video_id, p.title, s.failure_code, p.actual_success_score
+        FROM stories s
+        JOIN publications p ON s.story_id = p.story_id
+        WHERE s.status = 'MARKED_FOR_PURGE'
+          AND p.channel IN ({placeholders})
+        LIMIT ?
+    """
+
+    purged_items: List[Dict[str, Any]] = []
+    failed_items: List[Dict[str, Any]] = []
+
+    with connect(db_path) as conn:
+        rows = conn.execute(query, (*tuple(aliases), max(1, max_delete))).fetchall()
+        for row in rows:
+            v_id = row["video_id"]
+            s_id = row["story_id"]
+            title = row["title"]
+            try:
+                service.videos().delete(id=v_id).execute()
+                conn.execute(
+                    "UPDATE stories SET status = 'PURGED', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                    (s_id,),
+                )
+                conn.commit()
+                purged_items.append({
+                    "video_id": v_id,
+                    "title": title,
+                    "failure_code": row["failure_code"],
+                    "score": row["actual_success_score"],
+                    "status": "purged",
+                })
+                logger.info("[PURGE] Deleted marked video '%s' (reason: %s)", v_id, row["failure_code"])
+                time.sleep(0.5)
+            except Exception as exc:
+                logger.error("[PURGE] Failed to delete marked video '%s': %s", v_id, exc)
+                failed_items.append({
+                    "video_id": v_id,
+                    "title": title,
+                    "error": str(exc),
+                    "status": "failed",
+                })
+                if _is_quota_error(exc):
+                    logger.warning("[PURGE] YouTube quota exceeded during purge. Halting batch.")
+                    break
+
+    _notify_telegram_pruned(canon.value, purged_items)
+    return {
+        "channel": canon.value,
+        "purged_count": len(purged_items),
+        "failed_count": len(failed_items),
+        "items": purged_items + failed_items,
+    }
+

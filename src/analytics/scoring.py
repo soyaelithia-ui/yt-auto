@@ -75,18 +75,15 @@ def classify_comment_level(comments: int, views: int = 0) -> str:
     Classifies video audience comment engagement into discrete operational levels:
     - 'none': 0 comments
     - 'low': 1-5 comments or engagement ratio < 0.5%
-    - 'moderate': 6-30 comments with engagement ratio between 0.5% and 3.0%
-    - 'viral': >30 comments or engagement ratio > 3.0%
+    - 'high': >= 6 comments and (views == 0 or engagement ratio >= 0.5%)
     """
     c = max(0, int(comments))
     v = max(0, int(views))
     if c == 0:
         return "none"
     ratio = (c / max(1.0, float(v))) * 100.0 if v > 0 else 0.0
-    if c > 30 or ratio > 3.0:
-        return "viral"
     if c >= 6 and (v == 0 or ratio >= 0.5):
-        return "moderate"
+        return "high"
     return "low"
 
 

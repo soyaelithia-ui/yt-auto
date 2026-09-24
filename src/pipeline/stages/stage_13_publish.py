@@ -194,7 +194,7 @@ def _handle_youtube_upload(
             channel=ctx.channel_name,
             thumbnail_path=str(ctx.thumbnail_path),
             token_path=str(ctx.settings.youtube_token_path),
-            api_only=ctx.directed,
+            api_only=False,
             expected_channel_id=ctx.settings.expected_youtube_channel_id,
             on_video_id=lambda vid: ctx.repository.record_youtube_upload_id(ctx.story_id, ctx.run_id, vid, owner=ctx.owner),
             job_id=ctx.story_id,

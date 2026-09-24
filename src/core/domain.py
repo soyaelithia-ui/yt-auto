@@ -127,6 +127,8 @@ class JobStatus(str, Enum):
     PUBLISHED = "PUBLISHED"
     RETRYABLE_FAILED = "RETRYABLE_FAILED"
     PERMANENT_FAILED = "PERMANENT_FAILED"
+    MARKED_FOR_PURGE = "MARKED_FOR_PURGE"
+    PURGED = "PURGED"
 
 
 LEGACY_STATUSES: Final[frozenset[str]] = frozenset({"COMPLETED", "FAILED", "pending_approval"})

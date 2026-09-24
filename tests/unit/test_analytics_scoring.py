@@ -180,15 +180,14 @@ def test_classify_comment_level():
     assert classify_comment_level(0, 1000) == "none"
     assert classify_comment_level(0, 0) == "none"
 
-    # low comments (< 6 and ratio < 3%)
+    # low comments (< 6 and ratio < 0.5%)
     assert classify_comment_level(2, 1000) == "low"
     assert classify_comment_level(5, 500) == "low"
 
-    # moderate comments (6-30 comments, >= 0.5% ratio)
-    assert classify_comment_level(10, 1000) == "moderate"  # 1% ratio
-    assert classify_comment_level(6, 0) == "moderate"
-
-    # viral comments (> 30 comments or > 3% ratio)
-    assert classify_comment_level(35, 2000) == "viral"
-    assert classify_comment_level(5, 100) == "viral"  # 5% ratio > 3%
+    # high comments (>= 6 comments and ratio >= 0.5% or views == 0)
+    assert classify_comment_level(10, 1000) == "high"  # 1% ratio
+    assert classify_comment_level(6, 0) == "high"
+    assert classify_comment_level(35, 2000) == "high"
+    assert classify_comment_level(5, 100) == "low"  # c < 6 is low
+    assert classify_comment_level(6, 100) == "high"  # 6% ratio >= 0.5%
 
