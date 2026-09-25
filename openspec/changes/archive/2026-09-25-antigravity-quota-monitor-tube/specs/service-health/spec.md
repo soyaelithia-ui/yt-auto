@@ -1,9 +1,43 @@
-# Specification: Service Health Diagnostics
+# Service Health Diagnostics Specification (Delta)
 
 ## Capability Overview
 The `service-health` capability provides operational status diagnostics for external authentication mechanisms (YouTube OAuth API tokens, Google Drive API / Service Accounts, and Playwright session cookies).
 
-## Requirements
+---
+
+## Original Specification Reference (openspec/specs/service-health/spec.md)
+
+### Requirement 1: Deep Cookie Session Health Checks
+The `check_cookies(channel)` health check MUST perform deep validation using the `cookie-management` layer instead of shallow JSON parsing.
+
+#### Scenario: Channel with valid, unexpired cookies (Happy Path)
+- **Given** a valid cookie file for a channel with active YouTube session tokens
+- **When** `check_cookies(channel="moku")` is invoked
+- **Then** it MUST return `{"ok": True, "detail": "Cookies OK (activas, N días restantes)"}`.
+
+#### Scenario: Channel with expired cookies (Failure State)
+- **Given** a cookie file whose session tokens have expired
+- **When** `check_cookies(channel="moku")` is invoked
+- **Then** it MUST return `{"ok": False, "detail": "Cookies expiradas: <filename>"}`.
+
+#### Scenario: Channel with missing critical tokens (Failure State)
+- **Given** a cookie file missing `LOGIN_INFO` or `SID`
+- **When** `check_cookies(channel="moku")` is invoked
+- **Then** it MUST return `{"ok": False, "detail": "Cookies incompletas (falta LOGIN_INFO)"}`.
+
+#### Scenario: Channel with Netscape .txt cookies file (Happy Path)
+- **Given** a channel configured with `secrets/cookies.txt` (Netscape format)
+- **When** `check_cookies(channel="moku")` is invoked
+- **Then** it MUST parse the Netscape format and report valid health status without JSON errors.
+
+---
+
+## Purpose of Delta
+Extends the `service-health` capability to proactively emit structured operational incident events (`cookie_failure` and `cookie_warning`) into the `system_events` table during cookie health inspection, with stateful 1-hour deduplication per channel to prevent event flooding.
+
+---
+
+## MODIFIED Requirements
 
 ### Requirement: Deep Cookie Session Health Checks
 (Reason: Extends check_cookies to emit structured operational incidents into system_events)
@@ -48,6 +82,8 @@ The `check_cookies(channel)` health check MUST perform deep validation using the
 - **Then** it MUST parse the Netscape format and report valid health status without JSON errors.
 
 ---
+
+## ADDED Requirements
 
 ### Requirement: Stateful 1-Hour Deduplication for Cookie Incidents
 The operational health emission subsystem MUST enforce a 1-hour deduplication window per channel for cookie incidents to avoid log pollution from frequent background polling.
