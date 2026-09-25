@@ -12,3 +12,8 @@ The production hot path uses local videos and stream-copy composition.
 
 Helpers: `src/media/encode_defaults.py` and `src/media/loop_engine.py`.
 See `docs/visual-assets-policy.md` for the asset boundary.
+
+## Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM)
+
+All media pipeline operations adhere to the target ceiling of ≤ 2 CPU Cores and ≤ 2.0 GiB RAM. Longform multi-act assembly must complete via stream-copy within a turnaround ceiling of ≤ 45s under the ≤ 2 CPU Cores and ≤ 2.0 GiB RAM budget.
+

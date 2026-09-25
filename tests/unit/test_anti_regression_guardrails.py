@@ -120,10 +120,7 @@ class TestSubtitleAndTypographyGuardrails:
         from src.media import force_pillow_subtitles_enabled, write_ass_from_cues_or_words
         assert force_pillow_subtitles_enabled() is False
         assert callable(write_ass_from_cues_or_words)
-        # compositor must prefer libass helpers
-        comp_src = (MEDIA_DIR / "compositor.py").read_text(encoding="utf-8")
-        assert "force_pillow_subtitles_enabled" in comp_src
-        assert "write_ass_from_cues_or_words" in comp_src or "ass=" in comp_src
+        # loop engine must prefer libass helpers
         loop_src = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
         assert "force_pillow_subtitles_enabled" in loop_src
 
@@ -209,12 +206,10 @@ class TestCompositorAndProceduralGuardrails:
         assert len(found_wgsl) == 0, f"REG-07 VIOLATION: Found WGSL shaders on disk: {found_wgsl}"
 
     def test_reg08_inmemory_compositor_reuses_buffers(self) -> None:
-        """Assert InMemoryCompositor allocates contiguous memory buffers and does not leak."""
-        from src.media.inmemory_compositor import InMemoryCompositor
-        compositor = InMemoryCompositor(width=1080, height=1920)
-        assert hasattr(compositor, "_out_buffer")
-        assert compositor._out_buffer.shape == (1920, 1080, 4)
-        assert compositor._out_buffer.flags.c_contiguous is True
+        """Assert InMemoryCompositor is eradicated and no in-memory compositor exists on disk."""
+        assert not (MEDIA_DIR / "inmemory_compositor.py").exists(), (
+            "REG-08 VIOLATION: src/media/inmemory_compositor.py must not exist in asset-only architecture"
+        )
 
 
 # ==============================================================================
@@ -236,7 +231,7 @@ class TestContractSchemaGuardrails:
         assert ["procedural_config"] in forbidden_reqs
 
         allowed_engines = set(scene_schema["properties"]["engine_type"]["enum"])
-        assert allowed_engines == {"catalog_loop", "static_matte", "hybrid_cinematic_ai"}
+        assert allowed_engines == {"catalog_loop"}
 
 
 # ==============================================================================
