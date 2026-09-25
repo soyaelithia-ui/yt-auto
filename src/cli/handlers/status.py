@@ -312,9 +312,160 @@ def handle_status(args: argparse.Namespace, parser: argparse.ArgumentParser | No
             print(f"Bundle: {report.get('bundle_dir')}")
         return 0
 
+    if getattr(args, "tube", False):
+        if not getattr(args, "json", False):
+            print_status(db_path=db_path)
+            print("\n" + "=" * 60 + "\n")
+        return cli_tube(args)
+
     if getattr(args, "json", False):
         st = cli_status(db_path=db_path)
         print(json.dumps(st, ensure_ascii=False, indent=2, default=str))
     else:
         print_status(db_path=db_path)
     return 0
+
+
+def print_tube(
+    snapshot: Any,
+    channel: str | None = None,
+    json_output: bool = False,
+) -> None:
+    """Render ANSI dashboard or structured JSON for El Tubo operational telemetry."""
+    if json_output:
+        print(json.dumps(snapshot.to_dict(), indent=2, ensure_ascii=False, default=str))
+        return
+
+    # ANSI styles
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    RED = "\033[31m"
+    CYAN = "\033[36m"
+
+    status_color = {
+        "HEALTHY": GREEN,
+        "OK": GREEN,
+        "SYNCED": GREEN,
+        "DEGRADED": YELLOW,
+        "WARNING": YELLOW,
+        "GROWTH_WARNING": YELLOW,
+        "BACKUP_STALE_WARNING": YELLOW,
+        "CRITICAL": RED,
+        "EXHAUSTED": RED,
+        "CRITICAL_WAL_BLOAT": RED,
+        "PENDING_MIGRATIONS": RED,
+        "BROKEN": RED,
+        "CORRUPTED": RED,
+        "STOPPED": RED,
+        "STALE": YELLOW,
+    }
+
+    def badge(st: str) -> str:
+        c = status_color.get(str(st).upper(), RESET)
+        return f"{c}{BOLD}[{st}]{RESET}"
+
+    ch_label = f" — Canal: {channel}" if channel else ""
+    print(f"\n{BOLD}{CYAN}=== EL TUBO — OBSERVABILIDAD DEL PIPELINE{ch_label} ==={RESET}")
+    print(f"Timestamp: {snapshot.timestamp}  |  Estado Global: {badge(snapshot.system_status)}\n")
+
+    # 1. System Gauges
+    hr = snapshot.host_resources
+    cpu_bar = f"{hr.cpu_percent:.1f}%"
+    ram_bar = f"{hr.ram_rss_mib:.1f} MiB / 2048 MiB ({hr.ram_status})"
+    disk_bar = f"{hr.disk_free_gib:.2f} GiB libres (min: 2.0 GiB) ({hr.disk_status})"
+    print(f"{BOLD}📊 SECCIÓN 1: GAUGES DEL SISTEMA{RESET}")
+    print(f"  • CPU:  {cpu_bar} ({badge(hr.overall_status)})")
+    print(f"  • RAM:  {ram_bar}")
+    print(f"  • DISK: {disk_bar}")
+    print(f"  • Muestreo: {hr.sampling_duration_ms:.2f} ms\n")
+
+    # 2. Daemon & Concurrency
+    ds = snapshot.daemon_stoppages
+    hb_str = f"{ds.heartbeat_age_seconds}s atrás" if ds.heartbeat_age_seconds is not None else "Sin latido"
+    print(f"{BOLD}🔄 SECCIÓN 2: DAEMON Y CONCURRENCIA{RESET}")
+    print(f"  • Liveness: {hb_str} ({badge(ds.daemon_liveness_status)})")
+    print(f"  • Locks activos: {len(ds.active_locks)} (Expirados: {ds.expired_locks_count})")
+    print(f"  • Canales pausados: {len(ds.paused_channels)}")
+    for pc in ds.paused_channels:
+        print(f"    - {pc['channel']}: {pc.get('reason', '-')}")
+    print()
+
+    # 3. Token Burn & USD Costs
+    tb = snapshot.token_burn
+    print(f"{BOLD}🔥 SECCIÓN 3: CONSUMO DE TOKENS (TOKEN BURN){RESET}")
+    print(f"  • Ventana: {tb.window_hours}h  |  Total Llamadas: {tb.total_calls}  |  Saturaciones: {tb.total_saturations}")
+    print(f"  • Tokens: {tb.total_tokens:,} (Prompt: {tb.total_prompt_tokens:,}, Compl: {tb.total_completion_tokens:,}, Cached: {tb.total_cached_tokens:,})")
+    print(f"  • Costo Estimado: ${tb.total_cost_usd:.4f} USD")
+    if tb.provider_breakdown:
+        print("  • Desglose por Proveedor:")
+        for prov, pdata in tb.provider_breakdown.items():
+            print(f"    - {prov}: {pdata.get('total_tokens', 0):,} tokens (${pdata.get('total_cost_usd', 0.0):.4f}) [{pdata.get('calls', 0)} llamadas]")
+    print()
+
+    # 4. YouTube Quotas
+    yt = snapshot.youtube_quotas
+    print(f"{BOLD}📹 SECCIÓN 4: CUOTAS YOUTUBE DATA API V3{RESET}")
+    print(f"  • Unidades Usadas: {yt.estimated_consumed_units:,} / {yt.daily_budget_units:,} ({badge(yt.quota_status)})")
+    print(f"  • Unidades Restantes: {yt.remaining_quota_units:,} (~{yt.estimated_remaining_uploads} videos restantes)")
+    print(f"  • Próximo reinicio (08:00 UTC): {yt.quota_cycle_reset_utc}")
+    print(f"  • Borradores en cola: {yt.staged_drafts_count}  |  No listados: {yt.staged_unlisted_count}  |  No confirmados: {yt.unconfirmed_uploads_count}")
+    if yt.channel_daily_uploads:
+        print("  • Subidas en ciclo actual:")
+        for ch_name, u_cnt in yt.channel_daily_uploads.items():
+            print(f"    - {ch_name}: {u_cnt} videos")
+    print()
+
+    # 5. Security & Database Health
+    dh = snapshot.database_health
+    pl = snapshot.prompt_leaks
+    ck = snapshot.cookie_health
+    mh = snapshot.mcp_health
+    print(f"{BOLD}🛡️ SECCIÓN 5: SEGURIDAD Y SALUD OPERACIONAL{RESET}")
+    print(f"  • Base de datos SQLite: {dh.db_size_mib:.2f} MiB  |  WAL: {dh.wal_size_mib:.2f} MiB ({badge(dh.wal_status)})")
+    print(f"  • Migraciones: v{dh.applied_migration_version} / v{dh.expected_migration_version} ({badge(dh.migration_status)})")
+    print(f"  • Último Backup: {dh.last_backup_timestamp or 'Nunca'} ({badge(dh.backup_status)})")
+    print(f"  • MCP Server: {badge(mh.overall_status)} ({mh.status_reason})")
+    print(f"  • Cookies de Sesión: {len(ck.degraded_channels)} canales degradados (Warnings: {ck.recent_warnings_count}, Fallos: {ck.recent_failures_count})")
+    print(f"  • Fugas de Prompt (Pre-TTS): {pl.total_leaks} detectadas (Alerta Cluster Activa: {pl.alert_cluster_active})")
+    print()
+
+    # 6. Incidents Timeline
+    print(f"{BOLD}⚠️ SECCIÓN 6: LÍNEA DE TIEMPO DE INCIDENTES RECIENTES{RESET}")
+    if not snapshot.recent_incidents:
+        print("  (Sin incidentes en la ventana consultada)")
+    else:
+        for inc in snapshot.recent_incidents[:10]:
+            print(f"  [{inc.get('ts')}] {inc.get('level', 'INFO'):<7} {inc.get('event_type')} ch={inc.get('channel') or '-'}: {str(inc.get('message', ''))[:120]}")
+    print()
+
+
+def cli_tube(args: argparse.Namespace) -> int:
+    """Handle tube subcommand: query TubeCollector and render dashboard or JSON."""
+    db_path = getattr(args, "db_path", DEFAULT_DB_PATH)
+    channel = getattr(args, "channel", None)
+    if channel in ("all", ""):
+        channel = None
+    window_hours = getattr(args, "window", 24) or 24
+    json_mode = getattr(args, "json", False)
+
+    from src.core.repository import QueueRepository
+    from src.observability.tube import TubeCollector
+
+    if getattr(args, "prune", False):
+        deleted = QueueRepository(db_path).prune_token_burn_events(retention_days=30)
+        if not json_mode:
+            print(f"🧹 Purgados {deleted} registros de consumo de tokens (>30 días)")
+
+    collector = TubeCollector(db_path=db_path)
+    snapshot = collector.compile_snapshot(channel=channel, window_hours=window_hours)
+
+    print_tube(snapshot, channel=channel, json_output=json_mode)
+    return 0
+
+
+def handle_tube(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> int:
+    """CLI dispatcher entry point for tube."""
+    return cli_tube(args)
+

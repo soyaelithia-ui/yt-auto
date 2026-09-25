@@ -89,10 +89,72 @@ def register_resources(server: MCPServer) -> None:
     async def get_system_health() -> str:
         try:
             from src.config import get_active_channel_key
+            from src.observability.tube import TubeCollector
+
             st = cli_status(DEFAULT_DB_PATH)
             st["api_health"] = check_all(get_active_channel_key())
+
+            collector = TubeCollector(DEFAULT_DB_PATH)
+            stoppages = collector.sample_daemon_stoppages()
+            db_health = collector.sample_database_health()
+            cookie_health = collector.sample_cookie_health()
+            mcp_health = collector.mcp_checker.evaluate_health()
+
+            st["daemon_liveness_status"] = stoppages.daemon_liveness_status
+            st["heartbeat_age_seconds"] = stoppages.heartbeat_age_seconds
+            st["mcp_health"] = mcp_health.to_dict()
+            st["cookie_health"] = cookie_health.to_dict()
+            st["wal_status"] = db_health.wal_status
+
             clean = sanitize_payload(st)
             return json.dumps(clean, indent=2, ensure_ascii=False)
         except Exception as exc:
             logger.exception("Failed compiling system health resource: %s", exc)
             raise ResourceNotFoundError(f"Failed to compile system health: {exc}") from exc
+
+    # -------------------------------------------------------------------------
+    # Resource 4: system://tube
+    # -------------------------------------------------------------------------
+    @server.resource(
+        "system://tube",
+        name="system_tube",
+        description="Comprehensive operational telemetry snapshot ('El Tubo') covering host resources, daemon stoppages, token burn, YouTube quotas, security incidents, and database health.",
+        mime_type="application/json",
+    )
+    async def get_system_tube() -> str:
+        try:
+            from src.observability.tube import TubeCollector
+
+            collector = TubeCollector(DEFAULT_DB_PATH)
+            snapshot = collector.compile_snapshot()
+            clean = sanitize_payload(snapshot.to_dict())
+            return json.dumps(clean, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            logger.exception("Failed compiling system tube resource: %s", exc)
+            raise ResourceNotFoundError(f"Failed to compile system tube resource: {exc}") from exc
+
+    # -------------------------------------------------------------------------
+    # Resource 5: system://quotas
+    # -------------------------------------------------------------------------
+    @server.resource(
+        "system://quotas",
+        name="system_quotas",
+        description="Multi-provider AI token burn rates, USD costs, and YouTube Data API v3 daily quota consumption.",
+        mime_type="application/json",
+    )
+    async def get_system_quotas() -> str:
+        try:
+            from src.observability.quota import QuotaMonitor
+
+            monitor = QuotaMonitor(DEFAULT_DB_PATH)
+            burn = monitor.get_token_burn_summary().to_dict()
+            yt = monitor.get_youtube_quota_metrics().to_dict()
+            payload = {
+                "token_burn": burn,
+                "youtube_quotas": yt,
+            }
+            clean = sanitize_payload(payload)
+            return json.dumps(clean, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            logger.exception("Failed compiling system quotas resource: %s", exc)
+            raise ResourceNotFoundError(f"Failed to compile system quotas resource: {exc}") from exc

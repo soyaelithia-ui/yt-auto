@@ -56,6 +56,7 @@ CANONICAL_SUBCOMMANDS = {
     "sweep-24h",
     "prune-underperforming",
     "collect-links",
+    "tube",
 }
 
 
@@ -357,6 +358,10 @@ def dispatch_cli(args: argparse.Namespace, parser: argparse.ArgumentParser | Non
         return handle_prune_underperforming(args, parser)
     if subcommand == "collect-links":
         return handle_collect_links(args, parser)
+    if subcommand == "tube":
+        from src.cli.handlers.status import handle_tube
+
+        return handle_tube(args, parser)
 
 
     # Legacy mock / direct namespace fallback routing

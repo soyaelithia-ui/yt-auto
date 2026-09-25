@@ -53,7 +53,7 @@ npx @modelcontextprotocol/inspector .venv/bin/python3 -m src.mcp
 
 ## 3. Catálogo Canónico de Herramientas (Tools)
 
-El servidor registra 9 herramientas operativas:
+El servidor registra 10 herramientas operativas:
 
 | # | Herramienta | Propósito Principal | Módulo Backing |
 |---|---|---|---|
@@ -66,6 +66,7 @@ El servidor registra 9 herramientas operativas:
 | 7 | `get_system_status` | Diagnóstico de salud, conteos de cola, bloqueos y logs de errores recientes. | `src.cli.handlers.status`, `healthcheck` |
 | 8 | `manage_queue` | Inspección de cola, revisión de pendientes, pausa/reanudación y barrido de publicación. | `src.cli.handlers.queue`, `review.db`, `src.telegram.approval` |
 | 9 | `verify_integrity` | Ejecución del script oficial de integridad y suite anti-regresión (REG-01 a REG-14). | `scripts/verify_integrity.sh` |
+| 10 | `get_tube_status` | Observabilidad unificada: recursos de host, cuotas YouTube, token burn e incidentes. | `src.observability.tube`, `src.mcp.tools.get_tube_status` |
 
 ### 3.1. `system_preflight`
 - **Parámetros**:
@@ -195,17 +196,61 @@ El servidor registra 9 herramientas operativas:
 }
 ```
 
+### 3.10. `get_tube_status`
+- **Parámetros**:
+  - `channel` (string opcional): Canal específico a filtrar (`"horror"`, `"drama"`, `"scifi"`).
+  - `window_hours` (integer opcional, default `24`): Ventana temporal en horas para métricas y eventos.
+  - `include_incidents` (boolean, default `True`): Incluye lista de incidentes recientes no resueltos.
+  - `include_burn` (boolean, default `True`): Incluye métricas de consumo de tokens y costos USD acumulados.
+  - `db_path` (string opcional): Ruta a la base de datos SQLite (para entornos de test o perfiles aislados).
+- **Respuesta**:
+```json
+{
+  "system_status": "HEALTHY",
+  "status_reason": "All subsystems nominal",
+  "generated_at": "2026-09-25T12:00:00+00:00",
+  "host_resources": {
+    "cpu_percent": 12.5,
+    "memory_rss_mb": 142.3,
+    "memory_percent": 7.1,
+    "disk_free_gb": 45.2,
+    "load_average_1m": 0.45,
+    "sampled_at": "2026-09-25T12:00:00+00:00"
+  },
+  "token_burn": {
+    "total_tokens": 15420,
+    "prompt_tokens": 12200,
+    "completion_tokens": 3220,
+    "cost_usd": 0.0452,
+    "channel_breakdowns": {
+      "horror": { "tokens": 15420, "cost_usd": 0.0452 }
+    }
+  },
+  "youtube_quotas": {
+    "units_used": 1600,
+    "quota_limit": 10000,
+    "pct_used": 16.0,
+    "resets_in_seconds": 43200,
+    "is_degraded": false,
+    "publish_allowed": true
+  },
+  "incidents": []
+}
+```
+
 ---
 
 ## 4. Recursos Canónicos (Resources) y Esquemas de URI
 
-El servidor expone 3 recursos estandarizados:
+El servidor expone 5 recursos estandarizados:
 
 ```
 resources/
 ├── channels://{channel_name}/config   # Configuración pública y sanitizada del canal
 ├── lanes://catalog                    # Catálogo de especificaciones de carriles
-└── system://health                    # Métricas de salud en tiempo real
+├── system://health                    # Métricas de salud en tiempo real y estado tri-state
+├── system://tube                      # Snapshot unificado de observabilidad "El Tubo"
+└── system://quotas                    # Auditoría de cuotas YouTube Data API v3 y degradaciones
 ```
 
 ### 4.1. `channels://{channel_name}/config`
@@ -246,7 +291,22 @@ resources/
 ### 4.3. `system://health`
 - **URI**: `system://health`
 - **MIME Type**: `application/json`
-- **Origen**: Reporte diagnóstico en vivo (`healthcheck.py` + `shorts_queue.db`).
+- **Origen**: Reporte diagnóstico en vivo (`healthcheck.py` + `shorts_queue.db`), enriquecido con:
+  - `daemon_liveness_status`: `"HEALTHY"` | `"STALE"` | `"DEAD"`
+  - `heartbeat_age_seconds`: Segundos transcurridos desde el último latido del daemon.
+  - `mcp_health`: Tri-state de salud MCP (`"HEALTHY"`, `"DEGRADED"`, `"BROKEN"`).
+  - `cookie_health`: Estado de cookies (`"OK"`, `"DEGRADED"`, `"EXPIRED"`).
+  - `wal_status`: Estado del Write-Ahead Log (`"NORMAL"`, `"CHECKPOINT_NEEDED"`, `"STUCK"`).
+
+### 4.4. `system://tube`
+- **URI**: `system://tube`
+- **MIME Type**: `application/json`
+- **Origen**: `src.observability.tube.TubeCollector` — Snapshot unificado de telemetría de host, cuotas de YouTube, quema de tokens, degradación y telemetría de incidentes.
+
+### 4.5. `system://quotas`
+- **URI**: `system://quotas`
+- **MIME Type**: `application/json`
+- **Origen**: `src.observability.quota.QuotaMonitor` — Métricas en vivo del presupuesto diario de YouTube Data API v3 (10,000 unidades), resets en segundos y estado de bloqueo de publicación.
 
 ---
 

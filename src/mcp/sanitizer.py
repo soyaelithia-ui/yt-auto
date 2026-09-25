@@ -42,7 +42,13 @@ _SENSITIVE_KEY_NAMES = frozenset({
 
 
 def _is_sensitive_key(k_lower: str) -> bool:
-    if k_lower.endswith("_available") or k_lower.endswith("_count") or k_lower.endswith("_status"):
+    if (
+        k_lower.endswith("_available")
+        or k_lower.endswith("_count")
+        or k_lower.endswith("_status")
+        or k_lower.endswith("_tokens")
+        or k_lower in ("token_burn", "tokens")
+    ):
         return False
     if k_lower in _SENSITIVE_KEY_NAMES:
         return True
