@@ -3,8 +3,6 @@ src/media/thumbnails/grading.py - Chiaroscuro Grading, Rec.709 S-Curve, Depth Bl
 """
 from __future__ import annotations
 
-from typing import Dict
-
 from PIL import Image, ImageEnhance, ImageFilter
 
 
@@ -58,26 +56,4 @@ class ChiaroscuroColorGrader:
             return Image.alpha_composite(blended.convert("RGBA"), overlay).convert("RGB")
 
         return blended
-
-
-    @staticmethod
-    def process_analog_horror(
-        base_img: Image.Image,
-        target_w: int,
-        target_h: int,
-        *,
-        with_osd: bool = False,
-        osd_kwargs: Dict | None = None,
-        seed: int = 42,
-    ) -> Image.Image:
-        """Found-footage grade aligned to Aelithia quality ref (VHS/CCTV)."""
-        from src.media.thumbnails.analog_horror import apply_analog_horror_grade
-
-        return apply_analog_horror_grade(
-            base_img,
-            target_size=(target_w, target_h),
-            with_osd=with_osd,
-            osd_kwargs=osd_kwargs,
-            seed=seed,
-        )
 

@@ -3,14 +3,13 @@ src/media/thumbnails/asset_resolver.py - Deterministic 3-Tier Thematic Asset Res
 """
 from __future__ import annotations
 
+import hashlib
 import logging
-import tempfile
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 
-from src.media.thumbnails.extractor import ClimaxFrameExtractor
 
 logger = logging.getLogger("thematic_asset_resolver")
 
@@ -99,159 +98,9 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
     Resolves background imagery through a strict 3-tier local hierarchy:
     - Tier 1: Explicit image path (if specified and valid).
     - Tier 2: Curated local asset bank (assets/thumbnails/templates/ or assets/visual_bank/).
-    - Tier 3: Climax keyframe extracted from video with Chiaroscuro grading.
-    - Default Fallback: High-contrast chiaroscuro cinematic gradient (zero stick-figure silhouettes).
+    - Tier 3: Catalog loop or clean local scenery asset.
+    - Missing assets: fail closed; no synthetic or procedural image is generated.
     """
-
-    @classmethod
-    def resolve_base_image(
-        cls,
-        channel_id: str,
-        archetype: str,
-        target_size: Tuple[int, int],
-        explicit_path: Optional[Union[str, Path]] = None,
-        video_path: Optional[Union[str, Path]] = None,
-        manifest_path: Optional[Union[str, Path]] = None,
-        prefer_video_climax: bool = False,
-    ) -> Image.Image:
-        w, h = target_size
-
-        # ---------------------------------------------------------
-        # Tier 1: Explicit Path
-        # ---------------------------------------------------------
-        if explicit_path:
-            p = Path(explicit_path).resolve()
-            if p.is_file():
-                try:
-                    img = Image.open(p).convert("RGB")
-                    return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-                except Exception as exc:
-                    logger.warning("Tier 1 resolution failed loading %s: %s", p, exc)
-
-        def _try_climax_extraction() -> Optional[Image.Image]:
-            if video_path and Path(video_path).is_file():
-                v_p = Path(video_path)
-                try:
-                    extractor = ClimaxFrameExtractor()
-                    climax_t = extractor.resolve_climax_timestamp(
-                        manifest_path=Path(manifest_path) if manifest_path else None
-                    )
-                    with tempfile.TemporaryDirectory(prefix="thumb_cands_") as tmp_dir_str:
-                        tmp_dir = Path(tmp_dir_str)
-                        cand_frames = extractor.extract_candidate_frames(
-                            video_path=v_p,
-                            center_timestamp=climax_t,
-                            output_dir=tmp_dir,
-                            count=3,
-                        )
-                        best_frame = extractor.select_best_frame(cand_frames)
-                        if best_frame and best_frame.is_file():
-                            with Image.open(best_frame) as raw_frame:
-                                raw_rgb = raw_frame.convert("RGB")
-                                return ImageOps.fit(raw_rgb, (w, h), method=Image.Resampling.LANCZOS)
-                except Exception as exc:
-                    logger.warning("Video climax extraction failed: %s", exc)
-            return None
-
-        # When prefer_video_climax is requested or a rendered video is available, try climax frame first
-        if prefer_video_climax or (video_path and Path(video_path).is_file()):
-            climax_img = _try_climax_extraction()
-            if climax_img is not None:
-                return climax_img
-
-        # ---------------------------------------------------------
-        # Tier 2: Curated Local Asset Bank (Archetype-specific)
-        # ---------------------------------------------------------
-        norm_arch = str(archetype or "").lower()
-        norm_chan = str(channel_id or "").lower()
-        visual_bank_dir = Path(cls.VISUAL_BANK_DIR)
-        templates_dir = Path(cls.TEMPLATES_DIR)
-
-        # Map archetype first to specific template folders
-        template_keys = []
-        if any(k in norm_arch for k in ("scp", "found-footage", "anomaly")):
-            template_keys.append("scp")
-        elif any(k in norm_arch for k in ("aita", "drama", "confession")):
-            template_keys.append("aita")
-        elif any(k in norm_arch for k in ("horror", "vhs", "analog")):
-            template_keys.append("horror")
-        elif norm_arch:
-            template_keys.append(norm_arch)
-
-        for t_key in template_keys:
-            t_dir = templates_dir / t_key
-            if t_dir.is_dir():
-                for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
-                    candidates = sorted(t_dir.glob(ext))
-                    if candidates:
-                        try:
-                            cand_seed = abs(hash(f"{channel_id}_{archetype}_{manifest_path or video_path or ''}"))
-                            selected_cand = candidates[cand_seed % len(candidates)]
-                            img = Image.open(selected_cand).convert("RGB")
-                            return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-                        except Exception as exc:
-                            logger.warning("Failed loading template backdrop from %s: %s", candidates[0], exc)
-
-        # ---------------------------------------------------------
-        # Tier 3: Climax Keyframe Fallback from Video
-        # (Prioritized when archetype has no curated template bank)
-        # ---------------------------------------------------------
-        if not prefer_video_climax:
-            climax_img = _try_climax_extraction()
-            if climax_img is not None:
-                return climax_img
-
-        # ---------------------------------------------------------
-        # Tier 2 (Fallback): Curated Channel Defaults / Visual Bank
-        # ---------------------------------------------------------
-        chan_keys = []
-        is_vertical = h > w
-        if any(k in norm_chan for k in ("scp", "found-footage")):
-            chan_keys.append("scp")
-        elif any(k in norm_chan for k in ("aita", "drama", "aelithia")):
-            chan_keys.append("aita")
-        elif any(k in norm_chan for k in ("horror", "vhs", "analog")):
-            chan_keys.append("horror")
-        elif "moku" in norm_chan:
-            chan_keys.append("scp" if is_vertical else "horror")
-
-        for c_key in chan_keys:
-            c_dir = templates_dir / c_key
-            if c_dir.is_dir():
-                for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
-                    candidates = sorted(c_dir.glob(ext))
-                    if candidates:
-                        try:
-                            img = Image.open(candidates[0]).convert("RGB")
-                            return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-                        except Exception as exc:
-                            logger.warning("Failed loading channel template backdrop from %s: %s", candidates[0], exc)
-
-        # Also check assets/visual_bank/<channel>/scenery/ (clean stills only)
-        chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
-        visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
-        candidates = _list_scenery_candidates(visual_scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
-        if candidates:
-            try:
-                img = Image.open(candidates[0]).convert("RGB")
-                return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-            except Exception as exc:
-                logger.warning("Failed loading visual bank image from %s: %s", candidates[0], exc)
-
-        # Also check generic assets/background.jpg
-        generic_bg = REPO_ROOT / "assets" / "background.jpg"
-        if generic_bg.is_file():
-            try:
-                img = Image.open(generic_bg).convert("RGB")
-                return ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
-            except Exception:
-                pass
-
-        # ---------------------------------------------------------
-        # Default Fallback: Clean Atmospheric Chiaroscuro Gradient
-        # with Controlled Film Grain Noise (Zero primitive stick-figures)
-        # ---------------------------------------------------------
-        return cls.create_atmospheric_noise_background(w, h)
 
     @classmethod
     def resolve_scene_asset_path(
@@ -285,8 +134,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         if motion:
             return motion[(idx - 1) % len(motion)]
 
-        # 2. Prefer catalog / procedural loops over scenery stills for video scenes
-        # (empty scenery OR stills-only → motion loop; never baked title card as bg).
+        # 2. Prefer catalog loops over scenery stills for video scenes.
         try:
             from src.core.catalog import LoopCatalogRepository
             from src.media.loop_engine import CATEGORY_ALIASES
@@ -307,13 +155,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         except Exception as exc:
             logger.debug("LoopCatalogRepository resolution failed: %s", exc)
 
-        proc_dir = root / "assets" / "loops" / "web_procedural"
-        if proc_dir.is_dir():
-            proc_candidates = sorted(p for p in proc_dir.glob("**/*.mp4") if p.is_file())
-            if proc_candidates:
-                return proc_candidates[(idx - 1) % len(proc_candidates)]
-
-        # 3. Clean scenery stills only after loops exhausted (Ken Burns applied at render).
+        # 3. Clean scenery stills only after catalog loops are exhausted.
         if stills:
             return stills[(idx - 1) % len(stills)]
 
@@ -355,7 +197,8 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         video_path: Optional[Union[str, Path]] = None,
         is_vertical: bool = False,
     ) -> Optional[Path]:
-        """Resolves the concrete asset path for a thumbnail backdrop if one exists on disk."""
+        """Resolve a concrete local thumbnail asset; video frames are never extracted."""
+        del video_path
         if explicit_path:
             p = Path(explicit_path).resolve()
             if p.is_file():
@@ -421,52 +264,5 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
             return generic_bg
 
         return None
-
-    @staticmethod
-    def create_atmospheric_noise_background(
-        width: int,
-        height: int,
-        accent_color_hex: Optional[str] = None,
-        noise_opacity: int = 22,
-    ) -> Image.Image:
-        """
-        Generates a high-craft dark atmospheric gradient background with controlled noise
-        (film grain) as a resilient safeguard against missing or corrupted visual assets.
-        """
-        w, h = width, height
-        bg = Image.new("RGB", (w, h), (10, 14, 20))
-        draw = ImageDraw.Draw(bg)
-
-        ar, ag, ab = (12, 16, 24)
-        if accent_color_hex:
-            try:
-                from PIL import ImageColor
-                ac = ImageColor.getrgb(accent_color_hex)
-                ar, ag, ab = int(ac[0] * 0.15), int(ac[1] * 0.15), int(ac[2] * 0.15)
-            except Exception:
-                pass
-
-        step = 2 if h <= 1080 else 4
-        for y in range(0, h, step):
-            ratio = y / max(1, h)
-            r = min(255, int(8 + (12 + ar) * ratio))
-            g = min(255, int(10 + (14 + ag) * ratio))
-            b = min(255, int(14 + (20 + ab) * ratio))
-            draw.rectangle([(0, y), (w, min(h, y + step))], fill=(r, g, b))
-
-        try:
-            import os
-            noise_bytes = os.urandom(w * h)
-            noise_l = Image.frombytes("L", (w, h), noise_bytes)
-            noise_rgba = Image.merge("RGBA", (
-                noise_l,
-                noise_l,
-                noise_l,
-                Image.new("L", (w, h), min(255, max(5, noise_opacity))),
-            ))
-            bg_rgba = bg.convert("RGBA")
-            return Image.alpha_composite(bg_rgba, noise_rgba).convert("RGB")
-        except Exception:
-            return bg
 
 

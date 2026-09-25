@@ -76,37 +76,30 @@ def test_queue_repository_resume_unpauses_channel_and_associated_lanes(tmp_path:
     repo.initialize()
 
     repo.pause("moku", "test pause")
-    repo.set_lane_paused("moku-horror-long", True, "test pause lane")
-    repo.set_lane_paused("moku-scp-shorts", True, "test pause lane")
+    repo.set_lane_paused("horror-horror-long", True, "test pause lane")
+    repo.set_lane_paused("horror-scp-shorts", True, "test pause lane")
 
     assert repo.is_channel_paused("moku") is True
-    assert (repo.get_lane_state("moku-horror-long") or {})["paused"] == 1
+    assert (repo.get_lane_state("horror-horror-long") or {})["paused"] == 1
 
     # Resume channel
     repo.resume("moku")
 
     assert repo.is_channel_paused("moku") is False
-    assert (repo.get_lane_state("moku-horror-long") or {})["paused"] == 0
-    assert (repo.get_lane_state("moku-scp-shorts") or {})["paused"] == 0
+    assert (repo.get_lane_state("horror-horror-long") or {})["paused"] == 0
+    assert (repo.get_lane_state("horror-scp-shorts") or {})["paused"] == 0
 
 
-def test_thumbnail_headline_diversity():
+def test_thumbnail_asset_requests_are_text_free_and_topic_bound():
     seo = SeoOptimizerAgent()
     res1 = seo.optimize(topic="El monstruo del lago negro", target_format="short", niche="horror")
     res2 = seo.optimize(topic="La cabaña desolada en el bosque", target_format="short", niche="horror")
 
-    concepts1 = res1.get("thumbnail_concepts") or []
-    concepts2 = res2.get("thumbnail_concepts") or []
-
-    assert len(concepts1) > 0
-    assert len(concepts2) > 0
-
-    h1 = concepts1[0].get("big_headline")
-    h2 = concepts2[0].get("big_headline")
-
-    assert bool(h1) and bool(h2)
-    # Different topics must produce distinct hooks or seed hashes across the pool
-    assert len({h1, h2}) >= 1
+    request1 = res1["thumbnail_asset_request"]
+    request2 = res2["thumbnail_asset_request"]
+    assert request1["bank"] == request2["bank"] == "local_ai"
+    assert request1["text_free"] is True and request2["text_free"] is True
+    assert request1["focal_subject"] != request2["focal_subject"]
 
 
 def test_longform_aelithia_story_diversity_guaranteed_below_qa_limit():

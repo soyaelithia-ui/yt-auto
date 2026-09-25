@@ -8,7 +8,6 @@ from typing import Any, List, Optional, Sequence
 import lib.video
 from src.agents.seo_optimizer import SeoOptimizerAgent
 from src.core.profiling import CanonicalStage
-from src.core.scenic_detector import extract_story_motifs
 import src.llm
 from src.log import get_logger
 from src.pipeline.context import PipelineContext
@@ -133,32 +132,6 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             ctx.script or "",
         )
 
-        motifs_for_thumb = extract_story_motifs(ctx.spanish_title or ctx.title or "")
-        thumb_hook = getattr(ctx.lane, "hook_text", None) or (
-            ctx.story.get("hook_text") if isinstance(ctx.story, dict) else None
-        )
-        if not thumb_hook and motifs_for_thumb:
-            motif_hooks = {
-                "carnival": ["¿QUÉ HABÍA EN LA FERIA?", "FERIA MALDITA ⚠️", "EL CIRCO PROHIBIDO"],
-                "morgue": ["¿QUÉ HABÍA EN LA CAMILLA?", "LA AUTOPSIA OCULTA 🚨", "NO ESTABA MUERTO"],
-                "asylum": ["¿QUÉ HABÍA EN EL PASILLO?", "PABELLÓN CLAUSURADO 👁️", "EL GRITO EN LA CELDA"],
-                "cabin": ["¿QUÉ HABÍA EN LA CABAÑA?", "NUNCA ENTRES AL BOSQUE 🌲", "EL REFUGIO PERDIDO"],
-                "cemetery": ["¿QUÉ HABÍA EN LA TUMBA?", "LA CRIPTA ABIERTA ⚠️", "NO DEBÍ ABRIRLA"],
-                "diner": ["¿QUÉ PASÓ A LAS 3 AM?", "TURNO DE NOCHE FATAL ❌", "EL CLIENTE EN SOMBRAS"],
-                "bakery": ["¿QUÉ HABÍA EN EL HORNO?", "TURNO DE MADRUGADA ⚠️", "EL SECRETO DEL OBRADOR"],
-                "mar": ["¿QUÉ HABÍA EN EL FARO?", "ABISMO SUBMARINO 🌊", "EL ECO DE LA FOSA"],
-                "boda": ["¿ARRUINÉ SU BODA? 💥", "EXIGENCIAS IMPOSIBLES ⚖️", "NO PAGARÉ SU BODA 🚫", "TRAICIÓN EN EL ALTAR 💔"],
-                "hermano": ["¿TRAICIÓN FAMILIAR? ⚡", "MI HERMANO ME ENGAÑÓ ❌", "DESENMASCARADO ANTE TODOS ⚖️"],
-                "apartamento": ["¿EXIGEN MI HERENCIA? 🏠", "QUISIERON QUITARME TODO 🚫", "LA CASA ES MÍA 💥"],
-                "deudas": ["¿PAGAR SUS DEUDAS? 💸", "NO SOY SU BANCO 🚫", "ESTAFA INTRAFAMILIAR ⚠️"],
-            }
-            cand_hooks = motif_hooks.get(motifs_for_thumb[0])
-            if cand_hooks:
-                import hashlib
-
-                seed = int(hashlib.md5((ctx.spanish_title or ctx.title or "").encode("utf-8")).hexdigest()[:6], 16)
-                thumb_hook = cand_hooks[seed % len(cand_hooks)]
-
         seo_opt = SeoOptimizerAgent()
         target_fmt = "longform" if ctx.is_long_lane else "short"
         use_agent_real = (not is_test_environment()) and bool(os.environ.get("USE_AGENT_HARNESS", "0") in ("1", "true", "yes"))
@@ -218,12 +191,13 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
         if ai_tags and isinstance(ai_tags, list):
             ctx.branding.tags = [str(t).strip() for t in ai_tags if str(t).strip()]
 
-        thumb_concept = (seo_res.get("thumbnail_concepts") or [{}])[0]
-        thumb_hook = thumb_hook or thumb_concept.get("big_headline") or "¡EXPEDIENTE SECRETO PROHIBIDO!"
-        thumb_prompt = (
-            thumb_concept.get("visual_layout") or "Chiaroscuro high-CTR dramatic lighting mysterious focal subject"
-        )
-        palette = thumb_concept.get("color_palette")
+        thumb_request = seo_res.get("thumbnail_asset_request") or {
+            "bank": "local_ai",
+            "archetype": getattr(ctx, "target_category", "general") or "general",
+            "focal_subject": ctx.spanish_title or ctx.title,
+            "text_free": True,
+        }
+        palette = thumb_request.get("color_palette") if isinstance(thumb_request, dict) else None
         accent_color = palette[0] if palette and isinstance(palette, list) else None
 
         lib.video.create_video_thumbnail(
@@ -231,21 +205,14 @@ def stage_11_thumbnail_metadata(ctx: PipelineContext) -> None:
             ctx.channel_name,
             str(ctx.thumbnail_path),
             template=ctx.lane.template,
-            archetype=ctx.target_category,
             strict_official_sdk=False,
             video_mode=target_fmt,
-            video_path=str(ctx.video_path),
+            video_path=None,
             bg_image_path=None,
-            manifest_path=str(ctx.scene_manifest_path),
-            hook_text=thumb_hook,
-            cover_prompt=thumb_prompt,
+            manifest_path=None,
+            archetype=str(thumb_request.get("archetype") or getattr(ctx, "target_category", "general")),
             accent_color=accent_color,
-            metadata={
-                "prompt": thumb_prompt,
-                "visual_layout": thumb_prompt,
-                "big_headline": thumb_hook,
-                "prefer_video_climax": True,
-            },
+            metadata={"thumbnail_asset_request": thumb_request, "text_free": True},
         )
         metadata_payload = {
             "channel": ctx.channel_name,

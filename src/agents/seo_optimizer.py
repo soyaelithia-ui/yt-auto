@@ -2,13 +2,13 @@
 src/agents/seo_optimizer.py - Agent 6: SEO & Viral Metadata Optimizer.
 
 Generates high-CTR titles for A/B testing, structured YouTube descriptions with timestamps,
-optimized tag clouds, algorithm-boosting pinned comments, and thumbnail visual concepts.
+optimized tag clouds, and algorithm-boosting pinned comments. Thumbnail generation is delegated to
+the local AI asset bank through a text-free request contract.
 Validates output against schemas/seo_metadata.schema.json.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -40,9 +40,8 @@ SYSTEM_INSTRUCTIONS = (
     "3. High-retention description with formatted timestamps, CTA, and tags. "
     "4. Relevant tags and valid hashtags. "
     "5. Pinned comment to maximize audience engagement. "
-    "6. Thumbnail concepts using prompt-driven real-time intelligence: "
-    "   Chiaroscuro high-CTR style, punchy 3-5 word viral hook headline, mysterious focal subject, "
-    "   and high-contrast color palette. "
+    "6. A local AI thumbnail asset request: choose an archetype and focal subject, and set text_free=true. "
+    "   Never write a headline, badge, watermark, or layout instructions. "
     "Always output strictly valid JSON conforming to the requested schema."
 )
 
@@ -184,7 +183,7 @@ class SeoOptimizerAgent:
 
                 task_prompt = (
                     f"Generate YouTube SEO metadata for topic '{topic}' in format '{fmt}' and niche '{niche}'.\n"
-                    "Include 3 viral titles, description with timestamps, tags, hashtags, pinned comment, and thumbnail concepts."
+                    "Include 3 viral titles, description with timestamps, tags, hashtags, pinned comment, and a text-free local AI thumbnail asset request."
                     f"{recent_titles_prompt}"
                     f"{story_context_prompt}"
                 )
@@ -298,29 +297,6 @@ class SeoOptimizerAgent:
             ]
             hashtags = [f"#{slug[:15]}", "#Misterio", "#Suspense", "#Viral"]
             pinned_comment = f"👇 ¿Cuál fue el momento más inquietante de esta historia? ¡Debatamos en los comentarios!"
-            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
-            horror_headlines = [
-                "¡EXPEDIENTE SECRETO PROHIBIDO! ⚠️",
-                "NUNCA ENTRES A SOLAS 🧬",
-                "EL ARCHIVO CONFIDENCIAL ❌",
-                "NO DEBIERON ABRIRLO 🚨",
-                "LA PESADILLA OCULTA 👁️",
-                "EXPEDIENTE CLASIFICADO ⚠️",
-            ]
-            thumbnail_concepts = [
-                {
-                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación volumétrica lateral dramática, sombras profundas, sujeto focal misterioso en penumbra con silueta recortada",
-                    "big_headline": horror_headlines[seed_hash % len(horror_headlines)],
-                    "color_palette": ["#FF0000", "#111827", "#F59E0B", "#FFFFFF"],
-                    "facial_expression": "Silueta misteriosa en sombras con mirada fija",
-                },
-                {
-                    "visual_layout": "Claroscuro de máximo contraste: luz de contorno verde cian sobre fondo negro abisal, sujeto focal misterioso emergiendo",
-                    "big_headline": horror_headlines[(seed_hash + 1) % len(horror_headlines)],
-                    "color_palette": ["#00FF66", "#040A08", "#D8FFE6"],
-                    "facial_expression": "Sujeto en penumbra de espaldas al abismo",
-                },
-            ]
         elif is_drama:
             if clean_topic.startswith("¿") or len(clean_topic) > 35:
                 viral_titles = [
@@ -359,29 +335,6 @@ class SeoOptimizerAgent:
             ]
             hashtags = [f"#{slug[:15]}", "#HistoriasReales", "#Confesiones", "#Viral"]
             pinned_comment = f"👇 ¿Tú qué habrías hecho en esta situación? ¡Déjame tu opinión en los comentarios!"
-            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
-            drama_headlines = [
-                "¡NO COMETAS ESTE ERROR! 🚨",
-                "EL SECRETO MEJOR GUARDADO ❌",
-                "TRAICIÓN AL DESCUBIERTO ⚡",
-                "LA VERDAD QUE OCULTABAN 💥",
-                "DESENMASCARADO ANTE TODOS ⚖️",
-                "TODO FUE UNA MENTIRA 💔",
-            ]
-            thumbnail_concepts = [
-                {
-                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación de recorte volumétrica de alto impacto, sujeto focal misterioso en primer plano sobre fondo oscuro",
-                    "big_headline": drama_headlines[seed_hash % len(drama_headlines)],
-                    "color_palette": ["#FF0000", "#FFFFFF", "#000000", "#FFD700"],
-                    "facial_expression": "Expresión de impacto y mirada directa intrigante",
-                },
-                {
-                    "visual_layout": "Composición Claroscuro de tensión: fondo oscuro minimalista con resplandor neón dorado y sujeto focal intrigante recortado",
-                    "big_headline": drama_headlines[(seed_hash + 1) % len(drama_headlines)],
-                    "color_palette": ["#00FF88", "#111827", "#F59E0B"],
-                    "facial_expression": "Sujeto focal en sombra señalando hacia el misterio",
-                },
-            ]
         else:
             if len(clean_topic) > 40:
                 viral_titles = [
@@ -417,29 +370,6 @@ class SeoOptimizerAgent:
             ]
             hashtags = [f"#{slug[:15]}", "#Curiosidades", "#YouTubeShorts" if target_format == "short" else "#YouTube", "#Viral"]
             pinned_comment = f"👇 ¿Cuál fue el dato que más te sorprendió sobre {truncate_at_word_boundary(clean_topic, 40)}? ¡Déjalo abajo!"
-            seed_hash = int(hashlib.md5(clean_topic.encode("utf-8")).hexdigest()[:6], 16)
-            drama_headlines = [
-                "¡NO COMETAS ESTE ERROR! 🚨",
-                "EL SECRETO MEJOR GUARDADO ❌",
-                "TRAICIÓN AL DESCUBIERTO ⚡",
-                "LA VERDAD QUE OCULTABAN 💥",
-                "DESENMASCARADO ANTE TODOS ⚖️",
-                "TODO FUE UNA MENTIRA 💔",
-            ]
-            thumbnail_concepts = [
-                {
-                    "visual_layout": "Estilo Claroscuro de alto CTR: iluminación de recorte volumétrica de alto impacto, sujeto focal misterioso en primer plano sobre fondo oscuro",
-                    "big_headline": drama_headlines[seed_hash % len(drama_headlines)],
-                    "color_palette": ["#FF0000", "#FFFFFF", "#000000", "#FFD700"],
-                    "facial_expression": "Expresión de impacto y mirada directa intrigante",
-                },
-                {
-                    "visual_layout": "Composición Claroscuro de tensión: fondo oscuro minimalista con resplandor neón dorado y sujeto focal intrigante recortado",
-                    "big_headline": drama_headlines[(seed_hash + 1) % len(drama_headlines)],
-                    "color_palette": ["#00FF88", "#111827", "#F59E0B"],
-                    "facial_expression": "Sujeto focal en sombra señalando hacia el misterio",
-                },
-            ]
 
         metadata = {
             "version": "2.0",
@@ -451,7 +381,13 @@ class SeoOptimizerAgent:
             "tags": tags,
             "hashtags": hashtags,
             "pinned_comment": pinned_comment,
-            "thumbnail_concepts": thumbnail_concepts,
+            "thumbnail_asset_request": {
+                "bank": "local_ai",
+                "archetype": "scp" if is_scp else ("drama" if is_drama else "general"),
+                "focal_subject": clean_topic,
+                "color_palette": ["#111827", "#00FF88"] if not is_drama else ["#2C1C22", "#FFAA44"],
+                "text_free": True,
+            },
         }
 
         self.validate_metadata(metadata)

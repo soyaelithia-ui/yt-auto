@@ -14,6 +14,9 @@ from src.agents.base_agent import (
     _resolve_default_app_data_dir,
     _seed_appdata_from_secrets,
     cleanup_ephemeral_sessions,
+    parse_agy_models_output,
+    select_available_model,
+    AgentModelResolutionError,
 )
 from src.agents.story_director import StoryDirectorAgent, StoryInvestigatorAgent
 from src.agents.atmospheric_director import AtmosphericDirectorAgent
@@ -22,8 +25,26 @@ from src.agents.seo_optimizer import SeoOptimizerAgent, ViralPackagingAgent
 from src.agents.video_qa import VideoQAAgent, MultimodalReviewAgent
 
 
-def test_canonical_model_is_gemini_flash():
-    assert CANONICAL_MODEL == "gemini-3.8-flash-high"
+def test_canonical_model_prefers_gpt_luna_alias():
+    assert CANONICAL_MODEL == "gpt-6-luna"
+
+
+def test_parse_agy_models_output_and_preference_order():
+    catalog = parse_agy_models_output(
+        "Fetching available models...\n"
+        "gpt-5.6-luna\tGPT 5.6 Luna\n"
+        "gpt-oss-120b-medium\tGPT OSS 120B\n"
+    )
+    assert catalog == ("gpt-5.6-luna", "gpt-oss-120b-medium")
+    assert select_available_model("gpt-6-luna", catalog) == "gpt-5.6-luna"
+
+
+def test_model_resolution_uses_validated_free_fallback():
+    assert select_available_model(
+        "gpt-6-luna", ("gemini-3.8-flash-low", "gpt-oss-120b-medium")
+    ) == "gpt-oss-120b-medium"
+    with pytest.raises(AgentModelResolutionError):
+        select_available_model("gpt-6-luna", ("claude-sonnet-4-6",))
 
 
 def test_programmatic_agent_consume(tmp_path):
@@ -130,13 +151,13 @@ def test_seo_optimizer_agent_optimize_with_agent_mock(monkeypatch, tmp_path):
         "tags": ["scp", "horror", "creepy"],
         "hashtags": ["#scp", "#shorts"],
         "pinned_comment": "Qué opinas de SCP-173?",
-        "thumbnail_concepts": [
-            {
-                "visual_layout": "Primer plano estatua",
-                "big_headline": "NO PARPADEES",
-                "color_palette": ["#ff0000", "#000000"],
-            }
-        ],
+        "thumbnail_asset_request": {
+            "bank": "local_ai",
+            "archetype": "scp",
+            "focal_subject": "SCP-173",
+            "color_palette": ["#ff0000", "#000000"],
+            "text_free": True,
+        },
     }
     
     mock_payload = {
@@ -196,18 +217,23 @@ def test_circuit_breaker_multi_instance_isolation():
 
 
 @patch("subprocess.run")
-def test_agy_stream_client_send_task(mock_run, tmp_path):
-    mock_proc = MagicMock()
-    mock_proc.returncode = 0
-    mock_proc.stdout = json.dumps({
+def test_agy_stream_client_send_task_validates_and_uses_runtime_model(mock_run, tmp_path):
+    catalog_proc = MagicMock()
+    catalog_proc.returncode = 0
+    catalog_proc.stdout = "gpt-5.6-luna\tGPT 5.6 Luna\n"
+    catalog_proc.stderr = ""
+    task_proc = MagicMock()
+    task_proc.returncode = 0
+    task_proc.stdout = json.dumps({
         "status": "SUCCESS",
         "response": "Respuesta por stream",
         "conversation_id": "stream_conv_1",
     })
-    mock_run.return_value = mock_proc
+    task_proc.stderr = ""
+    mock_run.side_effect = [catalog_proc, task_proc]
 
     client = AgyStreamClient(
-        model="gemini-3.8-flash-high",
+        model="gpt-6-luna",
         reasoning_effort="high",
         app_data_dir=tmp_path / "app_data",
     )
@@ -216,6 +242,10 @@ def test_agy_stream_client_send_task(mock_run, tmp_path):
     assert res["status"] == "SUCCESS"
     assert res["response"] == "Respuesta por stream"
     assert res["conversation_id"] == "stream_conv_1"
+    assert res["requested_model"] == "gpt-6-luna"
+    assert res["effective_model"] == "gpt-5.6-luna"
+    task_command = mock_run.call_args_list[1].args[0]
+    assert task_command[task_command.index("--model") + 1] == "gpt-5.6-luna"
     client.close()
 
 

@@ -1,12 +1,8 @@
 # Sistema Unificado de Automatización de YouTube — yt-auto
-
 > **Repositorio Oficial:** [https://github.com/soyaelithia-ui/yt-auto.git](https://github.com/soyaelithia-ui/yt-auto.git)  
 > **Gobernanza:** Repositorio privado para infraestructura, producción y publicación automatizada multi-canal.
-
 Sistema de producción y publicación automatizada para **YouTube Shorts verticales (9:16)** y **Videos Largos (16:9, 10+ min)** en español, con revisión interactiva en Telegram (`review`), respaldo verificado en Google Drive y control atómico en SQLite WAL.
-
 ---
-
 ## 📚 Base de Conocimiento
 
 Índice completo y navegación por rol: [`docs/README.md`](docs/README.md).
@@ -77,10 +73,11 @@ python3 main.py mcp
 
 ## 🎨 Motor Visual FFmpeg y Catálogo Local de Bucles
 
-El stack visual de producción es **100% basado en assets y FFmpeg nativo** (cero navegadores, cero procedural):
-- **Modo beats / loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** sobre loops maestros pre-renderizados.
-- **Modo director / multi-escena** (`MultiSceneCompositor`): Ken Burns fotográfico (`zoompan`) con stream-copy trim + concat demuxer (`-c:v copy`).
-- **Catálogo de bucles y assets** (`LoopCatalogRepository` + `data/loop_catalog.db`): loops maestros (`assets/loops/`) y overlays pre-renderizados. Fail-closed con `CatalogAssetNotFoundError`.
+El stack visual de producción es **100% basado en recursos audiovisuales locales y FFmpeg nativo** (cero navegadores, cero procedural y cero gráficos generados en tiempo real):
+- **Modo loop** (`LoopVideoEngine`): concat demuxer + **`-c:v copy`** sobre videos maestros locales.
+- **Modo director**: selecciona una secuencia de videos locales por acto y delega la composición al mismo `LoopVideoEngine`; no aplica zoom, HUD, overlays ni texto al video.
+- **Catálogo de bucles y assets** (`LoopCatalogRepository` + `data/loop_catalog.db`): videos maestros (`assets/videos/` y `assets/loops/`). Fail-closed con `CatalogAssetNotFoundError`.
+- **Portadas**: `LocalAIThumbnailBank` selecciona imágenes generadas localmente y declaradas `text_free`; el pipeline no imprime títulos, badges ni marcas de agua.
 - **Temáticas canónicas**: `cosmic_horror`, `dark_forest`, `dark_ambient`, `tactical_chamber`, `monsters`, `space_abyss`, `classified_terminal`, `drama`.
 - **Zero Procedural**: Shaders WGSL, canvas y navegadores erradicados. Codificación fallback: `RENDER_PRESET=veryfast`.
 
@@ -91,9 +88,10 @@ El stack visual de producción es **100% basado en assets y FFmpeg nativo** (cer
 
 ## 🤖 Arnés Antigravity Multi-Agente (6 Agentes Especializados)
 
-Pipeline de 6 agentes desacoplados bajo contratos JSON Schema y CLI local `agy` (`gemini-3.8-flash-high`):
-- **Producción Narrativa y Visual**: Script Curator (retención/gancho), Art Director (Rec.709) y Scene Planner (`SceneManifestV2`).
-- **Control de Calidad y SEO**: Forensic QA (EBU R128), Image Auditor (anti-filler) y SEO Optimizer (títulos virales y tags).
+Pipeline de agentes desacoplados bajo contratos JSON Schema y CLI local `agy`: prefiere `gpt-6-luna` / `gpt-5.6-luna`, valida con `agy models` y usa `gpt-oss-120b-medium` como fallback gratuito validado:
+- **Producción narrativa**: Script Curator y Scene Planner seleccionan actos y recursos locales; ya no generan escenas, HUDs ni gráficos.
+- **Control de calidad y SEO**: Forensic QA y SEO Optimizer producen metadata; SEO solo emite una solicitud `local_ai` con `text_free=true` para el banco de portadas.
+- **Recuperación acotada**: cada agente registra decisiones, reintentos, correcciones contractuales y evidencia estructurada sin bucles ilimitados.
 
 ---
 
@@ -110,7 +108,7 @@ Pipeline de 6 agentes desacoplados bajo contratos JSON Schema y CLI local `agy` 
 
 1. **Revisión & Despacho**: Veredicto determinista (`CodeReviewVerdict`), compuertas QA y Telegram local (`:8081`, hasta 2 GB zero-copy).
 2. **Auto-Publicación**: Ventana configurable vía `AUTO_PUBLISH_TIMEOUT_HOURS` (default 24h); barrido con `main.py queue sweep`.
-3. **Política AI-First**: Agentes bajo arnés Antigravity (`gemini-3.8-flash-high`); renderizado de producción FFmpeg stream-copy y persistencia determinista local. Cero navegadores y cero generadores procedurales.
+3. **Política AI-First**: Agentes bajo arnés Antigravity con preferencias GPT Luna y validación local; renderizado de producción FFmpeg stream-copy y persistencia determinista local. Cero navegadores y cero identificadores de modelo inválidos.
 
 ---
 

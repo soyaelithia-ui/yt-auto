@@ -1,39 +1,19 @@
-"""
-src/media/thumbnail_engine.py - Backward-Compatibility Adapter for Thumbnail Generation.
-
-Delegates thumbnail rendering to canonical src.media.thumbnails.engine.ThumbnailEngine.
-"""
+"""Compatibility adapter for text-free local AI thumbnail generation."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
-from PIL import ImageFont
 
-from src.media.thumbnails.engine import ThumbnailEngine, ThumbnailConfig
-from src.media.thumbnails.typography import DynamicTypographyEngine
-
-logger = logging.getLogger("thumbnail_engine")
-
-SYSTEM_FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/opt/hermes/hermes-webui/static/vendor/katex/0.16.22/fonts/KaTeX_SansSerif-Bold.ttf",
-    "/opt/hermes/hermes-webui/static/vendor/katex/0.16.22/fonts/KaTeX_Main-Bold.ttf",
-]
+from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
 
 
 class ResilientThumbnailEngine:
-    """Backward-compatibility adapter delegating to ThumbnailEngine."""
+    """Preserve the legacy call shape while delegating to the local AI bank."""
 
     def __init__(self, custom_font_paths: Optional[List[str]] = None) -> None:
+        del custom_font_paths
         self._engine = ThumbnailEngine()
-        self.font_candidates = (custom_font_paths or []) + SYSTEM_FONT_CANDIDATES
-
-    def resolve_font(self, size: int) -> ImageFont.FreeTypeFont:
-        """Loads TrueType font via DynamicTypographyEngine."""
-        return DynamicTypographyEngine.resolve_font("LiberationSans-Bold.ttf", size)
+        self.font_candidates: list[str] = []
 
     def generate(
         self,
@@ -50,42 +30,25 @@ class ResilientThumbnailEngine:
         height: int = 720,
         **kwargs: Any,
     ) -> Path:
-        """Adapts legacy keyword arguments into a ThumbnailConfig and delegates to ThumbnailEngine."""
-        out_p = Path(output_path).resolve()
-        out_p.parent.mkdir(parents=True, exist_ok=True)
-
+        del highlight_box, badge_text, subtitle_color, badge_color
         if isinstance(accent_color, tuple):
-            accent_hex = f"#{accent_color[0]:02x}{accent_color[1]:02x}{accent_color[2]:02x}"
+            accent_hex = "#%02x%02x%02x" % accent_color[:3]
         else:
             accent_hex = str(accent_color)
-
-        title_full = f"{title_main}: {title_sub}" if title_sub else title_main
-        hook = highlight_box or title_sub or title_main
-        is_vertical = height > width
-
-        metadata: dict[str, Any] = {
-            "badge_text": badge_text,
-            "category": badge_text,
-            "title_raw": title_full,
-        }
-        if kwargs.get("metadata"):
-            metadata.update(kwargs["metadata"])
-
-        cfg = ThumbnailConfig(
-            title=title_full,
-            channel_id=kwargs.get("channel_id", "moku"),
-            lane_id=kwargs.get("lane_id", "moku-scp-shorts" if is_vertical else "scp"),
-            hook_text=hook,
-            output_path=out_p,
-            width=width,
-            height=height,
-            accent_color=accent_hex,
-            archetype=kwargs.get("archetype", "scp"),
-            template=kwargs.get("template"),
-            metadata=metadata,
-        )
-
+        title = f"{title_main}: {title_sub}" if title_sub else title_main
         return self._engine.generate(
-            config=cfg,
+            ThumbnailConfig(
+                title=title,
+                channel_id=kwargs.get("channel_id", "moku"),
+                lane_id=kwargs.get("lane_id"),
+                output_path=Path(output_path).resolve(),
+                width=width,
+                height=height,
+                accent_color=accent_hex,
+                archetype=kwargs.get("archetype", "scp"),
+                template=kwargs.get("template"),
+                metadata=kwargs.get("metadata"),
+                text_free=True,
+            ),
             base_image_path=background_image,
         )

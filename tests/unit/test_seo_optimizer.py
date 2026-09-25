@@ -30,7 +30,8 @@ class TestSeoOptimizerAgent(unittest.TestCase):
         for h in data["hashtags"]:
             self.assertTrue(h.startswith("#"))
         self.assertTrue(data["pinned_comment"])
-        self.assertGreaterEqual(len(data["thumbnail_concepts"]), 1)
+        self.assertEqual(data["thumbnail_asset_request"]["bank"], "local_ai")
+        self.assertTrue(data["thumbnail_asset_request"]["text_free"])
         self.optimizer.validate_metadata(data)
 
     def test_optimize_scp_content(self):

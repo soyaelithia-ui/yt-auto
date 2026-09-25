@@ -1,20 +1,14 @@
-"""
-src/media/thumbnails/ - High-CTR YouTube Thumbnail Generation Engine.
-"""
+"""Local AI thumbnail bank and text-free export contract."""
+from src.media.thumbnails.ai_bank import LocalAIThumbnailBank, LocalThumbnailAsset
+from src.media.thumbnails.asset_resolver import ThematicAssetResolver
 from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
-from src.media.thumbnails.extractor import ClimaxFrameExtractor
 from src.media.thumbnails.grading import ChiaroscuroColorGrader
-from src.media.thumbnails.layout import AspectLayoutManager, SafeZone
-from src.media.thumbnails.subject_extractor import RimLightCompositor
-from src.media.thumbnails.typography import DynamicTypographyEngine
 
 __all__ = [
+    "LocalAIThumbnailBank",
+    "LocalThumbnailAsset",
+    "ThematicAssetResolver",
     "ThumbnailEngine",
     "ThumbnailConfig",
-    "ClimaxFrameExtractor",
     "ChiaroscuroColorGrader",
-    "RimLightCompositor",
-    "DynamicTypographyEngine",
-    "AspectLayoutManager",
-    "SafeZone",
 ]

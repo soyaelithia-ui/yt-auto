@@ -1,12 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SeoMetadata",
-  "description": "Canonical output contract for Agent 6 (SEO & Viral Metadata Optimizer)",
+  "description": "Canonical SEO metadata plus a delegated local AI thumbnail asset request; no baked cover text.",
   "type": "object",
   "properties": {
     "version": {
       "type": "string",
-      "enum": ["2.0"]
+      "enum": [
+        "2.0"
+      ]
     },
     "topic": {
       "type": "string",
@@ -14,7 +16,10 @@
     },
     "target_format": {
       "type": "string",
-      "enum": ["short", "longform"]
+      "enum": [
+        "short",
+        "longform"
+      ]
     },
     "viral_title_options": {
       "type": "array",
@@ -53,31 +58,39 @@
       "type": "string",
       "minLength": 5
     },
-    "thumbnail_concepts": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "properties": {
-          "visual_layout": {
-            "type": "string"
-          },
-          "big_headline": {
-            "type": "string"
-          },
-          "color_palette": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "facial_expression": {
+    "thumbnail_asset_request": {
+      "type": "object",
+      "properties": {
+        "bank": {
+          "type": "string",
+          "const": "local_ai"
+        },
+        "archetype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "focal_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color_palette": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
             "type": "string"
           }
         },
-        "required": ["visual_layout", "big_headline", "color_palette"],
-        "additionalProperties": false
-      }
+        "text_free": {
+          "const": true
+        }
+      },
+      "required": [
+        "bank",
+        "archetype",
+        "focal_subject",
+        "text_free"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -90,7 +103,7 @@
     "tags",
     "hashtags",
     "pinned_comment",
-    "thumbnail_concepts"
+    "thumbnail_asset_request"
   ],
   "additionalProperties": false
 }

@@ -206,24 +206,15 @@ class TestContinuousSingleLoopEngine:
         assert Path(res).stat().st_size > 0
 
 
-class TestPromptDrivenThumbnails:
-    """Tests for prompt-driven real-time thumbnail generation."""
+class TestLocalAIThumbnails:
+    """Thumbnail metadata delegates to the local text-free AI bank."""
 
-    def test_seo_optimizer_generates_chiaroscuro_and_3_to_5_word_hook(self):
+    def test_seo_optimizer_requests_local_text_free_asset(self):
         optimizer = SeoOptimizerAgent()
         meta = optimizer.optimize("El Misterio de SCP-087", target_format="short")
-
-        assert "thumbnail_concepts" in meta
-        concepts = meta["thumbnail_concepts"]
-        assert len(concepts) >= 1
-
-        first = concepts[0]
-        assert "Claroscuro" in first["visual_layout"] or "Chiaroscuro" in first["visual_layout"]
-        assert "sujeto focal misterioso" in first["visual_layout"].lower()
-
-        # Headline hook must be 3-5 words
-        words = first["big_headline"].split()
-        assert 3 <= len(words) <= 6
+        request = meta["thumbnail_asset_request"]
+        assert request["bank"] == "local_ai"
+        assert request["text_free"] is True
 
     def test_thumbnail_engine_accepts_cover_prompt_and_viral_hook(self, tmp_path: Path):
         engine = ThumbnailEngine()
@@ -231,10 +222,10 @@ class TestPromptDrivenThumbnails:
         cfg = ThumbnailConfig(
             title="SCP-087: La Escalera Infinita",
             channel_id="moku",
-            hook_text="¡NUNCA ENTRES AQUÍ! ⚠️",
+            hook_text="ignored metadata",
             output_path=out_thumb,
-            cover_prompt="Claroscuro de alto CTR con sujeto focal misterioso en penumbra",
-            metadata={"visual_layout": "Claroscuro", "big_headline": "¡NUNCA ENTRES AQUÍ! ⚠️"},
+            cover_prompt="local AI atmospheric asset",
+            metadata={"text_free": True},
         )
         res = engine.generate(config=cfg)
         assert res.is_file()
