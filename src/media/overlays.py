@@ -36,6 +36,15 @@ def _hybrid_overlay_search_roots(kind_norm: str) -> List[Path]:
     """CWD + repo assets/overlays/static and assets/overlays/motion."""
     from src.config import BASE_DIR
 
+    cwd = Path.cwd().resolve()
+    base = BASE_DIR.resolve()
+    if cwd != base and (Path("assets/overlays").is_dir() or Path("assets/overlays/static").is_dir()):
+        roots = [
+            Path("assets/overlays/static"),
+            Path("assets/overlays"),
+        ]
+        return [r for r in roots if r.is_dir()]
+
     roots: List[Path] = [
         Path("assets/overlays/static"),
         Path("assets/overlays"),
@@ -61,17 +70,25 @@ def resolve_hybrid_overlay_asset(
     """Return a pre-made static overlay PNG (never a principal-plane background).
 
     Conventions:
-    - delegates first to GraphicsBank.resolve_atmospheric_path
+    - when in isolated test sandbox (CWD != BASE_DIR and local assets/overlays exists), respect sandbox roots only
+    - otherwise delegates first to GraphicsBank.resolve_atmospheric_path
     - fallback: particles, god_rays, film_grain, vignette, tv_static in assets/overlays/static or assets/overlays
     """
-    try:
-        from src.media.graphics_bank import get_graphics_bank
+    from src.config import BASE_DIR
 
-        bank_path = get_graphics_bank().resolve_atmospheric_path(kind, particle_type)
-        if bank_path is not None and bank_path.is_file() and bank_path.stat().st_size > 0:
-            return bank_path.resolve()
-    except Exception:
-        pass
+    cwd = Path.cwd().resolve()
+    base = BASE_DIR.resolve()
+    in_sandbox = cwd != base and (Path("assets/overlays").is_dir() or Path("assets/overlays/static").is_dir())
+
+    if not in_sandbox:
+        try:
+            from src.media.graphics_bank import get_graphics_bank
+
+            bank_path = get_graphics_bank().resolve_atmospheric_path(kind, particle_type)
+            if bank_path is not None and bank_path.is_file() and bank_path.stat().st_size > 0:
+                return bank_path.resolve()
+        except Exception:
+            pass
 
     kind_norm = (kind or "").strip().lower()
     candidates: List[Path] = []

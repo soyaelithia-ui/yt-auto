@@ -340,7 +340,13 @@ class MultiSceneCompositor(BaseVideoCompositor):
         lane_id: str,
     ) -> Optional[Path]:
         """Resolve a catalog/on-disk loop for a scene without re-encoding."""
-        asset_candidate = getattr(scene, "asset_path", None) or getattr(scene, "loop_path", None)
+        asset_candidate = getattr(scene, "loop_path", None)
+        if not asset_candidate:
+            raw_asset = getattr(scene, "asset_path", None)
+            if raw_asset and Path(raw_asset).suffix.lower() in (
+                ".mp4", ".mov", ".mkv", ".webm", ".m4v"
+            ):
+                asset_candidate = raw_asset
         if asset_candidate and Path(asset_candidate).is_file():
             return Path(asset_candidate).resolve()
 

@@ -135,6 +135,17 @@ class AssetManager:
                         _add_media("templates", full_p)
                         _add_media("default", full_p)
 
+        # 3. Scan assets/visual_bank/ directory if exists (fallback compatibility for test fixtures)
+        visual_bank_dir = os.path.join(self.root_dir, "visual_bank")
+        if os.path.exists(visual_bank_dir):
+            for root, _, files in os.walk(visual_bank_dir):
+                rel = os.path.relpath(root, visual_bank_dir)
+                category = rel.split(os.sep)[0].lower() if rel != "." else "visual_bank"
+                for f in files:
+                    if not f.startswith("."):
+                        full_p = os.path.join(root, f)
+                        _add_media(category, full_p)
+                        _add_media("default", full_p)
 
         # 4. Scan legacy folders for fallback compatibility
         bg_dir = os.path.join(self.root_dir, "backgrounds")
