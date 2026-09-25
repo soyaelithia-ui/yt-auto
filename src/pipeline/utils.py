@@ -332,32 +332,23 @@ def _resolve_engine_mode(
         or getattr(SETTINGS, "short_compositor", None)
         or "loop"
     ).strip().lower()
-    is_loop_mode = engine_mode in ("loop", "loop_video", "loop_video_engine", "loop_compositor", "beats", "video_loop")
-    is_multiscene_mode = engine_mode in (
-        "director",
-        "multiscene",
-        "multi_scene",
-        "multi_scene_compositor",
-        "dual_engine",
-        "hybrid",
-        "procedural",
-        "image_animation",
+    is_loop_mode = engine_mode in (
+        "loop", "loop_video", "loop_video_engine", "loop_compositor", "video_loop"
     )
-    force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
-    if is_multiscene_mode and getattr(lane, "orientation", None) == "horizontal" and getattr(lane, "visual_pipeline", None) == "director":
-        engine_mode = "director"
-        is_multiscene_mode = True
-        is_loop_mode = False
-    elif is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
-        logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
+    is_director_mode = engine_mode == "director"
+    if is_director_mode and (
+        getattr(lane, "orientation", None) != "horizontal"
+        or getattr(lane, "visual_pipeline", None) != "director"
+    ):
+        logger.info("Coercing director lane %s to local loop mode", getattr(lane, "id", "unknown"))
         engine_mode = "loop"
+        is_director_mode = False
         is_loop_mode = True
-        is_multiscene_mode = False
-    if not (is_loop_mode or is_multiscene_mode):
+    if not (is_loop_mode or is_director_mode):
         raise ValueError(
-            f"video_engine={engine_mode!r} is not supported. Supported engine modes: 'director', 'multiscene', 'hybrid', 'image_animation', or 'loop'."
+            f"video_engine={engine_mode!r} is not supported. Supported modes: 'director' or 'video_loop'."
         )
-    return engine_mode, is_loop_mode, is_multiscene_mode
+    return engine_mode, is_loop_mode, is_director_mode
 
 
 def _prepare_pipeline_paths(run_id: str) -> dict[str, Path]:

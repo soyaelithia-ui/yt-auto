@@ -66,48 +66,6 @@ class SafeArea(BaseModel):
     margin_right: int = Field(85, ge=0)
 
 
-class LayerConfig(BaseModel):
-    layer_id: str
-    asset_path: str
-    z_depth: float = Field(..., ge=0.0, le=1.0)
-    blend_mode: Literal["normal", "screen", "multiply", "overlay", "add"] = "normal"
-    opacity: float = Field(1.0, ge=0.0, le=1.0)
-
-
-class CameraMotionConfig(BaseModel):
-    type: Literal[
-        "ken_burns_3d",
-        "parallax_drift",
-        "orbital_pan",
-        "zoom_in",
-        "zoom_out",
-        "pan_left",
-        "pan_right",
-        "static",
-    ] = "ken_burns_3d"
-    start_zoom: float = 1.0
-    end_zoom: float = 1.10  # canonical Ken Burns zoom 1.00 → 1.10
-    pan_direction: Literal[
-        "center_to_top",
-        "center_to_bottom",
-        "left_to_right",
-        "right_to_left",
-        "static",
-    ] = "center_to_top"
-    easing: Literal["linear", "ease_in_out", "cubic_bezier"] = "cubic_bezier"
-    parallax_intensity: float = Field(0.15, ge=0.0, le=1.0)
-
-
-class HybridAIConfig(BaseModel):
-    background_image_path: Optional[str] = None
-    still_bg: Optional[str] = None
-    depth_map_path: Optional[str] = None
-    prompt_used: Optional[str] = None
-    seed: Optional[int] = None
-    layers: Optional[List[LayerConfig]] = Field(default_factory=list)
-    camera_motion: Optional[CameraMotionConfig] = Field(default_factory=CameraMotionConfig)
-
-
 class TransitionConfig(BaseModel):
     type: Literal[
         "crossfade",
@@ -122,7 +80,7 @@ class TransitionConfig(BaseModel):
 
 
 class SceneConfig(BaseModel):
-    # Explicit fields only (niche_hud / camera_motion / image_path / asset_path).
+    # Explicit fields only (local asset path and editorial metadata).
     # Do not widen with extra="allow" — unknown keys are ignored (Pydantic default).
     scene_index: int = Field(..., ge=1)
     scene_id: str
@@ -130,16 +88,9 @@ class SceneConfig(BaseModel):
     start_sec: float = Field(..., ge=0.0)
     duration_sec: float = Field(..., ge=0.1)
     tension_level: int = Field(..., ge=1, le=5)
-    engine_type: Literal[
-        "catalog_loop",
-        "static_matte",
-        "hybrid_cinematic_ai",
-    ]
-    hybrid_ai_config: Optional[HybridAIConfig] = None
+    engine_type: Literal["catalog_loop"]
     asset_config: Optional[Dict[str, Any]] = None
     transition_out: Optional[TransitionConfig] = Field(default_factory=TransitionConfig)
-    niche_hud: Optional[Dict[str, Any]] = None
-    camera_motion: Optional[Union[CameraMotionConfig, Dict[str, Any]]] = None
     image_path: Optional[str] = None
     asset_path: Optional[str] = None
 
@@ -298,14 +249,6 @@ def parse_scene_manifest_model(
         sc_dur = float(sc.get("duration_sec", dur / max(1, len(scenes_raw))))
         sc_start = float(sc.get("start_sec", idx * sc_dur))
         img_p = sc.get("image_path") or sc.get("source")
-        is_video_source = bool(img_p and str(img_p).endswith(".mp4"))
-        if is_video_source:
-            engine_t = "catalog_loop"
-            hyb_cfg = None
-        else:
-            engine_t = "hybrid_cinematic_ai"
-            hyb_cfg = HybridAIConfig(background_image_path=str(img_p) if img_p else None)
-
         adapted_scenes.append(
             SceneConfig(
                 scene_index=idx + 1,
@@ -314,8 +257,9 @@ def parse_scene_manifest_model(
                 start_sec=sc_start,
                 duration_sec=sc_dur,
                 tension_level=3,
-                engine_type=engine_t,
-                hybrid_ai_config=hyb_cfg,
+                engine_type="catalog_loop",
+                image_path=str(img_p) if img_p else None,
+                asset_path=str(img_p) if img_p else None,
                 transition_out=TransitionConfig(type="crossfade", duration_sec=0.8),
             )
         )

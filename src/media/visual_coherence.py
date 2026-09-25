@@ -3,7 +3,7 @@
 Ownership (D2 paso 6):
 - art_director: inclusion + palette (theme) + per-scene mood
 - scene_planner: order (script acts) + timing scaled to audio; must not reshuffle
-- director_single_pass: encode/assembly only (no palette/order rewrite)
+- local asset assembly: encode/assembly only (no palette/order rewrite)
 
 Helpers keep planner from inventing a second scene order or dropping art_director palettes.
 """

@@ -126,7 +126,7 @@ def _stage_08_loop_scene(ctx: RunContext) -> None:
 
 
 def _stage_09_video_rendering(ctx: RunContext) -> None:
-    """Stage 9: Video composition via stream-copy or MultiSceneCompositor."""
+    """Stage 9: Local asset video composition via stream-copy."""
     _dispatch_stage("_stage_09_video_rendering", stage_09_video_rendering, _stage_09_video_rendering)(ctx)
 
 
@@ -260,13 +260,6 @@ def run_pipeline_once(
     repository = claimed_ctx["repository"]
 
     engine_mode, is_loop_mode, is_multiscene_mode = _resolve_engine_mode(lane, video_engine, compositor)
-    force_multiscene = os.environ.get("FORCE_MULTISCENE", "").strip().lower() in ("1", "true", "yes", "on")
-    if is_multiscene_mode and not force_multiscene and engine_mode != "image_animation":
-        logger.info("Coercing video_engine=%s to loop (set FORCE_MULTISCENE=1 to restore director)", engine_mode)
-        engine_mode = "loop"
-        is_loop_mode = True
-        is_multiscene_mode = False
-
     subtitles_active = False
     if enable_subtitles is True:
         subtitles_active = True

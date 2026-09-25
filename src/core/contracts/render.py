@@ -72,7 +72,7 @@ class RenderSpec(Mapping):
     orientation: str = "vertical"  # "vertical" | "horizontal"
     include_subtitles: bool = True
     stream_copy: bool = True
-    visual_pipeline: str = "beats"
+    visual_pipeline: str = "video_loop"
     scene_images: list[str] = field(default_factory=list)
     shot_durations: list[float] = field(default_factory=list)
     shot_roles: list[str] = field(default_factory=list)
@@ -194,7 +194,7 @@ class RenderSpec(Mapping):
         orientation = str(d.pop("orientation", "vertical") or "vertical")
         include_subtitles = bool(d.pop("include_subtitles", True))
         stream_copy = bool(d.pop("stream_copy", True))
-        visual_pipeline = str(d.pop("visual_pipeline", "beats") or "beats")
+        visual_pipeline = str(d.pop("visual_pipeline", "video_loop") or "video_loop")
         scene_images = list(d.pop("scene_images", None) or [])
         shot_durations = [_safe_float(x) for x in (d.pop("shot_durations", None) or [])]
         shot_roles = [str(x) for x in (d.pop("shot_roles", None) or [])]
@@ -272,7 +272,7 @@ class RenderSpec(Mapping):
             width = _safe_int(expected_res[0], width)
             height = _safe_int(expected_res[1], height)
 
-        visual_pipeline = getattr(lane_obj, "visual_pipeline", "beats") or "beats"
+        visual_pipeline = getattr(lane_obj, "visual_pipeline", "video_loop") or "beats"
 
         return cls(
             manifest_path=getattr(ctx, "manifest_path", None),

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from src.agents.atmospheric_director import AtmosphericDirectorAgent, ArtDirectorMoodAgent
-from src.media.manifest_compiler import SceneManifestCompiler, ScenePlannerCompositorAgent
 from src.curators.text_splitter import TextSegmentationEngine, CinematicScriptCuratorAgent
 from src.asset_manager import get_asset_manager
 from src.core.profiling import CanonicalStage
@@ -125,32 +123,6 @@ def stage_04_mood_theme(ctx: PipelineContext) -> None:
                     return
             except Exception as exc:
                 logger.warning("pipeline.mood.multi_act_fallback: %s", exc, exc_info=True)
-
-        if ctx.is_multiscene_mode and not is_horizontal_director:
-            from src.media.compositor import MultiSceneCompositor
-
-            curator = CinematicScriptCuratorAgent()
-            art = ArtDirectorMoodAgent()
-            ctx.planner_agent = ScenePlannerCompositorAgent()
-            ctx.multi_compositor = MultiSceneCompositor()
-
-            target_fmt = "short" if ctx.lane.orientation == "vertical" else "longform"
-            ctx.script_payload = curator.curate(
-                raw_text=ctx.clean_script,
-                title=ctx.title,
-                channel_lane=ctx.lane.id,
-                target_format=target_fmt,
-            )
-            (ctx.work_dir / "cinematic_script.json").write_text(
-                json.dumps(ctx.script_payload, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-            ctx.visual_plan_payload = art.plan_visuals(
-                cinematic_script=ctx.script_payload, theme_lane=ctx.target_category
-            )
-            ctx.visual_plan_path.write_text(
-                json.dumps(ctx.visual_plan_payload, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-            return
 
         from src.media.loop_engine import LoopVideoEngine
 

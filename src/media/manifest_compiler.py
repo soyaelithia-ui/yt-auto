@@ -474,8 +474,6 @@ class SceneManifestCompiler:
         do_subdivide = subdivide_shots or meta.get("subdivide_shots", False) or meta.get("dynamic_pacing", False)
 
         global_scene_idx = 1
-        pan_directions = ["center_to_top", "left_to_right", "right_to_left", "center_to_bottom"]
-        camera_motion_types = ["ken_burns_3d", "parallax_drift", "zoom_in", "zoom_out", "pan_left", "pan_right"]
 
         used_archetypes_short: set[str] = set()
         prev_archetype: Optional[str] = None
@@ -500,60 +498,35 @@ class SceneManifestCompiler:
 
             for sub_i, sub_dur in enumerate(sub_durations):
                 sub_sc_id = f"scene_{global_scene_idx:03d}"
-                pan_dir = pan_directions[global_scene_idx % len(pan_directions)]
-                motion_type = camera_motion_types[global_scene_idx % len(camera_motion_types)]
+                # Every scene is a local catalog loop.  There is deliberately no
+                # camera-motion, procedural, hybrid, or generated-frame branch.
+                engine_type = "catalog_loop"
+                dram_role = sc_script.get("dramatic_role", "")
+                narration_snippet = sc_script.get("narration_text", "") or sc_script.get("scene_text", "")
 
-                # Engine & Template Selection
-                # Use catalog_loop with dynamic universal visual categories for all scenes
-                is_procedural = True
-                
-                if is_procedural:
-                    engine_type = "catalog_loop"
-                    dram_role = sc_script.get("dramatic_role", "")
-                    narration_snippet = sc_script.get("narration_text", "") or sc_script.get("scene_text", "")
+                # For Shorts: exclude all previously used archetypes to guarantee 100% distinct scenes.
+                # For Longform: exclude the immediate previous archetype to prevent static back-to-back loops.
+                excluded = set(used_archetypes_short) if not is_longform else ({prev_archetype} if prev_archetype else set())
 
-                    # For Shorts: exclude all previously used archetypes to guarantee 100% distinct scenes
-                    # For Longform: exclude the immediate previous archetype to prevent static back-to-back loops
-                    excluded = set(used_archetypes_short) if not is_longform else ({prev_archetype} if prev_archetype else set())
-
-                    upstream_archetype = sc_plan.get("archetype_id")
-                    if upstream_archetype:
-                        category = upstream_archetype
-                    else:
-                        category, _template_name, _custom_params = self._resolve_scene_archetype(
-                            env_name=f"{env_name} {narration_snippet}",
-                            tension=tension,
-                            dramatic_role=dram_role,
-                            lane_id=lane,
-                            scene_idx=global_scene_idx,
-                            excluded_archetypes=excluded,
-                        )
-                    used_archetypes_short.add(category)
-                    prev_archetype = category
-                    hybrid_config = None
+                upstream_archetype = sc_plan.get("archetype_id")
+                if upstream_archetype:
+                    category = upstream_archetype
                 else:
-                    engine_type = "hybrid_cinematic_ai"
-
-                    hybrid_config = {
-                        "seed": 1000 + global_scene_idx * 37,
-                        "layers": [],
-                        "camera_motion": {
-                            "type": motion_type,
-                            "start_zoom": 1.0,
-                            "end_zoom": round(1.10 + 0.02 * max(0, tension - 1), 3),
-                            "pan_direction": pan_dir,
-                            "easing": "cubic_bezier",
-                            "parallax_intensity": round(0.12 + 0.09 * tension, 2),
-                        },
-                    }
-                    pos_prompt = sc_plan.get("image_prompts", {}).get("positive_prompt")
-                    if pos_prompt:
-                        hybrid_config["prompt_used"] = pos_prompt
+                    category, _template_name, _custom_params = self._resolve_scene_archetype(
+                        env_name=f"{env_name} {narration_snippet}",
+                        tension=tension,
+                        dramatic_role=dram_role,
+                        lane_id=lane,
+                        scene_idx=global_scene_idx,
+                        excluded_archetypes=excluded,
+                    )
+                used_archetypes_short.add(category)
+                prev_archetype = category
 
                 scene_entry: Dict[str, Any] = {
                     "scene_index": global_scene_idx,
                     "scene_id": sub_sc_id,
-                    "environment_name": category if is_procedural else (f"{env_name} (Cut {sub_i+1})" if len(sub_durations) > 1 else env_name),
+                    "environment_name": category,
                     "start_sec": round(current_time, 2),
                     "duration_sec": round(sub_dur, 2),
                     "tension_level": tension,
@@ -564,78 +537,18 @@ class SceneManifestCompiler:
                     },
                 }
 
-                if hybrid_config:
-                    scene_entry["hybrid_ai_config"] = hybrid_config
-
-                # Niche HUD telemetry + resolved visual-bank asset (PR #2 value on cheap director)
-                lane_l = lane.lower()
-                hud_badge = sc_plan.get("hud_badge") or sc_script.get("hud_badge")
-                hud_site = sc_plan.get("hud_site") or sc_script.get("hud_site")
-                telemetry = sc_plan.get("telemetry_label") or sc_script.get("telemetry_label")
-                from src.media.multi_act_renderer import resolve_hud_accent_color
-                plan_accent = sc_plan.get("palette", {}).get("accent") if isinstance(sc_plan.get("palette"), dict) else None
-                scene_accent_raw = plan_accent or sc_plan.get("accent_color_hex")
-                if scene_accent_raw is not None:
-                    scene_accent = validate_hex_color(str(scene_accent_raw), default=resolved_accent)
-                else:
-                    scene_accent = resolved_accent
-                story_l = str(meta.get("story_type", "")).lower()
-                if "scp" in lane_l or "scp" in story_l:
-                    story_type = "scp"
-                    copy_badge = hud_badge or f"NIVEL {tension} // {'KETER' if tension >= 4 else 'EUCLID'}: CLASIFICADO"
-                    copy_site = hud_site or "SITIO-19 // SECTOR-04"
-                    copy_tel = telemetry or f"CAM-{global_scene_idx:02d}: CONTENCIÓN ACTIVA"
-                elif "aita" in lane_l or "reddit" in lane_l or "drama" in lane_l:
-                    story_type = "reddit_aita"
-                    copy_badge = hud_badge or "r/AmItheAsshole"
-                    copy_site = hud_site or f"OP: u/{str(meta.get('story_id', 'anon'))[:14]}"
-                    copy_tel = telemetry or f"▲ {12 + global_scene_idx * 2}.4k upvotes • {global_scene_idx * 340} comments"
-                else:
-                    story_type = "horror"
-                    copy_badge = hud_badge or "ABYSSAL SONAR // REC"
-                    copy_site = hud_site or f"PROFUNDIDAD: {1200 + global_scene_idx * 450}M"
-                    copy_tel = telemetry or "ECO NO IDENTIFICADO"
-                if (
-                    resolved_layout in ("none", "off", "disabled", "false")
-                    or meta.get("hud_enabled") is False
-                    or sc_plan.get("hud_enabled") is False
-                    or sc_script.get("hud_enabled") is False
-                ):
-                    niche_hud = None
-                else:
-                    niche_hud = {
-                        "lane_id": lane,
-                        "story_type": story_type,
-                        "hud_layout": resolved_layout,
-                        "hud_badge": copy_badge,
-                        "hud_site": copy_site,
-                        "telemetry_label": copy_tel,
-                        "accent_color_hex": resolve_hud_accent_color(
-                            scene_accent, lane_id=lane, story_type=story_type
-                        ),
-                        "primary_color_hex": resolved_primary,
-                        "tension_level": tension,
-                    }
-
+                # The renderer receives only a local visual asset; no HUD or text
+                # payload is written into the manifest.
                 from src.media.thumbnails.asset_resolver import ThematicAssetResolver
-                arch = category if is_procedural else env_name
+                arch = category
                 resolved_asset = ThematicAssetResolver.resolve_scene_asset_path(
                     channel_id=lane,
                     archetype=str(arch),
                     scene_idx=global_scene_idx,
                     is_vertical=(res[1] > res[0]),
                 )
-                scene_entry["niche_hud"] = niche_hud
-                scene_entry["camera_motion"] = {
-                    "type": motion_type,
-                    "pan_direction": pan_dir,
-                    "start_zoom": 1.0,
-                    "end_zoom": round(1.10 + 0.02 * max(0, tension - 1), 3),
-                }
                 scene_entry["image_path"] = str(resolved_asset)
                 scene_entry["asset_path"] = str(resolved_asset)
-                if hybrid_config:
-                    hybrid_config["background_image_path"] = str(resolved_asset)
 
                 scenes_data.append(scene_entry)
                 current_time += sub_dur

@@ -27,9 +27,9 @@ ALLOWED_RESOLUTIONS: Final[dict[str, tuple[int, int]]] = {
     "vertical": SHORT_RESOLUTION,
     "horizontal": LONGFORM_RESOLUTION,
 }
-ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset(
-    {"beats", "director", "image_animation", "video_loop"}
-)
+# Production video composition is intentionally asset-only; only local loop
+# assembly modes are accepted here.
+ALLOWED_VISUAL_PIPELINES: Final[frozenset[str]] = frozenset({"director", "video_loop"})
 ALLOWED_STORY_TYPES: Final[frozenset[str]] = frozenset(
     {"scp", "horror", "reddit_aita", "reddit_generic", "scifi"}
 )
@@ -165,7 +165,7 @@ class LaneProfile:
     background_audio: LaneBackgroundAudioConfig = field(default_factory=LaneBackgroundAudioConfig)
     enabled: bool = True
     multistory_collection: bool = False
-    visual_pipeline: str = "beats"  # "beats" | "director" | "image_animation" | "video_loop"
+    visual_pipeline: str = "video_loop"  # "director" | "video_loop"
     qa_profile: str = ""
     review_content_type: str = ""
     topic_filter_mode: str = "off"
@@ -290,7 +290,7 @@ def parse_lane(raw: Mapping[str, Any]) -> LaneProfile:
     if story_type not in ALLOWED_STORY_TYPES:
         raise ValueError(f"Lane '{lane_id}': story_type inválida {story_type!r}")
 
-    visual_pipeline = str(raw.get("visual_pipeline", "beats")).strip().lower()
+    visual_pipeline = str(raw.get("visual_pipeline", "video_loop")).strip().lower()
     if visual_pipeline not in ALLOWED_VISUAL_PIPELINES:
         raise ValueError(
             f"Lane '{lane_id}': visual_pipeline inválido {visual_pipeline!r} "

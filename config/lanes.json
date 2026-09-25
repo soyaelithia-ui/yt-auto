@@ -29,7 +29,7 @@
         "keywords": ["scp", "anomal", "contención", "fundación", "keter", "euclid", "safe"]
       },
       "multistory_collection": false,
-      "visual_pipeline": "image_animation",
+      "visual_pipeline": "video_loop",
       "qa_profile": "short",
       "review_content_type": "short",
       "padding_themes": ["pasillos metálicos", "luz de emergencia roja", "contención de hormigón"],
@@ -172,7 +172,7 @@
         "keywords": ["singularidad", "agujero negro", "paradoja", "inteligencia artificial", "espacio", "fermi"]
       },
       "multistory_collection": false,
-      "visual_pipeline": "image_animation",
+      "visual_pipeline": "video_loop",
       "qa_profile": "short",
       "review_content_type": "short",
       "padding_themes": ["puentes de mando de naves estelares", "horizontes de sucesos de agujeros negros", "estaciones espaciales en órbita"],

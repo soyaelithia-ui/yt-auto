@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SceneManifestV2",
-  "description": "Canonical Visual & Audio Scene Manifest Contract for Asset-Based Video Rendering Pipeline",
+  "description": "Canonical manifest for local video assets and stream-copy composition; no generated frames or runtime graphic layers.",
   "type": "object",
   "required": [
     "manifest_version",
@@ -18,7 +18,11 @@
   "properties": {
     "manifest_version": {
       "type": "string",
-      "enum": ["2.0", "2.1", "2.0.0"]
+      "enum": [
+        "2.0",
+        "2.1",
+        "2.0.0"
+      ]
     },
     "story_id": {
       "type": "string",
@@ -41,7 +45,13 @@
     },
     "fps": {
       "type": "integer",
-      "enum": [24, 25, 30, 50, 60]
+      "enum": [
+        24,
+        25,
+        30,
+        50,
+        60
+      ]
     },
     "total_duration_sec": {
       "type": "number",
@@ -64,7 +74,10 @@
         },
         "pixel_format": {
           "type": "string",
-          "enum": ["yuv420p", "yuv420p10le"],
+          "enum": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
           "default": "yuv420p"
         }
       },
@@ -72,7 +85,9 @@
     },
     "audio_tracks": {
       "type": "object",
-      "required": ["narration_path"],
+      "required": [
+        "narration_path"
+      ],
       "properties": {
         "narration_path": {
           "type": "string",
@@ -129,7 +144,11 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["sfx_path", "timestamp_sec", "volume"],
+            "required": [
+              "sfx_path",
+              "timestamp_sec",
+              "volume"
+            ],
             "properties": {
               "sfx_id": {
                 "type": "string"
@@ -161,7 +180,12 @@
     },
     "safe_area": {
       "type": "object",
-      "required": ["margin_top", "margin_bottom", "margin_left", "margin_right"],
+      "required": [
+        "margin_top",
+        "margin_bottom",
+        "margin_left",
+        "margin_right"
+      ],
       "properties": {
         "margin_top": {
           "type": "integer",
@@ -195,13 +219,6 @@
           "tension_level",
           "engine_type"
         ],
-        "not": {
-          "anyOf": [
-            {"required": ["procedural_config"]},
-            {"required": ["uniforms"]},
-            {"properties": {"engine_type": {"enum": ["pure_procedural_webgl", "procedural_canvas2d"]}}}
-          ]
-        },
         "properties": {
           "scene_index": {
             "type": "integer",
@@ -225,189 +242,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 5
-          },
-          "engine_type": {
-            "type": "string",
-            "enum": [
-              "catalog_loop",
-              "static_matte",
-              "hybrid_cinematic_ai"
-            ]
-          },
-          "hybrid_ai_config": {
-            "type": "object",
-            "properties": {
-              "background_image_path": {
-                "type": ["string", "null"]
-              },
-              "depth_map_path": {
-                "type": ["string", "null"]
-              },
-              "prompt_used": {
-                "type": ["string", "null"]
-              },
-              "seed": {
-                "type": "integer"
-              },
-              "layers": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": ["layer_id", "asset_path", "z_depth"],
-                  "properties": {
-                    "layer_id": {
-                      "type": "string"
-                    },
-                    "asset_path": {
-                      "type": "string"
-                    },
-                    "z_depth": {
-                      "type": "number",
-                      "minimum": 0.0,
-                      "maximum": 1.0
-                    },
-                    "blend_mode": {
-                      "type": "string",
-                      "enum": ["normal", "screen", "multiply", "overlay", "add"],
-                      "default": "normal"
-                    },
-                    "opacity": {
-                      "type": "number",
-                      "minimum": 0.0,
-                      "maximum": 1.0,
-                      "default": 1.0
-                    }
-                  },
-                  "additionalProperties": true
-                }
-              },
-              "camera_motion": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "ken_burns_3d",
-                      "parallax_drift",
-                      "orbital_pan",
-                      "zoom_in",
-                      "zoom_out",
-                      "pan_left",
-                      "pan_right",
-                      "static"
-                    ],
-                    "default": "ken_burns_3d"
-                  },
-                  "start_zoom": {
-                    "type": "number",
-                    "default": 1.0
-                  },
-                  "end_zoom": {
-                    "type": "number",
-                    "default": 1.08
-                  },
-                  "pan_direction": {
-                    "type": "string",
-                    "enum": [
-                      "center_to_top",
-                      "center_to_bottom",
-                      "left_to_right",
-                      "right_to_left",
-                      "static"
-                    ],
-                    "default": "center_to_top"
-                  },
-                  "easing": {
-                    "type": "string",
-                    "enum": ["linear", "ease_in_out", "cubic_bezier"],
-                    "default": "cubic_bezier"
-                  },
-                  "parallax_intensity": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "maximum": 1.0,
-                    "default": 0.15
-                  }
-                },
-                "additionalProperties": true
-              },
-              "lighting": {
-                "type": "object",
-                "properties": {
-                  "volumetric_rays": {
-                    "type": "boolean",
-                    "default": false
-                  },
-                  "light_source_pos": {
-                    "type": "array",
-                    "items": {
-                      "type": "number"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
-                  },
-                  "intensity": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "maximum": 1.0,
-                    "default": 0.3
-                  },
-                  "flicker_frequency": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "default": 0.0
-                  },
-                  "color_tint": {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$",
-                    "default": "#ffffff"
-                  }
-                },
-                "additionalProperties": true
-              },
-              "particles": {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "dust_motes",
-                      "ember_sparks",
-                      "fog_mist",
-                      "spores",
-                      "rain_streaks",
-                      "none"
-                    ],
-                    "default": "none"
-                  },
-                  "density": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 500,
-                    "default": 40
-                  },
-                  "velocity": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "maximum": 5.0,
-                    "default": 1.0
-                  },
-                  "color": {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$",
-                    "default": "#ffffff"
-                  },
-                  "opacity": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "maximum": 1.0,
-                    "default": 0.4
-                  }
-                },
-                "additionalProperties": true
-              }
-            },
-            "additionalProperties": true
           },
           "transition_out": {
             "type": "object",
@@ -433,16 +267,52 @@
               }
             },
             "additionalProperties": true
+          },
+          "engine_type": {
+            "type": "string",
+            "enum": [
+              "catalog_loop"
+            ]
+          },
+          "image_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asset_path": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "additionalProperties": true
+        "additionalProperties": true,
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "procedural_config"
+              ]
+            },
+            {
+              "required": [
+                "uniforms"
+              ]
+            }
+          ]
+        }
       }
     },
     "subtitles": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["start", "end", "text"],
+        "required": [
+          "start",
+          "end",
+          "text"
+        ],
         "properties": {
           "start": {
             "type": "number",

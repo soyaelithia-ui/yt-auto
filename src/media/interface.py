@@ -1,8 +1,8 @@
 """
 src/media/interface.py - Compositor Interface and Registry for Video Rendering.
 
-Supports Unified Asset-Based Multi-Scene Rendering (MultiSceneCompositor),
-Ken Burns Photographic Composition (HybridVideoEngine), and Continuous Loops (LoopVideoEngine).
+The production runtime accepts only local video assets and stream-copy assembly.
+No real-time graphics compositor is registered here.
 """
 from __future__ import annotations
 
@@ -77,52 +77,47 @@ class BaseVideoCompositor(ABC):
         pass
 
 
-_MULTISCENE_ALIASES = {"multiscene", "multi_scene", "multi_scene_compositor", "dual_engine", "default", "catalog"}
-_HYBRID_ALIASES = {"hybrid", "hybrid_ai", "hybrid_cinematic_ai", "hybrid_video_engine", "ken_burns"}
-_LOOP_ALIASES = {"loop", "loop_video", "loop_video_engine", "loop_compositor", "ffmpeg_legacy", "motion_canvas", "legacy"}
+_LOOP_ALIASES = {
+    "loop",
+    "loop_video",
+    "loop_video_engine",
+    "loop_compositor",
+    "video_loop",
+    "ffmpeg_legacy",
+    "default",
+    "legacy",
+    "motion_canvas",
+    # Deprecated configuration aliases now resolve to local loop composition.
+    "multiscene",
+    "multi_scene",
+    "catalog",
+    "dual_engine",
+}
 
 
 def get_compositor(name: Optional[str] = None) -> BaseVideoCompositor:
-    """
-    Return the configured compositor instance.
-    Supports 'multiscene' (default), 'hybrid', and 'loop'.
+    """Return the local asset stream-copy compositor.
+
+    ``name`` is retained as a compatibility input, but every accepted value
+    resolves to ``LoopVideoEngine``. Retired graphical engines fail closed.
     """
     comp_name = (
         name
         or os.environ.get("VIDEO_ENGINE")
         or os.environ.get("SHORT_COMPOSITOR")
         or os.environ.get("COMPOSITOR")
-        or getattr(SETTINGS, "short_compositor", "multiscene")
-        or "multiscene"
+        or getattr(SETTINGS, "short_compositor", "loop")
+        or "loop"
     ).lower()
-
-    if comp_name in _MULTISCENE_ALIASES:
-        from src.media.compositor import MultiSceneCompositor
-        return MultiSceneCompositor()
-
-    if comp_name in _HYBRID_ALIASES:
-        from src.media.hybrid_engine import HybridVideoEngine
-        return HybridVideoEngine()
-
-    if comp_name in _LOOP_ALIASES:
-        from src.media.loop_engine import LoopVideoEngine
-        return LoopVideoEngine()
-
-    logger.warning(
-        "Compositor %r is unrecognized. Defaulting to MultiSceneCompositor.",
-        comp_name,
-    )
-    from src.media.compositor import MultiSceneCompositor
-    return MultiSceneCompositor()
+    if comp_name not in _LOOP_ALIASES:
+        raise ValueError(
+            f"Unsupported video engine {comp_name!r}; only local asset loop composition is available"
+        )
+    from src.media.loop_engine import LoopVideoEngine
+    return LoopVideoEngine()
 
 
 def __getattr__(name: str):
-    if name in ("MultiSceneCompositor",):
-        from src.media.compositor import MultiSceneCompositor
-        return MultiSceneCompositor
-    if name in ("HybridVideoEngine",):
-        from src.media.hybrid_engine import HybridVideoEngine
-        return HybridVideoEngine
     if name in ("LoopVideoEngine", "LoopVideoCompositor"):
         from src.media.loop_engine import LoopVideoEngine
         return LoopVideoEngine

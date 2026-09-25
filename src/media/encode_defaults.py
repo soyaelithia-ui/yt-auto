@@ -61,9 +61,8 @@ def loop_matches_target_geometry(
 ) -> bool:
     """Return True when probed video WxH equals the target (safe for ``-c:v copy``).
 
-    Shared by procedural segment render (this PR) and director single-pass assembly
-    (PR #11 ``MultiSceneCompositor._loop_matches_target``) so merges do not fork
-    two incompatible geometry checks. Uses ``probe.primary_video`` (same as
+    Shared by local loop assembly and QA so the repository has one geometry check.
+    Uses ``probe.primary_video`` (same as
     ``video_streams[0]`` when present).
     """
     try:

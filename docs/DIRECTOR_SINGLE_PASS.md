@@ -1,31 +1,11 @@
-# Director single-pass assembly (CPU/RAM)
+# Director: local asset sequence
 
-## Encode counts (video)
+The director lane is now an editorial selector, not a graphics renderer.
 
-| Path | Scene encodes | Assembly | Master (no ASS / with ASS) | Total (N=5, no ASS) |
-|------|---------------|----------|----------------------------|---------------------|
-| Legacy multi-pass | N libx264 | concat `-c:v copy` (0) | 0 / 1 | **5** |
-| `DIRECTOR_SINGLE_PASS=1` stream-copy (homogeneous loops, no HUD) | 0 | trim `-c:v copy` + concat copy (0) | 0 / 1 | **0** |
-| MultiAct, HUD off, `MULTIACT_XFADE=0`, homogeneous (9:16 or 16:9) | 0 | trim `-c:v copy` + concat copy (0) | 0 (AAC mux) | **0** |
-| MultiAct, any WxH/codec/pix_fmt/time_base mismatch | 0 | 1 filter_complex scale+concat (`setsar=1`, veryfast/CRF21) | 0 (AAC mux) | **1** |
-| Single-pass + scale (resize **or** non-homogeneous codec/pix_fmt/time_base) | 0 | 1 filter_complex concat | 0 / 1 | **1** |
-| Single-pass + planner `niche_hud` | 0 | 1 filter_complex concat+HUD (veryfast/CRF21) | 0 / 1 | **1** |
-| `DIRECTOR_XFADE=1` | 0 | 1 filter_complex xfade | 0 / 1 | **1** |
+- Stage 4 selects local video resources from the catalog for each narrative act.
+- Stages 8–9 build and compose the manifest through `LoopVideoEngine`.
+- Matching local videos use stream-copy concat (`-c:v copy`); audio and soft subtitles are muxed separately.
+- No Ken Burns/zoompan, runtime HUD, SVG, raster overlay, drawtext, drawbox, or generated video frame is allowed.
+- `DIRECTOR_XFADE`, `MULTIACT_XFADE`, and `DIRECTOR_SINGLE_PASS` are retired and must not be used to alter production output.
 
-## Flags
-
-- `DIRECTOR_SINGLE_PASS` — default **on**. Falls back to legacy multi-pass for hybrid scenes or missing loops (no arbitrary `glob('*.mp4')[0]` fallback).
-- `DIRECTOR_XFADE` — default **off** in `MultiSceneCompositor` (timeline shortens; breaks naive narration sync).
-- `MULTIACT_XFADE` — default **on** for `MultiActVideoRenderer` (docs/openspec claimed xfade). Set `0` for concat without duration shrink. Callers must pass `total_duration=calculate_xfade_duration([...])` so output `-t` keeps A/V aligned.
-
-## Stream-copy safety
-
-Concat demuxer `-c:v copy` requires all trimmed segments to share **WxH + codec + pix_fmt + time_base** (via ffprobe). Otherwise assembly uses one scale+concat encode.
-
-Planner/lane `niche_hud` (SCP / Reddit-AITA / abyssal) is burned with **one** extra FFmpeg `drawtext`/`drawbox` stage on the concat graph (not N per-scene encodes; no Playwright / wgpu / Pillow frames). Homogeneous loops without HUD still stream-copy. `DIRECTOR_XFADE` stays default off.
-
-## Follow-ups
-
-1. Fuse master audio/ASS into the same filter_complex as loop assembly (true 1-pass end-to-end).
-2. Hybrid stills: multi-input `zoompan` + xfade in one graph (larger change).
-3. Planner-aware xfade duration accounting so `DIRECTOR_XFADE=1` can be default-safe.
+Thumbnail generation is independent: `LocalAIThumbnailBank` resolves a locally generated image and `ThumbnailEngine` applies only bounded color grading. Text is never printed into the thumbnail.
