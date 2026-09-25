@@ -60,10 +60,10 @@ class TestTakeDueLanes:
         now = int(time.time())
         short, long = lanes[0], lanes[1]
         repo.ensure_lane_rows([lane.id for lane in lanes], now=now - 1000)
-        # Push short AND aelithia forward; moku-horror-long is most overdue.
+        # Push short AND drama-aita-long forward; horror-horror-long is most overdue.
         repo.mark_lane_fired(short.id, fired_at=now - 500, next_due_at=now + 10_000)
         repo.mark_lane_fired(
-            "aelithia-aita-long", fired_at=now - 500, next_due_at=now + 10_000
+            "drama-aita-long", fired_at=now - 500, next_due_at=now + 10_000
         )
         scheduler = LaneScheduler(str(db_path), lanes=lanes)
         scheduler.initialize()
@@ -111,9 +111,9 @@ class TestTakeDueLanes:
         wait = scheduler.seconds_until_due(now=now)
         assert wait == 300
 
-        # Filtered to only aelithia-aita-long (1800s gap)
-        wait_ael = scheduler.seconds_until_due(now=now, lanes_filter={"aelithia-aita-long"})
-        assert wait_ael == 1800
+        # Filtered to only drama-aita-long (1800s gap)
+        wait_drama = scheduler.seconds_until_due(now=now, lanes_filter={"drama-aita-long"})
+        assert wait_drama == 1800
 
 
 class TestCommitSemantics:
@@ -152,13 +152,13 @@ class TestCommitSemantics:
         before = int(time.time())
         outage_end = before + 7_200  # daemon slept two hours
         picks = scheduler.take_due_lanes(now=outage_end, max_picks=5)
-        short = next(p for p in picks if p.lane_id == "moku-scp-shorts")
+        short = next(p for p in picks if p.lane_id == "horror-scp-shorts")
         scheduler.commit_fire(short, run_id="after-outage")
-        state = scheduler.repository.get_lane_state("moku-scp-shorts")
+        state = scheduler.repository.get_lane_state("horror-scp-shorts")
         assert state["next_due_at"] == outage_end + 300
         # Exactly one pending fire per lane even after the outage.
         again = scheduler.take_due_lanes(now=outage_end + 1, max_picks=5)
-        assert all(pick.lane_id != "moku-scp-shorts" for pick in again)
+        assert all(pick.lane_id != "horror-scp-shorts" for pick in again)
 
 
 class TestInitialize:

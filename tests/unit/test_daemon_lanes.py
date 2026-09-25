@@ -21,7 +21,7 @@ def db_path(tmp_path, monkeypatch):
     return target
 
 
-def _seed_story(db_path: str, story_id: str, channel: str = "moku") -> None:
+def _seed_story(db_path: str, story_id: str, channel: str = "horror") -> None:
     repo = QueueRepository(db_path)
     assert repo.enqueue(
         story_id,
@@ -35,7 +35,7 @@ def _seed_story(db_path: str, story_id: str, channel: str = "moku") -> None:
 class TestStartDaemonLanes:
     def test_processes_due_lanes_and_advances_cadence(self, db_path, monkeypatch):
         _seed_story(db_path, "story-a")
-        _seed_story(db_path, "story-b", channel="aelithia")
+        _seed_story(db_path, "story-b", channel="drama")
         calls: list[str] = []
 
         def fake_pipeline(**kwargs):
@@ -79,7 +79,7 @@ class TestStartDaemonLanes:
             interval_seconds=1,
             max_picks=1,
             db_path=db_path,
-            lanes_filter=["moku-scp-shorts"],
+            lanes_filter=["horror-scp-shorts"],
             max_ticks=1,
         )
         assert any(r.get("status") == "RETRYABLE_FAILED" for r in results)
@@ -95,16 +95,16 @@ class TestStartDaemonLanes:
             interval_seconds=1,
             max_picks=3,
             db_path=db_path,
-            lanes_filter=["moku-scp-shorts"],
+            lanes_filter=["horror-scp-shorts"],
             max_ticks=1,
         )
-        assert all(r.get("lane") == "moku-scp-shorts" for r in results if "lane" in r)
-        assert set(executed) <= {"moku-scp-shorts"}
+        assert all(r.get("lane") == "horror-scp-shorts" for r in results if "lane" in r)
+        assert set(executed) <= {"horror-scp-shorts"}
 
     def test_resume_claim_preferred_over_fresh(self, db_path, monkeypatch):
         """A stuck RENDERED video is resumed before claiming fresh stories."""
         repo = QueueRepository(db_path)
-        repo.ensure_lane_rows(["moku-scp-shorts"], now=int(time.time()) - 10_000)
+        repo.ensure_lane_rows(["horror-scp-shorts"], now=int(time.time()) - 10_000)
         _seed_story(db_path, "fresh-story")
         seen_modes: list[str] = []
 
@@ -124,7 +124,7 @@ class TestStartDaemonLanes:
             interval_seconds=1,
             max_picks=1,
             db_path=db_path,
-            lanes_filter=["moku-scp-shorts"],
+            lanes_filter=["horror-scp-shorts"],
             max_ticks=1,
         )
         # The resumable path was consulted (no artifact → fell to fresh claim).
@@ -169,11 +169,11 @@ class TestStartDaemonLanes:
             exclude = kwargs.get("exclude_lanes") or set()
             if call_count == 1:
                 return [
-                    LanePick(lane_id="moku-horror-long", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 1800)
+                    LanePick(lane_id="horror-horror-long", channel=CanonicalChannel.HORROR, fired_at=cur, next_due_at=cur + 1800)
                 ]
-            elif call_count == 2 and "moku-scp-shorts" not in exclude:
+            elif call_count == 2 and "horror-scp-shorts" not in exclude:
                 return [
-                    LanePick(lane_id="moku-scp-shorts", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 600)
+                    LanePick(lane_id="horror-scp-shorts", channel=CanonicalChannel.HORROR, fired_at=cur, next_due_at=cur + 600)
                 ]
             return []
 
@@ -187,17 +187,17 @@ class TestStartDaemonLanes:
             max_ticks=4,
         )
 
-        assert any(r.get("lane") == "moku-horror-long" for r in results)
-        assert any(r.get("lane") == "moku-scp-shorts" for r in results)
-        assert "moku-horror-long_start" in timestamps
-        assert "moku-scp-shorts_start" in timestamps
-        assert "moku-horror-long_end" in timestamps
-        assert "moku-scp-shorts_end" in timestamps
+        assert any(r.get("lane") == "horror-horror-long" for r in results)
+        assert any(r.get("lane") == "horror-scp-shorts" for r in results)
+        assert "horror-horror-long_start" in timestamps
+        assert "horror-scp-shorts_start" in timestamps
+        assert "horror-horror-long_end" in timestamps
+        assert "horror-scp-shorts_end" in timestamps
 
         # Verify that short started BEFORE long finished (concurrent execution!)
-        assert timestamps["moku-scp-shorts_start"] < timestamps["moku-horror-long_end"]
+        assert timestamps["horror-scp-shorts_start"] < timestamps["horror-horror-long_end"]
         # Verify that short actually completed BEFORE long finished
-        assert timestamps["moku-scp-shorts_end"] < timestamps["moku-horror-long_end"]
+        assert timestamps["horror-scp-shorts_end"] < timestamps["horror-horror-long_end"]
 
     def test_concurrent_three_lanes_with_one_unhandled_failure(
         self, db_path, monkeypatch
@@ -207,13 +207,13 @@ class TestStartDaemonLanes:
         from src.core.scheduler import LaneScheduler, LanePick
         from src.core.domain import CanonicalChannel
 
-        _seed_story(db_path, "story_moku_long", channel="moku")
-        _seed_story(db_path, "story_moku_short", channel="moku")
-        _seed_story(db_path, "story_aelithia_short", channel="aelithia")
+        _seed_story(db_path, "story_horror_long", channel="horror")
+        _seed_story(db_path, "story_horror_short", channel="horror")
+        _seed_story(db_path, "story_drama_short", channel="drama")
 
         def fake_pipeline(**kw):
             lane_id = kw.get("lane_id")
-            if lane_id == "moku-scp-shorts":
+            if lane_id == "horror-scp-shorts":
                 raise RuntimeError("Simulated unhandled worker crash in lane")
             threading.Event().wait(0.02)
             return {"status": "PUBLISHED", "lane": lane_id}
@@ -230,9 +230,9 @@ class TestStartDaemonLanes:
             cur = int(time.time())
             if call_count == 1:
                 return [
-                    LanePick(lane_id="moku-horror-long", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 1800),
-                    LanePick(lane_id="moku-scp-shorts", channel=CanonicalChannel.MOKU, fired_at=cur, next_due_at=cur + 600),
-                    LanePick(lane_id="aelithia-drama-shorts", channel=CanonicalChannel.AELITHIA, fired_at=cur, next_due_at=cur + 600),
+                    LanePick(lane_id="horror-horror-long", channel=CanonicalChannel.HORROR, fired_at=cur, next_due_at=cur + 1800),
+                    LanePick(lane_id="horror-scp-shorts", channel=CanonicalChannel.HORROR, fired_at=cur, next_due_at=cur + 600),
+                    LanePick(lane_id="drama-drama-shorts", channel=CanonicalChannel.DRAMA, fired_at=cur, next_due_at=cur + 600),
                 ]
             return []
 
@@ -247,14 +247,14 @@ class TestStartDaemonLanes:
         )
 
         res_by_lane = {r.get("lane"): r for r in results}
-        assert "moku-horror-long" in res_by_lane
-        assert "moku-scp-shorts" in res_by_lane
-        assert "aelithia-drama-shorts" in res_by_lane
+        assert "horror-horror-long" in res_by_lane
+        assert "horror-scp-shorts" in res_by_lane
+        assert "drama-drama-shorts" in res_by_lane
 
-        assert res_by_lane["moku-horror-long"]["status"] == "PUBLISHED"
-        assert res_by_lane["aelithia-drama-shorts"]["status"] == "PUBLISHED"
-        assert res_by_lane["moku-scp-shorts"]["status"] == "RETRYABLE_FAILED"
-        assert "Simulated unhandled worker crash in lane" in str(res_by_lane["moku-scp-shorts"].get("error"))
+        assert res_by_lane["horror-horror-long"]["status"] == "PUBLISHED"
+        assert res_by_lane["drama-drama-shorts"]["status"] == "PUBLISHED"
+        assert res_by_lane["horror-scp-shorts"]["status"] == "RETRYABLE_FAILED"
+        assert "Simulated unhandled worker crash in lane" in str(res_by_lane["horror-scp-shorts"].get("error"))
 
 
 
@@ -271,7 +271,7 @@ def test_directed_longform_enforces_minimum_duration_gate(db_path, monkeypatch):
     from unittest.mock import MagicMock
     from src.pipeline import run_pipeline_once
 
-    _seed_story(db_path, "directed-short-audio-01", channel="aelithia")
+    _seed_story(db_path, "directed-short-audio-01", channel="drama")
 
     monkeypatch.setattr("src.llm.curate_script", lambda *a, **kw: "Guion corto.")
     monkeypatch.setattr("src.llm.curate_batch_json", lambda *a, **kw: {
@@ -288,9 +288,9 @@ def test_directed_longform_enforces_minimum_duration_gate(db_path, monkeypatch):
     monkeypatch.setattr("lib.tts.generate_audio", fake_short_audio)
 
     res = run_pipeline_once(
-        channel="aelithia",
+        channel="drama",
         story_id="directed-short-audio-01",
-        lane_id="aelithia-aita-long",
+        lane_id="drama-aita-long",
         db_path=db_path,
         generate_only=True,
     )
@@ -304,7 +304,7 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
     from pathlib import Path
     from src.pipeline import run_pipeline_once
 
-    _seed_story(db_path, "directed-long-audio-01", channel="aelithia")
+    _seed_story(db_path, "directed-long-audio-01", channel="drama")
 
     monkeypatch.setattr("src.llm.curate_script", lambda *a, **kw: "Guion suficientemente largo.")
     monkeypatch.setattr("src.llm.curate_batch_json", lambda *a, **kw: {
@@ -344,9 +344,9 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
 
     res = run_pipeline_once(
-        channel="aelithia",
+        channel="drama",
         story_id="directed-long-audio-01",
-        lane_id="aelithia-aita-long",
+        lane_id="drama-aita-long",
         db_path=db_path,
         generate_only=True,
     )
@@ -369,6 +369,7 @@ class TestDaemonSingletonLockBypass:
 
         env = dict(os.environ)
         env["PYTHON_BIN"] = sys.executable
+        env["YT_FORCE_HOST"] = "1"
 
         # Check if already running to avoid killing active production daemon
         status_before = subprocess.run(

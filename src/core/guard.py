@@ -119,7 +119,10 @@ def ensure_disk_available(
     Never raises. The caller decides whether a failed check should pause the
     channel / skip the turn.
     """
-    targets = [Path(p) for p in paths] if paths is not None else _guard_paths()
+    if paths is not None:
+        targets = [Path(paths)] if isinstance(paths, (str, os.PathLike)) else [Path(p) for p in paths]
+    else:
+        targets = _guard_paths()
     threshold = (
         min_free_gb * (1024**3)
         if min_free_gb is not None

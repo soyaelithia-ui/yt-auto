@@ -258,21 +258,35 @@ def run_lane_once(
     )
 
 
+_ACTIVE_ORCHESTRATOR: Any = None
+
+
 def request_shutdown() -> None:
-    global _SHUTDOWN_REQUESTED
+    global _SHUTDOWN_REQUESTED, _ACTIVE_ORCHESTRATOR
     _SHUTDOWN_REQUESTED = True
     _SHUTDOWN_EVENT.set()
+    if _ACTIVE_ORCHESTRATOR is not None:
+        try:
+            _ACTIVE_ORCHESTRATOR.request_shutdown()
+        except Exception:
+            pass
     _release_telegram_poller_lock()
 
 
 def reset_shutdown() -> None:
-    global _SHUTDOWN_REQUESTED
+    global _SHUTDOWN_REQUESTED, _ACTIVE_ORCHESTRATOR
     _SHUTDOWN_REQUESTED = False
     _SHUTDOWN_EVENT.clear()
+    if _ACTIVE_ORCHESTRATOR is not None:
+        try:
+            _ACTIVE_ORCHESTRATOR.reset_shutdown()
+        except Exception:
+            pass
 
 
 def is_shutdown_requested() -> bool:
     return _SHUTDOWN_EVENT.is_set() or _SHUTDOWN_REQUESTED
+
 
 
 _TELEGRAM_POLLER_LOCK_HANDLE: Any = None
@@ -1011,196 +1025,44 @@ def start_daemon_lanes(
     interval_seconds: int = 60,
     max_picks: int | None = None,
     db_path: str | None = None,
-    lanes_filter: list[str] | None = None,
+    lanes_filter: list[str] | set[str] | None = None,
     max_parallel: int | None = None,
     generate_only: bool = False,
     max_ticks: int | None = None,
 ) -> list[dict[str, Any]]:
     """Persistent multi-lane daemon: concurrent production by cadence ceiling.
 
-    Replaces the legacy short/longform tmux grid: every tick the LaneScheduler
-    picks due lanes (respecting per-lane ``min_gap_seconds`` ceilings), each
-    pick runs concurrently in a thread pool, and a productive fire advances
-    that lane's ceiling — never accumulating catch-up work. ``max_ticks``
-    bounds idle ticks (tests and supervised one-shots); production omits it.
+    Delegates autonomous multi-lane lifecycle, cadence commitment, and thread pool
+    execution directly to LaneDaemonOrchestrator.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
-    from src.config import is_test_environment
-    from src.core.scheduler import LanePick, LaneScheduler
-
-    global scheduler_commit_fire, scheduler_commit_empty
+    global scheduler_commit_fire, scheduler_commit_empty, _ACTIVE_ORCHESTRATOR
     reset_shutdown()
     database = db_path or DEFAULT_DB_PATH
-    parallel = max(1, int(max_parallel or os.environ.get("YT_MAX_PARALLEL_LANES", "3")))
-    if max_parallel is None and max_picks is not None:
-        parallel = max(parallel, max_picks)
-    lane_scheduler = LaneScheduler(database)
-    lane_scheduler.initialize(apply_offsets=not is_test_environment())
-    active_lanes = {
-        lane.id: lane
-        for lane in lane_scheduler.lanes
-        if lanes_filter is None or lane.id in lanes_filter
-    }
-    if max_picks is None:
-        max_picks = len(active_lanes)
-    results: list[dict[str, Any]] = []
+    filter_set = set(lanes_filter) if lanes_filter is not None else None
 
-    scheduler_commit_fire = lane_scheduler.commit_fire
-    scheduler_commit_empty = lane_scheduler.commit_empty
+    from src.config import is_test_environment
+    from src.core.contracts.daemon import LaneDaemonConfig
+    from src.orchestrator.scheduler import LaneDaemonOrchestrator
 
-    channel_set = {lane.channel for lane in active_lanes.values()}
-    target_channel = list(channel_set)[0] if len(channel_set) == 1 else None
+    config = LaneDaemonConfig(
+        db_path=database,
+        interval_seconds=interval_seconds,
+        max_picks=max_picks,
+        lanes_filter=filter_set,
+        max_parallel=max_parallel or int(os.environ.get("YT_MAX_PARALLEL_LANES", "3")),
+        generate_only=generate_only,
+        max_ticks=max_ticks,
+        apply_offsets=not is_test_environment(),
+    )
+    orchestrator = LaneDaemonOrchestrator(config)
+    _ACTIVE_ORCHESTRATOR = orchestrator
+    scheduler_commit_fire = orchestrator.commit_fire
+    scheduler_commit_empty = orchestrator.commit_empty
 
-    if not is_test_environment():
-        _startup_incident_check(database, interval_seconds, channel=target_channel)
-        try:
-            from src.core.lease_reaper import LeaseReaper
-            LeaseReaper(db_path=database).reap_once(startup=True, channel=target_channel)
-        except Exception:
-            logger.warning("Startup lease reap failed", exc_info=True)
-        try:
-            from src.cleaner import (
-                clean_expired_failed_runs,
-                clean_untracked_temp_files,
-            )
-            clean_expired_failed_runs()
-            clean_untracked_temp_files()
-        except Exception:
-            logger.debug("daemon lane startup cleanup skipped", exc_info=True)
-    if max_parallel is None and not is_test_environment():
-        _start_telegram_callback_poller()
-    breaker = ConsecutiveFailureBreaker()
-    attempts = 0
-    ticks = 0
-    with ThreadPoolExecutor(max_workers=parallel, thread_name_prefix="lane") as pool:
-        active_jobs: dict[Any, tuple[LanePick, float]] = {}
-        from concurrent.futures import wait, FIRST_COMPLETED
-
-        while not _SHUTDOWN_REQUESTED:
-            _reap_zombies_safe()
-            try:
-                from src.core.lease_reaper import LeaseReaper
-                LeaseReaper(db_path=database).reap_once(channel=target_channel)
-            except Exception:
-                pass
-            if not is_test_environment():
-                _run_auto_publish_sweep(channel=target_channel)
-                if max_parallel is None and not _TELEGRAM_POLLER_STARTED:
-                    _start_telegram_callback_poller()
-                if ticks % 360 == 0:
-                    try:
-                        from src.cleaner import (
-                            clean_expired_failed_runs,
-                            clean_untracked_temp_files,
-                            clean_tts_cache,
-                        )
-                        clean_expired_failed_runs()
-                        clean_untracked_temp_files()
-                        clean_tts_cache(max_size_bytes=500 * 1024 * 1024)
-                    except Exception:
-                        logger.debug("periodic background cleanup skipped", exc_info=True)
-                if ticks % 60 == 0:
-                    try:
-                        _run_24h_maintenance_sweep(database, channel=target_channel)
-                    except Exception:
-                        logger.debug("periodic 24h maintenance sweep skipped", exc_info=True)
-                try:
-                    touch_daemon_liveness(database)
-                except Exception:
-                    logger.debug("daemon liveness touch failed", exc_info=True)
-
-            # 1. Drain completed futures
-            done_futs = [f for f in active_jobs if f.done()]
-            for fut in done_futs:
-                pick, _ = active_jobs.pop(fut)
-                try:
-                    results.append(fut.result())
-                except Exception as exc:
-                    logger.error(
-                        "Lane %s falló de forma inesperada: %s",
-                        getattr(pick, "lane_id", "?"),
-                        exc,
-                    )
-                    results.append(
-                        {
-                            "status": "RETRYABLE_FAILED",
-                            "lane": getattr(pick, "lane_id", None),
-                            "error": str(exc),
-                        }
-                    )
-
-            # 2. Watchdog: check for timed-out jobs
-            turn_timeout = _turn_timeout_seconds()
-            now_mono = time.monotonic()
-            timed_out = [
-                f for f, (p, s_time) in active_jobs.items()
-                if now_mono - s_time >= turn_timeout
-            ]
-            for fut in timed_out:
-                pick, _ = active_jobs.pop(fut)
-                fut.cancel()
-                if not is_test_environment():
-                    try:
-                        from src.core.process_watch import terminate_hung_ffmpeg
-                        terminate_hung_ffmpeg(
-                            max_age_seconds=0,
-                            parent_pid=os.getpid(),
-                            grace_seconds=1.0,
-                        )
-                    except Exception:
-                        logger.debug("hung ffmpeg terminate failed", exc_info=True)
-                results.append(_timeout_result(pick))
-
-            # 3. Check tick bound
-            if max_ticks is not None and ticks >= max_ticks:
-                break
-            ticks += 1
-
-            # 4. Asynchronous dispatch: query due lanes and submit into available slots
-            running_lane_ids = {p.lane_id for p, _ in active_jobs.values()}
-            allowed_lanes = set(active_lanes) - running_lane_ids
-            capacity = min(parallel, max_picks) if max_picks is not None else parallel
-            available_slots = max(0, capacity - len(active_jobs))
-
-            if available_slots > 0 and allowed_lanes:
-                picks = lane_scheduler.take_due_lanes(
-                    max_picks=available_slots,
-                    lanes_filter=allowed_lanes,
-                    exclude_lanes=running_lane_ids,
-                )
-                for pick in picks:
-                    fut = pool.submit(
-                        _execute_lane_pick, database, pick, breaker, generate_only
-                    )
-                    active_jobs[fut] = (pick, time.monotonic())
-                    attempts += 1
-
-            # 5. Responsive wait: wake on task completion or tick timeout
-            if active_jobs:
-                wait_step = min(5.0, _watchdog_tick_seconds())
-                wait(active_jobs.keys(), timeout=wait_step, return_when=FIRST_COMPLETED)
-            else:
-                wait_time = min(
-                    interval_seconds,
-                    max(1, lane_scheduler.seconds_until_due(lanes_filter=set(active_lanes))),
-                )
-                if _responsive_sleep(wait_time):
-                    break
-
-        if active_jobs:
-            results.extend(
-                _collect_futures_responsive(
-                    {f: p for f, (p, _) in active_jobs.items()},
-                    timeout=_turn_timeout_seconds(),
-                    database=database,
-                    tick=_watchdog_tick_seconds(),
-                    channel=target_channel,
-                )
-            )
-            active_jobs.clear()
-
-    return results
+    try:
+        return orchestrator.run_loop()
+    finally:
+        _ACTIVE_ORCHESTRATOR = None
 
 
 run_daemon_loop = start_daemon_lanes

@@ -825,6 +825,47 @@ from src import compositing
         assert len(report.checks_failed) == 0
         assert len(report.checks_passed) >= 8
 
+    def test_reg14_daemon_concurrency_semaphores_and_worker_bounds(self) -> None:
+        """REG-14: Concurrency semaphores (2/1), max worker bounds <= 3, and Section 5 ceilings."""
+        from src.core.concurrency import _LONG_RENDER_SEMAPHORE, _SHORT_RENDER_SEMAPHORE
+        from src.core.contracts.daemon import ConcurrencyPolicy
+
+        assert _SHORT_RENDER_SEMAPHORE._value == 2
+        assert _LONG_RENDER_SEMAPHORE._value == 1
+
+        policy = ConcurrencyPolicy()
+        assert policy.max_parallel_lanes <= 3
+        assert policy.cpu_cores_hard_ceiling <= 2.0
+        assert policy.ram_gib_hard_ceiling <= 2.0
+
+    def test_reg10_zero_legacy_channel_names_in_daemon_and_scheduler_tests(self) -> None:
+        """REG-10: Zero legacy channel aliases in test_daemon_lanes and test_lane_scheduler."""
+        targets = [
+            REPO_ROOT / "tests" / "unit" / "test_daemon_lanes.py",
+            REPO_ROOT / "tests" / "unit" / "test_lane_scheduler.py",
+        ]
+        forbidden_aliases = ["moku-scp-shorts", "aelithia-aita-long"]
+        for target in targets:
+            text = target.read_text(encoding="utf-8")
+            for alias in forbidden_aliases:
+                assert alias not in text, f"Legacy alias '{alias}' found in {target}"
+
+    def test_reg01_zero_playwright_in_orchestrator(self) -> None:
+        """REG-01: Zero playwright or chromium imports in src/orchestrator/scheduler.py."""
+        target = REPO_ROOT / "src" / "orchestrator" / "scheduler.py"
+        assert target.is_file()
+        tree = ast.parse(target.read_text(encoding="utf-8"), filename=str(target))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert "playwright" not in alias.name.lower()
+                    assert "chromium" not in alias.name.lower()
+            elif isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                assert "playwright" not in mod.lower()
+                assert "chromium" not in mod.lower()
+
+
 
 
 

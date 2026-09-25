@@ -143,18 +143,41 @@ Modularization of media composition, audio pipelines, and curator segmentation M
 - **When** `master_audio_track` runs
 - **Then** FFmpeg MUST emit a stereo 48 kHz master audio file in a single execution pass combining ducking and EBU R128 normalization.
 ### Requirement: Hard Target Resource Ceiling Governance (2 Cores CPU, 2.0 GiB RAM)
+(Previously: Enforced the hard target operational ceiling of $\le 2.0$ CPU Cores and $\le 2.0\text{ GiB}$ RAM across individual renders and probe tasks, but did not mandate explicit global concurrency semaphores to partition parallel Short and Longform renders during continuous multi-lane daemon execution)
 
-In strict accordance with Section 5 of `AGENTS.md` and anti-regression invariant `REG-14`, all media processing workflows, pipeline stages, and background daemons MUST operate within an inviolable hard target ceiling of:
+In strict accordance with Section 5 of `AGENTS.md` and anti-regression invariant `REG-14`, all media processing workflows, pipeline stages, and multi-lane autonomous daemon engines MUST operate within an inviolable hard target operational ceiling of:
 - **CPU Aggregate Target**: $\le 2.0$ CPU Cores ($\le 200\%$ aggregate CPU utilization across all active threads and subprocesses).
 - **RAM Resident Target**: $\le 2.0$ GiB RAM ($2,048\text{ MiB}$ peak resident memory RSS).
 
-Resource consumption MUST follow the monotonic optimization directive: usage MUST only decrease or remain stable, never climbing across commits. If any architectural feature or render pass breaches the 2 Cores / 2.0 GiB RAM ceiling, the system MUST trigger the Resource Work Refusal policy to halt and optimize the implementation before deployment.
+To prevent concurrent media rendering operations from exceeding the resource envelope during multi-lane daemon execution, rendering tasks MUST be strictly partitioned by global thread semaphores:
+1. **Short Renders Semaphore**: `_SHORT_RENDER_SEMAPHORE = threading.Semaphore(2)`. At most two concurrent vertical Short renders (`image_animation` or vertical re-encode) MAY execute simultaneously.
+2. **Longform Renders Semaphore**: `_LONG_RENDER_SEMAPHORE = threading.Semaphore(1)`. At most one horizontal longform render (`horror-horror-long`, `drama-aita-long`, `scifi-singularity-long`) MAY execute concurrently. Concurrent or parallel longform renders are STRICTLY PROHIBITED.
 
-#### Scenario: Multi-scene render operates within 2 Cores and 2.0 GiB RAM ceiling (Happy Path)
-- **Given** an active video render executing an `image_animation` or `video_loop` production job
-- **When** CPU and resident memory consumption are profiled during peak composition
-- **Then** aggregate CPU utilization across all subprocess threads MUST NOT exceed 2.0 Cores (200%)
-- **And** peak resident memory (RSS) MUST NOT exceed 2,048 MiB.
+The multi-lane daemon worker thread pool capacity MUST NOT exceed 3 concurrent workers (`YT_MAX_PARALLEL_LANES=3`). Total aggregate CPU utilization across all concurrent lanes and subprocesses MUST NOT exceed $200\%$ (2 Cores), and peak aggregate resident memory MUST NOT exceed $2,048\text{ MiB}$ (2.0 GiB RAM).
+
+All FFmpeg subprocess invocations MUST bound thread execution with `-threads 2` for audio mastering, loudness probes, and QA checks, and at most `-threads 4` during video encoding passes. Probes MUST specify `-vn` to skip decoding video frame data into memory.
+
+Resource consumption MUST follow the monotonic optimization directive: usage MUST only decrease or remain stable, never climbing across commits. If any multi-lane execution or architectural feature breaches the 2 Cores / 2.0 GiB RAM ceiling, the system MUST trigger the Resource Work Refusal policy to halt and optimize the implementation before deployment.
+
+#### Scenario: Multi-lane concurrent render execution bounded by semaphores (Happy Path)
+- **Given** a multi-lane daemon running with up to 3 concurrent worker threads across shorts and longform lanes
+- **When** video composition stages are reached across multiple lanes simultaneously
+- **Then** Short renders MUST acquire a token from `_SHORT_RENDER_SEMAPHORE` (capacity 2)
+- **And** Longform renders MUST acquire a token from `_LONG_RENDER_SEMAPHORE` (capacity 1)
+- **And** aggregate CPU utilization across all concurrent lanes MUST NOT exceed 2.0 Cores (200%)
+- **And** peak aggregate resident memory (RSS) MUST NOT exceed 2,048 MiB.
+
+#### Scenario: Longform render serialization via single-token semaphore (Happy Path)
+- **Given** an active horizontal longform render executing `horror-horror-long` holding `_LONG_RENDER_SEMAPHORE`
+- **When** a second horizontal longform render (`drama-aita-long`) initiates composition
+- **Then** the second longform render MUST block waiting for the semaphore token
+- **And** zero concurrent horizontal longform renders MUST execute in parallel.
+
+#### Scenario: Short render concurrency capped at two tokens (Happy Path)
+- **Given** two vertical Short renders actively executing and occupying both tokens of `_SHORT_RENDER_SEMAPHORE`
+- **When** a third vertical Short render attempts to start video composition
+- **Then** the third Short render MUST block until one of the active renders releases its semaphore token
+- **And** at most 2 Short renders MUST execute concurrently.
 
 #### Scenario: Probe operations enforce low-CPU thread bounding (Happy Path)
 - **Given** an invocation of `ffprobe` or audio loudness analysis on media assets
@@ -163,11 +186,10 @@ Resource consumption MUST follow the monotonic optimization directive: usage MUS
 - **And** it MUST specify `-vn` to skip decoding video frame data into memory.
 
 #### Scenario: Resource work refusal on budget breach (Edge Case)
-- **Given** a prospective media composition pipeline that consumes $> 2.0$ Cores or $> 2.0$ GiB RAM
+- **Given** a prospective media composition pipeline or multi-lane configuration that consumes $> 2.0$ Cores or $> 2.0$ GiB RAM
 - **When** anti-regression guardrail or performance benchmarks run
 - **Then** the test suite MUST fail with a resource target violation
 - **And** automated agents MUST refuse to merge the change until optimized.
-
 ### Requirement: Zero Steady-State Idle Footprint and Resource Reclamation
 
 The system MUST maintain minimal steady-state resource consumption, dropping to zero active CPU utilization ($0.0\%$) and releasing transient memory buffers when idle:

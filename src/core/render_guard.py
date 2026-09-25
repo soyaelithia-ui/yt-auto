@@ -7,10 +7,25 @@ concurrently without head-of-line blocking.
 
 from __future__ import annotations
 
-import threading
+from src.core.concurrency import (
+    FFMPEG_ENCODE_MAX_THREADS,
+    FFMPEG_PROBE_THREADS,
+    RESOURCE_CPU_CEILING_CORES,
+    RESOURCE_RAM_CEILING_GIB,
+    _LONG_RENDER_SEMAPHORE,
+    _SHORT_RENDER_SEMAPHORE,
+    _SYNTHESIS_SEMAPHORE,
+    acquire_render_guard,
+)
 
-# Heavy render semaphore: 1 concurrent longform render (prevents CPU saturation)
-_LONG_RENDER_SEMAPHORE = threading.Semaphore(1)
+__all__ = [
+    "FFMPEG_ENCODE_MAX_THREADS",
+    "FFMPEG_PROBE_THREADS",
+    "RESOURCE_CPU_CEILING_CORES",
+    "RESOURCE_RAM_CEILING_GIB",
+    "_LONG_RENDER_SEMAPHORE",
+    "_SHORT_RENDER_SEMAPHORE",
+    "_SYNTHESIS_SEMAPHORE",
+    "acquire_render_guard",
+]
 
-# Light render semaphore: up to 2 concurrent stream-copy / short renders
-_SHORT_RENDER_SEMAPHORE = threading.Semaphore(2)

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from src.core.contracts.daemon import (
+    ConcurrencyPolicy,
+    LaneDaemonConfig,
+    TurnResult,
+)
 from src.core.contracts.pipeline import (
     ClaimedLeaseContext,
     PipelineContext,
@@ -16,12 +21,16 @@ from src.core.contracts.story import StoryRecord
 
 __all__ = [
     "ClaimedLeaseContext",
+    "ConcurrencyPolicy",
+    "LaneDaemonConfig",
     "PipelineContext",
     "PipelineRunResult",
     "RenderSpec",
     "ReviewContract",
     "RunContext",
     "StoryRecord",
+    "TurnResult",
     "_write_run_marker",
     "active_heartbeat_scope",
 ]
+
