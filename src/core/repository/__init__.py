@@ -13,10 +13,12 @@ from src.core.domain import (
 )
 from src.core.repository.migrations import (
     BUSY_TIMEOUT_MS,
+    EXPECTED_MIGRATION_VERSION,
     MIGRATION_001,
     MIGRATION_003,
     MIGRATION_004,
     MIGRATION_005,
+    MIGRATION_009,
     MigrationReport,
     _add_story_columns,
     _apply_migration_005,
@@ -36,7 +38,10 @@ from src.core.repository.leases import (
     touch_daemon_liveness,
 )
 from src.core.repository.queue import (
+    AssetRejectionSummary,
+    DaemonStoppageMetrics,
     QueueOperationsMixin,
+    TokenBurnSummary,
     compute_simhash_64,
     hamming_distance_64,
     is_simhash_duplicate,
@@ -61,7 +66,14 @@ from src.core.repository.catalog import (
 class QueueRepository(QueueOperationsMixin, LeaseOperationsMixin):
     """QueueRepository managing queue operations, leases, and database persistence."""
 
-    def __init__(self, db_path: str | os.PathLike[str]):
+    def __init__(self, db_path: str | os.PathLike[str] | None = None):
+        if db_path is None:
+            resolved_db = os.environ.get("DEFAULT_DB_PATH")
+            if not resolved_db:
+                from src.config import DEFAULT_DB_PATH
+
+                resolved_db = str(DEFAULT_DB_PATH)
+            db_path = resolved_db
         self.db_path = str(validate_db_path(db_path))
 
     def initialize(self) -> MigrationReport:
@@ -91,10 +103,15 @@ __all__ = [
     "JobStatus",
     "PublicationProof",
     "canonical_channel",
+    "EXPECTED_MIGRATION_VERSION",
+    "TokenBurnSummary",
+    "AssetRejectionSummary",
+    "DaemonStoppageMetrics",
     "MIGRATION_001",
     "MIGRATION_003",
     "MIGRATION_004",
     "MIGRATION_005",
+    "MIGRATION_009",
     "_utc_now",
     "_migration_checksum",
     "_ensure_legacy_stories",

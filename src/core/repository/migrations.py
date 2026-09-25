@@ -5,13 +5,15 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Final, Iterator, Sequence
 
 BUSY_TIMEOUT_MS = 15_000
+EXPECTED_MIGRATION_VERSION: Final[int] = 9
 
 
 def _utc_now() -> str:
@@ -405,6 +407,34 @@ MIGRATION_008 = (
     "CREATE INDEX IF NOT EXISTS idx_publications_views ON publications(channel, view_count)",
 )
 
+MIGRATION_009 = (
+    """
+    CREATE TABLE IF NOT EXISTS token_burn_events (
+        event_id TEXT PRIMARY KEY,
+        ts TEXT NOT NULL,
+        run_id TEXT,
+        story_id TEXT,
+        channel TEXT,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        cached_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0.0,
+        duration_seconds REAL NOT NULL DEFAULT 0.0,
+        status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success', 'failed', 'saturated')),
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_token_burn_ts ON token_burn_events(ts)",
+    "CREATE INDEX IF NOT EXISTS idx_token_burn_run ON token_burn_events(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_token_burn_provider_model ON token_burn_events(provider, model)",
+    "CREATE INDEX IF NOT EXISTS idx_token_burn_channel ON token_burn_events(channel)",
+    "CREATE INDEX IF NOT EXISTS idx_events_type_ts ON system_events(event_type, ts)",
+)
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -564,6 +594,19 @@ def _apply_migration_007(conn: sqlite3.Connection) -> None:
 
 def _apply_migration_008(conn: sqlite3.Connection) -> None:
     for statement in MIGRATION_008:
+        try:
+            conn.execute(statement)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "duplicate column name" in msg:
+                continue
+            if "already exists" in msg:
+                continue
+            raise
+
+
+def _apply_migration_009(conn: sqlite3.Connection) -> None:
+    for statement in MIGRATION_009:
         try:
             conn.execute(statement)
         except sqlite3.OperationalError as exc:
@@ -746,6 +789,23 @@ def _apply_v8_comment_lifecycle_and_metrics(conn: sqlite3.Connection, applied: l
         applied.append(8)
 
 
+def _apply_v9_token_burn_and_telemetry(conn: sqlite3.Connection, applied: list[int]) -> None:
+    m9_checksum = _migration_checksum("pipeline_telemetry_and_token_burn", MIGRATION_009)
+    existing_m9 = conn.execute(
+        "SELECT checksum FROM schema_migrations WHERE version = 9"
+    ).fetchone()
+    if existing_m9 and existing_m9["checksum"] != m9_checksum:
+        raise RuntimeError("Checksum de migración 9 no coincide")
+    if not existing_m9:
+        _apply_migration_009(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum, applied_at) "
+            "VALUES (9, 'pipeline_telemetry_and_token_burn', ?, ?)",
+            (m9_checksum, _utc_now()),
+        )
+        applied.append(9)
+
+
 def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
     indexes = (
         "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
@@ -777,6 +837,7 @@ def migrate_database(
             _apply_v6_publications_inventory(conn, applied)
             _apply_v7_performance_scoring(conn, applied)
             _apply_v8_comment_lifecycle_and_metrics(conn, applied)
+            _apply_v9_token_burn_and_telemetry(conn, applied)
             _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry
@@ -820,12 +881,55 @@ def backup_database(
     else:
         target = Path(validate_db_path(target_path))
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with connect(src, read_only=True) as src_conn, connect(target) as dst_conn:
-        src_conn.backup(dst_conn)
+    t0 = time.time()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with connect(src, read_only=True) as src_conn, connect(target) as dst_conn:
+            src_conn.backup(dst_conn)
 
-    with connect(target, read_only=True) as check_conn:
-        result = check_conn.execute("PRAGMA quick_check;").fetchone()[0]
-    if result != "ok":
-        raise RuntimeError(f"Backup SQLite inválido: {result}")
-    return target
+        with connect(target, read_only=True) as check_conn:
+            result = check_conn.execute("PRAGMA quick_check;").fetchone()[0]
+        if result != "ok":
+            raise RuntimeError(f"Backup SQLite inválido: {result}")
+
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        size_bytes = target.stat().st_size
+        try:
+            from src.observability.events import emit_event
+
+            emit_event(
+                "database_backup_completed",
+                level="INFO",
+                message=f"Database backup completed: {target.name} ({size_bytes} bytes in {duration_ms}ms)",
+                details={
+                    "target_path": str(target),
+                    "size_bytes": size_bytes,
+                    "duration_ms": duration_ms,
+                    "source_path": str(src),
+                },
+                db_path=str(source_path),
+            )
+        except Exception:
+            pass
+
+        return target
+    except Exception as exc:
+        import traceback
+
+        try:
+            from src.observability.events import emit_event
+
+            emit_event(
+                "database_backup_failed",
+                level="CRITICAL",
+                message=f"Database backup failed: {exc}",
+                details={
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                    "source_path": str(src),
+                },
+                db_path=str(source_path),
+            )
+        except Exception:
+            pass
+        raise
