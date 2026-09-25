@@ -1,16 +1,16 @@
 <svg viewBox="0 0 1080 1920" width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
-  <!-- Top Warning Hazard Stripe -->
-  <rect x="0" y="0" width="1080" height="24" fill="#FFCC00" fill-opacity="0.8"/>
+  <!-- Top Warning Hazard Stripe relocated to safe zone (y=190, strictly >= 180) -->
+  <rect x="70" y="190" width="870" height="18" fill="#FFCC00" fill-opacity="0.8"/>
   
-  <!-- Classification Badge Box -->
-  <g transform="translate(540, 70)">
-    <rect x="0" y="0" width="480" height="140" fill="#140202" fill-opacity="0.9" stroke="#FF3333" stroke-width="3"/>
-    <text x="24" y="38" font-family="sans-serif" font-size="20" font-weight="bold" fill="#FF3333">SCP FOUNDATION // TOP SECRET</text>
-    <text x="24" y="78" font-family="monospace" font-size="26" font-weight="bold" fill="#FFFFFF">ITEM #: SCP-{{item_number}}</text>
-    <text x="24" y="116" font-family="monospace" font-size="22" font-weight="bold" fill="#FF8800">CLASS: {{classification}}</text>
+  <!-- Classification Badge Box relocated to y=220 (x in [460, 940]) -->
+  <g transform="translate(460, 220)">
+    <rect x="0" y="0" width="480" height="130" fill="#140202" fill-opacity="0.92" stroke="#FF3333" stroke-width="3"/>
+    <text x="20" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#FF3333">SCP FOUNDATION // TOP SECRET</text>
+    <text x="20" y="72" font-family="'Courier New', monospace" font-size="24" font-weight="bold" fill="#FFFFFF">ITEM #: SCP-{{item_number:173}}</text>
+    <text x="20" y="108" font-family="'Courier New', monospace" font-size="20" font-weight="bold" fill="#FF8800">CLASS: {{classification:EUCLID}}</text>
   </g>
   
-  <!-- Bottom Security Clearance Warning -->
-  <rect x="60" y="1820" width="960" height="40" fill="#140202" fill-opacity="0.8" stroke="#FF8800" stroke-width="1.5"/>
-  <text x="80" y="1847" font-family="monospace" font-size="18" font-weight="bold" fill="#FFCC00">SECURITY CLEARANCE LEVEL 4 REQUIRED // UNAUTHORIZED ACCESS PROHIBITED</text>
+  <!-- Bottom Security Clearance Warning relocated to y=1420 (strictly <= 1460, x in [70, 940]) -->
+  <rect x="70" y="1410" width="870" height="38" fill="#140202" fill-opacity="0.85" stroke="#FF8800" stroke-width="1.5"/>
+  <text x="85" y="1435" font-family="'Courier New', monospace" font-size="15" font-weight="bold" fill="#FFCC00">SECURITY CLEARANCE LEVEL 4 REQUIRED // UNAUTHORIZED ACCESS PROHIBITED</text>
 </svg>

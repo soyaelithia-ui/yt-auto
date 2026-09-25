@@ -28,8 +28,8 @@ Helpers: `src/media/encode_defaults.py` (`default_render_preset`, `default_rende
 
 See `tests/unit/test_ffmpeg_low_cpu_defaults.py` and `tests/unit/test_anti_regression_guardrails.py`.
 
-## Coordination with director single-pass (PR #11)
+## Single-Pass Director Architecture
 
-Catalog loop stream-copy / geometry logic in `LoopVideoEngine.render_scene_segment` is intentionally aligned with
-`MultiSceneCompositor` single-pass assembly on `perf/director-single-pass-ffmpeg`, calling
+Catalog loop stream-copy and geometry logic in `LoopVideoEngine.render_scene_segment` is permanently aligned with
+`src/media/director_assembly.py` single-pass assembly, calling
 `loop_matches_target_geometry` to guarantee zero-copy rendering without re-encoding overhead.

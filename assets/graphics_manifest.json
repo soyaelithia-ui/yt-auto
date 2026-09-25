@@ -1,0 +1,225 @@
+{
+  "version": "1.0.0",
+  "assets": [
+    {
+      "id": "dark_vignette",
+      "name": "Dark Vignette",
+      "category": "atmospheric",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/dark_vignette.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.25,
+      "dynamic_params": {},
+      "tags": ["vignette", "shadow", "horror", "drama", "scifi", "atmospheric"]
+    },
+    {
+      "id": "soft_vignette",
+      "name": "Soft Vignette",
+      "category": "atmospheric",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/soft_vignette.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.25,
+      "dynamic_params": {},
+      "tags": ["vignette", "soft", "feathered", "cinematic", "atmospheric"]
+    },
+    {
+      "id": "film_grain",
+      "name": "35mm Film Grain",
+      "category": "atmospheric",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/film_grain.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.20,
+      "dynamic_params": {},
+      "tags": ["film", "grain", "35mm", "texture", "analog", "atmospheric"]
+    },
+    {
+      "id": "tv_static",
+      "name": "CRT TV Static",
+      "category": "atmospheric",
+      "channel_affinity": "horror",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/tv_static.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.20,
+      "dynamic_params": {},
+      "tags": ["crt", "tv", "static", "noise", "vhs", "analog", "horror", "atmospheric"]
+    },
+    {
+      "id": "particles",
+      "name": "Ambient Floating Particles",
+      "category": "atmospheric",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/particles.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.25,
+      "dynamic_params": {},
+      "tags": ["particles", "dust", "ambient", "motes", "atmospheric"]
+    },
+    {
+      "id": "particles_dust",
+      "name": "Indoor Dust Particles",
+      "category": "atmospheric",
+      "channel_affinity": "drama",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/particles_dust.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.20,
+      "dynamic_params": {},
+      "tags": ["dust", "indoor", "gentle", "drama", "particles", "atmospheric"]
+    },
+    {
+      "id": "particles_embers",
+      "name": "Glowing Warm Embers",
+      "category": "atmospheric",
+      "channel_affinity": "horror",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/particles_embers.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.30,
+      "dynamic_params": {},
+      "tags": ["embers", "fire", "glowing", "warm", "horror", "particles", "atmospheric"]
+    },
+    {
+      "id": "god_rays",
+      "name": "Volumetric God Rays",
+      "category": "atmospheric",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/overlays/static/god_rays.png",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.25,
+      "dynamic_params": {},
+      "tags": ["god_rays", "rays", "light", "shafts", "cinematic", "atmospheric"]
+    },
+    {
+      "id": "rec_analog_hud",
+      "name": "Analog VHS Camcorder REC HUD",
+      "category": "vector_hud",
+      "channel_affinity": "horror",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/rec_analog_hud.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.90,
+      "dynamic_params": {
+        "rec_time": "00:00:00",
+        "rec_date": "1994-10-24",
+        "battery_pct": "85%",
+        "tape_mode": "SP"
+      },
+      "tags": ["vhs", "camcorder", "rec", "analog", "horror", "osd", "hud"]
+    },
+    {
+      "id": "cinematic_scope_bars",
+      "name": "Cinematic 2.39:1 Anamorphic Scope Bars",
+      "category": "framing",
+      "channel_affinity": "all",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/cinematic_scope_bars.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 1.00,
+      "dynamic_params": {
+        "aspect_ratio_label": "2.39:1 CINEMATIC"
+      },
+      "tags": ["scope", "anamorphic", "letterbox", "cinema", "framing"]
+    },
+    {
+      "id": "classified_warning_banner",
+      "name": "Classified Containment Warning Banner",
+      "category": "vector_hud",
+      "channel_affinity": "horror",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/classified_warning_banner.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.95,
+      "dynamic_params": {
+        "classification_tier": "LEVEL 4 RESTRICTED",
+        "warning_message": "UNAUTHORIZED ACCESS PROHIBITED"
+      },
+      "tags": ["warning", "classified", "scp", "hazard", "horror", "hud"]
+    },
+    {
+      "id": "drama_quote_card",
+      "name": "Drama Frosted Glass Quote Card",
+      "category": "typography",
+      "channel_affinity": "drama",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/drama_quote_card.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.90,
+      "dynamic_params": {
+        "quote_text": "We suffer more often in imagination than in reality.",
+        "author_name": "SENECA",
+        "source_context": "Letters from a Stoic"
+      },
+      "tags": ["quote", "card", "typography", "drama", "frosted_glass"]
+    },
+    {
+      "id": "cyber_data_stream",
+      "name": "Cyber Tactical Data Stream HUD",
+      "category": "vector_hud",
+      "channel_affinity": "scifi",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/cyber_data_stream.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.85,
+      "dynamic_params": {
+        "node_id": "NODE-01",
+        "frequency_ghz": "14.28",
+        "encryption_cipher": "AES-256",
+        "coordinates": "34.0522N 118.2437W"
+      },
+      "tags": ["cyber", "scifi", "telemetry", "data", "terminal", "hud"]
+    },
+    {
+      "id": "hud_tactical_telemetry",
+      "name": "Tactical Telemetry HUD",
+      "category": "vector_hud",
+      "channel_affinity": "scifi",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/hud_tactical_telemetry.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.85,
+      "dynamic_params": {
+        "telemetry_text": "SYSTEM OK",
+        "bpm": "72"
+      },
+      "tags": ["hud", "tactical", "telemetry", "scifi"]
+    },
+    {
+      "id": "scp_classification_stamp",
+      "name": "SCP Foundation Classification Stamp",
+      "category": "vector_hud",
+      "channel_affinity": "horror",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/scp_classification_stamp.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.90,
+      "dynamic_params": {
+        "item_number": "173",
+        "classification": "EUCLID"
+      },
+      "tags": ["scp", "classification", "stamp", "horror", "hud"]
+    },
+    {
+      "id": "biometric_wave",
+      "name": "Biometric Pulse Wave HUD",
+      "category": "vector_hud",
+      "channel_affinity": "scifi",
+      "aspect_ratios": ["9:16", "16:9"],
+      "relative_path": "assets/svg_overlays/biometric_wave.svg",
+      "safe_zone_compliant": true,
+      "default_opacity": 0.85,
+      "dynamic_params": {
+        "bpm": "72",
+        "spo2": "98"
+      },
+      "tags": ["biometric", "wave", "ekg", "vitals", "scifi", "hud"]
+    }
+  ]
+}

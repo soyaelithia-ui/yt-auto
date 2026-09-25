@@ -397,7 +397,7 @@ class SceneManifestCompiler:
         music_path: Optional[str] = None,
         music_volume: Optional[float] = None,
         lane_id: Optional[str] = None,
-        channel_name: str = "moku",
+        channel_name: str = "horror",
         resolution: Optional[List[int]] = None,
         fps: int = 30,
         actual_audio_duration: Optional[float] = None,

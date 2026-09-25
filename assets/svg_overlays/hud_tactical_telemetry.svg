@@ -5,23 +5,23 @@
       <stop offset="100%" stop-color="#0088FF" stop-opacity="0.85"/>
     </linearGradient>
   </defs>
-  <!-- Framing Reticles -->
-  <path d="M 60 120 L 180 120 M 60 120 L 60 240" stroke="#00FFCC" stroke-width="4" fill="none"/>
-  <path d="M 1020 120 L 900 120 M 1020 120 L 1020 240" stroke="#00FFCC" stroke-width="4" fill="none"/>
-  <path d="M 60 1800 L 180 1800 M 60 1800 L 60 1680" stroke="#00FFCC" stroke-width="4" fill="none"/>
-  <path d="M 1020 1800 L 900 1800 M 1020 1800 L 1020 1680" stroke="#00FFCC" stroke-width="4" fill="none"/>
+  <!-- Framing Reticles confined within safe zones: x in [70, 940], y in [190, 1450] -->
+  <path d="M 70 240 L 160 240 M 70 240 L 70 320" stroke="#00FFCC" stroke-width="3" fill="none"/>
+  <path d="M 940 240 L 850 240 M 940 240 L 940 320" stroke="#00FFCC" stroke-width="3" fill="none"/>
+  <path d="M 70 1440 L 160 1440 M 70 1440 L 70 1360" stroke="#00FFCC" stroke-width="3" fill="none"/>
+  <path d="M 940 1440 L 850 1440 M 940 1440 L 940 1360" stroke="#00FFCC" stroke-width="3" fill="none"/>
   
-  <!-- Header Telemetry Readout -->
-  <rect x="70" y="80" width="460" height="40" fill="#001a24" fill-opacity="0.75" stroke="#00FFCC" stroke-width="2"/>
-  <text x="85" y="107" font-family="monospace" font-size="20" font-weight="bold" fill="#00FFCC">TELEMETRY: {{telemetry_text}}</text>
+  <!-- Header Telemetry Readout (y=200, strictly >= 180) -->
+  <rect x="75" y="200" width="460" height="40" fill="#001a24" fill-opacity="0.75" stroke="#00FFCC" stroke-width="2"/>
+  <text x="90" y="227" font-family="'Courier New', monospace" font-size="20" font-weight="bold" fill="#00FFCC">TELEMETRY: {{telemetry_text:SYSTEM OK}}</text>
   
-  <!-- Diagnostic BPM Readout -->
-  <rect x="790" y="80" width="220" height="40" fill="#001a24" fill-opacity="0.75" stroke="#00FFCC" stroke-width="2"/>
-  <text x="810" y="107" font-family="monospace" font-size="20" font-weight="bold" fill="#00FFCC">BPM: {{bpm}}</text>
+  <!-- Diagnostic BPM Readout (x=730, y=200, right edge = 940 <= 950) -->
+  <rect x="730" y="200" width="210" height="40" fill="#001a24" fill-opacity="0.75" stroke="#00FFCC" stroke-width="2"/>
+  <text x="750" y="227" font-family="'Courier New', monospace" font-size="20" font-weight="bold" fill="#00FFCC">BPM: {{bpm:72}}</text>
   
   <!-- Center Crosshair Reticle -->
-  <circle cx="540" cy="960" r="140" stroke="#00FFCC" stroke-width="1.5" stroke-dasharray="8 6" fill="none" opacity="0.4"/>
-  <circle cx="540" cy="960" r="40" stroke="#00FFCC" stroke-width="1.5" fill="none" opacity="0.6"/>
-  <line x1="510" y1="960" x2="570" y2="960" stroke="#00FFCC" stroke-width="2" opacity="0.6"/>
-  <line x1="540" y1="930" x2="540" y2="990" stroke="#00FFCC" stroke-width="2" opacity="0.6"/>
+  <circle cx="540" cy="850" r="140" stroke="#00FFCC" stroke-width="1.5" stroke-dasharray="8 6" fill="none" opacity="0.4"/>
+  <circle cx="540" cy="850" r="40" stroke="#00FFCC" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <line x1="510" y1="850" x2="570" y2="850" stroke="#00FFCC" stroke-width="2" opacity="0.6"/>
+  <line x1="540" y1="820" x2="540" y2="880" stroke="#00FFCC" stroke-width="2" opacity="0.6"/>
 </svg>

@@ -599,23 +599,8 @@ class LoopRotationMixin:
     def _find_scenery_still(self, seed: Any = None, channel: str | None = None) -> Path | None:
         """Clean scenery still fallback (never overlays / grey lavfi)."""
         still_dirs: list[Path] = []
-        if channel:
-            chan_scenery = BASE_DIR / "assets" / "visual_bank" / channel.lower().strip() / "scenery"
-            if chan_scenery.is_dir():
-                still_dirs.append(chan_scenery)
         if self.default_fallback_dir.is_dir():
             still_dirs.append(self.default_fallback_dir)
-        using_prod_loops = self.loops_root_dir == (BASE_DIR / "assets" / "loops").resolve()
-        if using_prod_loops:
-            vb = BASE_DIR / "assets" / "visual_bank"
-            if vb.is_dir():
-                try:
-                    for chan in sorted(p for p in vb.iterdir() if p.is_dir() and not p.name.startswith("_")):
-                        scenery = chan / "scenery"
-                        if scenery.is_dir() and scenery not in still_dirs:
-                            still_dirs.append(scenery)
-                except OSError:
-                    pass
         for d in still_dirs:
             picked = self._pick_media_file(
                 d,

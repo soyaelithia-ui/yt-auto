@@ -1,50 +1,35 @@
 # Pipeline Visual Multi-Canal, Calidad y Rendimiento
 
-> **Estado:** OFICIAL / PRODUCCIÓN  
-> **Última actualización:** 2026-09  
-
-Especificaciones de renderizado audiovisual, perfiles por canal y directivas de calidad para `yt-auto`.
-
----
+> **Estado:** OFICIAL / PRODUCCIÓN | **Actualización:** 2026-09 | Renderizado audiovisual y directivas de calidad (`yt-auto`).
 
 ## 1. Especificaciones Técnicas por Formato
 
 ### YouTube Shorts (9:16)
-- **Dimensiones**: Master `1080x1920` @30fps.
-- **Motor Visual**: `LoopVideoEngine` con clip único continuo de 10s (`assets/videos/shorts/`) repetido sin fisuras.
-- **Códec de Video**: Ensamble directo stream-copy (`-c:v copy`) vía concat demuxer (`ffconcat 1.0`), ejecución ultra-rápida (<2s) y consumo casi nulo de CPU/RAM.
-- **Audio**: AAC 192 kbps, 48 kHz estéreo, masterizado a EBU R128 (`loudnorm=I=-14:LRA=11:TP=-1.5`) con ducking musical a `-18 dB`.
-- **Subtítulos**: Muxing directo (`mov_text`), franja segura inferior (`MarginV >= 240`).
-- **Duración Natural**: 60–180s determinada de forma orgánica por el TTS.
+- **Motor Visual**: `LoopVideoEngine` con clip continuo de 10s (`assets/videos/shorts/`) en `1080x1920` @30fps.
+- **Códec & Ensamble**: Stream-copy (`-c:v copy`) vía concat demuxer (<2s). Audio AAC 192kbps masterizado EBU R128 (-14 LUFS, TP ≤ -1.5 dBTP) con sidechain -18 dB.
+- **Subtítulos**: Muxing suave (`mov_text`) en contenedor MP4 con franja segura inferior (`MarginV >= 240`).
 
 ### Videos Largos / Longform (16:9)
-- **Dimensiones**: Master Full HD `1920x1080` @30fps.
-- **Motor Visual**: `LoopVideoEngine` con clip único continuo de 30s (`assets/videos/longs/`) repetido sin fisuras.
-- **Códec de Video**: Ensamble stream-copy (`-c:v copy`) directo vía concat demuxer (<2s).
-- **Duración**: ≥600s (10+ min) cubriendo el audio completo sin límites artificiales.
+- **Arquitectura Director**: Multi-Act Director (`src/media/director_assembly.py`, [DIRECTOR_SINGLE_PASS.md](DIRECTOR_SINGLE_PASS.md)).
+- **Pacing Multi-Acto**: Estructuración de 4 a 8 actos narrativos con curva de tensión y selección temática desde `assets/loops/` con fallback por módulo.
+- **Ensamble Stream-Copy**: Concat demuxer (`-c:v copy`) para segmentos homogéneos (geometría `1920x1080`, códec H.264, pixel format y time base).
+- **Gobernanza de Rendimiento**: Techo de turnaround $\le 45$s bajo presupuesto estricto de $\le 2$ CPU Cores y $\le 2.0$ GiB RAM.
 
----
-
-## 2. Resolución de Loop Continuo y Neutralidad Multi-Canal
+## 2. Resolución de Loops y Neutralidad Multi-Canal
 
 ```mermaid
 flowchart TD
-    Req[Solicitud de Composición] --> Dir{Identificar Formato}
-    Dir -- 9:16 Shorts --> Sh[assets/videos/shorts/ 10s]
-    Dir -- 16:9 Longs --> Lg[assets/videos/longs/ 30s]
-    Sh & Lg --> Rot[Rotación Round-Robin Neutral]
-    Rot --> StreamCopy[Ensamble Stream-Copy -c:v copy sub-2s]
+    Req[Solicitud Composición] --> Dir{Formato}
+    Dir -- 9:16 Shorts --> Sh[assets/videos/shorts/ 10s LoopEngine]
+    Dir -- 16:9 Longs --> Lg[assets/loops/ Multi-Act Director 4-8 actos]
+    Sh & Lg --> Rot[Rotación Temática Round-Robin Neutral]
+    Rot --> StreamCopy[Ensamble Stream-Copy -c:v copy <= 45s]
 ```
 
-1. **Clip Único Continuo**: Repetido sin fisuras para cubrir la totalidad de la narración de audio.
-2. **Neutralidad Multi-Canal**: Rotación round-robin o no-repetitiva entre los `.mp4` disponibles en el directorio, completamente desacoplada de nombres de canales.
-3. **Salvaguarda Fail-Fast**: Si el directorio (`assets/videos/shorts/` o `assets/videos/longs/`) está vacío, se eleva `CatalogAssetNotFoundError` con instrucciones claras para depositar los archivos.
+- **Neutralidad Multi-Canal**: Rotación desacoplada de nombres de canal entre los `.mp4` disponibles.
+- **Salvaguarda Fail-Fast**: Si no hay loops requeridos, se eleva `CatalogAssetNotFoundError` inmediatamente.
 
----
+## 3. Generación de Portadas y Directivas
 
-## 3. Generación de Portadas en Tiempo Real Guiada por Prompts
-
-- **Modelo Smart-Prompt**: Portadas generadas en tiempo real por agentes en el arnés SDK local usando inteligencia dinámica y prompts (estilo Claroscuro de alto CTR, hook viral de 3-5 palabras, sujeto focal misterioso), sin extracción de fotogramas de video ni bancos estáticos.
-- **Bases Limpias**: Plantillas maestras de alto CTR preservadas en `assets/thumbnails/templates/`.
-
-Clasificación scenery vs title cards: [visual-assets-policy.md](visual-assets-policy.md). Catálogo CI vs prod: [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).
+- **Modelo Smart-Prompt**: Portadas generadas con estilo Claroscuro de alto CTR y plantillas en `assets/thumbnails/templates/`.
+- **Políticas de Assets**: Scenery vs title cards: [visual-assets-policy.md](visual-assets-policy.md). Catálogo CI vs producción: [POLITICA_CATALOGO_CI.md](POLITICA_CATALOGO_CI.md).

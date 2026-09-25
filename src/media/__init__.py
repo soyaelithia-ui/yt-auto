@@ -66,6 +66,21 @@ from src.media.subtitles_ass import (
 from src.media.unified_encoder import (
     UnifiedEncoder,
 )
+from src.media.graphics_bank import (
+    BankValidationReport,
+    GraphicAsset,
+    GraphicCategory,
+    GraphicChannelAffinity,
+    GraphicsBank,
+    get_graphics_bank,
+)
+from src.media.overlays import (
+    clamp_atmospheric_overlay_opacity,
+)
+from src.media.visual_coherence import (
+    enforce_shorts_safe_zone,
+    validate_visual_continuity,
+)
 
 __all__ = [
     "check_local_templates",
@@ -111,6 +126,15 @@ __all__ = [
     "force_pillow_subtitles_enabled",
     "write_ass_from_cues_or_words",
     "UnifiedEncoder",
+    "BankValidationReport",
+    "GraphicAsset",
+    "GraphicCategory",
+    "GraphicChannelAffinity",
+    "GraphicsBank",
+    "get_graphics_bank",
+    "clamp_atmospheric_overlay_opacity",
+    "enforce_shorts_safe_zone",
+    "validate_visual_continuity",
 ]
 
 

@@ -201,7 +201,7 @@ El servidor registra 9 herramientas operativas:
 
 El servidor expone 3 recursos estandarizados:
 
-```
+```text
 resources/
 ├── channels://{channel_name}/config   # Configuración pública y sanitizada del canal
 ├── lanes://catalog                    # Catálogo de especificaciones de carriles

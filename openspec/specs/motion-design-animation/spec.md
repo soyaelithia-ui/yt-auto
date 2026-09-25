@@ -1,7 +1,7 @@
 # Motion Design and Animation Engine Specification
 
 ## Purpose
-Defines the motion design and animation engine governing smoothstep Ken Burns camera motion planning, still asset segment splitting to eliminate FFmpeg precision drift, dynamic kinetic SVG vector typography and HUD overlays, and tension-aware transition harmonization.
+Defines the motion design and animation engine governing smoothstep Ken Burns camera motion planning, still asset segment splitting to eliminate FFmpeg precision drift, bounded LRU vector overlay rasterization, zero-allocation NumPy RGBA frame buffers, graceful rasterizer fallback, and tension-aware transition harmonization.
 
 ## Requirements
 
@@ -53,28 +53,58 @@ To eliminate FFmpeg floating-point coordinate precision loss and avoid visual vi
 - **Then** the planner MUST split the scene into 2 segments of 10.0 seconds each
 - **And** no individual segment SHALL exceed 15.0 seconds.
 
-### Requirement: Dynamic Kinetic SVG Typography and HUD Overlays (`SVGOverlayEngine`)
-The system MUST provide a declarative vector overlay engine (`SVGOverlayEngine`) using Rust-based `resvg_py` for zero-allocation rendering into pre-allocated NumPy RGBA buffers (`shape=(height, width, 4)`, `dtype=uint8`). The engine MUST support:
-1. XML template caching from `assets/svg_overlays/`.
-2. Dynamic parameter interpolation via mustache `{{param}}` and single-brace `{param}` syntax.
-3. In-memory raster caching indexed by `(preset_name, width, height, sorted_params)`.
-4. Clamping of vector elements to mobile safe-zone boundaries.
+### Requirement: Vector Overlay Engine Caching and Rendering (`vector_overlay_engine_caching_and_rendering`)
 
-Frame-by-frame text rendering loops in Python (e.g. unconstrained Pillow loops) are strictly prohibited. In the absence of `resvg_py`, the engine MAY fall back to Pillow rasterization only when explicitly configured for test fixtures.
+The system MUST provide a high-performance, memory-bounded vector overlay engine (`SVGOverlayEngine` in `src/media/svg_overlay.py`) capable of dynamic template interpolation and zero-allocation frame rasterization while strictly adhering to project resource limits ($\le 2\text{ CPU Cores}$, $\le 2.0\text{ GiB RAM}$).
+
+The engine MUST fulfill the following architectural requirements:
+1. **Dynamic Parameter Interpolation**:
+   - The engine MUST load SVG XML templates from `assets/svg_overlays/` or resolve them via `GraphicsBank`.
+   - Template placeholders MUST support both double-brace `{{param}}` and single-brace `{param}` syntax.
+   - If dynamic parameters are provided, placeholders MUST be substituted with sanitized string values.
+   - If dynamic parameters are omitted or missing, the template MUST retain default fallback text or clean defaults without corrupting XML syntax or raising unhandled exceptions.
+2. **Bounded LRU Raster Cache**:
+   - The engine MUST maintain an in-memory raster cache indexed by composite key `(preset_name, width, height, tuple(sorted(params.items())))`.
+   - The cache MUST be strictly bounded at a maximum capacity of **128 items** ($\le 128$ cached RGBA raster arrays $\approx 1.06\text{ GiB}$ worst-case ceiling, operational steady-state $< 200\text{ MiB}$).
+   - Upon reaching 128 entries, insertion of a new rasterization MUST evict the least recently used (LRU) entry.
+   - The engine MUST provide `clear_cache()` and `cache_info()` methods to allow pipeline stages to inspect and flush cache state.
+3. **Zero-Allocation In-Place NumPy Buffers**:
+   - `render_overlay(preset_name, width, height, params=None, out_buffer=None)` MUST accept a pre-allocated contiguous NumPy array `out_buffer` of shape `(height, width, 4)` and `dtype=uint8`.
+   - When `out_buffer` is provided, the engine MUST rasterize directly into `out_buffer` (or copy into it in-place) and return the identical array instance (`out_buffer is result`).
+   - Accumulating lists or arrays of uncompressed video frames in Python heap memory is strictly prohibited (`REG-08`).
+4. **Graceful Rasterization Fallback**:
+   - The primary rasterization backend SHALL be Rust-based `resvg_py` for sub-millisecond vector rendering.
+   - If `resvg_py` is not installed or raises an import error, the engine MUST fall back gracefully to a secondary rasterizer (such as Pillow/PIL rasterization or synthetic test mock), log a warning event, and successfully return valid RGBA NumPy frame data. The absence of `resvg_py` MUST NOT crash rendering pipelines or cause test suite failures.
+5. **Mobile Safe-Zone Viewport Compliance**:
+   - Vector overlays rendered by the engine MUST comply with safe-zone margins computed by `enforce_shorts_safe_zone()` ($MarginV_{bottom} \ge 460\text{px}$, $MarginV_{top} \ge 180\text{px}$, $MarginH_{right} \ge 130\text{px}$, $MarginH_{left} \ge 64\text{px}$ for 9:16).
 
 #### Scenario: SVG template loading and dynamic parameter interpolation (Happy Path)
-- **Given** an SVG template containing tokens `{{timestamp}}` and `{{clearance_level}}`
-- **And** parameters `{"timestamp": "03:42:19", "clearance_level": "LEVEL 4 / TOP SECRET"}`
+- **Given** an SVG template containing tokens `{{rec_time}}` and `{battery_pct}`
+- **And** parameters `{"rec_time": "00:14:28:09", "battery_pct": "78%"}`
 - **When** `interpolate_template(svg_text, params)` is executed
-- **Then** the output string MUST have all placeholder tokens replaced with parameter values
-- **And** no residual `{...}` or `{{...}}` tokens matching the parameter keys SHALL remain.
+- **Then** the output SVG text MUST have all placeholder tokens replaced with their parameter values
+- **And** no residual `{{rec_time}}` or `{battery_pct}` tokens SHALL remain.
 
 #### Scenario: Zero-allocation rasterization into pre-allocated NumPy buffer (Happy Path)
 - **Given** a pre-allocated contiguous NumPy array `out_buffer` of shape `(1920, 1080, 4)` and `dtype=uint8`
-- **When** `render_overlay("scp_hud", 1080, 1920, params=params, out_buffer=out_buffer)` is executed
+- **When** `render_overlay("rec_analog_hud", 1080, 1920, params=params, out_buffer=out_buffer)` is executed
 - **Then** the engine MUST render the vector graphic directly into `out_buffer`
 - **And** the return value MUST be the identical array instance (`out_buffer is result`)
-- **And** no additional frame buffers SHALL be allocated in Python heap.
+- **And** total heap memory allocated for frame pixels MUST NOT grow.
+
+#### Scenario: Bounded LRU cache eviction at 128 items (Happy Path)
+- **Given** an `SVGOverlayEngine` instance with 128 unique cached raster entries
+- **When** a 129th unique overlay request is rendered
+- **Then** the cache MUST evict the least recently used entry
+- **And** `cache_info().currsize` MUST NOT exceed 128
+- **And** peak memory consumption MUST remain within the $\le 2.0\text{ GiB}$ system budget.
+
+#### Scenario: Graceful rasterization fallback when resvg_py is uninstalled (Edge Case)
+- **Given** an execution environment where `resvg_py` is not installed or import is mocked to fail
+- **When** `render_overlay` is invoked with valid SVG overlay preset
+- **Then** the engine MUST catch the missing dependency, emit a warning log, and use the fallback rasterizer
+- **And** return a valid `(height, width, 4)` uint8 NumPy array
+- **And** MUST NOT raise an unhandled `ImportError` or terminate the pipeline.
 
 #### Scenario: Missing preset or null overlay rendering (Edge Case)
 - **Given** a preset name of `"none"`, `""`, or `None`
