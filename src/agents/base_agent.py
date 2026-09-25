@@ -24,9 +24,10 @@ import shutil
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 from dotenv import load_dotenv
 
@@ -164,8 +165,28 @@ def _resolve_default_app_data_dir(instance_id: str = "default") -> Path:
 
 DEFAULT_APP_DATA_DIR = _resolve_default_app_data_dir()
 AGENT_GENERATED_DIR = PROJECT_ROOT / "data" / "worksets" / "generated"
-CANONICAL_MODEL = os.environ.get("AGY_MODEL", os.environ.get("GEMINI_MODEL", "gemini-3.8-flash-high"))
+
+# Human-facing preferences are kept separate from the runtime model actually
+# sent to `agy`. The CLI is the source of truth for availability; unsupported
+# aliases must never reach either the CLI or the native SDK.
+LUNA_MODEL_PREFERENCES = ("gpt-6-luna", "gpt-5.6-luna")
+AGY_MODEL_PREFERENCES = tuple(
+    item.strip()
+    for item in os.environ.get("AGY_MODEL_PREFERENCES", ",".join(LUNA_MODEL_PREFERENCES)).split(",")
+    if item.strip()
+) or LUNA_MODEL_PREFERENCES
+DEFAULT_FREE_PLAN_MODEL = os.environ.get("AGY_FREE_FALLBACK_MODEL", "gpt-oss-120b-medium").strip()
+_LEGACY_MODEL_DEFAULTS = {"gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"}
+_configured_model = os.environ.get("AGY_MODEL", "").strip()
+# A stale AGY_MODEL from older deployments must not override the new Luna
+# preference chain. Non-legacy explicit overrides remain supported.
+CANONICAL_MODEL = (
+    _configured_model
+    if _configured_model and _configured_model.lower() not in _LEGACY_MODEL_DEFAULTS
+    else AGY_MODEL_PREFERENCES[0]
+)
 CLI_TIMEOUT_SECONDS = int(os.environ.get("AGY_TIMEOUT_SECONDS", "300"))
+MODEL_DISCOVERY_TIMEOUT_SECONDS = int(os.environ.get("AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS", "20"))
 
 SATURATION_PATTERNS = (
     "saturat",
@@ -220,6 +241,92 @@ def _resolve_agy_bin_path() -> Path:
 
 AGY_BIN_PATH = _resolve_agy_bin_path()
 
+_MODEL_CATALOG_CACHE: dict[str, tuple[str, ...]] = {}
+_MODEL_CATALOG_LOCK = threading.Lock()
+
+
+class AgentModelResolutionError(RuntimeError):
+    """Raised when no requested or configured model is available in the local harness."""
+
+
+def parse_agy_models_output(output: str) -> tuple[str, ...]:
+    """Parse the stable model-id column from ``agy models`` output."""
+    models: list[str] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line or line.lower().startswith(("fetching ", "available ", "model ")):
+            continue
+        model_id = line.split()[0]
+        if model_id.lower() in {"id", "name", "models"} or model_id.startswith(("-", "=")):
+            continue
+        if model_id not in models:
+            models.append(model_id)
+    return tuple(models)
+
+
+def discover_agy_models(agy_bin_path: Optional[Path] = None) -> tuple[str, ...]:
+    """Read the authenticated local model catalog once per CLI binary."""
+    binary = Path(agy_bin_path or AGY_BIN_PATH).expanduser().resolve()
+    cache_key = str(binary)
+    with _MODEL_CATALOG_LOCK:
+        cached = _MODEL_CATALOG_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    proc = subprocess.run(
+        [str(binary), "models"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=MODEL_DISCOVERY_TIMEOUT_SECONDS,
+        cwd=str(PROJECT_ROOT),
+        env=os.environ.copy(),
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "unknown catalog error").strip()[-400:]
+        raise AgentModelResolutionError(f"agy model catalog unavailable: {detail}")
+    models = parse_agy_models_output(f"{proc.stdout}\n{proc.stderr}")
+    if not models:
+        raise AgentModelResolutionError("agy model catalog returned no usable model identifiers")
+    with _MODEL_CATALOG_LOCK:
+        _MODEL_CATALOG_CACHE[cache_key] = models
+    return models
+
+
+def select_available_model(
+    requested_model: str,
+    available_models: tuple[str, ...] | list[str],
+    *,
+    preferences: tuple[str, ...] = AGY_MODEL_PREFERENCES,
+    fallback_model: str = DEFAULT_FREE_PLAN_MODEL,
+) -> str:
+    """Select the first available requested/preferred/fallback model."""
+    available = {model.strip().lower(): model.strip() for model in available_models if model.strip()}
+    candidates: list[str] = []
+    for candidate in (requested_model, *preferences, fallback_model):
+        normalized = str(candidate or "").strip()
+        if normalized and normalized.lower() not in {item.lower() for item in candidates}:
+            candidates.append(normalized)
+    for candidate in candidates:
+        if candidate.lower() in available:
+            return available[candidate.lower()]
+    raise AgentModelResolutionError(
+        "No configured Antigravity model is available; "
+        f"requested={requested_model!r}, candidates={candidates!r}, "
+        f"available={sorted(available)!r}"
+    )
+
+
+def resolve_runtime_model(
+    requested_model: str = CANONICAL_MODEL,
+    *,
+    agy_bin_path: Optional[Path] = None,
+) -> str:
+    """Validate a model against the local catalog before CLI/SDK execution."""
+    return select_available_model(requested_model, discover_agy_models(agy_bin_path))
+
+
 SYSTEM_INSTRUCTIONS = (
     "You are the programmatic quality agent of a YouTube Shorts pipeline. "
     "Answer in Spanish, concise, factual, in plain text with short bullets."
@@ -234,6 +341,60 @@ DEFAULT_TASK = (
 
 class AgentSaturationError(RuntimeError):
     """Raised when the harness signals saturation (rate limit / quota)."""
+
+
+@dataclass(frozen=True)
+class RecoveryDecision:
+    """One deterministic recovery decision made inside the bounded agent policy."""
+
+    action: str
+    reason: str
+    attempt: int
+    correction_count: int
+
+
+@dataclass(frozen=True)
+class AgentRecoveryPolicy:
+    """Small, explicit recovery budget shared by SDK and CLI execution."""
+
+    max_attempts: int = 2
+    max_corrections: int = 1
+    retry_delay_seconds: float = 1.0
+
+    @classmethod
+    def from_environment(cls) -> "AgentRecoveryPolicy":
+        def _bounded_int(name: str, default: int, low: int, high: int) -> int:
+            try:
+                return max(low, min(high, int(os.environ.get(name, str(default)))))
+            except (TypeError, ValueError):
+                return default
+
+        try:
+            delay = max(0.0, min(10.0, float(os.environ.get("AGY_RECOVERY_DELAY_SECONDS", "1"))))
+        except (TypeError, ValueError):
+            delay = 1.0
+        return cls(
+            max_attempts=_bounded_int("AGY_MAX_ATTEMPTS", 2, 1, 4),
+            max_corrections=_bounded_int("AGY_MAX_SELF_CORRECTIONS", 1, 0, 2),
+            retry_delay_seconds=delay,
+        )
+
+    def decide(self, error: str, *, attempt: int, correction_count: int) -> RecoveryDecision:
+        detail = str(error or "unknown failure")
+        if is_saturation_text(detail):
+            return RecoveryDecision("stop", "provider_saturation", attempt, correction_count)
+        if detail.startswith("validation:") and correction_count < self.max_corrections:
+            return RecoveryDecision("correct", "structured_output_validation", attempt, correction_count)
+        if attempt < self.max_attempts:
+            return RecoveryDecision("retry", "transient_execution_failure", attempt, correction_count)
+        return RecoveryDecision("stop", "recovery_budget_exhausted", attempt, correction_count)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "max_attempts": self.max_attempts,
+            "max_corrections": self.max_corrections,
+            "retry_delay_seconds": self.retry_delay_seconds,
+        }
 
 
 def is_saturation_text(text: str) -> bool:
@@ -347,6 +508,7 @@ class AgyStreamClient:
         self.reasoning_effort = reasoning_effort
         self.app_data_dir = app_data_dir
         self.agy_bin_path = agy_bin_path
+        self._resolved_model: Optional[str] = None
         self._process: Optional[subprocess.Popen] = None
         self._lock = threading.Lock()
 
@@ -375,17 +537,21 @@ class AgyStreamClient:
         return cli_env
 
     def send_task(self, prompt: str, schema: Optional[Any] = None) -> dict[str, Any]:
-        """Send a turn over the stream or spawn single turn if stream is unsupported."""
+        """Send a turn after validating the requested model against ``agy models``."""
         with self._lock:
             cli_env = self._prepare_env()
+            effective_model = self._resolved_model or resolve_runtime_model(
+                self.model, agy_bin_path=self.agy_bin_path
+            )
+            self._resolved_model = effective_model
             cmd = [
                 str(self.agy_bin_path),
-                "--model", self.model,
+                "--model", effective_model,
                 "--output-format", "json",
                 "--dangerously-skip-permissions",
                 "-p", prompt,
             ]
-            model_lower = str(self.model).lower()
+            model_lower = str(effective_model).lower()
             has_effort_suffix = any(model_lower.endswith(f"-{eff}") for eff in ("low", "medium", "high"))
             if not has_effort_suffix and self.reasoning_effort:
                 cmd.extend(["--effort", self.reasoning_effort])
@@ -412,6 +578,8 @@ class AgyStreamClient:
             data: dict[str, Any] = json.loads(payload)
             if data.get("status", "UNKNOWN") != "SUCCESS":
                 raise RuntimeError(f"AGY status={data.get('status')}: {payload[-400:]}")
+            data.setdefault("requested_model", self.model)
+            data.setdefault("effective_model", effective_model)
             return data
 
     def close(self) -> None:
@@ -472,6 +640,8 @@ class ProgrammaticAgent:
         app_data_dir: Union[Path, str, None] = None,
         json_schema: Optional[Union[dict, str, Path]] = None,
         use_sdk: bool = False,
+        response_validator: Optional[Callable[[dict[str, Any]], None]] = None,
+        recovery_policy: Optional[AgentRecoveryPolicy] = None,
     ) -> None:
         self.system_instructions = system_instructions
         self.model = model
@@ -481,6 +651,8 @@ class ProgrammaticAgent:
         self.task_result_path = Path(task_result_path or TASK_RESULT_PATH)
         self.app_data_dir = Path(app_data_dir or _resolve_default_app_data_dir(instance_id))
         self.json_schema = json_schema
+        self.response_validator = response_validator
+        self.recovery_policy = recovery_policy or AgentRecoveryPolicy.from_environment()
         self._use_sdk = use_sdk or (os.environ.get("USE_ANTIGRAVITY_SDK", "").lower() in ("1", "true", "yes"))
         self.circuit_breaker = CircuitBreaker.get(instance_id=self.instance_id)
 
@@ -502,9 +674,10 @@ class ProgrammaticAgent:
         from google.antigravity.hooks import policy
 
         api_key = os.environ.get("GEMINI_API_KEY")
+        self.effective_model = resolve_runtime_model(self.model, agy_bin_path=AGY_BIN_PATH)
         return LocalAgentConfig(
             system_instructions=self.system_instructions,
-            model=self.model,
+            model=self.effective_model,
             api_key=api_key if api_key else None,
             policies=[policy.allow_all()],
             workspaces=[str(PROJECT_ROOT)],
@@ -544,8 +717,9 @@ class ProgrammaticAgent:
             raise RuntimeError(f"Antigravity CLI binary not found at {AGY_BIN_PATH}")
 
         last_exc: Optional[Exception] = None
+        self.effective_model = resolve_runtime_model(self.model, agy_bin_path=AGY_BIN_PATH)
         client = _get_or_create_stream_client(
-            model=self.model,
+            model=self.effective_model,
             reasoning_effort=self.reasoning_effort,
             app_data_dir=self.app_data_dir,
             agy_bin_path=AGY_BIN_PATH,
@@ -566,6 +740,29 @@ class ProgrammaticAgent:
 
         raise RuntimeError(f"AGY CLI failed after retries: {last_exc}")
 
+    def _validate_response(self, data: dict[str, Any]) -> Optional[str]:
+        """Return a stable validation error, if this agent has a response contract."""
+        if self.response_validator is not None:
+            try:
+                self.response_validator(data)
+            except Exception as exc:
+                return f"validation: {exc}"
+        if self.json_schema is None:
+            return None
+        structured = data.get("structured_output")
+        if structured is None:
+            return None
+        try:
+            import jsonschema
+
+            schema = self.json_schema
+            if isinstance(schema, (str, Path)):
+                schema = json.loads(Path(schema).read_text(encoding="utf-8"))
+            jsonschema.validate(structured, schema)
+        except Exception as exc:
+            return f"validation: {exc}"
+        return None
+
     async def _run_async(self, task: str) -> Path:
         self.app_data_dir.mkdir(parents=True, exist_ok=True)
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -576,6 +773,11 @@ class ProgrammaticAgent:
         usage: Optional[dict[str, Any]] = None
         structured_output: Optional[Any] = None
         duration_seconds: Optional[float] = None
+        failure_evidence: dict[str, Any] = {
+            "policy": self.recovery_policy.as_dict(),
+            "attempts": [],
+            "recovered": False,
+        }
 
         if self.circuit_breaker.is_open():
             error = (
@@ -584,33 +786,78 @@ class ProgrammaticAgent:
             )
             status = "saturated"
         else:
-            try:
-                if self._can_use_sdk():
-                    data = await self._chat_async(task)
-                else:
-                    data = self._chat_cli_fallback(task)
+            current_task = task
+            attempt = 1
+            correction_count = 0
+            while True:
+                try:
+                    if self._can_use_sdk():
+                        data = await self._chat_async(current_task)
+                    else:
+                        data = self._chat_cli_fallback(current_task)
+                    if not isinstance(data, dict):
+                        raise RuntimeError("provider returned a non-object response")
+                    provider_status = str(data.get("status", "SUCCESS"))
+                    if provider_status != "SUCCESS":
+                        raise RuntimeError(f"provider status={provider_status}")
+                    validation_error = self._validate_response(data)
+                    if validation_error:
+                        raise RuntimeError(validation_error)
 
-                reply = data.get("response", "")
-                conversation_id = data.get("conversation_id")
-                usage = data.get("usage")
-                duration_seconds = data.get("duration_seconds")
-                structured_output = data.get("structured_output")
-            except AgentSaturationError as exc:
-                self.circuit_breaker.record_failure(str(exc))
-                error = str(exc)
-                status = "saturated"
-            except Exception as exc:
-                self.circuit_breaker.record_failure(str(exc))
-                error = str(exc)
-                status = "saturated" if is_saturation_text(str(exc)) else "error"
-            else:
-                self.circuit_breaker.record_success()
+                    reply = data.get("response", "")
+                    conversation_id = data.get("conversation_id")
+                    usage = data.get("usage")
+                    duration_seconds = data.get("duration_seconds")
+                    structured_output = data.get("structured_output")
+                    self.circuit_breaker.record_success()
+                    failure_evidence["recovered"] = bool(failure_evidence["attempts"])
+                    break
+                except AgentSaturationError as exc:
+                    detail = str(exc)
+                    self.circuit_breaker.record_failure(detail)
+                    error = detail
+                    status = "saturated"
+                    failure_evidence["attempts"].append(
+                        {"attempt": attempt, "error": detail, "action": "stop", "reason": "provider_saturation"}
+                    )
+                    break
+                except Exception as exc:
+                    detail = str(exc)
+                    decision = self.recovery_policy.decide(
+                        detail, attempt=attempt, correction_count=correction_count
+                    )
+                    failure_evidence["attempts"].append(
+                        {
+                            "attempt": attempt,
+                            "error": detail,
+                            "action": decision.action,
+                            "reason": decision.reason,
+                            "correction_count": correction_count,
+                        }
+                    )
+                    self.circuit_breaker.record_failure(detail)
+                    if decision.action == "retry":
+                        await asyncio.sleep(self.recovery_policy.retry_delay_seconds)
+                        attempt += 1
+                        continue
+                    if decision.action == "correct":
+                        current_task = (
+                            f"{task}\n\nCorrection required: the previous response failed the declared "
+                            f"contract ({detail}). Return only a corrected response."
+                        )
+                        correction_count += 1
+                        attempt += 1
+                        continue
+                    error = detail
+                    status = "saturated" if is_saturation_text(detail) else "error"
+                    break
 
         doc = self._build_result(
             task, reply, error, status=status,
             conversation_id=conversation_id, usage=usage,
             duration_seconds=duration_seconds,
             structured_output=structured_output,
+            failure_evidence=failure_evidence,
         )
         self.task_result_path.write_text(
             json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -658,6 +905,7 @@ class ProgrammaticAgent:
         usage: Optional[dict[str, Any]] = None,
         duration_seconds: Optional[float] = None,
         structured_output: Optional[Any] = None,
+        failure_evidence: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         cost_info: Optional[dict[str, Any]] = None
         if usage:
@@ -696,9 +944,11 @@ class ProgrammaticAgent:
                 "instance_id": self.instance_id,
                 "framework": "google-antigravity",
                 "connection": "antigravity-sdk" if self._can_use_sdk() else "antigravity-stream-harness",
-                "quota": "pro-active-model",
-                "model": self.model,
+                "quota": os.environ.get("AGY_ACCOUNT_TIER", "unknown"),
+                "requested_model": self.model,
+                "model": getattr(self, "effective_model", self.model),
                 "reasoning_effort": self.reasoning_effort,
+                "recovery_policy": self.recovery_policy.as_dict(),
             },
             "output": {
                 "reply": reply,
@@ -708,7 +958,9 @@ class ProgrammaticAgent:
                 "usage": usage,
                 "cost": cost_info,
                 "structured_output": structured_output,
+                "failure_evidence": failure_evidence or {},
             },
+            "failure_evidence": failure_evidence or {},
             "cost": cost_info,
             "result": status,
             "created_at": datetime.now(timezone.utc).isoformat(),

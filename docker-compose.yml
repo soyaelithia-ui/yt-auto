@@ -68,10 +68,16 @@ x-yt-base: &yt-base
     AUTO_PURGE_MARKED_BATCH_SIZE: ${AUTO_PURGE_MARKED_BATCH_SIZE:-50}
     ENABLE_TELEGRAM_CALLBACK_POLLING: "1"
     DRIVE_KEY_PATH: /run/secrets/drive_key.json
-    AGY_MODEL: gemini-3.8-flash-high
-    GEMINI_MODEL: gemini-3.8-flash-high
+    # Prefer the user's GPT Luna aliases, then select a model validated by `agy models`.
+    # The fallback is session-based and does not require API billing.
+    AGY_MODEL: ${AGY_MODEL:-}
+    AGY_MODEL_PREFERENCES: ${AGY_MODEL_PREFERENCES:-gpt-6-luna,gpt-5.6-luna}
+    AGY_FREE_FALLBACK_MODEL: ${AGY_FREE_FALLBACK_MODEL:-gpt-oss-120b-medium}
+    AGY_ACCOUNT_TIER: ${AGY_ACCOUNT_TIER:-free}
+    GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash-high}
     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     AGY_TIMEOUT_SECONDS: "600"
+    AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS: "20"
     AGY_CREDITS_DISABLED_CONFIRMED: ${AGY_CREDITS_DISABLED_CONFIRMED:-0}
     DRIVE_FOLDER_ID: ${DRIVE_FOLDER_ID:-}
     DRIVE_ROOT_FOLDER_ID: ${DRIVE_ROOT_FOLDER_ID:-}
