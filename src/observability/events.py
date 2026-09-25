@@ -32,9 +32,13 @@ def _events_log_path() -> Path:
 
 
 def _default_db_path() -> str:
+    env_db = os.environ.get("DEFAULT_DB_PATH")
+    if env_db:
+        return env_db
     from src.config import DEFAULT_DB_PATH
 
     return str(DEFAULT_DB_PATH)
+
 
 
 def _utc_ts() -> str:
