@@ -73,8 +73,8 @@ class ResilientThumbnailEngine:
 
         cfg = ThumbnailConfig(
             title=title_full,
-            channel_id=kwargs.get("channel_id", "horror"),
-            lane_id=kwargs.get("lane_id", "horror-scp-shorts" if is_vertical else "scp"),
+            channel_id=kwargs.get("channel_id", "moku"),
+            lane_id=kwargs.get("lane_id", "moku-scp-shorts" if is_vertical else "scp"),
             hook_text=hook,
             output_path=out_p,
             width=width,

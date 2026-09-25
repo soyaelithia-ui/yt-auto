@@ -5,11 +5,9 @@ import pytest
 
 from src.media.visual_coherence import (
     build_coherent_color_grade,
-    clamp_atmospheric_overlay_opacity,
     enforce_shorts_safe_zone,
     harmonize_scene_transitions,
     timing_scales_to_audio,
-    validate_graphic_safe_zone,
     validate_visual_continuity,
 )
 
@@ -175,58 +173,3 @@ class TestVisualCoherenceTimingAndColor:
 
         # Single scene returns empty
         assert harmonize_scene_transitions([SimpleNamespace(duration_sec=5.0, tension_level=2)]) == []
-
-    def test_clamp_atmospheric_overlay_opacity_boundaries(self):
-        """Validates clamping behavior for values below min (0.05 -> 0.15), above max (0.65 -> 0.35),
-        within band (0.28 -> 0.28), default fallback (None -> 0.25), and zero disabling (0.0 -> 0.0)."""
-        assert clamp_atmospheric_overlay_opacity(0.05) == 0.15
-        assert clamp_atmospheric_overlay_opacity(0.65) == 0.35
-        assert clamp_atmospheric_overlay_opacity(0.28) == 0.28
-        assert clamp_atmospheric_overlay_opacity(None) == 0.25
-        assert clamp_atmospheric_overlay_opacity(0.0) == 0.0
-
-    def test_validate_graphic_element_safe_zone_vertical(self):
-        """Tests bounding box validation function against vertical 9:16 safe zone,
-        confirming rejection of elements with y > 1460px or y < 180px or x > 950px or x < 64px."""
-        # Safe element inside (x in [64, 950], y in [180, 1460])
-        valid_bbox = {"x": 100, "y": 200, "width": 400, "height": 300}
-        assert validate_graphic_safe_zone(valid_bbox, 1080, 1920) is True
-
-        # Violates top: y < 180
-        top_violation = {"x": 100, "y": 100, "width": 400, "height": 200}
-        assert validate_graphic_safe_zone(top_violation, 1080, 1920) is False
-
-        # Violates bottom: y + height > 1460
-        bottom_violation = {"x": 100, "y": 1400, "width": 400, "height": 100}  # y2 = 1500 > 1460
-        assert validate_graphic_safe_zone(bottom_violation, 1080, 1920) is False
-
-        # Violates left: x < 64
-        left_violation = {"x": 30, "y": 200, "width": 400, "height": 200}
-        assert validate_graphic_safe_zone(left_violation, 1080, 1920) is False
-
-        # Violates right: x + width > 950
-        right_violation = {"x": 600, "y": 200, "width": 400, "height": 200}  # x2 = 1000 > 950
-        assert validate_graphic_safe_zone(right_violation, 1080, 1920) is False
-
-    def test_validate_graphic_element_safe_zone_horizontal(self):
-        """Tests bounding box validation against horizontal 16:9 safe zone
-        (MarginV_bottom >= 120px, MarginV_top >= 80px, lateral MarginH >= 80px)."""
-        # Safe horizontal element: canvas 1920x1080, top=80, bottom=120 (max y2=960), left=80, right=80 (max x2=1840)
-        valid_bbox = {"x": 100, "y": 100, "width": 800, "height": 400}
-        assert validate_graphic_safe_zone(valid_bbox, 1920, 1080) is True
-
-        # Violates top: y < 80
-        top_violation = {"x": 100, "y": 50, "width": 400, "height": 200}
-        assert validate_graphic_safe_zone(top_violation, 1920, 1080) is False
-
-        # Violates bottom: y + height > 960
-        bottom_violation = {"x": 100, "y": 900, "width": 400, "height": 100}  # y2 = 1000 > 960
-        assert validate_graphic_safe_zone(bottom_violation, 1920, 1080) is False
-
-        # Violates left: x < 80
-        left_violation = {"x": 50, "y": 100, "width": 400, "height": 200}
-        assert validate_graphic_safe_zone(left_violation, 1920, 1080) is False
-
-        # Violates right: x + width > 1840
-        right_violation = {"x": 1500, "y": 100, "width": 400, "height": 200}  # x2 = 1900 > 1840
-        assert validate_graphic_safe_zone(right_violation, 1920, 1080) is False

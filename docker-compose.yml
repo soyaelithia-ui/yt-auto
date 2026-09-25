@@ -57,6 +57,8 @@ x-yt-base: &yt-base
     REQUIRE_DRIVE: ${REQUIRE_DRIVE:-0}
     REQUIRE_PUBLISH: ${REQUIRE_PUBLISH:-1}
     REQUIRE_REVIEW: ${REQUIRE_REVIEW:-1}
+    # Prefer authenticated browser/session cookies for uploads; API remains fallback.
+    PREFER_SESSION_UPLOAD: ${PREFER_SESSION_UPLOAD:-1}
     USE_AGENT_HARNESS: ${USE_AGENT_HARNESS:-1}
     USE_ANTIGRAVITY_SDK: ${USE_ANTIGRAVITY_SDK:-1}
     AUTO_APPROVE: ${AUTO_APPROVE:-1}

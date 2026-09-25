@@ -33,25 +33,22 @@ ATMOSPHERIC_OVERLAY_OPACITY: float = 0.25
 
 
 def _hybrid_overlay_search_roots(kind_norm: str) -> List[Path]:
-    """CWD + repo assets/overlays/static and assets/overlays/motion."""
+    """CWD + repo assets/overlays, plus visual_bank overlays (PNG only)."""
     from src.config import BASE_DIR
 
-    cwd = Path.cwd().resolve()
-    base = BASE_DIR.resolve()
-    if cwd != base and (Path("assets/overlays").is_dir() or Path("assets/overlays/static").is_dir()):
-        roots = [
-            Path("assets/overlays/static"),
-            Path("assets/overlays"),
-        ]
-        return [r for r in roots if r.is_dir()]
-
-    roots: List[Path] = [
-        Path("assets/overlays/static"),
-        Path("assets/overlays"),
-        BASE_DIR / "assets" / "overlays" / "static",
-        BASE_DIR / "assets" / "overlays" / "motion",
-        BASE_DIR / "assets" / "overlays",
-    ]
+    roots: List[Path] = [Path("assets/overlays")]
+    repo_overlays = BASE_DIR / "assets" / "overlays"
+    if repo_overlays not in roots:
+        roots.append(repo_overlays)
+    vb = BASE_DIR / "assets" / "visual_bank"
+    if vb.is_dir():
+        try:
+            channels = sorted(p for p in vb.iterdir() if p.is_dir() and not p.name.startswith("_"))
+        except OSError:
+            channels = []
+        for chan in channels:
+            roots.append(chan / "overlays")
+            # Never scan ambient_gifs: full-frame GIF decode is banned on the hot path.
     seen: set[str] = set()
     out: List[Path] = []
     for root in roots:
@@ -70,26 +67,11 @@ def resolve_hybrid_overlay_asset(
     """Return a pre-made static overlay PNG (never a principal-plane background).
 
     Conventions:
-    - when in isolated test sandbox (CWD != BASE_DIR and local assets/overlays exists), respect sandbox roots only
-    - otherwise delegates first to GraphicsBank.resolve_atmospheric_path
-    - fallback: particles, god_rays, film_grain, vignette, tv_static in assets/overlays/static or assets/overlays
+    - particles: ``assets/overlays/particles_<type>.png`` then ``particles.png``
+    - god_rays: ``assets/overlays/god_rays.png``
+    - film_grain / vignette / tv_static: ``assets/overlays`` then
+      ``assets/visual_bank/*/overlays`` (PNG only; GIFs are skipped)
     """
-    from src.config import BASE_DIR
-
-    cwd = Path.cwd().resolve()
-    base = BASE_DIR.resolve()
-    in_sandbox = cwd != base and (Path("assets/overlays").is_dir() or Path("assets/overlays/static").is_dir())
-
-    if not in_sandbox:
-        try:
-            from src.media.graphics_bank import get_graphics_bank
-
-            bank_path = get_graphics_bank().resolve_atmospheric_path(kind, particle_type)
-            if bank_path is not None and bank_path.is_file() and bank_path.stat().st_size > 0:
-                return bank_path.resolve()
-        except Exception:
-            pass
-
     kind_norm = (kind or "").strip().lower()
     candidates: List[Path] = []
     for root in _hybrid_overlay_search_roots(kind_norm):
@@ -126,14 +108,8 @@ def resolve_hybrid_overlay_asset(
 
 
 def clamp_atmospheric_overlay_opacity(opacity: float | None = None) -> float:
-    """Keep film_grain / vignette / tv_static in the 15-35% overlay band.
-    Returns 0.0 when 0.0 is requested. Default fallback is 0.25.
-    """
-    if opacity is None:
-        return ATMOSPHERIC_OVERLAY_OPACITY
-    val = float(opacity)
-    if val == 0.0:
-        return 0.0
+    """Keep film_grain / vignette / tv_static in the 15-35% overlay band."""
+    val = ATMOSPHERIC_OVERLAY_OPACITY if opacity is None else float(opacity)
     return max(ATMOSPHERIC_OVERLAY_OPACITY_MIN, min(ATMOSPHERIC_OVERLAY_OPACITY_MAX, val))
 
 

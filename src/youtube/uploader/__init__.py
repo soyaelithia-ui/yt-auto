@@ -326,6 +326,45 @@ def _perform_playwright_fallback_flow(
     raise RuntimeError("No hay cookies ni token del canal seleccionado")
 
 
+def _try_preferred_session_upload(
+    *,
+    video_path: str,
+    title: str,
+    effective_description: str,
+    effective_tags: List[str],
+    thumbnail_path: Optional[str],
+    effective_cookies: str,
+    channel_key: str,
+    settings: Any,
+    dry_run: bool,
+) -> Optional[Dict[str, Any]]:
+    """Try cookie-backed upload when explicitly enabled; return None for API fallback."""
+    prefer_session = os.environ.get("PREFER_SESSION_UPLOAD", "0").strip().lower() in {"1", "true", "yes", "on"}
+    if not prefer_session or not os.path.isfile(effective_cookies):
+        return None
+    logger.info("Session-cookie upload preferred for channel %s", channel_key)
+    try:
+        result = _perform_playwright_fallback_flow(
+            video_path=video_path,
+            title=title,
+            effective_description=effective_description,
+            effective_tags=effective_tags,
+            thumbnail_path=thumbnail_path,
+            effective_cookies=effective_cookies,
+            channel_key=channel_key,
+            settings=settings,
+            dry_run=dry_run,
+            api_quota_error=None,
+            api_auth_error=None,
+        )
+        if result.get("status") in {"PUBLISHED", "SUCCESS", "DRY_RUN", "TEST_MOCK"}:
+            return result
+        logger.warning("Session-cookie upload returned %s; trying API fallback", result.get("status"))
+    except Exception as exc:
+        logger.warning("Session-cookie upload failed; trying API fallback: %s", exc)
+    return None
+
+
 def upload_video(
     video_path: str,
     title: str,
@@ -359,15 +398,9 @@ def upload_video(
         _consume_publication_claim(gate, claimed_job_id, claimed_version, normalized)
         return normalized
 
-    (
-        _branding,
-        settings,
-        channel_key,
-        effective_tags,
-        effective_description,
-        effective_cookies,
-        effective_token,
-    ) = _resolve_upload_metadata(channel, title, description, tags, cookies_path, token_path)
+    _, settings, channel_key, effective_tags, effective_description, effective_cookies, effective_token = _resolve_upload_metadata(
+        channel, title, description, tags, cookies_path, token_path
+    )
 
     mock = os.environ.get("TEST_MODE") == "1" or os.environ.get("MOCK_YOUTUBE_UPLOAD") == "1"
     if mock:
@@ -388,6 +421,21 @@ def upload_video(
         except Exception as fmt_err:
             if not is_test_environment():
                 raise fmt_err
+
+    if not api_only:
+        session_result = _try_preferred_session_upload(
+            video_path=video_path,
+            title=title,
+            effective_description=effective_description,
+            effective_tags=effective_tags,
+            thumbnail_path=thumbnail_path,
+            effective_cookies=effective_cookies,
+            channel_key=channel_key,
+            settings=settings,
+            dry_run=dry_run,
+        )
+        if session_result is not None:
+            return _finalize(session_result)
 
     if api_only:
         expected_id = str(expected_channel_id or settings.expected_youtube_channel_id or "").strip()

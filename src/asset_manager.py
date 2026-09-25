@@ -86,7 +86,7 @@ class AssetManager:
         self.refresh_index()
 
     def refresh_index(self):
-        """Scans asset directories (worksets, templates, library) and builds in-memory catalog index."""
+        """Scans asset directories (worksets, templates, visual_bank, library) and builds in-memory catalog index."""
         self._index = {"backgrounds": {}, "music": {}, "ambient": {}}
 
         def _add_media(category: str, file_path: str):
@@ -135,17 +135,20 @@ class AssetManager:
                         _add_media("templates", full_p)
                         _add_media("default", full_p)
 
-        # 3. Scan assets/visual_bank/ directory if exists (fallback compatibility for test fixtures)
+        # 3. Scan assets/visual_bank/ directory
         visual_bank_dir = os.path.join(self.root_dir, "visual_bank")
         if os.path.exists(visual_bank_dir):
             for root, _, files in os.walk(visual_bank_dir):
                 rel = os.path.relpath(root, visual_bank_dir)
-                category = rel.split(os.sep)[0].lower() if rel != "." else "visual_bank"
+                parts = [p.lower() for p in rel.split(os.sep) if p != "."]
+                categories = parts + ["visual_bank", "horror", "default"]
                 for f in files:
                     if not f.startswith("."):
                         full_p = os.path.join(root, f)
-                        _add_media(category, full_p)
-                        _add_media("default", full_p)
+                        for cat in categories:
+                            _add_media(cat, full_p)
+                        if len(parts) >= 2:
+                            _add_media(f"{parts[0]}_{parts[1]}", full_p)
 
         # 4. Scan legacy folders for fallback compatibility
         bg_dir = os.path.join(self.root_dir, "backgrounds")

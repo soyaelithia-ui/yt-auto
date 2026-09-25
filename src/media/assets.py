@@ -49,12 +49,18 @@ def check_local_templates(
     folders_to_check = channel_folder_map.get(norm_channel, [norm_channel])
 
     search_dirs: List[Path] = []
+    visual_bank_dir = Path(BASE_DIR) / "assets" / "visual_bank"
     for f in folders_to_check:
+        search_dirs.append(visual_bank_dir / f / "scenery")
+        search_dirs.append(visual_bank_dir / f)
         search_dirs.append(TEMPLATES_DIR / f)
         search_dirs.append(WORKSETS_DIR / f)
 
     search_dirs.extend([
         WORKSETS_DIR / "generated",
+        visual_bank_dir / "moku" / "scenery",
+        visual_bank_dir / "aelithia" / "scenery",
+        visual_bank_dir,
         TEMPLATES_DIR,
         WORKSETS_DIR,
         Path(BASE_DIR) / "assets",

@@ -72,20 +72,17 @@ def timing_scales_to_audio(
     return scaled
 
 
-from src.media.overlays import clamp_atmospheric_overlay_opacity
-
-
 def build_coherent_color_grade(
     accent_hex: str = "#00FF88",
     primary_hex: str = "#030A14",
-    channel: str = "horror",
+    channel: str = "moku",
 ) -> str:
     """Generate subtle, filmic FFmpeg color harmony filter.
 
     Unifies disparate stock loops into a single cohesive visual world matching
     the channel brand identity without crushing blacks or blowing out highlights.
     """
-    ch = (channel or "horror").lower()
+    ch = (channel or "moku").lower()
     if "drama" in ch or "aelithia" in ch or "aita" in ch:
         # Warm, cinematic, gentle hearth tones, lifelike skin tones
         return (
@@ -141,14 +138,12 @@ def enforce_shorts_safe_zone(width: int, height: int) -> Dict[str, int]:
     """Compute YouTube Shorts / TikTok UI safe zone to prevent UI occlusion."""
     is_vertical = height > width
     if is_vertical:
+        top_margin = max(180, int(height * 0.10))
+        bottom_margin = max(460, int(height * 0.25))
         if width == 1080 and height == 1920:
-            top_margin = 180
-            bottom_margin = 460
             right_margin = 130
             left_margin = 64
         else:
-            top_margin = max(180, int(height * 0.10))
-            bottom_margin = max(460, int(height * 0.25))
             right_margin = max(130, int(width * 0.15))
             left_margin = max(64, int(width * 0.06))
     else:
@@ -173,26 +168,6 @@ def enforce_shorts_safe_zone(width: int, height: int) -> Dict[str, int]:
     }
 
 
-def validate_graphic_safe_zone(bbox: Dict[str, int], width: int, height: int) -> bool:
-    """Validate whether bounding box {x, y, width, height} resides strictly inside safe zone."""
-    sz = enforce_shorts_safe_zone(width, height)
-    x = float(bbox.get("x", 0))
-    y = float(bbox.get("y", 0))
-    w = float(bbox.get("width", 0))
-    h = float(bbox.get("height", 0))
-
-    min_x = sz["left"]
-    max_x = width - sz["right"]
-    min_y = sz["top"]
-    max_y = height - sz["bottom"]
-
-    if x < min_x or (x + w) > max_x:
-        return False
-    if y < min_y or (y + h) > max_y:
-        return False
-    return True
-
-
 def validate_visual_continuity(scenes: Sequence[Any]) -> Dict[str, Any]:
     """Validate visual continuity across scene sequence."""
     if not scenes:
@@ -213,13 +188,11 @@ def validate_visual_continuity(scenes: Sequence[Any]) -> Dict[str, Any]:
 
 __all__ = [
     "build_coherent_color_grade",
-    "clamp_atmospheric_overlay_opacity",
     "enforce_shorts_safe_zone",
     "harmonize_scene_transitions",
     "ordered_script_scene_ids",
     "plan_scenes_by_id",
     "timing_scales_to_audio",
-    "validate_graphic_safe_zone",
     "validate_visual_continuity",
     "visual_plan_palette",
 ]
