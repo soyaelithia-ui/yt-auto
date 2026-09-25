@@ -664,7 +664,7 @@ def _run_24h_maintenance_sweep(
 
         from src.analytics.link_collector import collect_channel_links
         from src.analytics.scoring import sync_and_score_channel_publications
-        from src.analytics.pruner import execute_autonomous_prune
+        from src.analytics.pruner import execute_autonomous_prune, purge_marked_videos
         from src.core.channel_profile import ChannelProfileRegistry
 
         channels_to_process = (
@@ -678,6 +678,7 @@ def _run_24h_maintenance_sweep(
         collection_results = {}
         scoring_results = {}
         prune_results = {}
+        marked_batch_size = max(1, int(os.environ.get("AUTO_PURGE_MARKED_BATCH_SIZE", "50")))
 
         for ch in channels_to_process:
             col_res = collect_channel_links(ch, db_path=database, dry_run=dry_run)
@@ -686,8 +687,15 @@ def _run_24h_maintenance_sweep(
             score_res = sync_and_score_channel_publications(ch, db_path=database, dry_run=dry_run)
             scoring_results[ch] = score_res
 
+            marked_res = (
+                {"purged_count": 0, "failed_count": 0, "items": []}
+                if dry_run
+                else purge_marked_videos(ch, db_path=database, max_delete=marked_batch_size)
+            )
             prune_res = execute_autonomous_prune(ch, db_path=database, dry_run=dry_run)
             prune_results[ch] = {
+                "marked_candidates_purged": marked_res["purged_count"],
+                "marked_candidates_failed": marked_res["failed_count"],
                 "evaluated": prune_res.evaluated_count,
                 "pruned": prune_res.pruned_count,
                 "failed": prune_res.failed_count,

@@ -6,7 +6,8 @@ Implements criteria-based automated deletion of underperforming YouTube Shorts:
 2. Dual-threshold underperformance check (actual_success_score < floor).
 3. Bounded daily deletion ceiling (<= 2 videos/channel/day).
 4. Kill-switch (AUTO_PRUNE_ENABLED=false) and HTTP 429 circuit breaker.
-5. Telegram operational audit alert dispatch.
+5. Marked-video purge runs in bounded batches and retries on later sweeps.
+6. Telegram operational audit alert dispatch.
 """
 from __future__ import annotations
 
@@ -415,6 +416,9 @@ def purge_marked_videos(
             s_id = row["story_id"]
             title = row["title"]
             try:
+                from src.youtube.control import _verify_ownership
+
+                _verify_ownership(service, v_id, canon.value)
                 service.videos().delete(id=v_id).execute()
                 conn.execute(
                     "UPDATE stories SET status = 'PURGED', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",

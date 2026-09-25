@@ -9,6 +9,7 @@ import pytest
 from src.analytics.pruner import (
     evaluate_prune_candidates,
     execute_autonomous_prune,
+    purge_marked_videos,
     AutonomousPruneReport,
 )
 from src.core.inventory import record_published_inventory
@@ -190,6 +191,37 @@ def test_live_prune_deletes_and_updates_db():
                 row = conn.execute("SELECT status FROM stories WHERE story_id = 'story-poor-2'").fetchone()
                 assert row is not None
                 assert row["status"] == "PURGED"
+
+
+def test_marked_purge_is_bounded_and_updates_db_after_ownership_check():
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        _create_sample_inventory(db_path)
+        with connect(db_path) as conn:
+            conn.execute("UPDATE stories SET status='MARKED_FOR_PURGE', failure_code='ZERO_ENGAGEMENT_STALE' WHERE story_id IN ('story-poor-1','story-poor-2','story-poor-3')")
+            conn.commit()
+
+        mock_youtube = MagicMock()
+        mock_delete = MagicMock()
+        mock_delete.execute.return_value = ""
+        mock_youtube.videos().delete.return_value = mock_delete
+        with patch("src.youtube.control._verify_ownership") as verify:
+            result = purge_marked_videos(
+                channel="moku",
+                db_path=db_path,
+                max_delete=2,
+                youtube_service=mock_youtube,
+            )
+
+        assert result["purged_count"] == 2
+        assert result["failed_count"] == 0
+        assert verify.call_count == 2
+        assert mock_delete.execute.call_count == 2
+        with connect(db_path) as conn:
+            rows = conn.execute("SELECT status FROM stories WHERE story_id IN ('story-poor-1','story-poor-2')").fetchall()
+            assert all(row["status"] == "PURGED" for row in rows)
+            remaining = conn.execute("SELECT status FROM stories WHERE story_id='story-poor-3'").fetchone()
+            assert remaining["status"] == "MARKED_FOR_PURGE"
 
 
 def test_purged_stories_are_excluded_from_prune_candidates():
