@@ -155,6 +155,22 @@ def _is_quota_error(exc: Exception) -> bool:
     return "quota" in err_str or "rate limit" in err_str or "429" in err_str
 
 
+def _is_video_not_found_error(exc: Exception) -> bool:
+    """True when the video is deleted or not found on YouTube (HTTP 404 / LookupError)."""
+    if isinstance(exc, LookupError):
+        return True
+    msg = str(exc).lower()
+    return "not found" in msg or "404" in msg or "videonotfound" in msg
+
+
+def _is_ownership_error(exc: Exception) -> bool:
+    """True when video ownership verification failed (belongs to another channel)."""
+    if isinstance(exc, PermissionError):
+        return True
+    msg = str(exc).lower()
+    return "pertenece a otro canal" in msg or "channel not owned" in msg
+
+
 def _notify_telegram_pruned(channel: str, pruned_items: List[Dict[str, Any]]) -> None:
     """Dispatches Telegram operational alert for pruned videos."""
     if not pruned_items:
@@ -280,15 +296,48 @@ def execute_autonomous_prune(
                 time.sleep(0.5)  # rate limit spacing
             except Exception as exc:
                 logger.error("[PRUNE] Failed to delete video '%s': %s", cand.video_id, exc)
-                failed_items.append({
-                    "video_id": cand.video_id,
-                    "title": cand.title,
-                    "error": str(exc),
-                    "status": "failed",
-                })
-                if _is_quota_error(exc):
+                if _is_video_not_found_error(exc):
+                    logger.info("[PRUNE] Video '%s' not found on YouTube (already deleted). Marking PURGED.", cand.video_id)
+                    conn.execute(
+                        "UPDATE stories SET status = 'PURGED', failure_code = 'VIDEO_NOT_FOUND', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                        (cand.story_id,),
+                    )
+                    conn.commit()
+                    pruned_items.append({
+                        "video_id": cand.video_id,
+                        "title": cand.title,
+                        "score": cand.actual_success_score,
+                        "status": "purged_not_found",
+                    })
+                elif _is_ownership_error(exc):
+                    logger.warning("[PRUNE] Video '%s' belongs to another channel. Marking PERMANENT_FAILED.", cand.video_id)
+                    conn.execute(
+                        "UPDATE stories SET status = 'PERMANENT_FAILED', failure_code = 'OWNERSHIP_MISMATCH', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                        (cand.story_id,),
+                    )
+                    conn.commit()
+                    failed_items.append({
+                        "video_id": cand.video_id,
+                        "title": cand.title,
+                        "error": str(exc),
+                        "status": "failed_terminal",
+                    })
+                elif _is_quota_error(exc):
+                    failed_items.append({
+                        "video_id": cand.video_id,
+                        "title": cand.title,
+                        "error": str(exc),
+                        "status": "failed_quota",
+                    })
                     logger.warning("[PRUNE] YouTube quota exceeded during prune. Halting batch.")
                     break
+                else:
+                    failed_items.append({
+                        "video_id": cand.video_id,
+                        "title": cand.title,
+                        "error": str(exc),
+                        "status": "failed",
+                    })
 
     _notify_telegram_pruned(canon, pruned_items)
 
@@ -436,15 +485,61 @@ def purge_marked_videos(
                 time.sleep(0.5)
             except Exception as exc:
                 logger.error("[PURGE] Failed to delete marked video '%s': %s", v_id, exc)
-                failed_items.append({
-                    "video_id": v_id,
-                    "title": title,
-                    "error": str(exc),
-                    "status": "failed",
-                })
-                if _is_quota_error(exc):
+                if _is_video_not_found_error(exc):
+                    logger.info("[PURGE] Video '%s' not found on YouTube (already deleted). Marking PURGED.", v_id)
+                    conn.execute(
+                        "UPDATE stories SET status = 'PURGED', failure_code = 'VIDEO_NOT_FOUND', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                        (s_id,),
+                    )
+                    conn.commit()
+                    purged_items.append({
+                        "video_id": v_id,
+                        "title": title,
+                        "failure_code": "VIDEO_NOT_FOUND",
+                        "score": row["actual_success_score"],
+                        "status": "purged_not_found",
+                    })
+                elif _is_ownership_error(exc):
+                    logger.warning("[PURGE] Video '%s' belongs to another channel. Marking PERMANENT_FAILED.", v_id)
+                    conn.execute(
+                        "UPDATE stories SET status = 'PERMANENT_FAILED', failure_code = 'OWNERSHIP_MISMATCH', updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                        (s_id,),
+                    )
+                    conn.commit()
+                    failed_items.append({
+                        "video_id": v_id,
+                        "title": title,
+                        "error": str(exc),
+                        "status": "failed_terminal",
+                    })
+                elif _is_quota_error(exc):
+                    failed_items.append({
+                        "video_id": v_id,
+                        "title": title,
+                        "error": str(exc),
+                        "status": "failed_quota",
+                    })
                     logger.warning("[PURGE] YouTube quota exceeded during purge. Halting batch.")
                     break
+                else:
+                    cur_code = str(row["failure_code"] or "")
+                    new_status = "PERMANENT_FAILED" if "PURGE_ATTEMPT_2" in cur_code else "MARKED_FOR_PURGE"
+                    new_code = (
+                        f"PURGE_FAILED_TERMINAL: {str(exc)[:40]}"
+                        if "PURGE_ATTEMPT_2" in cur_code
+                        else ("PURGE_ATTEMPT_2" if "PURGE_ATTEMPT_1" in cur_code else "PURGE_ATTEMPT_1")
+                    )
+                    conn.execute(
+                        "UPDATE stories SET status = ?, failure_code = ?, updated_at = CURRENT_TIMESTAMP WHERE story_id = ?",
+                        (new_status, new_code, s_id),
+                    )
+                    conn.commit()
+                    failed_items.append({
+                        "video_id": v_id,
+                        "title": title,
+                        "error": str(exc),
+                        "status": "failed",
+                    })
 
     _notify_telegram_pruned(canon.value, purged_items)
     return {

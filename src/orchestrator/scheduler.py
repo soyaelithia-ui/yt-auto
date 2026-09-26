@@ -117,6 +117,24 @@ class LaneDaemonOrchestrator:
         self.lane_scheduler.initialize(apply_offsets=self.config.apply_offsets)
 
         try:
+            with connect(self.config.db_path) as conn:
+                row = conn.execute(
+                    "SELECT last_24h_sweep_at FROM scheduler_state WHERE scheduler_id = 1"
+                ).fetchone()
+                if row and row["last_24h_sweep_at"] is not None:
+                    self._last_24h_sweep = float(row["last_24h_sweep_at"])
+        except Exception:
+            pass
+
+        if not is_test_environment():
+            try:
+                from src.daemon import _start_telegram_callback_poller
+
+                _start_telegram_callback_poller()
+            except Exception:
+                logger.debug("Telegram callback poller initialization skipped", exc_info=True)
+
+        try:
             from src.core.lease_reaper import LeaseReaper
 
             LeaseReaper(db_path=self.config.db_path).reap_once(
@@ -199,6 +217,13 @@ class LaneDaemonOrchestrator:
         result: Optional[TurnResult] = None
 
         try:
+            from src.core.lifecycle import set_current_lane
+
+            set_current_lane(pick.lane_id)
+        except Exception:
+            pass
+
+        try:
             job = repository.claim_resumable(
                 pick.lane_id, ch_val, owner, lease_seconds=lease_seconds
             )
@@ -254,6 +279,12 @@ class LaneDaemonOrchestrator:
                 "error_code": "lane_turn_exception",
             }
         finally:
+            try:
+                from src.core.lifecycle import set_current_lane
+
+                set_current_lane(None)
+            except Exception:
+                pass
             if result and result.get("work_dir"):
                 try:
                     from src.cleaner import clean_run_intermediates
@@ -336,13 +367,17 @@ class LaneDaemonOrchestrator:
             pick, _ = active_jobs.pop(fut)
             fut.cancel()
             try:
-                from src.core.process_watch import terminate_hung_ffmpeg
+                from src.core.lifecycle import terminate_lane_processes
 
-                terminate_hung_ffmpeg(
-                    max_age_seconds=0, parent_pid=os.getpid(), grace_seconds=1.0
-                )
+                terminated_pids = terminate_lane_processes(pick.lane_id)
+                if not terminated_pids:
+                    from src.core.process_watch import terminate_hung_ffmpeg
+
+                    terminate_hung_ffmpeg(
+                        max_age_seconds=timeout, parent_pid=os.getpid(), grace_seconds=1.0
+                    )
             except Exception:
-                logger.debug("hung ffmpeg terminate failed", exc_info=True)
+                logger.debug("watchdog hung process terminate failed", exc_info=True)
 
             ch_val = pick.channel.value if hasattr(pick.channel, "value") else str(pick.channel)
             res: TurnResult = {
@@ -406,7 +441,18 @@ class LaneDaemonOrchestrator:
                 logger.debug("auto-publish sweep skipped", exc_info=True)
 
         now_wall = time.time()
-        if now_wall - self._last_24h_sweep >= 86400.0 or (ticks > 0 and ticks % 60 == 0):
+        last_sweep = self._last_24h_sweep
+        try:
+            with connect(self.config.db_path) as conn:
+                row = conn.execute(
+                    "SELECT last_24h_sweep_at FROM scheduler_state WHERE scheduler_id = 1"
+                ).fetchone()
+                if row and row["last_24h_sweep_at"] is not None:
+                    last_sweep = max(last_sweep, float(row["last_24h_sweep_at"]))
+        except Exception:
+            pass
+
+        if now_wall - last_sweep >= 86400.0:
             self._last_24h_sweep = now_wall
             try:
                 from src.daemon import _run_24h_maintenance_sweep
@@ -416,6 +462,22 @@ class LaneDaemonOrchestrator:
                 )
             except Exception:
                 logger.debug("24h maintenance sweep skipped", exc_info=True)
+
+        if not is_test_environment():
+            try:
+                from src.daemon import _start_telegram_callback_poller
+
+                poller_alive = any(
+                    t.name == "telegram-callback-poller" and t.is_alive()
+                    for t in threading.enumerate()
+                )
+                if not poller_alive:
+                    import src.daemon as daemon_mod
+
+                    daemon_mod._TELEGRAM_POLLER_STARTED = False
+                    daemon_mod._start_telegram_callback_poller()
+            except Exception:
+                logger.debug("Telegram callback poller check skipped", exc_info=True)
 
         try:
             import src.core.repository as _repo

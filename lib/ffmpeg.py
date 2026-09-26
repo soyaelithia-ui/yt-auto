@@ -313,6 +313,11 @@ def run_ffmpeg(
             cwd=str(cwd) if cwd else None,
             start_new_session=True,
         )
+        try:
+            from src.core.lifecycle import register_process
+            register_process(proc)
+        except Exception:
+            pass
 
         poll_interval = min(0.1, max(0.005, timeout / 10.0))
         watchdog = SubprocessWatchdog(
@@ -433,6 +438,13 @@ def run_ffmpeg(
             stderr="ffmpeg binary not found",
             duration_sec=duration_sec,
         )
+    finally:
+        if proc is not None:
+            try:
+                from src.core.lifecycle import unregister_process
+                unregister_process(proc)
+            except Exception:
+                pass
 
 
 def run_ffprobe(

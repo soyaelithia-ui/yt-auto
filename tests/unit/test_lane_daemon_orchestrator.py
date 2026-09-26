@@ -305,3 +305,98 @@ def test_cli_handler_daemon_invocation(test_db: str) -> None:
         mock_run.assert_called_once()
 
 
+def test_orchestrator_24h_sweep_ignores_ticks_and_checks_sqlite_state(test_db: str) -> None:
+    """Verify ticks % 60 == 0 does NOT trigger 24h sweep when less than 24h elapsed (Issue #20)."""
+    config = LaneDaemonConfig(db_path=test_db, enable_sweeps=True)
+    orchestrator = LaneDaemonOrchestrator(config)
+    now = time.time()
+    orchestrator._last_24h_sweep = now - 300.0  # 5 minutes ago
+
+    # Persist recent sweep in SQLite scheduler_state
+    with connect(test_db) as conn:
+        conn.execute("UPDATE scheduler_state SET last_24h_sweep_at = ? WHERE scheduler_id = 1", (int(now - 300),))
+        conn.commit()
+
+    with (
+        patch("src.daemon._run_24h_maintenance_sweep") as mock_24h_sweep,
+        patch("src.daemon._run_auto_publish_sweep"),
+        patch("src.core.repository.touch_daemon_liveness"),
+    ):
+        # Even with ticks=60, it MUST NOT trigger
+        orchestrator._run_sweeps_if_due(ticks=60)
+        mock_24h_sweep.assert_not_called()
+
+        # Now simulate 25 hours elapsed in scheduler_state
+        conn_update = int(now - 90000.0)
+        with connect(test_db) as conn:
+            conn.execute("UPDATE scheduler_state SET last_24h_sweep_at = ? WHERE scheduler_id = 1", (conn_update,))
+            conn.commit()
+        orchestrator._last_24h_sweep = float(conn_update)
+
+        orchestrator._run_sweeps_if_due(ticks=1)
+        mock_24h_sweep.assert_called_once()
+
+
+def test_orchestrator_watchdog_terminates_only_expired_lane_processes(test_db: str) -> None:
+    """Verify watchdog timeout terminates only the timed out lane's processes without wiping siblings (Issue #21)."""
+    from src.core.lifecycle import register_process, set_current_lane, get_lane_pids
+    config = LaneDaemonConfig(db_path=test_db, enable_sweeps=False)
+    orchestrator = LaneDaemonOrchestrator(config)
+
+    # Register mock PIDs for two concurrent lanes
+    set_current_lane("lane-horror")
+    pid_horror = register_process(99991)
+    set_current_lane("lane-drama")
+    pid_drama = register_process(99992)
+    set_current_lane(None)
+
+    assert pid_horror in get_lane_pids("lane-horror")
+    assert pid_drama in get_lane_pids("lane-drama")
+
+    fut = concurrent.futures.Future()
+    pick = LanePick("lane-horror", CanonicalChannel.HORROR, 1000, 1300)
+    # Simulate start time far in the past to trigger turn timeout
+    active_jobs = {fut: (pick, time.monotonic() - 20000.0)}
+
+    with (
+        patch("src.core.lifecycle.os.kill") as mock_kill,
+        patch("src.core.lifecycle.os.getpgid", side_effect=lambda p: p),
+        patch("src.core.lifecycle.os.killpg") as mock_killpg,
+        patch("src.core.process_watch.terminate_hung_ffmpeg") as mock_hung,
+    ):
+        results = orchestrator._watchdog_check(active_jobs)
+        assert len(results) == 1
+        assert results[0]["status"] == "RETRYABLE_FAILED"
+        assert results[0]["lane"] == "lane-horror"
+
+        # lane-horror process was terminated
+        assert pid_horror not in get_lane_pids("lane-horror")
+        # sibling lane-drama process was NOT touched!
+        assert pid_drama in get_lane_pids("lane-drama")
+        # Global fallback terminate_hung_ffmpeg was NOT called because lane processes were handled
+        mock_hung.assert_not_called()
+
+        from src.core.lifecycle import unregister_process
+        unregister_process(pid_drama)
+
+
+def test_orchestrator_telegram_poller_lifecycle_supervision(test_db: str) -> None:
+    """Verify orchestrator starts and supervises telegram callback poller in production (Issue #22)."""
+    config = LaneDaemonConfig(db_path=test_db, enable_sweeps=True)
+    orchestrator = LaneDaemonOrchestrator(config)
+
+    with (
+        patch("src.orchestrator.scheduler.is_test_environment", return_value=False),
+        patch("src.daemon._start_telegram_callback_poller") as mock_start_poller,
+        patch("src.core.repository.touch_daemon_liveness"),
+    ):
+        orchestrator.initialize()
+        mock_start_poller.assert_called_once()
+        mock_start_poller.reset_mock()
+
+        # In _run_sweeps_if_due when thread is not running, it restarts
+        orchestrator._run_sweeps_if_due(ticks=1)
+        mock_start_poller.assert_called_once()
+
+
+

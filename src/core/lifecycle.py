@@ -10,10 +10,28 @@ import threading
 import time
 from typing import Any, Optional, Set, Union
 
+import contextvars
+
 logger = logging.getLogger(__name__)
 
 _tracked_pids_lock = threading.Lock()
 _tracked_pids: Set[int] = set()
+
+_current_lane_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "current_lane", default=None
+)
+_lane_pids_lock = threading.Lock()
+_lane_pids: dict[str, set[int]] = {}
+
+
+def set_current_lane(lane_id: Optional[str]) -> None:
+    """Set the active lane identifier for the current thread/context."""
+    _current_lane_var.set(lane_id)
+
+
+def get_current_lane() -> Optional[str]:
+    """Get the active lane identifier for the current thread/context."""
+    return _current_lane_var.get()
 
 
 def register_process(proc: Union[subprocess.Popen, int, Any]) -> Optional[int]:
@@ -31,6 +49,10 @@ def register_process(proc: Union[subprocess.Popen, int, Any]) -> Optional[int]:
             return None
     with _tracked_pids_lock:
         _tracked_pids.add(pid)
+    lane = get_current_lane()
+    if lane:
+        with _lane_pids_lock:
+            _lane_pids.setdefault(lane, set()).add(pid)
     return pid
 
 
@@ -49,12 +71,69 @@ def unregister_process(proc: Union[subprocess.Popen, int, Any]) -> None:
             return
     with _tracked_pids_lock:
         _tracked_pids.discard(pid)
+    lane = get_current_lane()
+    if lane:
+        with _lane_pids_lock:
+            if lane in _lane_pids:
+                _lane_pids[lane].discard(pid)
 
 
 def get_tracked_pids() -> Set[int]:
     """Returns a copy of currently tracked PIDs."""
     with _tracked_pids_lock:
         return set(_tracked_pids)
+
+
+def get_lane_pids(lane_id: str) -> Set[int]:
+    """Returns a copy of tracked PIDs for a specific lane."""
+    with _lane_pids_lock:
+        return set(_lane_pids.get(lane_id, set()))
+
+
+def terminate_lane_processes(lane_id: str, timeout: float = 1.0) -> list[int]:
+    """Terminate only subprocesses registered under a specific lane without touching others."""
+    with _lane_pids_lock:
+        pids = list(_lane_pids.pop(lane_id, set()))
+
+    terminated: list[int] = []
+    for pid in pids:
+        try:
+            try:
+                pgid = os.getpgid(pid)
+                if pgid == pid:
+                    os.killpg(pgid, signal.SIGTERM)
+                else:
+                    os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError, OSError):
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError, OSError):
+                    continue
+            terminated.append(pid)
+        except Exception:
+            continue
+
+    if terminated and timeout > 0:
+        time.sleep(min(0.5, timeout))
+
+    for pid in terminated:
+        try:
+            os.kill(pid, 0)
+            try:
+                pgid = os.getpgid(pid)
+                if pgid == pid:
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        finally:
+            with _tracked_pids_lock:
+                _tracked_pids.discard(pid)
+
+    return terminated
 
 
 def cleanup_subprocesses(*procs: Optional[Any], timeout: float = 2.0) -> None:

@@ -182,6 +182,11 @@ class UnifiedEncoder:
             stderr=subprocess.PIPE,
             bufsize=10 * 1024 * 1024,
         )
+        try:
+            from src.core.lifecycle import register_process
+            register_process(self.proc)
+        except Exception:
+            pass
         self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
         self._stderr_thread.start()
         self._is_started = True
@@ -244,6 +249,11 @@ class UnifiedEncoder:
 
         if retcode != 0:
             raise RuntimeError(f"FFmpeg failed with return code {retcode}:\n{self.get_stderr_tail()}")
+        try:
+            from src.core.lifecycle import unregister_process
+            unregister_process(self.proc)
+        except Exception:
+            pass
 
     def __enter__(self) -> "UnifiedEncoder":
         self.start()
@@ -255,6 +265,11 @@ class UnifiedEncoder:
                 try:
                     self.proc.kill()
                     self.proc.wait(timeout=5.0)
+                except Exception:
+                    pass
+                try:
+                    from src.core.lifecycle import unregister_process
+                    unregister_process(self.proc)
                 except Exception:
                     pass
         else:

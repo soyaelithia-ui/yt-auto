@@ -245,3 +245,82 @@ def test_purged_stories_are_excluded_from_prune_candidates():
         candidate_story_ids_after = [c.story_id for c in cands_after]
         assert "story-poor-2" not in candidate_story_ids_after
         assert "story-poor-1" in candidate_story_ids_after
+
+
+def test_purge_marked_videos_terminal_not_found_marked_as_purged():
+    """Verify video not found (LookupError / 404) marks story PURGED and avoids infinite retry (Issue #23)."""
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        _create_sample_inventory(db_path)
+        with connect(db_path) as conn:
+            conn.execute("UPDATE stories SET status='MARKED_FOR_PURGE' WHERE story_id='story-poor-1'")
+            conn.commit()
+
+        mock_youtube = MagicMock()
+        with patch("src.youtube.control._verify_ownership", side_effect=LookupError("Video no encontrado en YouTube")):
+            result = purge_marked_videos(
+                channel="moku",
+                db_path=db_path,
+                max_delete=1,
+                youtube_service=mock_youtube,
+            )
+
+        assert result["purged_count"] == 1
+        assert result["failed_count"] == 0
+        with connect(db_path) as conn:
+            row = conn.execute("SELECT status, failure_code FROM stories WHERE story_id='story-poor-1'").fetchone()
+            assert row["status"] == "PURGED"
+            assert row["failure_code"] == "VIDEO_NOT_FOUND"
+
+
+def test_purge_marked_videos_ownership_mismatch_marked_as_permanent_failed():
+    """Verify ownership mismatch (PermissionError) marks story PERMANENT_FAILED (Issue #23)."""
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        _create_sample_inventory(db_path)
+        with connect(db_path) as conn:
+            conn.execute("UPDATE stories SET status='MARKED_FOR_PURGE' WHERE story_id='story-poor-1'")
+            conn.commit()
+
+        mock_youtube = MagicMock()
+        with patch("src.youtube.control._verify_ownership", side_effect=PermissionError("El video pertenece a otro canal")):
+            result = purge_marked_videos(
+                channel="moku",
+                db_path=db_path,
+                max_delete=1,
+                youtube_service=mock_youtube,
+            )
+
+        assert result["purged_count"] == 0
+        assert result["failed_count"] == 1
+        with connect(db_path) as conn:
+            row = conn.execute("SELECT status, failure_code FROM stories WHERE story_id='story-poor-1'").fetchone()
+            assert row["status"] == "PERMANENT_FAILED"
+            assert row["failure_code"] == "OWNERSHIP_MISMATCH"
+
+
+def test_purge_marked_videos_quota_halts_without_updating_status():
+    """Verify quota errors halt the batch and preserve MARKED_FOR_PURGE status for later retry (Issue #23)."""
+    with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
+        db_path = tmp.name
+        _create_sample_inventory(db_path)
+        with connect(db_path) as conn:
+            conn.execute("UPDATE stories SET status='MARKED_FOR_PURGE' WHERE story_id='story-poor-1'")
+            conn.commit()
+
+        mock_youtube = MagicMock()
+        with patch("src.youtube.control._verify_ownership", side_effect=RuntimeError("quotaExceeded: Daily Limit Exceeded")):
+            result = purge_marked_videos(
+                channel="moku",
+                db_path=db_path,
+                max_delete=1,
+                youtube_service=mock_youtube,
+            )
+
+        assert result["purged_count"] == 0
+        assert result["failed_count"] == 1
+        with connect(db_path) as conn:
+            row = conn.execute("SELECT status FROM stories WHERE story_id='story-poor-1'").fetchone()
+            # Must remain marked for purge to be retried on next scheduled cycle
+            assert row["status"] == "MARKED_FOR_PURGE"
+
