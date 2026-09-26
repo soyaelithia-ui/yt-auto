@@ -104,7 +104,7 @@ def test_send_task_env_never_points_at_host_gemini(mock_run, tmp_path, monkeypat
 
     isolated = tmp_path / "bot_home" / ".gemini" / "antigravity-cli"
     client = AgyStreamClient(app_data_dir=isolated)
-    client._resolved_model = "gpt-6-luna"
+    client._resolved_model = "gemini-3.8-flash-high"
     client.send_task("ping")
 
     env = mock_run.call_args.kwargs["env"]

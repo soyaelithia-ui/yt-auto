@@ -30,17 +30,17 @@ Inventario estructurado de variables de entorno, directivas de seguridad y polí
 | `ANTIGRAVITY_AGENTS_APP_DATA_DIR_<ID>` | Directorio aislado para una instancia específica (ej. `PIPELINE_CREATIVE`). | `.bot_home_<id>/.gemini/antigravity-cli` |
 | `AGY_BIN` | Ruta al CLI Antigravity. En Docker vive **dentro** de la imagen. | `/usr/local/bin/agy` |
 
-### B. Inteligencia Artificial (Antigravity local)
+### B. Inteligencia Artificial (Antigravity local y Google Gemini)
 | Variable | Descripción | Uso |
 |---|---|---|
-| `AGY_MODEL` | Override opcional de un modelo concreto; se valida contra `agy models` antes de ejecutar. | Vacía por defecto. |
-| `AGY_MODEL_PREFERENCES` | Lista ordenada de preferencias separadas por coma. | `gpt-6-luna,gpt-5.6-luna` |
-| `AGY_FREE_FALLBACK_MODEL` | Fallback permitido para el plan gratuito; debe aparecer en el catálogo de `agy`. | `gpt-oss-120b-medium` |
-| `AGY_ACCOUNT_TIER` | Etiqueta operativa para observabilidad; no concede cuota ni permisos. | `free` |
+| `AGY_MODEL` | Override opcional de un modelo concreto (por defecto `gemini-3.8-flash-high`); se valida contra `agy models` antes de ejecutar. | `gemini-3.8-flash-high` |
+| `AGY_MODEL_PREFERENCES` | Lista ordenada de preferencias separadas por coma. | `gemini-3.8-flash-high,gemini-3.8-flash-medium,gemini-3.8-flash-low` |
+| `AGY_FREE_FALLBACK_MODEL` | Fallback permitido para el plan gratuito; debe aparecer en el catálogo de `agy`. | `gemini-3.8-flash-low` |
+| `AGY_ACCOUNT_TIER` | Etiqueta operativa para observabilidad; no concede cuota ni permisos. | `pro` |
 | `AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS` | Timeout de la consulta local `agy models`. | `20` |
 | `GEMINI_API_KEY` | Clave opcional para el proveedor REST de respaldo. | Vacía; no es necesaria para el arnés CLI con sesión. |
 
-El arnés conserva las preferencias Luna aunque no estén expuestas por la cuenta, pero **nunca** las envía a `agy` o al SDK sin validarlas. Si no hay preferencia ni fallback disponible, el agente devuelve un error de resolución y no realiza una llamada.
+El arnés consulta el catálogo oficial de `agy models`; si una preferencia no está disponible, selecciona el siguiente modelo compatible en la cadena de preferencias o el fallback oficial.
 
 ### C. Google Drive API v3 (Respaldo)
 | Variable | Descripción | Valor Predeterminado / Requisito |

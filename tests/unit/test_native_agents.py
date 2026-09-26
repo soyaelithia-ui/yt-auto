@@ -25,26 +25,26 @@ from src.agents.seo_optimizer import SeoOptimizerAgent, ViralPackagingAgent
 from src.agents.video_qa import VideoQAAgent, MultimodalReviewAgent
 
 
-def test_canonical_model_prefers_gpt_luna_alias():
-    assert CANONICAL_MODEL == "gpt-6-luna"
+def test_canonical_model_prefers_gemini_3_8_flash_high():
+    assert CANONICAL_MODEL == "gemini-3.8-flash-high"
 
 
 def test_parse_agy_models_output_and_preference_order():
     catalog = parse_agy_models_output(
         "Fetching available models...\n"
-        "gpt-5.6-luna\tGPT 5.6 Luna\n"
-        "gpt-oss-120b-medium\tGPT OSS 120B\n"
+        "gemini-3.8-flash-medium\tGemini 3.8 Flash Medium\n"
+        "gemini-3.8-flash-low\tGemini 3.8 Flash Low\n"
     )
-    assert catalog == ("gpt-5.6-luna", "gpt-oss-120b-medium")
-    assert select_available_model("gpt-6-luna", catalog) == "gpt-5.6-luna"
+    assert catalog == ("gemini-3.8-flash-medium", "gemini-3.8-flash-low")
+    assert select_available_model("gemini-3.8-flash-high", catalog) == "gemini-3.8-flash-medium"
 
 
 def test_model_resolution_uses_validated_free_fallback():
     assert select_available_model(
-        "gpt-6-luna", ("gemini-3.8-flash-low", "gpt-oss-120b-medium")
-    ) == "gpt-oss-120b-medium"
+        "gemini-3.8-flash-high", ("gemini-2.0-flash", "gemini-3.8-flash-low")
+    ) == "gemini-3.8-flash-low"
     with pytest.raises(AgentModelResolutionError):
-        select_available_model("gpt-6-luna", ("claude-sonnet-4-6",))
+        select_available_model("gemini-3.8-flash-high", ("unsupported-model-x",))
 
 
 def test_programmatic_agent_consume(tmp_path):
@@ -220,7 +220,7 @@ def test_circuit_breaker_multi_instance_isolation():
 def test_agy_stream_client_send_task_validates_and_uses_runtime_model(mock_run, tmp_path):
     catalog_proc = MagicMock()
     catalog_proc.returncode = 0
-    catalog_proc.stdout = "gpt-5.6-luna\tGPT 5.6 Luna\n"
+    catalog_proc.stdout = "gemini-3.8-flash-medium\tGemini 3.8 Flash Medium\n"
     catalog_proc.stderr = ""
     task_proc = MagicMock()
     task_proc.returncode = 0
@@ -233,7 +233,7 @@ def test_agy_stream_client_send_task_validates_and_uses_runtime_model(mock_run, 
     mock_run.side_effect = [catalog_proc, task_proc]
 
     client = AgyStreamClient(
-        model="gpt-6-luna",
+        model="gemini-3.8-flash-high",
         reasoning_effort="high",
         app_data_dir=tmp_path / "app_data",
     )
@@ -242,10 +242,10 @@ def test_agy_stream_client_send_task_validates_and_uses_runtime_model(mock_run, 
     assert res["status"] == "SUCCESS"
     assert res["response"] == "Respuesta por stream"
     assert res["conversation_id"] == "stream_conv_1"
-    assert res["requested_model"] == "gpt-6-luna"
-    assert res["effective_model"] == "gpt-5.6-luna"
+    assert res["requested_model"] == "gemini-3.8-flash-high"
+    assert res["effective_model"] == "gemini-3.8-flash-medium"
     task_command = mock_run.call_args_list[1].args[0]
-    assert task_command[task_command.index("--model") + 1] == "gpt-5.6-luna"
+    assert task_command[task_command.index("--model") + 1] == "gemini-3.8-flash-medium"
     client.close()
 
 

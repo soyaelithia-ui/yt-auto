@@ -166,24 +166,23 @@ def _resolve_default_app_data_dir(instance_id: str = "default") -> Path:
 DEFAULT_APP_DATA_DIR = _resolve_default_app_data_dir()
 AGENT_GENERATED_DIR = PROJECT_ROOT / "data" / "worksets" / "generated"
 
-# Human-facing preferences are kept separate from the runtime model actually
-# sent to `agy`. The CLI is the source of truth for availability; unsupported
-# aliases must never reach either the CLI or the native SDK.
-LUNA_MODEL_PREFERENCES = ("gpt-6-luna", "gpt-5.6-luna")
+# Canonical model configuration for the Antigravity local CLI harness (Pro quota).
+DEFAULT_CANONICAL_MODEL = "gemini-3.8-flash-high"
+DEFAULT_MODEL_PREFERENCES = (
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.8-flash-low",
+)
 AGY_MODEL_PREFERENCES = tuple(
     item.strip()
-    for item in os.environ.get("AGY_MODEL_PREFERENCES", ",".join(LUNA_MODEL_PREFERENCES)).split(",")
+    for item in os.environ.get("AGY_MODEL_PREFERENCES", ",".join(DEFAULT_MODEL_PREFERENCES)).split(",")
     if item.strip()
-) or LUNA_MODEL_PREFERENCES
-DEFAULT_FREE_PLAN_MODEL = os.environ.get("AGY_FREE_FALLBACK_MODEL", "gpt-oss-120b-medium").strip()
-_LEGACY_MODEL_DEFAULTS = {"gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"}
-_configured_model = os.environ.get("AGY_MODEL", "").strip()
-# A stale AGY_MODEL from older deployments must not override the new Luna
-# preference chain. Non-legacy explicit overrides remain supported.
+) or DEFAULT_MODEL_PREFERENCES
+DEFAULT_FREE_PLAN_MODEL = os.environ.get("AGY_FREE_FALLBACK_MODEL", "gemini-3.8-flash-low").strip()
 CANONICAL_MODEL = (
-    _configured_model
-    if _configured_model and _configured_model.lower() not in _LEGACY_MODEL_DEFAULTS
-    else AGY_MODEL_PREFERENCES[0]
+    os.environ.get("AGY_MODEL", "").strip()
+    or os.environ.get("GEMINI_MODEL", "").strip()
+    or DEFAULT_CANONICAL_MODEL
 )
 CLI_TIMEOUT_SECONDS = int(os.environ.get("AGY_TIMEOUT_SECONDS", "300"))
 MODEL_DISCOVERY_TIMEOUT_SECONDS = int(os.environ.get("AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS", "20"))

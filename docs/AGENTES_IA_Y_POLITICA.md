@@ -6,9 +6,9 @@ Directivas de inteligencia artificial generativa, arquitectura de agentes en `sr
 ## 1. Política AI-First y Conmutación por Cuota (Graceful Procedural Fallback)
 
 > [!IMPORTANT]
-> **Principio Fundamental**: Las tareas creativas y semánticas se ejecutan prioritariamente por el arnés local `agy`, que prefiere `gpt-6-luna` y `gpt-5.6-luna` cuando la cuenta los expone. Antes de cada sesión, el arnés consulta `agy models`; si esas preferencias no están disponibles, selecciona `AGY_FREE_FALLBACK_MODEL` (por defecto `gpt-oss-120b-medium`) únicamente si aparece en el catálogo. Esto evita enviar identificadores inválidos y no requiere facturación por API.
+> **Principio Fundamental**: Las tareas creativas y semánticas (curación y estructuración de guiones, traducción adaptativa y optimización SEO) son ejecutadas prioritariamente por modelos de IA a través del arnés nativo de Antigravity CLI (`gemini-3.8-flash-high`) para consumir la cuota Pro del usuario.
 >
-> Si la cuenta se satura (HTTP 429, `RESOURCE_EXHAUSTED` o circuit breaker abierto), el sistema **no detiene el demonio de producción**: activa un enfriamiento temporal de 300 segundos y conmuta de manera elegante a plantillas narrativas procedurales (`_procedural_fallback_story`) y fórmulas SEO determinísticas (`_deterministic_seo`) para asegurar continuidad de publicación.
+> Si la cuota de la cuenta o del proveedor se satura (HTTP 429, `RESOURCE_EXHAUSTED` o circuit breaker abierto), el sistema **no detiene el demonio de producción**: activa un enfriamiento temporal de 300 segundos y conmuta de manera elegante a plantillas narrativas procedurales (`_procedural_fallback_story`) y fórmulas SEO determinísticas (`_deterministic_seo`) para asegurar continuidad de publicación.
 
 El renderizado FFmpeg con `LoopVideoEngine`, subtítulos ASS, miniaturas y operaciones de base de datos son **100% código determinista local**.
 
@@ -18,8 +18,7 @@ El renderizado FFmpeg con `LoopVideoEngine`, subtítulos ASS, miniaturas y opera
 
 | Identificador | Rol en el Sistema | Estado |
 |---|---|---|
-| **`gpt-6-luna` → `gpt-5.6-luna`** | Preferencias de modelo para `agy`; se valida cada identificador contra `agy models`. | Preferencia del operador |
-| **`gpt-oss-120b-medium`** | Fallback validado para cuentas gratuitas cuando está presente en el catálogo local. | Fallback / Sin API |
+| **`gemini-3.8-flash-high`** | **Modelo Canónico Exclusivo** para todos los agentes nativos en `src/agents/` bajo arnés CLI `agy`. | Activo / Oficial |
 
 ---
 
