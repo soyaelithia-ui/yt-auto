@@ -363,12 +363,12 @@ def test_start_daemon_continues_when_one_channel_disk_paused(tmp_path, monkeypat
     monkeypatch.setattr("src.daemon._watchdog_tick_seconds", lambda: 0.05)
     monkeypatch.setattr("src.daemon._responsive_sleep", lambda sec: False)
 
-    # First channel (moku) fails disk check; second channel (aelithia) passes
+    # First channel (moku/horror) fails disk check; second channel (aelithia/drama) passes
     disk_check_calls = []
 
     def fake_disk_check(database, channel_value):
         disk_check_calls.append(channel_value)
-        if channel_value == "moku":
+        if channel_value in ("moku", "horror"):
             return False  # disk pause
         return True
 
@@ -383,9 +383,9 @@ def test_start_daemon_continues_when_one_channel_disk_paused(tmp_path, monkeypat
 
     assert len(results) == 2
     assert results[0]["status"] == "GUARD_DISK_PAUSED"
-    assert results[0]["channel"] == "moku"
+    assert results[0]["channel"] in ("moku", "horror")
     # Crucial invariant: start_daemon did NOT break! It continued to aelithia!
-    assert "aelithia" in runs
+    assert any(c in runs for c in ("aelithia", "drama"))
     assert results[1]["status"] == "SUCCESS"
 
 

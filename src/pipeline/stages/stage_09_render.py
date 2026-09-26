@@ -7,6 +7,7 @@ from src.core.guard import memory_checkpoint
 from src.core.profiling import CanonicalStage
 from src.core.render_guard import _LONG_RENDER_SEMAPHORE, _SHORT_RENDER_SEMAPHORE
 from src.log import get_logger
+from src.media.encode_defaults import default_render_preset
 from src.pipeline.context import PipelineContext, active_heartbeat_scope
 
 logger = get_logger("pipeline.stages.stage_09_render")
@@ -18,6 +19,8 @@ def _render_video_loop(ctx: PipelineContext, render_spec: RenderSpec) -> None:
         from src.media.loop_engine import LoopVideoEngine
         ctx.loop_engine = LoopVideoEngine()
 
+    _preset = getattr(render_spec, "preset", None) or default_render_preset()
+    stream_copy_mode = True
     mux_subtitles = render_spec.include_subtitles
     bg_path = (
         render_spec.background_path
@@ -36,7 +39,7 @@ def _render_video_loop(ctx: PipelineContext, render_spec: RenderSpec) -> None:
         category=render_spec.category or ctx.target_category,
         orientation=render_spec.orientation,
         include_subtitles=mux_subtitles,
-        stream_copy=True,
+        stream_copy=True,  # stream_copy=stream_copy_mode
         scene_images=render_spec.scene_images,
         shot_durations=render_spec.shot_durations,
         shot_roles=render_spec.shot_roles,

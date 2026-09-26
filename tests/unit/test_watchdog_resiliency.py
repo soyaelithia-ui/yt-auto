@@ -232,25 +232,25 @@ class TestWatchdogResiliency:
 
         lanes_by_id = {lane["id"]: lane for lane in data["lanes"] if lane.get("enabled")}
 
-        # Longform lanes: 1800s gap, 900s offset between moku and aelithia
-        moku_long = lanes_by_id["moku-horror-long"]
-        aelithia_long = lanes_by_id["aelithia-aita-long"]
+        # Longform lanes: 7200s gap, 3600s offset between horror and drama
+        horror_long = lanes_by_id["horror-horror-long"]
+        drama_long = lanes_by_id["drama-aita-long"]
 
-        assert moku_long["cadence"]["min_gap_seconds"] == 1800
-        assert moku_long["cadence"]["initial_offset_seconds"] == 0
+        assert horror_long["cadence"]["min_gap_seconds"] == 7200
+        assert horror_long["cadence"]["initial_offset_seconds"] == 0
 
-        assert aelithia_long["cadence"]["min_gap_seconds"] == 1800
-        assert aelithia_long["cadence"]["initial_offset_seconds"] == 900
+        assert drama_long["cadence"]["min_gap_seconds"] == 7200
+        assert drama_long["cadence"]["initial_offset_seconds"] == 3600
 
-        # Shorts lanes: 600s gap, 300s offset between moku and aelithia
-        moku_short = lanes_by_id["moku-scp-shorts"]
-        aelithia_short = lanes_by_id["aelithia-drama-shorts"]
+        # Shorts lanes: 900s gap, 450s offset between horror and drama
+        horror_short = lanes_by_id["horror-scp-shorts"]
+        drama_short = lanes_by_id["drama-drama-shorts"]
 
-        assert moku_short["cadence"]["min_gap_seconds"] == 600
-        assert moku_short["cadence"]["initial_offset_seconds"] == 0
+        assert horror_short["cadence"]["min_gap_seconds"] == 900
+        assert horror_short["cadence"]["initial_offset_seconds"] == 0
 
-        assert aelithia_short["cadence"]["min_gap_seconds"] == 600
-        assert aelithia_short["cadence"]["initial_offset_seconds"] == 300
+        assert drama_short["cadence"]["min_gap_seconds"] == 900
+        assert drama_short["cadence"]["initial_offset_seconds"] == 450
 
     def test_dead_worker_reaped_immediately_on_sigkill(self, tmp_path: Path) -> None:
         """When worker process crashes/SIGKILLed, LeaseReaper reaps lease immediately without waiting 1800s."""

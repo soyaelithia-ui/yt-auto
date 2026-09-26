@@ -147,7 +147,7 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
             self.assertEqual(len(results), 2)
             self.assertEqual(mock_run.call_count, 2)
             called_channels = [call.kwargs.get("channel") for call in mock_run.call_args_list]
-            self.assertEqual(called_channels, ["moku", "aelithia"])
+            self.assertEqual(called_channels, ["horror", "drama"])
 
     def test_start_daemon_default_channels_resolution(self):
         """Test start_daemon resolves default active channels when channels parameter is None."""
@@ -156,7 +156,7 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
             results = start_daemon(interval_seconds=1, max_runs=2, db_path=self.db_path, channels=None)
             self.assertEqual(len(results), 2)
             called_channels = {call.kwargs.get("channel") for call in mock_run.call_args_list}
-            self.assertEqual(called_channels, {"moku", "aelithia"})
+            self.assertEqual(called_channels, {"horror", "drama"})
 
     def test_start_daemon_responsive_sleep_and_shutdown(self):
         """Test start_daemon responsive sleep interrupts loop cleanly when request_shutdown is called."""
@@ -323,12 +323,12 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
             return {"rendered_scenes": 5, "output_path": str(out), "duration_sec": 605.0}
 
         with patch("src.pipeline.validate_prepublication", return_value=report), \
-             patch("src.media.compositor.MultiSceneCompositor.render", side_effect=fake_multiscene):
+             patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=fake_multiscene):
             res = run_pipeline_once(channel="aelithia", db_path=self.db_path, lane_id="aelithia-aita-long")
 
         self.assertEqual(res["status"], "SUCCESS")
         mock_upload_yt.assert_called_once()
-        self.assertEqual(mock_upload_yt.call_args.kwargs.get("channel"), "aelithia")
+        self.assertEqual(mock_upload_yt.call_args.kwargs.get("channel"), "drama")
 
     def test_update_story_status_youtube_url_persistence(self):
         """Test update_story_status stores youtube_url in database when provided."""

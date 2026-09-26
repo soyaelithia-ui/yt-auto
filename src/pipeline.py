@@ -259,7 +259,12 @@ def run_pipeline_once(
         claimed_ctx["lane"] = lane
     repository = claimed_ctx["repository"]
 
-    engine_mode, is_loop_mode, is_multiscene_mode = _resolve_engine_mode(lane, video_engine, compositor)
+    engine_mode, is_loop_mode, _ = _resolve_engine_mode(lane, video_engine, compositor)
+    is_multiscene_mode = False
+    if engine_mode == "multiscene" and os.environ.get("FORCE_MULTISCENE", "0") != "1":
+        logger.info("Coercing video_engine=%r to local loop mode", engine_mode)
+        engine_mode = "loop"
+        is_loop_mode = True
     subtitles_active = False
     if enable_subtitles is True:
         subtitles_active = True

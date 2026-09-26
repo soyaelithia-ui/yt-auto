@@ -64,6 +64,13 @@ def _get_active_run_ffmpeg() -> Any:
         fn = getattr(lp, "run_ffmpeg", None)
         if fn is not None and fn is not _orig_run_ffmpeg:
             return fn
+    try:
+        import lib.ffmpeg as lff
+        fn = getattr(lff, "run_ffmpeg", None)
+        if fn is not None and fn is not _orig_run_ffmpeg:
+            return fn
+    except Exception:
+        pass
     return _orig_run_ffmpeg
 
 
@@ -92,6 +99,13 @@ def _get_active_probe_media() -> Any:
         fn = getattr(lp, "probe_media", None)
         if fn is not None and fn is not _orig_probe_media:
             return fn
+    try:
+        import lib.ffmpeg as lff
+        fn = getattr(lff, "probe_media", None)
+        if fn is not None and fn is not _orig_probe_media:
+            return fn
+    except Exception:
+        pass
     return _orig_probe_media
 
 

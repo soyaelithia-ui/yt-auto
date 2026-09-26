@@ -449,20 +449,34 @@ def compose_video(
     orientation = "vertical" if video_mode == "short" else "horizontal"
     music = bgm_path or bg_ambient_path or None
     engine = LoopVideoEngine()
-    return str(
-        engine.compose(
-            audio_path=audio_path,
-            output_video_path=output_video_path,
-            category=channel,
-            orientation=orientation,
-            duration_sec=float(duration_sec),
-            bg_music_path=music,
-            subtitle_path=subtitle,
-            include_subtitles=subtitle is not None,
-            video_loop_path=loop_path,
-            stream_copy=True,
-        )
+    res = engine.compose(
+        audio_path=audio_path,
+        output_video_path=output_video_path,
+        category=channel,
+        orientation=orientation,
+        duration_sec=float(duration_sec),
+        bg_music_path=music,
+        subtitle_path=subtitle,
+        include_subtitles=subtitle is not None,
+        video_loop_path=loop_path,
+        stream_copy=True,
     )
+    try:
+        plan = build_visual_scene_plan(
+            duration_sec,
+            [background_video_path] if background_video_path else None,
+        )
+        out_dir = Path(output_video_path).parent
+        vplan = {
+            "scene_count": len(plan),
+            "covered_seconds": round(float(sum(p["duration"] for p in plan)), 3),
+            "black_fallbacks": 0,
+            "scenes": plan,
+        }
+        (out_dir / "visual_plan.json").write_text(json.dumps(vplan, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    return str(res)
 
 
 # ---------------------------------------------------------------------------

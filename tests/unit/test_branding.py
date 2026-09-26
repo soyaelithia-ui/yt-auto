@@ -9,13 +9,13 @@ from src.branding import (
 
 class TestBrandingEngine(unittest.TestCase):
     def test_resolve_channel_key_aliases(self):
-        self.assertEqual(resolve_channel_key("terror"), "moku")
-        self.assertEqual(resolve_channel_key("mokuredit"), "moku")
-        self.assertEqual(resolve_channel_key("aelithia"), "aelithia")
-        self.assertEqual(resolve_channel_key("soy_el_malo"), "aelithia")
-        self.assertEqual(resolve_channel_key("soy-el-malo"), "aelithia")
-        self.assertEqual(resolve_channel_key("yo_soy_el_malo"), "aelithia")
-        self.assertEqual(resolve_channel_key("aelithia-c1f"), "aelithia")
+        self.assertEqual(resolve_channel_key("terror"), "horror")
+        self.assertEqual(resolve_channel_key("mokuredit"), "horror")
+        self.assertEqual(resolve_channel_key("aelithia"), "drama")
+        self.assertEqual(resolve_channel_key("soy_el_malo"), "drama")
+        self.assertEqual(resolve_channel_key("soy-el-malo"), "drama")
+        self.assertEqual(resolve_channel_key("yo_soy_el_malo"), "drama")
+        self.assertEqual(resolve_channel_key("aelithia-c1f"), "drama")
         self.assertEqual(resolve_channel_key("scifi"), "scifi")
         with self.assertRaises(ValueError):
             resolve_channel_key(None)
@@ -24,47 +24,43 @@ class TestBrandingEngine(unittest.TestCase):
 
     def test_get_channel_branding_moku_from_legacy_alias(self):
         b = get_channel_branding("terror")
-        self.assertEqual(b.channel_key, "moku")
-        self.assertEqual(b.display_name, "Moku")
-        self.assertEqual(b.handle, "@MokuRedit")
-        self.assertEqual(b.channel_url, "https://www.youtube.com/@MokuRedit")
+        self.assertEqual(b.channel_key, "horror")
+        self.assertEqual(b.display_name, "Expedientes de Terror")
+        self.assertEqual(b.handle, "@expedientesdeterror")
         self.assertEqual(b.voice_name, "es-MX-JorgeNeural")
         self.assertIn("historias de terror", b.tags)
         self.assertEqual(b.outro_cta_template, "")
 
     def test_get_channel_branding_aelithia(self):
         b = get_channel_branding("aelithia")
-        self.assertEqual(b.channel_key, "aelithia")
-        self.assertEqual(b.display_name, "Aelithia")
-        self.assertEqual(b.handle, "@Aelithia-c1f")
-        self.assertEqual(b.channel_url, "https://www.youtube.com/@Aelithia-c1f")
+        self.assertEqual(b.channel_key, "drama")
+        self.assertEqual(b.display_name, "Dilemas Morales")
+        self.assertEqual(b.handle, "@dilemasmorales")
         self.assertEqual(b.voice_name, "es-MX-DaliaNeural")
-        self.assertIn("aelithia", b.tags)
+        self.assertIn("drama", b.tags)
         self.assertEqual(b.outro_cta_template, "")
 
     def test_generate_title_and_description_moku(self):
         b = get_channel_branding("terror")
         title = b.generate_title("La Casa Embrujada")
         self.assertNotIn("[RELATO DE TERROR]", title)
-        self.assertNotIn("Moku", title)
         self.assertEqual(title, "La Casa Embrujada")
 
         desc = b.generate_description("La Casa Embrujada", "Resumen de prueba")
-        self.assertIn("Moku", desc)
-        self.assertIn("@MokuRedit", desc)
-        self.assertIn("https://www.youtube.com/@MokuRedit", desc)
+        self.assertIn("Expedientes de Terror", desc)
+        self.assertIn("@expedientesdeterror", desc)
         self.assertIn("#HistoriasDeTerror", desc)
 
     def test_generate_title_and_description_aelithia(self):
         b = get_channel_branding("aelithia")
         title = b.generate_title("¿Soy el malo por irme?")
-        self.assertNotIn("Aelithia", title)
         self.assertEqual(title, "¿Soy el malo por irme?")
 
         desc = b.generate_description("¿Soy el malo por irme?", "Resumen drama")
-        self.assertIn("Aelithia", desc)
-        self.assertIn("@Aelithia-c1f", desc)
-        self.assertIn("https://www.youtube.com/@Aelithia-c1f", desc)
+        self.assertIn("Dilemas Morales", desc)
+        self.assertIn("@dilemasmorales", desc)
+        self.assertIn("#DilemasMorales", desc)
+
     def test_channel_branding_defaults_have_no_hardcoded_moku_watermark(self):
         cb = ChannelBranding(
             channel_key="custom",
@@ -87,9 +83,9 @@ class TestBrandingEngine(unittest.TestCase):
         self.assertIn(CanonicalChannel.MOKU, _CHANNEL_BRANDING_REGISTRY)
         self.assertNotIn("non_existent_random_channel", _CHANNEL_BRANDING_REGISTRY)
         b = _CHANNEL_BRANDING_REGISTRY["moku"]
-        self.assertEqual(b.channel_key, "moku")
+        self.assertEqual(b.channel_key, "horror")
         b_enum = _CHANNEL_BRANDING_REGISTRY[CanonicalChannel.MOKU]
-        self.assertEqual(b_enum.channel_key, "moku")
+        self.assertEqual(b_enum.channel_key, "horror")
         self.assertIsNone(_CHANNEL_BRANDING_REGISTRY.get("non_existent_random_channel"))
 
     def test_generate_shorts_metadata_dynamic_branding(self):
@@ -97,13 +93,13 @@ class TestBrandingEngine(unittest.TestCase):
         shorts_moku = b_moku.generate_shorts_metadata("SCP-5000", "Resumen SCP")
         self.assertIn("#Shorts", shorts_moku["title"])
         self.assertIn(b_moku.handle, shorts_moku["description"])
-        self.assertIn("#Moku", shorts_moku["description"])
+        self.assertIn("#ExpedientesdeTerror", shorts_moku["description"])
 
         b_aelithia = get_channel_branding("aelithia")
         shorts_ae = b_aelithia.generate_shorts_metadata("Confesión impactante", "Resumen drama")
         self.assertIn("#Shorts", shorts_ae["title"])
         self.assertIn(b_aelithia.handle, shorts_ae["description"])
-        self.assertIn("#Aelithia", shorts_ae["description"])
+        self.assertIn("#DilemasMorales", shorts_ae["description"])
 
     def test_generate_title_and_description_scifi_generic_channel(self):
         b_scifi = get_channel_branding("scifi")

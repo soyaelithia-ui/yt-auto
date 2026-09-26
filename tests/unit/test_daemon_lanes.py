@@ -340,7 +340,7 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
     monkeypatch.setattr("lib.subtitles.create_subtitles", fake_subs)
     monkeypatch.setattr("lib.subtitles.create_ass_subtitles", fake_subs)
     monkeypatch.setattr("lib.video.create_video_thumbnail", fake_thumb)
-    monkeypatch.setattr("src.media.compositor.MultiSceneCompositor.render", fake_multiscene)
+    monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", fake_multiscene)
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
 
     res = run_pipeline_once(

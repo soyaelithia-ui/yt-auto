@@ -14,8 +14,18 @@ from typing import Any, Dict, List, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import Resource, build
+import googleapiclient.discovery
+from googleapiclient.discovery import Resource
 import google_auth_oauthlib.flow
+
+
+def build(*args: Any, **kwargs: Any) -> Resource:
+    """Build Google API service resource, supporting mock intercepts at both discovery and module scopes."""
+    import sys
+    mod = sys.modules.get("src.core.google_auth")
+    if mod and getattr(mod, "build", None) is not build:
+        return getattr(mod, "build")(*args, **kwargs)
+    return googleapiclient.discovery.build(*args, **kwargs)
 
 from src.config import (
     BASE_DIR,
@@ -271,8 +281,7 @@ def build_youtube_service(
         scopes=YOUTUBE_SCOPES,
         auto_refresh=True,
     )
-    import googleapiclient.discovery
-    return googleapiclient.discovery.build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    return build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
 
 def _gcloud_credentials() -> Credentials:

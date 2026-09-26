@@ -14,7 +14,12 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent, parse_json_reply
+from src.agents.base_agent import (
+    CANONICAL_MODEL,
+    ProgrammaticAgent,
+    is_saturation_text,
+    parse_json_reply,
+)
 from src.core.domain import AIProviderChainExhausted
 from src.core.scp_lore import get_scp_canonical_lore, validate_scp_lore
 from src.log import get_logger
@@ -132,11 +137,12 @@ class StoryDirectorAgent(ProgrammaticAgent):
         )
 
         # Check circuit breaker before making expensive calls
-        if self.circuit_breaker.is_open():
+        cb = getattr(self, "circuit_breaker", None)
+        if cb and cb.is_open():
             logger.warning(
                 "Circuit breaker open for %s (%ds remaining). Using procedural fallback.",
-                self.instance_id,
-                self.circuit_breaker.retry_after(),
+                getattr(self, "instance_id", "agent"),
+                cb.retry_after(),
             )
             return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
 
@@ -149,7 +155,8 @@ class StoryDirectorAgent(ProgrammaticAgent):
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
         except Exception as exc:
             if is_saturation_text(str(exc)):
-                self.circuit_breaker.record_failure(str(exc))
+                if cb:
+                    cb.record_failure(str(exc))
                 logger.warning("StoryDirectorAgent saturated (%s). Using procedural fallback.", exc)
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             logger.error("StoryDirectorAgent invocation failed: %s", exc)
@@ -166,7 +173,7 @@ class StoryDirectorAgent(ProgrammaticAgent):
 
         if not data or not data.get("script"):
             error_detail = res.get("output", {}).get("error") or "Respuesta sin guion utilizable"
-            if is_saturation_text(str(error_detail)) or self.circuit_breaker.is_open():
+            if is_saturation_text(str(error_detail)) or (cb and cb.is_open()):
                 logger.warning("StoryDirectorAgent empty reply due to saturation. Using procedural fallback.")
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             raise AIProviderChainExhausted(f"StoryDirectorAgent sin guion valido ({error_detail})")

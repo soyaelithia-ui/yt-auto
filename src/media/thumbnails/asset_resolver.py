@@ -155,6 +155,12 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         except Exception as exc:
             logger.debug("LoopCatalogRepository resolution failed: %s", exc)
 
+        proc_dir = root / "assets" / "loops" / "web_procedural"
+        if proc_dir.is_dir():
+            proc_candidates = sorted(p for p in proc_dir.glob("**/*.mp4") if p.is_file())
+            if proc_candidates:
+                return proc_candidates[(idx - 1) % len(proc_candidates)]
+
         # 3. Clean scenery stills only after catalog loops are exhausted.
         if stills:
             return stills[(idx - 1) % len(stills)]

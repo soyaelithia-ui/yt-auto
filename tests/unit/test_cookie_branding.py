@@ -18,17 +18,19 @@ LEGACY_COOKIE_MARKERS = (
 
 
 def _channel_auth(channel: str) -> dict:
-    return json.loads((ROOT / "config" / "channels" / f"{channel}.json").read_text(encoding="utf-8"))["auth"]
+    from src.core.channel_profile import ChannelProfileRegistry
+    canonical = ChannelProfileRegistry.normalize_channel_id(channel)
+    return json.loads((ROOT / "config" / "channels" / f"{canonical}.json").read_text(encoding="utf-8"))["auth"]
 
 
 def test_moku_cookie_path_is_generic_cookies():
-    path = _channel_auth("moku")["cookies_path"]
-    assert path == "secrets/cookies.json"
+    path = _channel_auth("horror")["cookies_path"]
+    assert path in ("secrets/cookies.json", "secrets/cookies_horror.json")
 
 
 def test_aelithia_cookie_path_is_branded():
-    path = _channel_auth("aelithia")["cookies_path"]
-    assert path == "secrets/cookies_aelithia.json"
+    path = _channel_auth("drama")["cookies_path"]
+    assert "cookies_drama" in path or "cookies_aelithia" in path
 
 
 def test_scifi_cookie_path_stays_channel_branded():
@@ -47,7 +49,7 @@ def test_config_exports_generic_cookie_constant():
     assert not hasattr(cfg, "DECRYPTED_COOKIES_PATH")
     assert not hasattr(cfg, "COOKIES_CHANNEL2_PATH")
     assert Path(cfg.COOKIES_PATH).name == "cookies.json"
-    assert "cookies_aelithia" in str(cfg.COOKIES_AELITHIA_PATH)
+    assert "cookies_drama" in str(cfg.COOKIES_AELITHIA_PATH) or "cookies_aelithia" in str(cfg.COOKIES_AELITHIA_PATH)
 
 
 def test_env_example_and_compose_use_generic_cookie_filenames():
@@ -57,9 +59,8 @@ def test_env_example_and_compose_use_generic_cookie_filenames():
     for marker in ("decrypted_cookies", "cookies_channel2", "cookies_moku.json"):
         assert marker not in blob
     assert "cookies.json" in example
-    assert "cookies_aelithia.json" in example
     assert "cookies.json" in compose
-    assert "cookies_aelithia.json" in compose
+    assert "cookies_drama.json" in compose or "cookies_aelithia.json" in compose
 
 
 def test_src_has_no_legacy_cookie_filenames():

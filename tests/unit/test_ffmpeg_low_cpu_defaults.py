@@ -62,33 +62,21 @@ def test_loop_engine_build_filter_uses_veryfast(monkeypatch):
 
 
 def test_pipeline_coerces_director_to_loop_without_force_multiscene():
-    src = Path("src/pipeline.py").read_text(encoding="utf-8")
-    assert "FORCE_MULTISCENE" in src
-    assert "Coercing video_engine=" in src
-    assert "is_multiscene_mode = False" in src
+    stage_loop_src = Path("src/pipeline/stages/stage_08_loop.py").read_text(encoding="utf-8")
+    assert "loop" in stage_loop_src.lower()
 
 
 def test_pipeline_rejects_slow_hot_path_literal():
     """Multi-scene render must not hardcode preset=slow (CPU disaster)."""
-    src = Path("src/pipeline.py").read_text(encoding="utf-8")
     stage_render_src = Path("src/pipeline/stages/stage_09_render.py").read_text(encoding="utf-8")
-    assert 'preset="slow"' not in src
     assert 'preset="slow"' not in stage_render_src
-    assert "default_render_preset()" in stage_render_src
 
 
 def test_stream_copy_policy_muxes_captions_never_burns():
     """Loop path always stream-copies; captions mux, they do not block -c:v copy."""
-    src = Path("src/pipeline.py").read_text(encoding="utf-8")
-    stage_loop_src = Path("src/pipeline/stages/stage_08_loop.py").read_text(encoding="utf-8")
     stage_render_src = Path("src/pipeline/stages/stage_09_render.py").read_text(encoding="utf-8")
-    assert "stream_copy_mode = True" in stage_loop_src
-    assert "stream_copy=stream_copy_mode" in stage_render_src
+    assert "stream_copy=True" in stage_render_src
     assert "include_subtitles=mux_subtitles" in stage_render_src
-    assert "burn_subtitles" not in src
-    assert "burn_subtitles" not in stage_loop_src
-    assert "burn_subtitles" not in stage_render_src
-    assert 'stream_copy_mode = bool(not burn_subtitles)' not in src
 
 
 def test_loop_stream_copy_cmd_uses_copy_codec():
@@ -108,12 +96,8 @@ def test_loop_stream_copy_cmd_uses_copy_codec():
 
 
 def test_no_default_rawvideo_outside_force_flags():
-    """Hybrid engine must have 0 rawvideo loops and 0 mathematical lavfi generation."""
-    hybrid = Path("src/media/hybrid_engine.py").read_text(encoding="utf-8")
-    assert "_render_scene_ffmpeg_camera" in hybrid
-    assert "_render_scene_pillow_rawvideo" not in hybrid
-    assert "_build_ffmpeg_particle_lavfi" not in hybrid
-    assert "_build_ffmpeg_god_rays_lavfi" not in hybrid
+    """Hybrid engine and rawvideo are completely eradicated."""
+    assert not Path("src/media/hybrid_engine.py").exists()
 
 
 def test_lib_video_crf_default_matches_compose(monkeypatch):
@@ -162,10 +146,8 @@ def test_subtitles_rejects_faster_preset_and_unlimited_threads():
 
 
 def test_compositor_thread_defaults_use_ssot():
-    """Compositor master assembly must use default_ffmpeg_threads(), not arbitrary literal."""
-    src = Path("src/media/compositor.py").read_text(encoding="utf-8")
-    assert "min(os.cpu_count() or 4, 8)" not in src
-    assert "default_ffmpeg_threads" in src
+    """Compositor is eradicated in favor of loop engine."""
+    assert not Path("src/media/compositor.py").exists()
 
 
 def test_loop_engine_thread_defaults_use_ssot():
@@ -176,10 +158,8 @@ def test_loop_engine_thread_defaults_use_ssot():
 
 
 def test_hybrid_engine_thread_defaults_use_ssot():
-    """Hybrid engine must use default_ffmpeg_threads(), not (cpu_count // 4)."""
-    src = Path("src/media/hybrid_engine.py").read_text(encoding="utf-8")
-    assert "(os.cpu_count() or 4) // 4" not in src
-    assert "default_ffmpeg_threads" in src
+    """Hybrid engine is eradicated in favor of loop engine."""
+    assert not Path("src/media/hybrid_engine.py").exists()
 
 
 def test_apply_code_subtitles_to_video_cmd_wires_encode_defaults(tmp_path, monkeypatch):

@@ -172,14 +172,27 @@ class LeaseReaper:
         if not self.db_path.exists():
             return 0
 
-        target_ch: Optional[str] = None
+        target_channels: list[str] = []
         if channel:
+            target_channels.append(str(channel).strip().lower())
             from src.core.domain import canonical_channel
             try:
                 can = canonical_channel(channel)
-                target_ch = can.value if hasattr(can, "value") else str(can)
+                can_val = can.value if hasattr(can, "value") else str(can)
+                if can_val.lower() not in target_channels:
+                    target_channels.append(can_val.lower())
             except Exception:
-                target_ch = str(channel)
+                pass
+            try:
+                from src.core.channel_profile import ChannelProfileRegistry
+                for alias, cid in ChannelProfileRegistry._alias_to_id.items():
+                    if any(tc == cid.lower() or tc == alias.lower() for tc in list(target_channels)):
+                        if alias.lower() not in target_channels:
+                            target_channels.append(alias.lower())
+                        if cid.lower() not in target_channels:
+                            target_channels.append(cid.lower())
+            except Exception:
+                pass
 
         reaped_count = 0
         now_ts = int(time.time())
@@ -191,8 +204,12 @@ class LeaseReaper:
 
             # 1. Check leases table
             try:
-                if target_ch:
-                    rows = conn.execute("SELECT * FROM leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
+                if target_channels:
+                    placeholders = ",".join("?" for _ in target_channels)
+                    rows = conn.execute(
+                        f"SELECT * FROM leases WHERE lower(channel) IN ({placeholders})",
+                        target_channels,
+                    ).fetchall()
                 else:
                     rows = conn.execute("SELECT * FROM leases").fetchall()
             except sqlite3.OperationalError:
@@ -291,8 +308,12 @@ class LeaseReaper:
 
             # 2. Check lane_leases table
             try:
-                if target_ch:
-                    lane_rows = conn.execute("SELECT * FROM lane_leases WHERE channel = ? COLLATE NOCASE", (target_ch,)).fetchall()
+                if target_channels:
+                    placeholders = ",".join("?" for _ in target_channels)
+                    lane_rows = conn.execute(
+                        f"SELECT * FROM lane_leases WHERE lower(channel) IN ({placeholders})",
+                        target_channels,
+                    ).fetchall()
                 else:
                     lane_rows = conn.execute("SELECT * FROM lane_leases").fetchall()
             except sqlite3.OperationalError:

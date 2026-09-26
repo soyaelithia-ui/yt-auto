@@ -216,64 +216,21 @@ class MockScenePlannerCompositor:
                 dur = sc["estimated_duration_sec"]
                 tension = sc["tension_level"]
 
-                # Alternate between Hybrid AI and Pure Procedural WebGL
-                if idx % 2 == 1:
-                    engine_type = "hybrid_cinematic_ai"
-                    scene_obj = {
-                        "scene_index": idx,
-                        "scene_id": sc["scene_id"],
-                        "environment_name": sc["environmental_mood"],
-                        "start_sec": current_time,
-                        "duration_sec": dur,
-                        "tension_level": tension,
-                        "engine_type": engine_type,
-                        "hybrid_ai_config": {
-                            "background_image_path": f"mattes/{story_id}_scene_{idx:03d}.png",
-                            "depth_map_path": f"mattes/{story_id}_scene_{idx:03d}_depth.png",
-                            "prompt_used": f"Deep cinematic space station matte {idx}",
-                            "seed": 1000 + idx,
-                            "camera_motion": {
-                                "type": "ken_burns_3d",
-                                "start_zoom": 1.0,
-                                "end_zoom": 1.08 + (tension * 0.02),
-                                "easing": "cubic_bezier",
-                                "parallax_intensity": 0.15 + (tension * 0.05),
-                            },
-                            "lighting": {
-                                "volumetric_rays": True,
-                                "intensity": 0.35 + (tension * 0.05),
-                                "flicker_frequency": float(tension * 0.5),
-                                "color_tint": "#4a7c59",
-                            },
-                            "particles": {
-                                "type": "dust_motes",
-                                "density": 30 + (tension * 15),
-                                "velocity": 0.5 + (tension * 0.2),
-                                "color": "#ffffff",
-                                "opacity": 0.4,
-                            },
-                        },
-                        "transition_out": {
-                            "type": "crossfade",
-                            "duration_sec": 1.0,
-                        },
-                    }
-                else:
-                    engine_type = "catalog_loop"
-                    scene_obj = {
-                        "scene_index": idx,
-                        "scene_id": sc["scene_id"],
-                        "environment_name": sc["environmental_mood"],
-                        "start_sec": current_time,
-                        "duration_sec": dur,
-                        "tension_level": tension,
-                        "engine_type": engine_type,
-                        "asset_path": f"assets/loops/scene_{idx}.mp4",
-                        "transition_out": {
-                            "type": "crossfade",
-                            "duration_sec": 1.0,
-                        },
-                    }
+                engine_type = "catalog_loop"
+                scene_obj = {
+                    "scene_index": idx,
+                    "scene_id": sc["scene_id"],
+                    "environment_name": sc["environmental_mood"],
+                    "start_sec": current_time,
+                    "duration_sec": dur,
+                    "tension_level": tension,
+                    "engine_type": engine_type,
+                    "asset_path": f"assets/loops/scene_{idx}.mp4",
+                    "transition_out": {
+                        "type": "crossfade",
+                        "duration_sec": 1.0,
+                    },
+                }
 
                 scenes.append(scene_obj)
                 current_time += dur
@@ -431,13 +388,11 @@ class TestPipeline4AgentDataFlowAndManifest:
         assert manifest_path.is_file()
         assert validate_scene_manifest(manifest_path) is True
 
-        # Verify dual engine composition: Scene 1 & 3 are Hybrid AI; Scene 2 & 4 are Catalog Loop
+        # Verify engine composition: All scenes are Catalog Loop
         loaded_manifest = load_scene_manifest(manifest_path)
         assert len(loaded_manifest["scenes"]) == 4
-        assert loaded_manifest["scenes"][0]["engine_type"] == "hybrid_cinematic_ai"
-        assert loaded_manifest["scenes"][1]["engine_type"] == "catalog_loop"
-        assert loaded_manifest["scenes"][2]["engine_type"] == "hybrid_cinematic_ai"
-        assert loaded_manifest["scenes"][3]["engine_type"] == "catalog_loop"
+        for sc in loaded_manifest["scenes"]:
+            assert sc["engine_type"] == "catalog_loop"
 
         # Verify sidechain ducking and safe area parameters
         assert loaded_manifest["audio_tracks"]["ducking"]["target_lufs"] == -14.0

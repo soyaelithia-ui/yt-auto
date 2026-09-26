@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from src.media.manifest_compiler import ScenePlannerCompositorAgent
 from src.curators.text_splitter import TextSegmentationEngine, CinematicScriptCuratorAgent
 from src.asset_manager import get_asset_manager
 from src.core.profiling import CanonicalStage

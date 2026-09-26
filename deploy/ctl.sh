@@ -39,7 +39,7 @@ start_one() {
   fi
   # Guard against running both Docker daemon and host tmux supervisor simultaneously
   if command -v docker >/dev/null 2>&1 && [ "${YT_FORCE_HOST:-0}" != "1" ]; then
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^yt-automation$'; then
+    if docker ps --filter "name=yt-automation" --format '{{.Names}}' 2>/dev/null | grep -E -q '(^|[-_])yt-automation([-_]|$)'; then
       echo "[$svc] ERROR: Docker container 'yt-automation' is already running." >&2
       echo "[$svc] Running host tmux simultaneously duplicates resources and causes DB collisions." >&2
       echo "[$svc] Stop Docker container first or use YT_FORCE_HOST=1." >&2

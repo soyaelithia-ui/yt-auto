@@ -2,7 +2,10 @@
 from pathlib import Path
 
 def test_benchmark_mock_video_rendering_is_light():
-    src = Path("src/core/profiling.py").read_text(encoding="utf-8")
+    bench_p = Path("src/core/profiling/benchmarking.py")
+    if not bench_p.is_file():
+        bench_p = Path("src/core/profiling.py")
+    src = bench_p.read_text(encoding="utf-8")
     idx = src.index("elif stage == CanonicalStage.VIDEO_RENDERING:")
     block = src[idx : idx + 400]
     assert "0.03" not in block

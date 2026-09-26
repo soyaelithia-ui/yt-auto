@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from src.core.domain import (
     ALL_STATUSES,
+    CHANNEL_ALIASES,
     CanonicalChannel,
     JobStatus,
     PublicationProof,
@@ -190,17 +191,22 @@ class QueueOperationsMixin:
                 if os.environ.get("QUEUE_RANK_BY_SCORE", "") != "0"
                 else "created_at, story_id"
             )
+            aliases = [channel_key]
+            for alias, target in CHANNEL_ALIASES.items():
+                if getattr(target, "value", str(target)) == channel_key and alias not in aliases:
+                    aliases.append(alias)
+            placeholders = ",".join("?" for _ in aliases)
             row = conn.execute(
                 f"""
                 SELECT * FROM stories
-                WHERE channel = ?
+                WHERE channel IN ({placeholders})
                   AND status IN (?, ?)
                   AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
                 ORDER BY {order_by}
                 LIMIT 1
                 """,
                 (
-                    channel_key,
+                    *aliases,
                     JobStatus.PENDING.value,
                     JobStatus.RETRYABLE_FAILED.value,
                     current,

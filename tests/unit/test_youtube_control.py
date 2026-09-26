@@ -121,3 +121,21 @@ def test_stats_api_error_is_contained(fake_service, monkeypatch):
         result = ctl.get_video_stats("abc123", channel="moku")
     assert result["ok"] is False
     assert "boom" in result["error"]
+
+
+def test_verify_ownership_direct_import_and_execution(fake_service, monkeypatch):
+    """Direct verification of _verify_ownership without mock patching."""
+    _patch_channel_id(monkeypatch, value="UC_expected")
+    item = ctl._verify_ownership(fake_service, "abc123", "moku")
+    assert item["snippet"]["channelId"] == "UC_expected"
+
+    # Mismatch raises PermissionError
+    _patch_channel_id(monkeypatch, value="UC_different")
+    with pytest.raises(PermissionError, match="no al canal configurado"):
+        ctl._verify_ownership(fake_service, "abc123", "moku")
+
+    # Not found raises LookupError
+    fake_service.videos.return_value.list.return_value.execute.return_value = {"items": []}
+    with pytest.raises(LookupError, match="Video no encontrado"):
+        ctl._verify_ownership(fake_service, "missing_vid", "moku")
+

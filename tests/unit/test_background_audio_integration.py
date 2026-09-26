@@ -17,9 +17,9 @@ def test_lane_background_audio_configuration():
     assert len(lanes) >= 3
     lane_map = {l.id: l for l in lanes}
 
-    assert "moku-scp-shorts" in lane_map
-    assert "moku-horror-long" in lane_map
-    assert "aelithia-aita-long" in lane_map
+    assert "horror-scp-shorts" in lane_map
+    assert "horror-horror-long" in lane_map
+    assert "drama-aita-long" in lane_map
 
     for lane in lanes:
         assert hasattr(lane, "background_audio")

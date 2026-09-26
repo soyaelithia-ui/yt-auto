@@ -226,7 +226,7 @@ def compile_stories_to_target_words(
     if len(words) < min_words and additional_stories:
         extra_titles = []
         from src.branding import resolve_channel_key
-        is_drama = resolve_channel_key(channel) == "aelithia"
+        is_drama = resolve_channel_key(channel) in ("aelithia", "drama")
         connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
 
         idx = 0
@@ -332,7 +332,7 @@ def _expand_narrative_to_target_words(
     # 2. General organic connectors
     try:
         from src.branding import resolve_channel_key
-        is_drama = resolve_channel_key(channel) == "aelithia"
+        is_drama = resolve_channel_key(channel) in ("aelithia", "drama")
         connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
         additions = []
         current_count = len(words)
@@ -604,7 +604,19 @@ _ADAPTATION_PERSONAS: Dict[str, str] = {
         "relatas hechos que presenciaste o reconstruiste desde archivos, y jamás "
         "rompes la ilusión documental."
     ),
+    "horror": (
+        "Eres un narrador documental de horror en primera persona, especializado "
+        "en creepypastas y expedientes SCP. Tono sobrio, ominoso y verosímil: "
+        "relatas hechos que presenciaste o reconstruiste desde archivos, y jamás "
+        "rompes la ilusión documental."
+    ),
     "aelithia": (
+        "Eres un narrador confesional dramático en primera persona. Relatas el "
+        "conflicto personal con carga emocional cruda y mantienes el diálogo "
+        "directo presente en la historia original (réplicas textuales entre "
+        "comillas) tal como fue escrito."
+    ),
+    "drama": (
         "Eres un narrador confesional dramático en primera persona. Relatas el "
         "conflicto personal con carga emocional cruda y mantienes el diálogo "
         "directo presente en la historia original (réplicas textuales entre "

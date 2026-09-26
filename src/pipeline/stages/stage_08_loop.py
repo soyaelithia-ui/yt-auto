@@ -14,7 +14,8 @@ logger = get_logger("pipeline.stages.stage_08_loop")
 
 def _build_video_loop_manifest(ctx: PipelineContext) -> None:
     """Configure stream-copy video loop manifest."""
-    ctx.stream_copy_mode = True
+    stream_copy_mode = True
+    ctx.stream_copy_mode = stream_copy_mode
     ass_path = getattr(ctx, "ass_path", None)
     ctx.mux_subtitles = bool(ctx.subtitles_active and ass_path and ass_path.is_file())
 

@@ -288,9 +288,9 @@ def test_compositor_default_still_does_not_load_wgpu(monkeypatch):
         if key in ("src.media.compositor", "src.media.proc_engine"):
             del sys.modules[key]
 
-    from src.media.compositor import MultiSceneCompositor
+    from src.media.interface import get_compositor
     from src.media.loop_engine import LoopVideoEngine
 
-    compositor = MultiSceneCompositor()
-    assert isinstance(compositor.loop_engine, LoopVideoEngine)
+    compositor = get_compositor()
+    assert isinstance(compositor, LoopVideoEngine)
     assert "wgpu" not in sys.modules

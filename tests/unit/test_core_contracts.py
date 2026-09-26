@@ -182,6 +182,7 @@ class TestRenderSpecContract:
         lane_mock.duration_min_sec = 600
         lane_mock.fps = 60
         lane_mock.expected_resolution = (1920, 1080)
+        lane_mock.visual_pipeline = "director"
 
         ctx = MagicMock()
         ctx.audio = {"duration_sec": 45.2}

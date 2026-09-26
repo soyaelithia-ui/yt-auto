@@ -355,7 +355,7 @@ def test_top_level_sync_video_metrics_convenience_function(tmp_path):
 
     history = get_video_snapshot_history(story_id, repository=repo)
     assert len(history) == 1
-    assert history[0]["channel"] == "aelithia"
+    assert history[0]["channel"] in ("aelithia", "drama")
     assert history[0]["snapshot_interval"] == "12h"
     assert history[0]["view_count"] > 0
 

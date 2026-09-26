@@ -69,25 +69,26 @@ class TestPipelineOrchestrator(unittest.TestCase):
             "run_id": "run_abc",
         }
 
-        result = self.orchestrator.run_channel(channel="moku")
+        result = self.orchestrator.run_channel(channel="horror")
 
         self.assertIsInstance(result, PipelineRunResult)
-        self.assertEqual(result.channel, "moku")
+        self.assertEqual(result.channel, "horror")
         self.assertEqual(result.status, "SUCCESS")
         self.assertEqual(result.story_id, "story_abc")
         self.assertEqual(result.work_dir, "/tmp/work_abc")
         mock_run_pipeline.assert_called_once_with(
-            channel="moku",
+            channel="horror",
             db_path=self.db_path,
             generate_only=False,
             story_id=None,
             lane_id=None,
+            visual_pipeline=None,
         )
 
     def test_run_channel_dry_run_mode(self):
         """Dry-run mode returns DRY_RUN status without executing pipeline."""
         with patch("src.orchestrator.pipeline.run_pipeline_once") as mock_run:
-            result = self.orchestrator.run_channel(channel="moku", dry_run=True)
+            result = self.orchestrator.run_channel(channel="horror", dry_run=True)
             self.assertEqual(result.status, "DRY_RUN")
             mock_run.assert_not_called()
 
@@ -96,22 +97,22 @@ class TestPipelineOrchestrator(unittest.TestCase):
         """Scenario 3: Topic-driven on-demand run synthesizes narrative, enqueues story, and executes."""
         mock_run_pipeline.return_value = {
             "status": "SUCCESS",
-            "story_id": "auto-moku-el_misterio_del_faro",
+            "story_id": "auto-horror-el_misterio_del_faro",
             "work_dir": "/tmp/work_faro",
         }
 
         result = self.orchestrator.run_channel(
-            channel="moku",
+            channel="horror",
             topic="El Misterio del Faro",
-            lane_id="moku-horror-long",
+            lane_id="horror-horror-long",
         )
 
         self.assertEqual(result.status, "SUCCESS")
-        self.assertIn("auto-moku", result.story_id)
+        self.assertIn("auto-horror", result.story_id)
         mock_run_pipeline.assert_called_once()
         call_kwargs = mock_run_pipeline.call_args.kwargs
-        self.assertTrue(str(call_kwargs["story_id"]).startswith("auto-moku-el_misterio_del_faro"))
-        self.assertEqual(call_kwargs["lane_id"], "moku-horror-long")
+        self.assertTrue(str(call_kwargs["story_id"]).startswith("auto-horror-el_misterio_del_faro"))
+        self.assertEqual(call_kwargs["lane_id"], "horror-horror-long")
 
     @patch("src.orchestrator.pipeline.run_pipeline_once")
     @patch("src.telegram.notifier.TelegramNotifier.send_video_preview")
@@ -208,14 +209,14 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_delivery.detail = "Sent to Telegram Canary"
         mock_send_preview.return_value = mock_delivery
 
-        result = self.orchestrator.run_telegram_canary(channel="moku")
+        result = self.orchestrator.run_telegram_canary(channel="horror")
 
         self.assertIsInstance(result, CanaryRunResult)
         self.assertEqual(result.status, "SUCCESS")
         self.assertTrue(result.telegram_ok)
         self.assertEqual(result.video_file, video_path)
         mock_run_pipeline.assert_called_once_with(
-            channel="moku",
+            channel="horror",
             db_path=self.db_path,
             generate_only=True,
             story_id=None,
@@ -228,20 +229,20 @@ class TestPipelineOrchestrator(unittest.TestCase):
         from src.core.repository import QueueRepository, connect
         repo = QueueRepository(self.db_path)
         repo.initialize()
-        repo.enqueue("auto-moku-faro", "Old Topic", "Old Content", "http://old", "moku")
+        repo.enqueue("auto-horror-faro", "Old Topic", "Old Content", "http://old", "horror")
 
         with connect(self.db_path) as conn:
-            conn.execute("INSERT INTO runs (run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at) VALUES ('run-test-1', 'moku', 'auto-moku-faro', 'publish', 'RUNNING', 'w1', '2026-08-20T00:00:00Z', '2026-08-20T00:00:00Z')")
-            conn.execute("INSERT OR REPLACE INTO leases (job_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) VALUES ('auto-moku-faro', 'moku', 'w1', 'run-test-1', 100, 100, 9999999999)")
+            conn.execute("INSERT INTO runs (run_id, channel, story_id, mode, status, owner, started_at, heartbeat_at) VALUES ('run-test-1', 'horror', 'auto-horror-faro', 'publish', 'RUNNING', 'w1', '2026-08-20T00:00:00Z', '2026-08-20T00:00:00Z')")
+            conn.execute("INSERT OR REPLACE INTO leases (job_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) VALUES ('auto-horror-faro', 'horror', 'w1', 'run-test-1', 100, 100, 9999999999)")
             conn.commit()
 
         mock_run_pipeline.return_value = {
             "status": "SUCCESS",
-            "story_id": "auto-moku-faro",
+            "story_id": "auto-horror-faro",
         }
 
         result = self.orchestrator.run_channel(
-            channel="moku",
+            channel="horror",
             topic="Faro",
         )
 
@@ -249,8 +250,8 @@ class TestPipelineOrchestrator(unittest.TestCase):
         # A new unique auto- story is enqueued; the old leased row is left alone.
         call_kwargs = mock_run_pipeline.call_args.kwargs
         new_id = str(call_kwargs["story_id"])
-        self.assertTrue(new_id.startswith("auto-moku-faro"))
-        self.assertNotEqual(new_id, "auto-moku-faro")
+        self.assertTrue(new_id.startswith("auto-horror-faro"))
+        self.assertNotEqual(new_id, "auto-horror-faro")
 
     @patch("src.orchestrator.pipeline.run_pipeline_once")
     def test_run_telegram_canary_missing_video(self, mock_run_pipeline):
@@ -295,11 +296,11 @@ class TestPipelineOrchestrator(unittest.TestCase):
         """A channel-scoped daemon restricts to that channel's configured lanes."""
         from src.core.lanes import fallback_lanes
 
-        moku_lane = next(l for l in fallback_lanes() if l.channel.value == "moku")
-        mock_load_lanes.return_value = (moku_lane,)
+        horror_lane = next(l for l in fallback_lanes() if l.channel.value == "horror")
+        mock_load_lanes.return_value = (horror_lane,)
         with patch.dict(os.environ, {"TEST_MODE": "1"}):
-            self.orchestrator.run_daemon(interval=60, channel="moku")
-            assert mock_start_daemon_lanes.call_args.kwargs["lanes_filter"] == [moku_lane.id]
+            self.orchestrator.run_daemon(interval=60, channel="horror")
+            assert mock_start_daemon_lanes.call_args.kwargs["lanes_filter"] == [horror_lane.id]
 
 
 if __name__ == "__main__":

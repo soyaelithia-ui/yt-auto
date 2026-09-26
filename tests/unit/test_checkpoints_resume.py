@@ -115,9 +115,10 @@ def test_pipeline_copies_reusable_artifacts_into_new_workdir(tmp_path, monkeypat
     # Run 0: record checkpoints for script+audio against this story+lane.
     seed_dir = old_work_root / "seed"
     script_seed = _write(seed_dir / "script.txt", b"guion previo")
+    lane_id = "horror-scp-shorts"
     audio_seed = _write(seed_dir / "speech.wav", b"audio previo")
-    cp.record_checkpoint(repository, "run-seed", "story-x:moku-scp-shorts", "script", script_seed)
-    cp.record_checkpoint(repository, "run-seed", "story-x:moku-scp-shorts", "audio", audio_seed)
+    cp.record_checkpoint(repository, "run-seed", f"story-x:{lane_id}", "script", script_seed)
+    cp.record_checkpoint(repository, "run-seed", f"story-x:{lane_id}", "audio", audio_seed)
 
     captured = {}
 
@@ -136,7 +137,7 @@ def test_pipeline_copies_reusable_artifacts_into_new_workdir(tmp_path, monkeypat
             # invoking resume logic exactly as the pipeline does.
             from src.core.lanes import resolve_lane_for_run
 
-            lane = resolve_lane_for_run("moku", "moku-scp-shorts")
+            lane = resolve_lane_for_run("horror", lane_id)
             new_run = "run-new"
             new_dir = SETTINGS.work_root / new_run
             plan = cp.resume_plan(str(repository.db_path), "story-x", lane.id)

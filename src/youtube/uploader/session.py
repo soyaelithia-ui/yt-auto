@@ -710,6 +710,42 @@ def _reap_lingering_playwright_pids(pids_before: set) -> None:
         time.sleep(0.05)
 
 
+def _capture_and_alert_upload_failure(
+    upload_exc: Exception,
+    page: Any,
+    channel: str,
+    screenshot_dir: Optional[str],
+    video_published: bool,
+) -> None:
+    """Capture failure screenshot, alert Telegram, and raise appropriate error."""
+    err_img = None
+    if screenshot_dir:
+        os.makedirs(screenshot_dir, exist_ok=True)
+        target_path = os.path.join(screenshot_dir, f"upload_failure_{int(time.time())}.png")
+        try:
+            if page and not page.is_closed():
+                page.screenshot(path=target_path)
+                err_img = target_path
+        except Exception:
+            err_img = None
+
+    if err_img and os.path.isfile(err_img):
+        try:
+            from src.observability.alerts import send_operational_alert
+            send_operational_alert(
+                f"Fallo de Subida YouTube ({channel})",
+                f"Error: {upload_exc}\nCanal: {channel}\nURL: {getattr(page, 'url', 'desconocida')}",
+                photo_path=err_img,
+                force=True,
+            )
+        except Exception as alert_err:
+            logger.warning("No se pudo despachar captura a Telegram: %s", alert_err)
+
+    if not video_published and not isinstance(upload_exc, PlaywrightPrePublishError):
+        raise PlaywrightPrePublishError(f"Playwright pre-publish failed: {upload_exc}") from upload_exc
+    raise upload_exc
+
+
 def upload_video_via_playwright(
     video_path: str,
     title: str,
@@ -784,28 +820,7 @@ def upload_video_via_playwright(
                     "verified": bool(video_id),
                 }
             except Exception as upload_exc:
-                err_img = f"{screenshot_dir}/upload_failure_{int(time.time())}.png"
-                try:
-                    if page and not page.is_closed():
-                        page.screenshot(path=err_img)
-                except Exception:
-                    err_img = None
-
-                if err_img and os.path.isfile(err_img):
-                    try:
-                        from src.observability.alerts import send_operational_alert
-                        send_operational_alert(
-                            f"Fallo de Subida YouTube ({channel})",
-                            f"Error: {upload_exc}\nCanal: {channel}\nURL: {getattr(page, 'url', 'desconocida')}",
-                            photo_path=err_img,
-                            force=True,
-                        )
-                    except Exception as alert_err:
-                        logger.warning("No se pudo despachar captura a Telegram: %s", alert_err)
-
-                if not video_published and not isinstance(upload_exc, PlaywrightPrePublishError):
-                    raise PlaywrightPrePublishError(f"Playwright pre-publish failed: {upload_exc}") from upload_exc
-                raise
+                _capture_and_alert_upload_failure(upload_exc, page, channel, screenshot_dir, video_published)
             finally:
                 _cleanup_playwright_resources(page, context, browser, cookies_path)
     finally:

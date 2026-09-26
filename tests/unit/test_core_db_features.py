@@ -245,9 +245,9 @@ class TestLanesCLIAndVoiceProfiles:
         assert ret == 0
         output = buf.getvalue()
         assert "PRODUCTION LANES" in output
-        assert "moku-scp-shorts" in output
-        assert "moku-horror-long" in output
-        assert "aelithia-aita-long" in output
+        assert "horror-scp-shorts" in output
+        assert "horror-horror-long" in output
+        assert "drama-aita-long" in output
 
         # Test JSON output
         args_json = argparse.Namespace(db_path=db_path, json=True, channel="all")
@@ -259,7 +259,7 @@ class TestLanesCLIAndVoiceProfiles:
         from src.core.lanes import load_lanes
         assert data["count"] == len(load_lanes())
         lane_ids = [item["lane_id"] for item in data["lanes"]]
-        assert "moku-scp-shorts" in lane_ids
-        assert "moku-horror-long" in lane_ids
-        assert "aelithia-aita-long" in lane_ids
+        assert "horror-scp-shorts" in lane_ids
+        assert "horror-horror-long" in lane_ids
+        assert "drama-aita-long" in lane_ids
 

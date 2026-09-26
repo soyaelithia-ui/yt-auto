@@ -210,8 +210,8 @@ class TestTier1ToolListLanes:
         data = _parse_content_json(result)
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         lane_ids = {l.get("id") if isinstance(l, dict) else str(l) for l in lanes}
-        assert "moku-scp-shorts" in lane_ids
-        assert "moku-horror-long" in lane_ids
+        assert "horror-scp-shorts" in lane_ids
+        assert "horror-horror-long" in lane_ids
         assert len(lane_ids) >= 6
 
     def test_tier1_list_lanes_filter_moku(self):
@@ -222,7 +222,7 @@ class TestTier1ToolListLanes:
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         for lane in lanes:
             if isinstance(lane, dict):
-                assert lane.get("channel") == "moku"
+                assert lane.get("channel") in ("moku", "horror")
 
     def test_tier1_list_lanes_filter_aelithia(self):
         """list_lanes with channel=aelithia filters to aelithia lanes only."""
@@ -232,7 +232,7 @@ class TestTier1ToolListLanes:
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         for lane in lanes:
             if isinstance(lane, dict):
-                assert lane.get("channel") == "aelithia"
+                assert lane.get("channel") in ("aelithia", "drama")
 
     def test_tier1_list_lanes_filter_scifi(self):
         """list_lanes with channel=scifi filters to scifi lanes only."""
@@ -265,8 +265,8 @@ class TestTier1ToolGetLaneInfo:
         server = create_mcp_server()
         result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "moku-scp-shorts"
-        assert data.get("channel") == "moku"
+        assert data.get("id") == "horror-scp-shorts"
+        assert data.get("channel") in ("moku", "horror")
         assert data.get("orientation") == "vertical"
 
     def test_tier1_get_lane_info_moku_horror_long(self):
@@ -274,7 +274,7 @@ class TestTier1ToolGetLaneInfo:
         server = create_mcp_server()
         result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-horror-long"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "moku-horror-long"
+        assert data.get("id") == "horror-horror-long"
         assert data.get("orientation") == "horizontal"
 
     def test_tier1_get_lane_info_aelithia_drama_shorts(self):
@@ -282,21 +282,25 @@ class TestTier1ToolGetLaneInfo:
         server = create_mcp_server()
         result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "aelithia-drama-shorts"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "aelithia-drama-shorts"
+        assert data.get("id") == "drama-drama-shorts"
 
     def test_tier1_get_lane_info_thematic_aliases(self):
         """get_lane_info successfully resolves thematic lane aliases."""
         server = create_mcp_server()
         for alias, expected_id in [
-            ("horror-scp-shorts", "moku-scp-shorts"),
-            ("horror-long", "moku-horror-long"),
-            ("drama-shorts", "aelithia-drama-shorts"),
-            ("drama-aita-long", "aelithia-aita-long"),
+            ("horror-scp-shorts", "horror-scp-shorts"),
+            ("moku-scp-shorts", "horror-scp-shorts"),
+            ("horror-long", "horror-horror-long"),
+            ("moku-horror-long", "horror-horror-long"),
+            ("drama-shorts", "drama-drama-shorts"),
+            ("aelithia-drama-shorts", "drama-drama-shorts"),
+            ("drama-aita-long", "drama-aita-long"),
+            ("aelithia-aita-long", "drama-aita-long"),
         ]:
             result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": alias}))
             data = _parse_content_json(result)
             assert data.get("id") == expected_id, f"Failed for alias {alias}"
-        assert data.get("channel") == "aelithia"
+        assert data.get("channel") in ("aelithia", "drama")
 
     def test_tier1_get_lane_info_scifi_chronicles_shorts(self):
         """get_lane_info returns spec for scifi chronicles lane."""
@@ -601,7 +605,7 @@ class TestTier1ResourceChannelConfig:
         server = create_mcp_server()
         result = asyncio.run(server.read_resource("channels://moku/config"))
         data = _parse_content_json(result)
-        assert data.get("key") == "moku"
+        assert data.get("key") in ("moku", "horror")
         assert "expected_youtube_channel_id" in data
 
     def test_tier1_resource_channel_config_aelithia(self):
@@ -609,7 +613,7 @@ class TestTier1ResourceChannelConfig:
         server = create_mcp_server()
         result = asyncio.run(server.read_resource("channels://aelithia/config"))
         data = _parse_content_json(result)
-        assert data.get("key") == "aelithia"
+        assert data.get("key") in ("aelithia", "drama")
 
     def test_tier1_resource_channel_config_scifi(self):
         """Reading channels://scifi/config returns scifi channel profile."""
@@ -1077,7 +1081,7 @@ class TestTier4RealWorldScenarios:
         # Step 5: Resource inspection
         cfg_res = asyncio.run(server.read_resource("channels://moku/config"))
         cfg_data = _parse_content_json(cfg_res)
-        assert cfg_data["key"] == "moku"
+        assert cfg_data["key"] in ("moku", "horror")
         assert "cookies_path" not in cfg_data
 
     def test_tier4_s02_pipeline_production_dry_run_workflow(self):
@@ -1101,7 +1105,7 @@ class TestTier4RealWorldScenarios:
         # Step 2: Get lane spec
         spec_res = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
         spec_data = _parse_content_json(spec_res)
-        assert spec_data["id"] == "moku-scp-shorts"
+        assert spec_data["id"] == "horror-scp-shorts"
 
         # Step 3: Query catalog
         loops_res = asyncio.run(

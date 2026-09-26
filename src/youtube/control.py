@@ -17,6 +17,16 @@ logger = logging.getLogger("youtube_control")
 
 VALID_PRIVACY_STATUS = {"public", "private", "unlisted"}
 
+__all__ = [
+    "delete_video",
+    "set_video_privacy",
+    "get_video_stats",
+    "expected_channel_id",
+    "resolve_token_path",
+    "_verify_ownership",
+    "_service_for_channel",
+]
+
 
 def resolve_token_path(channel: str) -> str:
     """Return the OAuth token path configured for the canonical channel."""

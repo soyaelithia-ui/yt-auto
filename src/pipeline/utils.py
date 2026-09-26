@@ -343,7 +343,11 @@ def _resolve_engine_mode(
         logger.info("Coercing director lane %s to local loop mode", getattr(lane, "id", "unknown"))
         engine_mode = "loop"
         is_director_mode = False
-        is_loop_mode = True
+    if engine_mode == "multiscene":
+        if os.environ.get("FORCE_MULTISCENE", "0") != "1":
+            logger.info("Coercing video_engine=%r to local loop mode", engine_mode)
+            engine_mode = "loop"
+            is_loop_mode = True
     if not (is_loop_mode or is_director_mode):
         raise ValueError(
             f"video_engine={engine_mode!r} is not supported. Supported modes: 'director' or 'video_loop'."

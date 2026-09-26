@@ -10,5 +10,10 @@ The production hot path uses local videos and stream-copy composition.
 4. `RENDER_PRESET`, `RENDER_CRF`, and `FFMPEG_THREADS` remain available for the rare local compatibility re-encode or QA fallback.
 5. Catalog integrity and visual QA remain fail-closed; missing or uncertified local assets do not trigger remote downloads or generated video frames.
 
+## Resource Target & SLA
+
+- Target Resource Envelope (≤ 2 Cores CPU, ≤ 2.0 GiB RAM) governs all media composition and verification workflows.
+- Longform horizontal multi-act assembly must complete via stream-copy within a turnaround ceiling of ≤ 45s.
+
 Helpers: `src/media/encode_defaults.py` and `src/media/loop_engine.py`.
 See `docs/visual-assets-policy.md` for the asset boundary.
