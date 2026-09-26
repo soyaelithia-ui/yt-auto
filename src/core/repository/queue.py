@@ -7,9 +7,11 @@ import hashlib
 import json
 import os
 import re
+import logging
 import sqlite3
 import time
 import uuid
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -24,6 +26,74 @@ from src.core.repository.migrations import _utc_now, connect
 
 if TYPE_CHECKING:
     from src.core.contracts.story import StoryRecord
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TokenBurnSummary:
+    window_hours: int
+    total_prompt_tokens: int
+    total_completion_tokens: int
+    total_cached_tokens: int
+    total_reasoning_tokens: int
+    total_tokens: int
+    total_cost_usd: float
+    total_calls: int
+    total_saturations: int
+    provider_breakdown: dict[str, dict[str, Any]]
+    model_breakdown: dict[str, dict[str, Any]]
+
+    @property
+    def breakdown_by_provider(self) -> dict[str, dict[str, Any]]:
+        return self.provider_breakdown
+
+    @property
+    def breakdown_by_model(self) -> dict[str, dict[str, Any]]:
+        return self.model_breakdown
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["breakdown_by_provider"] = self.provider_breakdown
+        d["breakdown_by_model"] = self.model_breakdown
+        return d
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+@dataclass(frozen=True)
+class AssetRejectionSummary:
+    window_hours: int
+    total_automated_rejections: int
+    total_human_rejections: int
+    total_rejections: int
+    category_breakdown: dict[str, int]
+    channel_breakdown: dict[str, int]
+    top_offending_assets: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+@dataclass(frozen=True)
+class DaemonStoppageMetrics:
+    heartbeat_age_seconds: int | None
+    daemon_liveness_status: str  # "HEALTHY" | "DEGRADED" | "STALE" | "STOPPED"
+    paused_channels: list[dict[str, Any]]
+    active_locks: list[dict[str, Any]]
+    expired_locks_count: int
+    circuit_breakers: dict[str, dict[str, Any]]
+    tripped_breakers_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
 
 
 def to_signed_64(val: int | None) -> int | None:
@@ -1578,3 +1648,567 @@ class QueueOperationsMixin:
             result["resumable_video"] = str(video_path)
             result["previous_run_id"] = str(row["candidate_run_id"])
             return result
+
+    def record_token_burn(
+        self,
+        *,
+        event_id: str | None = None,
+        ts: str | None = None,
+        run_id: str | None = None,
+        story_id: str | None = None,
+        channel: str | CanonicalChannel | None = None,
+        provider: str,
+        model: str,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        cached_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        total_tokens: int = 0,
+        cost_usd: float = 0.0,
+        duration_seconds: float = 0.0,
+        status: str = "success",
+        **kwargs: Any,
+    ) -> str:
+        """Non-blocking, fail-open persistence of LLM/TTS token & character burn."""
+        eid = event_id or uuid.uuid4().hex
+        timestamp = ts or _utc_now()
+        channel_val: str | None = None
+        if channel is not None:
+            channel_val = getattr(channel, "value", str(channel))
+
+        calc_total = total_tokens
+        if status != "saturated" and calc_total == 0 and (prompt_tokens > 0 or completion_tokens > 0):
+            calc_total = prompt_tokens + completion_tokens
+
+        if status in ("success", "failed", "saturated"):
+            valid_status = status
+        elif str(status).lower() in ("error", "failed", "failure", "permanent_failed", "retryable_failed"):
+            valid_status = "failed"
+        else:
+            valid_status = "success"
+
+        try:
+            with connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO token_burn_events (
+                        event_id, ts, run_id, story_id, channel,
+                        provider, model, prompt_tokens, completion_tokens,
+                        cached_tokens, reasoning_tokens, total_tokens,
+                        cost_usd, duration_seconds, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        eid,
+                        timestamp,
+                        run_id,
+                        story_id,
+                        channel_val,
+                        str(provider),
+                        str(model),
+                        max(0, int(prompt_tokens)),
+                        max(0, int(completion_tokens)),
+                        max(0, int(cached_tokens)),
+                        max(0, int(reasoning_tokens)),
+                        max(0, int(calc_total)),
+                        max(0.0, float(cost_usd)),
+                        max(0.0, float(duration_seconds)),
+                        valid_status,
+                    ),
+                )
+                conn.commit()
+            return eid
+        except Exception as exc:
+            logger.debug("Failed to record token burn event: %s", exc)
+            return eid
+
+    def query_token_burn_summary(
+        self,
+        window_hours: int = 24,
+        channel: str | CanonicalChannel | None = None,
+        provider: str | None = None,
+    ) -> TokenBurnSummary:
+        """Aggregate token burn and USD costs grouped by provider and model."""
+        hours = max(1, int(window_hours))
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+
+        clauses = ["ts >= ?"]
+        params: list[Any] = [cutoff]
+
+        if channel is not None:
+            channel_val = getattr(channel, "value", str(channel))
+            clauses.append("channel = ?")
+            params.append(channel_val)
+
+        if provider is not None:
+            clauses.append("provider = ?")
+            params.append(str(provider))
+
+        where_sql = " AND ".join(clauses)
+
+        with connect(self.db_path, read_only=True) as conn:
+            tot_row = conn.execute(
+                f"""
+                SELECT
+                    COALESCE(SUM(prompt_tokens), 0) AS total_prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) AS total_completion_tokens,
+                    COALESCE(SUM(cached_tokens), 0) AS total_cached_tokens,
+                    COALESCE(SUM(reasoning_tokens), 0) AS total_reasoning_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd,
+                    COUNT(*) AS total_calls,
+                    COALESCE(SUM(CASE WHEN status = 'saturated' THEN 1 ELSE 0 END), 0) AS total_saturations
+                FROM token_burn_events
+                WHERE {where_sql}
+                """,
+                tuple(params),
+            ).fetchone()
+
+            rows = conn.execute(
+                f"""
+                SELECT
+                    provider,
+                    model,
+                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                    COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
+                    COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(SUM(cost_usd), 0.0) AS cost_usd,
+                    COUNT(*) AS calls,
+                    COALESCE(SUM(CASE WHEN status = 'saturated' THEN 1 ELSE 0 END), 0) AS saturations
+                FROM token_burn_events
+                WHERE {where_sql}
+                GROUP BY provider, model
+                ORDER BY provider ASC, model ASC
+                """,
+                tuple(params),
+            ).fetchall()
+
+        provider_breakdown: dict[str, dict[str, Any]] = {}
+        model_breakdown: dict[str, dict[str, Any]] = {}
+
+        for r in rows:
+            prov = str(r["provider"])
+            mod = str(r["model"])
+
+            model_breakdown[mod] = {
+                "provider": prov,
+                "model": mod,
+                "prompt_tokens": int(r["prompt_tokens"]),
+                "completion_tokens": int(r["completion_tokens"]),
+                "cached_tokens": int(r["cached_tokens"]),
+                "reasoning_tokens": int(r["reasoning_tokens"]),
+                "total_tokens": int(r["total_tokens"]),
+                "cost_usd": float(r["cost_usd"]),
+                "calls": int(r["calls"]),
+                "saturations": int(r["saturations"]),
+            }
+
+            if prov not in provider_breakdown:
+                provider_breakdown[prov] = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "cached_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "total_tokens": 0,
+                    "cost_usd": 0.0,
+                    "calls": 0,
+                    "saturations": 0,
+                    "models": {},
+                }
+            pb = provider_breakdown[prov]
+            pb["prompt_tokens"] += int(r["prompt_tokens"])
+            pb["completion_tokens"] += int(r["completion_tokens"])
+            pb["cached_tokens"] += int(r["cached_tokens"])
+            pb["reasoning_tokens"] += int(r["reasoning_tokens"])
+            pb["total_tokens"] += int(r["total_tokens"])
+            pb["cost_usd"] += float(r["cost_usd"])
+            pb["calls"] += int(r["calls"])
+            pb["saturations"] += int(r["saturations"])
+            pb["models"][mod] = model_breakdown[mod]
+
+        total_prompt = int(tot_row["total_prompt_tokens"]) if tot_row else 0
+        total_completion = int(tot_row["total_completion_tokens"]) if tot_row else 0
+        total_cached = int(tot_row["total_cached_tokens"]) if tot_row else 0
+        total_reasoning = int(tot_row["total_reasoning_tokens"]) if tot_row else 0
+        total_tokens = int(tot_row["total_tokens"]) if tot_row else 0
+        total_cost = float(tot_row["total_cost_usd"]) if tot_row else 0.0
+        total_calls = int(tot_row["total_calls"]) if tot_row else 0
+        total_saturations = int(tot_row["total_saturations"]) if tot_row else 0
+
+        return TokenBurnSummary(
+            window_hours=hours,
+            total_prompt_tokens=total_prompt,
+            total_completion_tokens=total_completion,
+            total_cached_tokens=total_cached,
+            total_reasoning_tokens=total_reasoning,
+            total_tokens=total_tokens,
+            total_cost_usd=round(total_cost, 6),
+            total_calls=total_calls,
+            total_saturations=total_saturations,
+            provider_breakdown=provider_breakdown,
+            model_breakdown=model_breakdown,
+        )
+
+    def prune_token_burn_events(self, retention_days: int = 30) -> int:
+        """Purge token burn events older than retention threshold during 24h sweep."""
+        days = max(0, int(retention_days))
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                cursor = conn.execute(
+                    "DELETE FROM token_burn_events WHERE ts < ?",
+                    (cutoff,),
+                )
+                deleted = int(cursor.rowcount)
+                conn.commit()
+                return deleted
+            except Exception:
+                conn.rollback()
+                raise
+
+    def query_asset_rejection_counts(
+        self,
+        window_hours: int = 24,
+        channel: str | CanonicalChannel | None = None,
+    ) -> AssetRejectionSummary:
+        """Aggregate automated QA failures and human review rejections."""
+        hours = max(1, int(window_hours))
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+
+        channel_val: str | None = None
+        if channel is not None:
+            channel_val = getattr(channel, "value", str(channel))
+
+        category_breakdown = {
+            "visual": 0,
+            "audio": 0,
+            "sync": 0,
+            "luminance": 0,
+            "pacing": 0,
+            "editorial": 0,
+        }
+        channel_breakdown: dict[str, int] = {}
+        asset_counts: dict[str, dict[str, Any]] = {}
+        total_automated = 0
+        total_human = 0
+
+        with connect(self.db_path, read_only=True) as conn:
+            # 1. Automated & human rejections in system_events
+            se_clauses = ["ts >= ?", "event_type IN ('asset_rejection', 'review_rejection')"]
+            se_params: list[Any] = [cutoff]
+            if channel_val:
+                se_clauses.append("channel = ?")
+                se_params.append(channel_val)
+
+            rows = conn.execute(
+                f"""
+                SELECT event_id, event_type, channel, details_json, story_id
+                FROM system_events
+                WHERE {' AND '.join(se_clauses)}
+                ORDER BY event_id ASC
+                """,
+                tuple(se_params),
+            ).fetchall()
+
+            reviewed_job_ids_in_events: set[str] = set()
+
+            for r in rows:
+                ev_type = r["event_type"]
+                ch = str(r["channel"] or "unknown")
+                details: dict[str, Any] = {}
+                try:
+                    if r["details_json"]:
+                        details = json.loads(r["details_json"])
+                except Exception:
+                    details = {}
+
+                if "job_id" in details:
+                    reviewed_job_ids_in_events.add(str(details["job_id"]))
+
+                if ev_type == "review_rejection":
+                    total_human += 1
+                    cat = str(details.get("category") or "editorial").lower()
+                else:
+                    total_automated += 1
+                    cat = str(details.get("category") or details.get("defect_category") or "visual").lower()
+
+                if cat not in category_breakdown:
+                    cat = "editorial" if ev_type == "review_rejection" else "visual"
+                category_breakdown[cat] += 1
+                channel_breakdown[ch] = channel_breakdown.get(ch, 0) + 1
+
+                asset_id = (
+                    details.get("asset_id")
+                    or details.get("source_url_or_path")
+                    or details.get("video_path")
+                    or r["story_id"]
+                    or f"event-{r['event_id']}"
+                )
+                if asset_id:
+                    aid_str = str(asset_id)
+                    if aid_str not in asset_counts:
+                        asset_counts[aid_str] = {
+                            "asset_id": aid_str,
+                            "rejections": 0,
+                            "category": cat,
+                            "channel": ch,
+                        }
+                    asset_counts[aid_str]["rejections"] += 1
+
+            # 2. Check review_jobs for human Telegram rejections not in system_events
+            rj_clauses = ["status = 'REJECTED'", "(COALESCE(reviewed_at, created_at) >= ?)"]
+            rj_params: list[Any] = [cutoff]
+            if channel_val:
+                rj_clauses.append("channel = ?")
+                rj_params.append(channel_val)
+
+            rj_rows = conn.execute(
+                f"""
+                SELECT job_id, channel, original_video_path, reviewed_at, created_at
+                FROM review_jobs
+                WHERE {' AND '.join(rj_clauses)}
+                """,
+                tuple(rj_params),
+            ).fetchall()
+
+            for rj in rj_rows:
+                jid = str(rj["job_id"])
+                if jid in reviewed_job_ids_in_events:
+                    continue
+                total_human += 1
+                category_breakdown["editorial"] += 1
+                ch = str(rj["channel"] or "unknown")
+                channel_breakdown[ch] = channel_breakdown.get(ch, 0) + 1
+                vid = str(rj["original_video_path"] or jid)
+                if vid not in asset_counts:
+                    asset_counts[vid] = {
+                        "asset_id": vid,
+                        "rejections": 0,
+                        "category": "editorial",
+                        "channel": ch,
+                    }
+                asset_counts[vid]["rejections"] += 1
+
+        top_offending = sorted(
+            asset_counts.values(),
+            key=lambda x: x["rejections"],
+            reverse=True,
+        )
+
+        return AssetRejectionSummary(
+            window_hours=hours,
+            total_automated_rejections=total_automated,
+            total_human_rejections=total_human,
+            total_rejections=total_automated + total_human,
+            category_breakdown=category_breakdown,
+            channel_breakdown=channel_breakdown,
+            top_offending_assets=top_offending,
+        )
+
+    def query_tube_incidents(
+        self,
+        window_hours: int = 24,
+        event_types: Sequence[str] | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Retrieve chronologically descending operational incidents from system_events."""
+        hours = max(1, int(window_hours))
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+
+        types = tuple(
+            event_types
+            if event_types is not None
+            else (
+                "cookie_failure",
+                "cookie_warning",
+                "lease_recovered",
+                "audio_prompt_leak",
+                "quota_saturation",
+                "stage_error",
+                "youtube_quota_limit",
+                "database_backup_failed",
+                "mcp_tool_failure",
+                "upload_unconfirmed",
+            )
+        )
+        placeholders = ",".join("?" for _ in types)
+        params: list[Any] = [cutoff, *types, max(1, int(limit))]
+
+        with connect(self.db_path, read_only=True) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT event_id, ts, level, event_type, run_id, story_id,
+                       channel, component, stage, error_code, message, details_json
+                FROM system_events
+                WHERE ts >= ? AND event_type IN ({placeholders})
+                ORDER BY ts DESC, event_id DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+
+        incidents: list[dict[str, Any]] = []
+        for r in rows:
+            details = {}
+            if r["details_json"]:
+                try:
+                    details = json.loads(r["details_json"])
+                except Exception:
+                    details = {"raw": r["details_json"]}
+            incidents.append(
+                {
+                    "event_id": r["event_id"],
+                    "ts": r["ts"],
+                    "level": r["level"],
+                    "event_type": r["event_type"],
+                    "run_id": r["run_id"],
+                    "story_id": r["story_id"],
+                    "channel": r["channel"],
+                    "component": r["component"],
+                    "stage": r["stage"],
+                    "error_code": r["error_code"],
+                    "message": r["message"],
+                    "details": details,
+                }
+            )
+        return incidents
+
+    def query_channel_stoppages(self) -> DaemonStoppageMetrics:
+        """Aggregate channel pauses, active worker locks, and daemon heartbeat."""
+        current_epoch = int(time.time())
+
+        with connect(self.db_path, read_only=True) as conn:
+            # 1. Daemon heartbeat
+            heartbeat_age: int | None = None
+            daemon_status = "STOPPED"
+            try:
+                hb_row = conn.execute(
+                    "SELECT heartbeat_at FROM daemon_liveness WHERE id = 1"
+                ).fetchone()
+                if hb_row and hb_row["heartbeat_at"] > 0:
+                    heartbeat_age = max(0, current_epoch - int(hb_row["heartbeat_at"]))
+                    if heartbeat_age <= 60:
+                        daemon_status = "HEALTHY"
+                    elif heartbeat_age <= 120:
+                        daemon_status = "DEGRADED"
+                    else:
+                        daemon_status = "STALE"
+            except Exception:
+                daemon_status = "STOPPED"
+
+            # 2. Paused channels
+            paused_channels: list[dict[str, Any]] = []
+            try:
+                ctrl_rows = conn.execute(
+                    "SELECT channel, paused, reason, updated_at FROM channel_controls WHERE paused = 1"
+                ).fetchall()
+                for r in ctrl_rows:
+                    paused_channels.append(
+                        {
+                            "channel": r["channel"],
+                            "paused": bool(r["paused"]),
+                            "reason": r["reason"] or "",
+                            "updated_at": r["updated_at"],
+                        }
+                    )
+            except Exception:
+                pass
+
+            # 3. Active worker leases
+            active_locks: list[dict[str, Any]] = []
+            try:
+                lease_rows = conn.execute(
+                    "SELECT channel, owner, run_id, acquired_at, expires_at FROM leases"
+                ).fetchall()
+                for r in lease_rows:
+                    exp = int(r["expires_at"])
+                    active_locks.append(
+                        {
+                            "channel": r["channel"],
+                            "lane_id": None,
+                            "owner": r["owner"],
+                            "run_id": r["run_id"],
+                            "acquired_at": int(r["acquired_at"]),
+                            "expires_at": exp,
+                            "is_expired": exp < current_epoch,
+                        }
+                    )
+            except Exception:
+                pass
+
+            try:
+                lane_rows = conn.execute(
+                    "SELECT lane_id, channel, owner, run_id, acquired_at, expires_at FROM lane_leases"
+                ).fetchall()
+                for r in lane_rows:
+                    exp = int(r["expires_at"])
+                    active_locks.append(
+                        {
+                            "channel": r["channel"],
+                            "lane_id": r["lane_id"],
+                            "owner": r["owner"],
+                            "run_id": r["run_id"],
+                            "acquired_at": int(r["acquired_at"]),
+                            "expires_at": exp,
+                            "is_expired": exp < current_epoch,
+                        }
+                    )
+            except Exception:
+                pass
+
+        expired_count = sum(1 for lock in active_locks if lock.get("is_expired"))
+
+        return DaemonStoppageMetrics(
+            heartbeat_age_seconds=heartbeat_age,
+            daemon_liveness_status=daemon_status,
+            paused_channels=paused_channels,
+            active_locks=active_locks,
+            expired_locks_count=expired_count,
+            circuit_breakers={},
+            tripped_breakers_count=0,
+        )
+
+    def pause_channel(
+        self,
+        channel: str | CanonicalChannel,
+        *,
+        reason: str | None = None,
+    ) -> None:
+        """Pause a channel in channel_controls."""
+        channel_key = canonical_channel(channel).value
+        with connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO channel_controls (channel, paused, reason, updated_at)
+                VALUES (?, 1, ?, ?)
+                ON CONFLICT(channel) DO UPDATE SET
+                    paused = 1,
+                    reason = excluded.reason,
+                    updated_at = excluded.updated_at
+                """,
+                (channel_key, reason, _utc_now()),
+            )
+            conn.commit()
+
+    def resume_channel(
+        self,
+        channel: str | CanonicalChannel,
+    ) -> None:
+        """Resume a channel in channel_controls."""
+        channel_key = canonical_channel(channel).value
+        with connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO channel_controls (channel, paused, reason, updated_at)
+                VALUES (?, 0, NULL, ?)
+                ON CONFLICT(channel) DO UPDATE SET
+                    paused = 0,
+                    reason = NULL,
+                    updated_at = excluded.updated_at
+                """,
+                (channel_key, _utc_now()),
+            )
+            conn.commit()

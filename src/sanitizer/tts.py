@@ -7,6 +7,7 @@ import re
 from src.sanitizer.security import (
     PromptLeakError,
     PROMPT_LEAK_PATTERNS,
+    record_and_emit_leak,
     validate_semantic_barrier,
 )
 
@@ -121,6 +122,7 @@ def validate_pre_tts_script(text: str) -> bool:
             r"(?i)^(?:vamos\s+a|voy\s+a|aqu[íi]|a\s+continuaci[óo]n|ahora\s+condensar|instrucciones|redacci[óo]n|adaptaci[óo]n)\b",
             first_line,
         ):
+            record_and_emit_leak(snippet=first_line[:120], pattern="meta_introduction")
             raise PromptLeakError(f"Pre-TTS barrier violation: script starts with meta-introduction '{first_line[:40]}'")
 
     validate_semantic_barrier(text)
@@ -134,12 +136,14 @@ def validate_pre_tts_script(text: str) -> bool:
 
     forbidden_editorial = check_forbidden_editorial_elements(text)
     if forbidden_editorial:
+        record_and_emit_leak(snippet=forbidden_editorial[:120], pattern="forbidden_editorial")
         raise PromptLeakError(f"Pre-TTS barrier violation: detected forbidden editorial element '{forbidden_editorial}'")
 
     # Check legacy branding and cringe intro patterns
     for pat in LEGACY_BRANDING_PATTERNS + CRINGE_INTRO_PATTERNS:
         match = re.search(pat, text, flags=re.MULTILINE)
         if match:
+            record_and_emit_leak(snippet=text[match.start() : match.start() + 120], pattern=pat)
             raise PromptLeakError(
                 f"Pre-TTS barrier violation: detected legacy branding/cringe intro pattern '{match.group(0)}'"
             )
@@ -147,6 +151,7 @@ def validate_pre_tts_script(text: str) -> bool:
     for pat in PROMPT_LEAK_PATTERNS:
         match = re.search(pat, text)
         if match:
+            record_and_emit_leak(snippet=text[match.start() : match.start() + 120], pattern=pat)
             raise PromptLeakError(f"Pre-TTS barrier violation: detected prompt leak pattern '{match.group(0)}'")
 
     # Check structural header leaks (Sección Primera:, Capítulo 1:, Título: ..., etc.)
@@ -160,6 +165,7 @@ def validate_pre_tts_script(text: str) -> bool:
     for pat in structural_header_check_patterns:
         match = re.search(pat, text, flags=re.MULTILINE)
         if match:
+            record_and_emit_leak(snippet=text[match.start() : match.start() + 120], pattern=pat)
             raise PromptLeakError(f"Pre-TTS barrier violation: detected structural header '{match.group(0)}'")
 
     return True

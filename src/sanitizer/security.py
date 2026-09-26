@@ -1,13 +1,89 @@
-"""src/sanitizer/security.py - Prompt leak barrier, taboo phrases, and reasoning monologue eradication."""
-
-from __future__ import annotations
-
+import logging
 import re
+import time
+
+from src.observability.alerts import send_operational_alert
+from src.observability.events import emit_event
+
+logger = logging.getLogger(__name__)
+
+_LEAK_HISTORY: list[tuple[float, str, str]] = []
+
+
+def _reset_leak_cluster_tracker() -> None:
+    """Reset in-memory prompt leak cluster history (for tests)."""
+    _LEAK_HISTORY.clear()
+
+
+def record_and_emit_leak(
+    snippet: str,
+    pattern: str = "",
+    model: str = "",
+    provider: str = "",
+    channel: str = "",
+    story_id: str = "",
+    run_id: str = "",
+) -> None:
+    """Record prompt leak telemetry and escalate clusters to operational alerts."""
+    leak_snippet = str(snippet or "").strip()[:120]
+
+    try:
+        from src.observability.context import get_run_context
+        ctx = get_run_context()
+        ch = channel or ctx.channel or "unknown"
+        mdl = model or getattr(ctx, "model", None) or "unknown"
+        prv = provider or getattr(ctx, "provider", None) or "unknown"
+        sid = story_id or ctx.story_id
+        rid = run_id or ctx.run_id
+    except Exception:
+        ch = channel or "unknown"
+        mdl = model or "unknown"
+        prv = provider or "unknown"
+        sid = story_id
+        rid = run_id
+
+    now = time.time()
+    # Prune records older than 30 minutes (1800s)
+    _LEAK_HISTORY[:] = [item for item in _LEAK_HISTORY if (now - item[0]) <= 1800.0]
+    _LEAK_HISTORY.append((now, ch, mdl))
+    cluster_count = sum(1 for ts, c, m in _LEAK_HISTORY if c == ch and m == mdl)
+
+    try:
+        emit_event(
+            "audio_prompt_leak",
+            level="WARNING",
+            message=f"Prompt leak intercepted: {pattern[:60]}",
+            details={
+                "leak_snippet": leak_snippet,
+                "matched_pattern": pattern,
+                "model": mdl,
+                "provider": prv,
+                "channel": ch,
+                "story_id": sid,
+                "run_id": rid,
+                "cluster_count": cluster_count,
+            },
+            channel=ch,
+            run_id=rid,
+            story_id=sid,
+        )
+    except Exception:
+        logger.debug("Failed to emit audio_prompt_leak event", exc_info=True)
+
+    if cluster_count > 3:
+        try:
+            send_operational_alert(
+                f"Prompt Leak Cluster Detected: channel {ch}",
+                f"Detected {cluster_count} prompt leaks in the last 30 minutes for channel '{ch}' and model '{mdl}'. Snippet: {leak_snippet}",
+            )
+        except Exception:
+            logger.debug("Failed to send prompt leak cluster alert", exc_info=True)
 
 
 class PromptLeakError(Exception):
     """Raised when a system prompt leak or taboo phrase is detected in script output."""
     pass
+
 
 
 TABOO_BARRIER_PATTERNS: list[str] = [
@@ -134,6 +210,9 @@ def validate_semantic_barrier(text: str) -> bool:
     for pat in TABOO_BARRIER_PATTERNS:
         match = re.search(pat, text)
         if match:
+            start = match.start()
+            snippet = text[start : start + 120]
+            record_and_emit_leak(snippet=snippet, pattern=pat)
             raise PromptLeakError(f"Semantic barrier violation: detected taboo phrase '{match.group(0)}'")
     return True
 
@@ -324,4 +403,6 @@ __all__ = [
     "validate_semantic_barrier",
     "extract_script_from_reasoning",
     "strip_llm_prompt_leaks",
+    "record_and_emit_leak",
+    "_reset_leak_cluster_tracker",
 ]

@@ -19,6 +19,7 @@ Architecture (generic, decoupled):
 import argparse
 import asyncio
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -36,6 +37,8 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"
 TASK_RESULT_PATH = OUTPUT_DIR / "task_result.json"
+
+logger = logging.getLogger(__name__)
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -862,6 +865,74 @@ class ProgrammaticAgent:
         self.task_result_path.write_text(
             json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+        # Record token burn telemetry
+        try:
+            from src.core.cost_calculator import CostCalculator
+            from src.core.domain import JobStatus
+            from src.core.repository import QueueRepository
+            from src.observability.context import get_run_context
+            from src.observability.events import emit_event
+
+            ctx = get_run_context()
+            prompt_tokens = 0
+            completion_tokens = 0
+            cached_tokens = 0
+            reasoning_tokens = 0
+            total_tokens = 0
+
+            if isinstance(usage, dict):
+                prompt_tokens = int(usage.get("prompt_tokens") or usage.get("promptTokenCount") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or usage.get("candidatesTokenCount") or 0)
+                cached_tokens = int(usage.get("cached_tokens") or usage.get("cachedContentTokenCount") or 0)
+                reasoning_tokens = int(usage.get("reasoning_tokens") or 0)
+                total_tokens = int(usage.get("total_tokens") or usage.get("totalTokenCount") or (prompt_tokens + completion_tokens))
+
+            cost_usd = CostCalculator.calculate_cost(self.model, prompt_tokens, completion_tokens, cached_tokens)
+            QueueRepository().record_token_burn(
+                provider="antigravity_pro",
+                model=self.model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
+                reasoning_tokens=reasoning_tokens,
+                total_tokens=total_tokens,
+                cost_usd=cost_usd,
+                channel=ctx.channel,
+                story_id=ctx.story_id,
+                stage=ctx.stage,
+                run_id=ctx.run_id,
+                status=status,
+                duration_seconds=duration_seconds,
+            )
+
+            if status == "saturated":
+                emit_event(
+                    "quota_saturation",
+                    level="ERROR",
+                    message=f"LLM quota saturation detected for instance {self.instance_id}: {error}",
+                    details={
+                        "provider": "antigravity_pro",
+                        "model": self.model,
+                        "instance_id": self.instance_id,
+                        "error": error,
+                    },
+                    channel=ctx.channel,
+                    story_id=ctx.story_id,
+                    run_id=ctx.run_id,
+                )
+                if ctx.story_id:
+                    try:
+                        QueueRepository().set_status(
+                            ctx.story_id,
+                            JobStatus.WAITING_LLM_QUOTA,
+                            error_detail=f"LLM quota saturated: {error}",
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            logger.debug("Failed to record token burn for ProgrammaticAgent", exc_info=True)
+
         return self.task_result_path
 
     def run(self, task: str = DEFAULT_TASK, task_result_path: Optional[Union[Path, str]] = None) -> Path:

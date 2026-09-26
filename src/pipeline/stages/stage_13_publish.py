@@ -205,6 +205,8 @@ def _handle_youtube_upload(
         )
         return result, None
     except (YouTubeUploadLimitError, YouTubeQuotaExceededError) as exc:
+        is_quota = isinstance(exc, YouTubeQuotaExceededError)
+        reason = "quota_exceeded" if is_quota else "upload_limit_exceeded"
         retry_delay = 14400 if isinstance(exc, YouTubeUploadLimitError) else 3600
         retry_at = int(time.time()) + retry_delay
         ctx.repository.record_provider_attempt(
@@ -215,6 +217,27 @@ def _handle_youtube_upload(
             error_code=exc.code,
             error_detail=str(exc),
         )
+        try:
+            from src.observability.events import emit_event
+
+            emit_event(
+                "youtube_quota_limit",
+                level="WARNING",
+                message=f"YouTube quota limit encountered for {ctx.channel_name}: {exc}",
+                details={
+                    "reason": reason,
+                    "estimated_units": 1600 if is_quota else 0,
+                    "channel": ctx.channel_name,
+                    "story_id": ctx.story_id,
+                    "run_id": ctx.run_id,
+                },
+                channel=ctx.channel_name,
+                story_id=ctx.story_id,
+                run_id=ctx.run_id,
+            )
+        except Exception:
+            pass
+
         if not ctx.set_owned_status(
             JobStatus.WAITING_YOUTUBE_LIMIT,
             error_code=exc.code,
@@ -242,6 +265,26 @@ def _handle_youtube_upload(
             error_detail=str(exc),
         )
         if ctx.directed:
+            try:
+                from src.observability.events import emit_event
+
+                emit_event(
+                    "upload_unconfirmed",
+                    level="ERROR",
+                    message=f"Ambiguous upload for story {ctx.story_id}: {exc}",
+                    details={
+                        "channel": ctx.channel_name,
+                        "story_id": ctx.story_id,
+                        "run_id": ctx.run_id,
+                        "error": str(exc),
+                    },
+                    channel=ctx.channel_name,
+                    story_id=ctx.story_id,
+                    run_id=ctx.run_id,
+                )
+            except Exception:
+                pass
+
             if not ctx.set_owned_status(
                 JobStatus.UPLOAD_UNCONFIRMED,
                 error_code=getattr(exc, "code", "youtube_unconfirmed"),

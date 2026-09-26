@@ -190,6 +190,27 @@ class DBReconciler:
 
             review_conn.commit()
             queue_conn.commit()
+
+            try:
+                from src.observability.events import emit_event
+
+                emit_event(
+                    "asset_rejection",
+                    level="WARNING",
+                    message=f"Editorial rejection for job {job_id}: {reason}",
+                    details={
+                        "defect_category": "editorial",
+                        "reason": reason,
+                        "job_id": job_id,
+                        "run_id": run_id,
+                    },
+                    story_id=job_id,
+                    run_id=run_id,
+                    db_path=str(self.queue_db),
+                )
+            except Exception:
+                pass
+
             return {"status": "REJECTED", "job_id": job_id, "reason": reason}
         except Exception as exc:
             try:

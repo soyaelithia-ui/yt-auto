@@ -327,12 +327,50 @@ class TechnicalQAAuditor:
         findings: List[Dict[str, Any]] = []
         if not overall_pass:
             for reason in rejection_reasons:
+                r_lower = reason.lower()
+                if "sync" in r_lower:
+                    cat = "sync"
+                elif "luminance" in r_lower:
+                    cat = "luminance"
+                elif "audio" in r_lower or "lufs" in r_lower or "dbtp" in r_lower:
+                    cat = "audio"
+                elif "black screen" in r_lower or "freeze" in r_lower:
+                    cat = "pacing"
+                else:
+                    cat = "visual"
+
+                findings_cat = "audio" if cat in ("audio", "sync") else ("pacing" if cat == "pacing" else ("subtitles" if "subtitle" in r_lower else "visual"))
+
                 findings.append({
                     "severity": "high",
-                    "category": "audio" if "Audio" in reason else "visual",
+                    "category": findings_cat,
                     "description": reason,
                     "suggested_fix": "Re-run master composition filter with corrected parameters.",
                 })
+
+                try:
+                    from src.observability.context import get_run_context
+                    from src.observability.events import emit_event
+
+                    ctx = get_run_context()
+                    emit_event(
+                        "asset_rejection",
+                        level="WARNING",
+                        message=f"Technical QA rejection ({cat}): {reason}",
+                        details={
+                            "defect_category": cat,
+                            "reason": reason,
+                            "quality_score": quality_score,
+                            "video_path": str(video_path),
+                            "story_id": ctx.story_id,
+                            "run_id": run_id or ctx.run_id,
+                        },
+                        channel=ctx.channel,
+                        story_id=ctx.story_id,
+                        run_id=run_id or ctx.run_id,
+                    )
+                except Exception:
+                    pass
 
         report_payload: Dict[str, Any] = {
             "version": "2.0",

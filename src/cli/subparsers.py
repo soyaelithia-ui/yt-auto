@@ -132,6 +132,20 @@ def register_status_subcommand(subparsers: argparse._SubParsersAction, parent: a
     p.add_argument("--level", type=str, default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Nivel de log mínimo")
     p.add_argument("--agent-review", type=str, default=None, metavar="RUN_ID", help="QA visual extra: envía el video del run a un agente con visión")
     p.add_argument("--check-pub", "--check-publication", dest="check_pub", action="store_true", help="Ejecutar verificación de publicación de 40 minutos")
+    p.add_argument("--tube", action="store_true", help="Renderizar panel de observabilidad integral El Tubo")
+
+
+def register_tube_subcommand(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
+    """Register 'tube' subcommand for comprehensive operational telemetry."""
+    p = subparsers.add_parser(
+        "tube",
+        parents=[parent],
+        help="Panel de observabilidad integral ('El Tubo'): recursos, tokens, cuotas YouTube e incidentes",
+    )
+    p.add_argument("-j", "--json", action="store_true", help="Salida en formato JSON estructurado")
+    p.add_argument("-c", "--channel", type=str, default=None, help="Filtrar por canal específico")
+    p.add_argument("-w", "--window", type=int, default=24, help="Ventana de observación en horas (por defecto: 24)")
+    p.add_argument("--prune", action="store_true", help="Purgar eventos de consumo de tokens mayores a 30 días")
 
 
 def register_queue_subcommand(subparsers: argparse._SubParsersAction, parent: argparse.ArgumentParser) -> None:
@@ -333,6 +347,7 @@ def register_all_subcommands(subparsers: argparse._SubParsersAction, parent: arg
     register_run_subcommand(subparsers, parent)
     register_daemon_subcommand(subparsers, parent)
     register_status_subcommand(subparsers, parent)
+    register_tube_subcommand(subparsers, parent)
     register_queue_subcommand(subparsers, parent)
     register_clean_subcommand(subparsers, parent)
     register_auth_subcommand(subparsers, parent)

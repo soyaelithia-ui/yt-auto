@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 class SessionStatus(str, Enum):
@@ -482,6 +482,95 @@ def validate_youtube_session_cookies(
     )
 
 
+_COOKIE_INCIDENT_REGISTRY: Dict[Tuple[str, str], tuple[float, str]] = {}
+
+
+def _reset_cookie_dedup_registry() -> None:
+    """Reset the in-memory cookie incident deduplication registry (for testing)."""
+    _COOKIE_INCIDENT_REGISTRY.clear()
+
+
+def validate_and_emit_cookie_health(
+    cookies: List[Dict[str, Any]],
+    channel: str,
+    db_path: Optional[str] = None,
+    expiring_soon_hours: float = 48.0,
+) -> SessionHealthResult:
+    """Validate YouTube session cookies and emit deduped cookie health events into system_events."""
+    result = validate_youtube_session_cookies(cookies, expiring_soon_hours=expiring_soon_hours)
+    ch = str(channel or "unknown").lower().strip()
+    now = time.time()
+
+    event_type: Optional[str] = None
+    level: Optional[str] = None
+
+    if result.status in (SessionStatus.EXPIRED, SessionStatus.INCOMPLETE, SessionStatus.INVALID):
+        event_type = "cookie_failure"
+        level = "ERROR"
+    elif result.status == SessionStatus.EXPIRING_SOON:
+        event_type = "cookie_warning"
+        level = "WARNING"
+
+    if event_type is not None:
+        key = (ch, event_type)
+        entry = _COOKIE_INCIDENT_REGISTRY.get(key)
+        current_status = result.status.value
+        should_emit = False
+
+        if entry is None:
+            should_emit = True
+        else:
+            last_ts, last_status = entry
+            if last_status != current_status:
+                should_emit = True
+            elif (now - last_ts) > 3600.0:
+                should_emit = True
+
+        if should_emit:
+            hours_left = (result.days_left * 24.0) if result.days_left is not None else None
+            details: Dict[str, Any] = {
+                "channel": ch,
+                "status": current_status,
+                "detail": result.detail,
+                "total_cookies": result.total_cookies,
+            }
+            if result.missing_tokens:
+                details["missing_tokens"] = result.missing_tokens
+            if hours_left is not None:
+                details["hours_left"] = round(hours_left, 2)
+            if result.days_left is not None:
+                details["days_left"] = round(result.days_left, 2)
+            if result.min_expiry is not None:
+                details["min_expiry"] = result.min_expiry
+
+            try:
+                from src.observability.events import emit_event
+
+                emit_event(
+                    event_type,
+                    level=level,
+                    message=f"Cookie {event_type} for channel '{ch}': {result.detail}",
+                    details=details,
+                    channel=ch,
+                    db_path=db_path,
+                )
+            except Exception:
+                pass
+
+            _COOKIE_INCIDENT_REGISTRY[key] = (now, current_status)
+    else:
+        # Healthy: reset active incident keys for this channel
+        _COOKIE_INCIDENT_REGISTRY.pop((ch, "cookie_failure"), None)
+        _COOKIE_INCIDENT_REGISTRY.pop((ch, "cookie_warning"), None)
+
+    # Keep registry bounded
+    if len(_COOKIE_INCIDENT_REGISTRY) > 256:
+        for k in sorted(_COOKIE_INCIDENT_REGISTRY, key=lambda k: _COOKIE_INCIDENT_REGISTRY[k][0])[:128]:
+            _COOKIE_INCIDENT_REGISTRY.pop(k, None)
+
+    return result
+
+
 class SessionHealthValidator:
     """Proactive health checker and expiration monitor for YouTube session cookies."""
 
@@ -538,14 +627,22 @@ class SessionHealthValidator:
         channel: str,
         secrets_dir: Optional[Union[str, Path]] = None,
         expiring_soon_hours: float = 48.0,
+        db_path: Optional[str] = None,
     ) -> SessionHealthResult:
-        """Check session health for a named channel."""
+        """Check session health for a named channel and emit telemetry."""
         path = cls.resolve_cookie_file_for_channel(channel, secrets_dir=secrets_dir)
         if not path:
-            return SessionHealthResult(
-                status=SessionStatus.INVALID,
-                detail=f"No se encontró archivo de cookies para el canal '{channel}'",
-                total_cookies=0,
+            return validate_and_emit_cookie_health(
+                [], channel=channel, db_path=db_path, expiring_soon_hours=expiring_soon_hours
             )
-        return cls.validate_file(path, expiring_soon_hours=expiring_soon_hours)
+        try:
+            cookies = parse_cookies_file(path)
+            return validate_and_emit_cookie_health(
+                cookies, channel=channel, db_path=db_path, expiring_soon_hours=expiring_soon_hours
+            )
+        except Exception:
+            return validate_and_emit_cookie_health(
+                [], channel=channel, db_path=db_path, expiring_soon_hours=expiring_soon_hours
+            )
+
 

@@ -96,6 +96,43 @@ class TTSRouter:
         return cls._breakers[provider]
 
     @classmethod
+    def _record_tts_burn(
+        cls,
+        resp: TTSResponse,
+        script_text: str,
+        duration_sec: float,
+        channel: str,
+    ) -> None:
+        try:
+            from src.core.repository import QueueRepository
+            from src.observability.context import get_run_context
+
+            ctx = get_run_context()
+            char_count = len(script_text or "")
+            provider = resp.provider.lower() if resp.provider else "edge_tts"
+            cost_usd = 0.0
+            if "elevenlabs" in provider:
+                cost_usd = (char_count / 1000.0) * 0.30
+
+            QueueRepository().record_token_burn(
+                provider=provider,
+                model=resp.voice or "default",
+                prompt_tokens=char_count,
+                completion_tokens=0,
+                cached_tokens=0,
+                total_tokens=char_count,
+                cost_usd=round(cost_usd, 6),
+                status="ok",
+                duration_seconds=duration_sec,
+                channel=channel or ctx.channel,
+                story_id=ctx.story_id,
+                stage=ctx.stage or "stage_4_audio",
+                run_id=ctx.run_id,
+            )
+        except Exception:
+            logger.debug("Failed to record TTS token burn", exc_info=True)
+
+    @classmethod
     def synthesize(
         cls,
         script_text: str,
@@ -113,7 +150,8 @@ class TTSRouter:
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
         edge_breaker = cls.get_breaker("edge-tts")
-        last_error: Optional[Exception] = None
+        t0 = time.time()
+        last_error: Exception | None = None
 
         # --- Tier 1: Edge-TTS Primary ---
         if force_tier in (None, 1) and not edge_breaker.is_open():
@@ -130,7 +168,7 @@ class TTSRouter:
                     **kwargs,
                 )
                 edge_breaker.record_success()
-                return TTSResponse(
+                resp = TTSResponse(
                     audio_path=result.get("audio_path", str(out_p)),
                     duration_sec=result.get("duration_sec", 0.0),
                     word_timestamps=result.get("word_timestamps", []),
@@ -140,6 +178,8 @@ class TTSRouter:
                     pitch=result.get("pitch", pitch or "+0Hz"),
                     cache_hit=result.get("cache_hit", False),
                 )
+                cls._record_tts_burn(resp, script_text, time.time() - t0, channel)
+                return resp
             except Exception as exc:
                 logger.warning("Tier 1 (Edge-TTS) synthesis failed: %s. Tripping circuit / failing over...", exc)
                 edge_breaker.record_failure()
@@ -157,6 +197,7 @@ class TTSRouter:
                     rate=rate,
                     pitch=pitch,
                 )
+                cls._record_tts_burn(resp, script_text, time.time() - t0, channel)
                 return resp
             except Exception as exc:
                 logger.warning("Tier 2 (Local) synthesis failed: %s. Failing over to Tier 3...", exc)
@@ -171,6 +212,7 @@ class TTSRouter:
                 target_duration_sec=target_duration_sec,
                 voice=voice,
             )
+            cls._record_tts_burn(resp, script_text, time.time() - t0, channel)
             return resp
         except Exception as exc:
             logger.error("Tier 3 audio generation fatally failed: %s", exc)

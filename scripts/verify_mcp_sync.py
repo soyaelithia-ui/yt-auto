@@ -27,9 +27,24 @@ if __name__ == "__main__":
         os.execv(str(_repo_venv_py), [str(_repo_venv_py)] + sys.argv)
 
 import asyncio
+import concurrent.futures
 import json
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
+
+
+def _run_async(coro_fn: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
+    """Run an async coroutine factory safely from sync context, even inside a running loop."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(lambda: asyncio.run(coro_fn())).result()
+    else:
+        return asyncio.run(coro_fn())
 
 # ==============================================================================
 # Canonical Single Source of Truth (SSOT) Specifications
@@ -45,12 +60,15 @@ CANONICAL_TOOLS: Set[str] = {
     "get_system_status",
     "manage_queue",
     "verify_integrity",
+    "get_tube_status",
 }
 
 CANONICAL_RESOURCES: Set[str] = {
     "channels://{channel_name}/config",
     "lanes://catalog",
     "system://health",
+    "system://tube",
+    "system://quotas",
 }
 
 CANONICAL_PROMPTS: Set[str] = {
@@ -104,7 +122,7 @@ def inspect_code_registrations(repo_root: Path) -> Tuple[bool, Dict[str, Any], L
     # Extract Tools
     registered_tools: Dict[str, Any] = {}
     try:
-        tools_list = asyncio.run(server.list_tools())
+        tools_list = _run_async(server.list_tools)
         for tool in tools_list:
             registered_tools[tool.name] = tool
     except Exception as e:
@@ -113,11 +131,11 @@ def inspect_code_registrations(repo_root: Path) -> Tuple[bool, Dict[str, Any], L
     # Extract Resources (static and templates)
     registered_resources: Dict[str, Any] = {}
     try:
-        resources_list = asyncio.run(server.list_resources())
+        resources_list = _run_async(server.list_resources)
         for res in resources_list:
             registered_resources[str(res.uri)] = res
 
-        templates_list = asyncio.run(server.list_resource_templates())
+        templates_list = _run_async(server.list_resource_templates)
         for tmpl in templates_list:
             registered_resources[str(tmpl.uri_template)] = tmpl
     except Exception as e:
@@ -126,7 +144,7 @@ def inspect_code_registrations(repo_root: Path) -> Tuple[bool, Dict[str, Any], L
     # Extract Prompts
     registered_prompts: Dict[str, Any] = {}
     try:
-        prompts_list = asyncio.run(server.list_prompts())
+        prompts_list = _run_async(server.list_prompts)
         for prm in prompts_list:
             registered_prompts[prm.name] = prm
     except Exception as e:

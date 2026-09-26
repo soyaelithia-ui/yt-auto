@@ -476,9 +476,69 @@ def _curate_with_gemini(prompt: str) -> Optional[str]:
         if resp.status_code != 200:
             logger.warning("Gemini REST returned status %s: %s", resp.status_code, resp.text[:200])
             cb.record_failure()
+            if resp.status_code == 429 or "RESOURCE_EXHAUSTED" in resp.text:
+                try:
+                    from src.core.repository import QueueRepository
+                    from src.observability.context import get_run_context
+                    from src.observability.events import emit_event
+                    ctx = get_run_context()
+                    QueueRepository().record_token_burn(
+                        provider="gemini_rest",
+                        model=model,
+                        prompt_tokens=0,
+                        completion_tokens=0,
+                        cached_tokens=0,
+                        total_tokens=0,
+                        cost_usd=0.0,
+                        status="saturated",
+                        channel=ctx.channel,
+                        story_id=ctx.story_id,
+                        stage=ctx.stage,
+                        run_id=ctx.run_id,
+                    )
+                    emit_event(
+                        "quota_saturation",
+                        level="ERROR",
+                        message=f"Gemini REST quota saturation (HTTP {resp.status_code}): {resp.text[:100]}",
+                        details={"provider": "gemini_rest", "model": model, "status_code": resp.status_code},
+                        channel=ctx.channel,
+                        story_id=ctx.story_id,
+                        run_id=ctx.run_id,
+                    )
+                except Exception:
+                    pass
             return None
 
         data = resp.json()
+        try:
+            from src.core.cost_calculator import CostCalculator
+            from src.core.repository import QueueRepository
+            from src.observability.context import get_run_context
+
+            ctx = get_run_context()
+            usage_meta = data.get("usageMetadata") or {}
+            prompt_tokens = int(usage_meta.get("promptTokenCount") or 0)
+            completion_tokens = int(usage_meta.get("candidatesTokenCount") or 0)
+            cached_tokens = int(usage_meta.get("cachedContentTokenCount") or 0)
+            total_tokens = int(usage_meta.get("totalTokenCount") or (prompt_tokens + completion_tokens))
+            cost_usd = CostCalculator.calculate_cost(model, prompt_tokens, completion_tokens, cached_tokens)
+
+            QueueRepository().record_token_burn(
+                provider="gemini_rest",
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
+                total_tokens=total_tokens,
+                cost_usd=cost_usd,
+                status="ok",
+                channel=ctx.channel,
+                story_id=ctx.story_id,
+                stage=ctx.stage,
+                run_id=ctx.run_id,
+            )
+        except Exception:
+            pass
         candidates = data.get("candidates") or []
         if not candidates:
             cb.record_failure()

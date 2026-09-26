@@ -59,6 +59,7 @@ CANONICAL_TOOL_NAMES = {
     "get_system_status",
     "manage_queue",
     "verify_integrity",
+    "get_tube_status",
 }
 
 CANONICAL_PROMPT_NAMES = {
@@ -70,6 +71,8 @@ CANONICAL_PROMPT_NAMES = {
 CANONICAL_RESOURCE_URIS = {
     "lanes://catalog",
     "system://health",
+    "system://tube",
+    "system://quotas",
 }
 
 CANONICAL_RESOURCE_TEMPLATES = {
@@ -119,12 +122,12 @@ class TestTier1ProtocolAndLifecycle:
         assert getattr(server, "version", None) in ("2.2.0", "1.0.0", "0.1.0", None) or hasattr(server, "name")
 
     def test_tier1_handshake_list_tools(self):
-        """tools/list handshake returns exactly the 9 canonical operational tools."""
+        """tools/list handshake returns exactly the 10 canonical operational tools."""
         server = create_mcp_server()
         tools = asyncio.run(server.list_tools())
         tool_names = {t.name for t in tools}
         assert CANONICAL_TOOL_NAMES.issubset(tool_names), f"Missing tools: {CANONICAL_TOOL_NAMES - tool_names}"
-        assert len(tool_names) == 9
+        assert len(tool_names) == 10
 
     def test_tier1_handshake_list_resources(self):
         """resources/list and resource templates expose lanes, health, and channels."""
@@ -1058,7 +1061,7 @@ class TestTier4RealWorldScenarios:
 
         # Step 1: Handshake
         tools = asyncio.run(server.list_tools())
-        assert len(tools) == 9
+        assert len(tools) == 10
 
         # Step 2: System health
         health_res = asyncio.run(server.read_resource("system://health"))

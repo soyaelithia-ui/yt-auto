@@ -296,6 +296,25 @@ class ReviewStateStore:
                 "UPDATE review_jobs SET status = ?, reviewed_at = ? WHERE job_id = ? AND version = ?",
                 (target, _now_iso(), job_id, version),
             )
+
+        if target == "REJECTED":
+            try:
+                from src.observability.events import emit_event
+
+                emit_event(
+                    "asset_rejection",
+                    level="WARNING",
+                    message=f"Editorial rejection for review job {job_id} v{version}",
+                    details={
+                        "defect_category": "editorial",
+                        "job_id": job_id,
+                        "version": version,
+                    },
+                    story_id=job_id,
+                )
+            except Exception:
+                pass
+
         return self.get_job(job_id, version)  # type: ignore[return-value]
 
     def transition_review_action(
