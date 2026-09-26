@@ -4,8 +4,9 @@ Transforms topics, canonical lore, or narrative premises into high-retention vid
 - YouTube Shorts retention curve: Hook (0-3s), Tension Escalation (3-30s), Climax (30-45s), Loop Hook (45-55s).
 - Longform narrative escalation: Multi-chapter suspense with character perspective and subtext.
 - Channel Specialization:
-  * 'moku': Cosmic horror, psychological terror, and strict official SCP Foundation lore.
-  * 'aelithia': High-stakes moral dilemmas, interpersonal drama, and community debate topics.
+  * 'horror': Cosmic horror, psychological terror, and strict official SCP Foundation lore.
+  * 'drama': High-stakes moral dilemmas, interpersonal drama, and community debate topics.
+  * 'scifi': Speculative sci-fi, artificial intelligence, and cosmic singularity.
 - Policy: Strict Fail-Closed — never emits degraded static placeholder text if AI quota/network fails.
 """
 from __future__ import annotations
@@ -14,7 +15,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent, parse_json_reply
+from src.agents.base_agent import CANONICAL_MODEL, ProgrammaticAgent, is_saturation_text, parse_json_reply
 from src.core.domain import AIProviderChainExhausted
 from src.core.scp_lore import get_scp_canonical_lore, validate_scp_lore
 from src.log import get_logger
@@ -34,8 +35,9 @@ STORY_DIRECTOR_SYSTEM_INSTRUCTIONS = (
     "3. CLÍMAX (30-45s): Momento de mayor revelación o ruptura dramática.\n"
     "4. LOOP HOOK (45-55s): Cierre que conecta circularmente con la primera frase para motivar la repetición del video.\n"
     "Tono según canal:\n"
-    "- 'moku' (Terror / SCP): Rigor canónico, atmósfera opresiva, horror psicológico, neutralidad documental.\n"
-    "- 'aelithia' (Drama): Dilema moral intenso, controversia real, debate ético sin villanos caricaturescos.\n"
+    "- 'horror' (Terror / SCP): Rigor canónico, atmósfera opresiva, horror psicológico, neutralidad documental.\n"
+    "- 'drama' (Drama): Dilema moral intenso, controversia real, debate ético sin villanos caricaturescos.\n"
+    "- 'scifi' (Ciencia Ficción): Especulación tecnológica, singularidad y dilemas futuristas.\n"
     "Responde EXCLUSIVAMENTE en formato JSON conforme al esquema solicitado."
 )
 
@@ -132,11 +134,12 @@ class StoryDirectorAgent(ProgrammaticAgent):
         )
 
         # Check circuit breaker before making expensive calls
-        if self.circuit_breaker.is_open():
+        cb = getattr(self, "circuit_breaker", None)
+        if cb and cb.is_open():
             logger.warning(
                 "Circuit breaker open for %s (%ds remaining). Using procedural fallback.",
                 self.instance_id,
-                self.circuit_breaker.retry_after(),
+                cb.retry_after(),
             )
             return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
 
@@ -149,7 +152,8 @@ class StoryDirectorAgent(ProgrammaticAgent):
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
         except Exception as exc:
             if is_saturation_text(str(exc)):
-                self.circuit_breaker.record_failure(str(exc))
+                if cb:
+                    cb.record_failure(str(exc))
                 logger.warning("StoryDirectorAgent saturated (%s). Using procedural fallback.", exc)
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             logger.error("StoryDirectorAgent invocation failed: %s", exc)
@@ -166,7 +170,7 @@ class StoryDirectorAgent(ProgrammaticAgent):
 
         if not data or not data.get("script"):
             error_detail = res.get("output", {}).get("error") or "Respuesta sin guion utilizable"
-            if is_saturation_text(str(error_detail)) or self.circuit_breaker.is_open():
+            if is_saturation_text(str(error_detail)) or (cb and cb.is_open()):
                 logger.warning("StoryDirectorAgent empty reply due to saturation. Using procedural fallback.")
                 return self._procedural_fallback_story(clean_topic, channel, fmt, words_budget)
             raise AIProviderChainExhausted(f"StoryDirectorAgent sin guion valido ({error_detail})")
@@ -185,7 +189,7 @@ class StoryDirectorAgent(ProgrammaticAgent):
     def _procedural_fallback_story(
         self,
         topic: str,
-        channel: str = "moku",
+        channel: str = "horror",
         target_format: str = "short",
         target_words: Optional[int] = None,
     ) -> Dict[str, Any]:
@@ -213,10 +217,10 @@ class StoryInvestigatorAgent(StoryDirectorAgent):
     """Backward compatibility alias for StoryInvestigatorAgent."""
 
     def generate_script(self, topic: str = "SCP-173") -> Dict[str, Any]:
-        return self.generate_story(topic=topic, channel="moku", target_format="short")
+        return self.generate_story(topic=topic, channel="horror", target_format="short")
 
 
 def generate_story_script(topic: str = "SCP-173") -> bool:
     agent = StoryDirectorAgent()
-    data = agent.generate_story(topic=topic, channel="moku")
+    data = agent.generate_story(topic=topic, channel="horror")
     return bool(data.get("script"))

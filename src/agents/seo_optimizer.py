@@ -155,7 +155,7 @@ class SeoOptimizerAgent:
                 recent_titles_prompt = ""
                 try:
                     from src.core.inventory import get_inventory_ai_digest
-                    channel_scope = niche if niche in ("moku", "aelithia", "horror", "drama") else None
+                    channel_scope = niche if niche in ("horror", "drama", "scifi") else None
                     digest = get_inventory_ai_digest(channel=channel_scope, limit=12)
                     titles = [p["title"] for p in digest.get("recent_publications", []) if p.get("title")]
                     if titles:
@@ -242,10 +242,10 @@ class SeoOptimizerAgent:
 
         niche_l = (niche or "").lower()
         is_scp = "scp" in clean_topic.lower() or "scp" in niche_l
-        is_moku_horror = any(k in niche_l or k in clean_topic.lower() for k in ("moku", "horror", "terror", "creepy", "nosleep"))
-        is_drama = any(k in niche_l or k in clean_topic.lower() for k in ("drama", "aita", "aelithia", "relato", "confesion", "infidelidad", "boda", "familia")) or clean_topic.startswith("¿")
+        is_horror = any(k in niche_l or k in clean_topic.lower() for k in ("horror", "terror", "creepy", "nosleep"))
+        is_drama = any(k in niche_l or k in clean_topic.lower() for k in ("drama", "aita", "relato", "confesion", "infidelidad", "boda", "familia")) or clean_topic.startswith("¿")
 
-        if is_scp or is_moku_horror:
+        if is_scp or is_horror:
             if is_scp:
                 if len(clean_topic) > 40:
                     viral_titles = [

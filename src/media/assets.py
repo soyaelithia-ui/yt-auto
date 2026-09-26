@@ -35,15 +35,11 @@ def check_local_templates(
     """
     norm_channel = channel_type.lower().strip()
 
-    # Map channel_type aliases to template and workset folders
+    # Map channel_type to template and workset folders
     channel_folder_map = {
-        "horror": ["moku", "horror"],
-        "moku_terror": ["moku", "moku_terror", "creepypasta", "terror"],
-        "aita_drama": ["aelithia", "aita_drama", "aita", "drama"],
-        "terror": ["moku", "moku_terror", "creepypasta"],
-        "moku": ["moku", "moku_terror", "creepypasta"],
-        "aelithia": ["aelithia", "aita_drama", "aita"],
-        "soy_el_malo": ["aelithia", "aita_drama", "aita"],
+        "horror": ["horror"],
+        "drama": ["drama", "aita"],
+        "scifi": ["scifi"],
     }
 
     folders_to_check = channel_folder_map.get(norm_channel, [norm_channel])
@@ -58,8 +54,9 @@ def check_local_templates(
 
     search_dirs.extend([
         WORKSETS_DIR / "generated",
-        visual_bank_dir / "moku" / "scenery",
-        visual_bank_dir / "aelithia" / "scenery",
+        visual_bank_dir / "horror" / "scenery",
+        visual_bank_dir / "drama" / "scenery",
+        visual_bank_dir / "scifi" / "scenery",
         visual_bank_dir,
         TEMPLATES_DIR,
         WORKSETS_DIR,

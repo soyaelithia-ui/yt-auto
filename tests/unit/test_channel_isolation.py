@@ -117,47 +117,47 @@ def test_lease_reaper_respects_alive_sibling_process(tmp_path):
 
         # Active lease of sibling channel owned by ALIVE process
         conn.execute(
-            "INSERT INTO stories VALUES ('story_moku_alive', 'PROCESSING', 'run_moku_alive', NULL)"
+            "INSERT INTO stories VALUES ('story_horror_alive', 'PROCESSING', 'run_horror_alive', NULL)"
         )
         conn.execute(
-            "INSERT INTO runs VALUES ('run_moku_alive', 'PROCESSING', NULL, NULL)"
+            "INSERT INTO runs VALUES ('run_horror_alive', 'PROCESSING', NULL, NULL)"
         )
         conn.execute(
-            "INSERT INTO leases VALUES ('story_moku_alive', 'moku', ?, 'run_moku_alive', ?, ?, ?)",
+            "INSERT INTO leases VALUES ('story_horror_alive', 'horror', ?, 'run_horror_alive', ?, ?, ?)",
             (f"worker:{cur_host}:{alive_pid}", now_ts - 30, now_ts - 5, now_ts + 900),
         )
 
         # Stale lease of crashed worker (DEAD pid)
         conn.execute(
-            "INSERT INTO stories VALUES ('story_aelithia_dead', 'PROCESSING', 'run_aelithia_dead', NULL)"
+            "INSERT INTO stories VALUES ('story_drama_dead', 'PROCESSING', 'run_drama_dead', NULL)"
         )
         conn.execute(
-            "INSERT INTO runs VALUES ('run_aelithia_dead', 'PROCESSING', NULL, NULL)"
+            "INSERT INTO runs VALUES ('run_drama_dead', 'PROCESSING', NULL, NULL)"
         )
         conn.execute(
-            "INSERT INTO leases VALUES ('story_aelithia_dead', 'aelithia', ?, 'run_aelithia_dead', ?, ?, ?)",
+            "INSERT INTO leases VALUES ('story_drama_dead', 'drama', ?, 'run_drama_dead', ?, ?, ?)",
             (f"worker:{cur_host}:{dead_pid}", now_ts - 60, now_ts - 10, now_ts + 900),
         )
         conn.commit()
 
-    # Startup reap for aelithia channel should NOT kill moku's alive lease
+    # Startup reap for drama channel should NOT kill horror's alive lease
     reaper = LeaseReaper(db_path=db_file)
-    reaped = reaper.reap_once(startup=True, channel="aelithia")
+    reaped = reaper.reap_once(startup=True, channel="drama")
     assert reaped == 1
 
     with sqlite3.connect(str(db_file)) as conn:
         conn.row_factory = sqlite3.Row
-        # Moku's alive lease must remain intact
-        moku_lease = conn.execute("SELECT * FROM leases WHERE channel = 'moku'").fetchone()
-        assert moku_lease is not None
-        moku_story = conn.execute("SELECT status FROM stories WHERE story_id = 'story_moku_alive'").fetchone()
-        assert moku_story["status"] == "PROCESSING"
+        # Horror's alive lease must remain intact
+        horror_lease = conn.execute("SELECT * FROM leases WHERE channel = 'horror'").fetchone()
+        assert horror_lease is not None
+        horror_story = conn.execute("SELECT status FROM stories WHERE story_id = 'story_horror_alive'").fetchone()
+        assert horror_story["status"] == "PROCESSING"
 
-        # Aelithia's dead lease must have been reaped
-        aelithia_lease = conn.execute("SELECT * FROM leases WHERE channel = 'aelithia'").fetchone()
-        assert aelithia_lease is None
-        aelithia_story = conn.execute("SELECT status FROM stories WHERE story_id = 'story_aelithia_dead'").fetchone()
-        assert aelithia_story["status"] == "RETRYABLE_FAILED"
+        # Drama's dead lease must have been reaped
+        drama_lease = conn.execute("SELECT * FROM leases WHERE channel = 'drama'").fetchone()
+        assert drama_lease is None
+        drama_story = conn.execute("SELECT status FROM stories WHERE story_id = 'story_drama_dead'").fetchone()
+        assert drama_story["status"] == "RETRYABLE_FAILED"
 
 
 def test_lease_reaper_channel_filter_isolation(tmp_path):
@@ -183,15 +183,15 @@ def test_lease_reaper_channel_filter_isolation(tmp_path):
 
         # Both channels have dead-worker leases
         conn.execute(
-            "INSERT INTO stories VALUES ('s_moku', 'PROCESSING', 'r_moku', NULL), ('s_aelithia', 'PROCESSING', 'r_aelithia', NULL)"
+            "INSERT INTO stories VALUES ('s_horror', 'PROCESSING', 'r_horror', NULL), ('s_drama', 'PROCESSING', 'r_drama', NULL)"
         )
         conn.execute(
-            "INSERT INTO runs VALUES ('r_moku', 'PROCESSING', NULL, NULL), ('r_aelithia', 'PROCESSING', NULL, NULL)"
+            "INSERT INTO runs VALUES ('r_horror', 'PROCESSING', NULL, NULL), ('r_drama', 'PROCESSING', NULL, NULL)"
         )
         conn.execute(
             "INSERT INTO lane_leases VALUES "
-            "('moku-horror-long', 'moku', ?, 'r_moku', ?, ?, ?), "
-            "('aelithia-aita-long', 'aelithia', ?, 'r_aelithia', ?, ?, ?)",
+            "('horror-horror-long', 'horror', ?, 'r_horror', ?, ?, ?), "
+            "('drama-aita-long', 'drama', ?, 'r_drama', ?, ?, ?)",
             (
                 f"worker:{cur_host}:{dead_pid}", now_ts - 50, now_ts - 5, now_ts + 900,
                 f"worker:{cur_host}:{dead_pid}", now_ts - 50, now_ts - 5, now_ts + 900,
@@ -200,14 +200,14 @@ def test_lease_reaper_channel_filter_isolation(tmp_path):
         conn.commit()
 
     reaper = LeaseReaper(db_path=db_file)
-    # Reap only moku
-    reaped = reaper.reap_once(channel="moku")
+    # Reap only horror
+    reaped = reaper.reap_once(channel="horror")
     assert reaped == 1
 
     with sqlite3.connect(str(db_file)) as conn:
         remaining_lanes = [r[0] for r in conn.execute("SELECT channel FROM lane_leases").fetchall()]
-        assert "moku" not in remaining_lanes
-        assert "aelithia" in remaining_lanes
+        assert "horror" not in remaining_lanes
+        assert "drama" in remaining_lanes
 
 
 # =====================================================================
@@ -215,75 +215,75 @@ def test_lease_reaper_channel_filter_isolation(tmp_path):
 # =====================================================================
 
 def test_concurrent_channel_locks(tmp_path):
-    """Distinct channels (moku and aelithia) can acquire locks concurrently without blocking."""
-    lock_moku = ChannelLock("moku", lock_dir=tmp_path, timeout=0.5)
-    lock_aelithia = ChannelLock("aelithia", lock_dir=tmp_path, timeout=0.5)
+    """Distinct channels (horror and drama) can acquire locks concurrently without blocking."""
+    lock_horror = ChannelLock("horror", lock_dir=tmp_path, timeout=0.5)
+    lock_drama = ChannelLock("drama", lock_dir=tmp_path, timeout=0.5)
 
-    with lock_moku:
-        assert lock_moku.is_acquired
-        with lock_aelithia:
-            assert lock_aelithia.is_acquired
-            assert os.path.exists(lock_moku.path)
-            assert os.path.exists(lock_aelithia.path)
-            assert lock_moku.path != lock_aelithia.path
+    with lock_horror:
+        assert lock_horror.is_acquired
+        with lock_drama:
+            assert lock_drama.is_acquired
+            assert os.path.exists(lock_horror.path)
+            assert os.path.exists(lock_drama.path)
+            assert lock_horror.path != lock_drama.path
 
-    assert not lock_moku.is_acquired
-    assert not lock_aelithia.is_acquired
-    assert not os.path.exists(lock_moku.path)
-    assert not os.path.exists(lock_aelithia.path)
+    assert not lock_horror.is_acquired
+    assert not lock_drama.is_acquired
+    assert not os.path.exists(lock_horror.path)
+    assert not os.path.exists(lock_drama.path)
 
 
 def test_lock_hierarchy_all_vs_single(tmp_path):
     """ChannelLock enforces hierarchy: 'all' excludes single channels, and vice-versa."""
-    lock_moku = ChannelLock("moku", lock_dir=tmp_path, timeout=0.2)
+    lock_horror = ChannelLock("horror", lock_dir=tmp_path, timeout=0.2)
     lock_all = ChannelLock("all", lock_dir=tmp_path, timeout=0.2)
 
-    # 1. When moku is held, 'all' cannot be acquired
-    with lock_moku:
+    # 1. When horror is held, 'all' cannot be acquired
+    with lock_horror:
         with pytest.raises(ChannelLockError) as exc_info:
             lock_all.acquire(timeout=0.1)
-        assert "moku" in str(exc_info.value)
+        assert "horror" in str(exc_info.value)
 
-    # 2. When 'all' is held, moku and aelithia cannot be acquired
+    # 2. When 'all' is held, horror and drama cannot be acquired
     with lock_all:
         with pytest.raises(ChannelLockError) as exc_info:
-            lock_moku.acquire(timeout=0.1)
+            lock_horror.acquire(timeout=0.1)
         assert "all" in str(exc_info.value)
 
-        lock_aelithia = ChannelLock("aelithia", lock_dir=tmp_path, timeout=0.1)
+        lock_drama = ChannelLock("drama", lock_dir=tmp_path, timeout=0.1)
         with pytest.raises(ChannelLockError) as exc_info2:
-            lock_aelithia.acquire(timeout=0.1)
+            lock_drama.acquire(timeout=0.1)
         assert "all" in str(exc_info2.value)
 
     # 3. Once 'all' is released, single channels acquire successfully
-    with lock_moku:
-        assert lock_moku.is_acquired
+    with lock_horror:
+        assert lock_horror.is_acquired
 
 
 def test_release_lock_specific_channel(tmp_path):
     """release_lock(channel) releases exclusively the specified channel."""
     _active_locks.clear()
-    lock_moku = ChannelLock("moku", lock_dir=tmp_path)
-    lock_aelithia = ChannelLock("aelithia", lock_dir=tmp_path)
+    lock_horror = ChannelLock("horror", lock_dir=tmp_path)
+    lock_drama = ChannelLock("drama", lock_dir=tmp_path)
 
-    lock_moku.acquire()
-    _active_locks["moku"] = lock_moku
-    lock_aelithia.acquire()
-    _active_locks["aelithia"] = lock_aelithia
+    lock_horror.acquire()
+    _active_locks["horror"] = lock_horror
+    lock_drama.acquire()
+    _active_locks["drama"] = lock_drama
 
-    assert "moku" in _active_locks
-    assert "aelithia" in _active_locks
+    assert "horror" in _active_locks
+    assert "drama" in _active_locks
 
-    release_lock("moku")
+    release_lock("horror")
 
-    assert "moku" not in _active_locks
-    assert "aelithia" in _active_locks
-    assert not os.path.exists(lock_moku.path)
-    assert os.path.exists(lock_aelithia.path)
+    assert "horror" not in _active_locks
+    assert "drama" in _active_locks
+    assert not os.path.exists(lock_horror.path)
+    assert os.path.exists(lock_drama.path)
 
-    release_lock("aelithia")
-    assert "aelithia" not in _active_locks
-    assert not os.path.exists(lock_aelithia.path)
+    release_lock("drama")
+    assert "drama" not in _active_locks
+    assert not os.path.exists(lock_drama.path)
 
 
 # =====================================================================
@@ -363,12 +363,12 @@ def test_start_daemon_continues_when_one_channel_disk_paused(tmp_path, monkeypat
     monkeypatch.setattr("src.daemon._watchdog_tick_seconds", lambda: 0.05)
     monkeypatch.setattr("src.daemon._responsive_sleep", lambda sec: False)
 
-    # First channel (moku) fails disk check; second channel (aelithia) passes
+    # First channel (horror) fails disk check; second channel (drama) passes
     disk_check_calls = []
 
     def fake_disk_check(database, channel_value):
         disk_check_calls.append(channel_value)
-        if channel_value == "moku":
+        if channel_value == "horror":
             return False  # disk pause
         return True
 
@@ -378,14 +378,14 @@ def test_start_daemon_continues_when_one_channel_disk_paused(tmp_path, monkeypat
         interval_seconds=1,
         max_runs=2,
         db_path=db_path,
-        channels=["moku", "aelithia"],
+        channels=["horror", "drama"],
     )
 
     assert len(results) == 2
     assert results[0]["status"] == "GUARD_DISK_PAUSED"
-    assert results[0]["channel"] == "moku"
-    # Crucial invariant: start_daemon did NOT break! It continued to aelithia!
-    assert "aelithia" in runs
+    assert results[0]["channel"] == "horror"
+    # Crucial invariant: start_daemon did NOT break! It continued to drama!
+    assert "drama" in runs
     assert results[1]["status"] == "SUCCESS"
 
 
@@ -404,14 +404,14 @@ def test_lease_reaper_startup_preserves_alive_workers_without_channel_filter(tmp
         conn.execute("CREATE TABLE lane_leases (lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
 
         # Alive workers on multiple distinct channels
-        conn.execute("INSERT INTO stories VALUES ('s_moku_alive', 'PROCESSING', 'r_moku_alive', NULL), ('s_ael_alive', 'PROCESSING', 'r_ael_alive', NULL)")
-        conn.execute("INSERT INTO runs VALUES ('r_moku_alive', 'PROCESSING', NULL, NULL), ('r_ael_alive', 'PROCESSING', NULL, NULL)")
+        conn.execute("INSERT INTO stories VALUES ('s_horror_alive', 'PROCESSING', 'r_horror_alive', NULL), ('s_drama_alive', 'PROCESSING', 'r_drama_alive', NULL)")
+        conn.execute("INSERT INTO runs VALUES ('r_horror_alive', 'PROCESSING', NULL, NULL), ('r_drama_alive', 'PROCESSING', NULL, NULL)")
         conn.execute(
-            "INSERT INTO leases VALUES ('s_moku_alive', 'moku', ?, 'r_moku_alive', ?, ?, ?)",
+            "INSERT INTO leases VALUES ('s_horror_alive', 'horror', ?, 'r_horror_alive', ?, ?, ?)",
             (f"worker:{cur_host}:{alive_pid}", now_ts - 10, now_ts - 2, now_ts + 900),
         )
         conn.execute(
-            "INSERT INTO lane_leases VALUES ('ael-lane-1', 'aelithia', ?, 'r_ael_alive', ?, ?, ?)",
+            "INSERT INTO lane_leases VALUES ('drama-lane-1', 'drama', ?, 'r_drama_alive', ?, ?, ?)",
             (f"worker:{cur_host}:{alive_pid}", now_ts - 10, now_ts - 2, now_ts + 900),
         )
 
@@ -430,8 +430,8 @@ def test_lease_reaper_startup_preserves_alive_workers_without_channel_filter(tmp
 
     with sqlite3.connect(str(db_file)) as conn:
         # Alive leases still exist
-        assert conn.execute("SELECT 1 FROM leases WHERE channel = 'moku'").fetchone() is not None
-        assert conn.execute("SELECT 1 FROM lane_leases WHERE channel = 'aelithia'").fetchone() is not None
+        assert conn.execute("SELECT 1 FROM leases WHERE channel = 'horror'").fetchone() is not None
+        assert conn.execute("SELECT 1 FROM lane_leases WHERE channel = 'drama'").fetchone() is not None
         # Dead lease reaped
         assert conn.execute("SELECT 1 FROM leases WHERE channel = 'scifi'").fetchone() is None
 
@@ -459,8 +459,8 @@ def test_start_reaper_daemon_channel_scoped(tmp_path):
 
     sweeps = []
     with patch.object(LeaseReaper, "reap_once", side_effect=lambda **kw: sweeps.append(kw.get("channel")) or 0):
-        th = start_reaper_daemon(interval_seconds=0.05, db_path=str(tmp_path / "dummy.db"), channel="moku")
+        th = start_reaper_daemon(interval_seconds=0.05, db_path=str(tmp_path / "dummy.db"), channel="horror")
         time.sleep(0.12)
         assert len(sweeps) >= 1
-        assert sweeps[0] == "moku"
+        assert sweeps[0] == "horror"
 

@@ -2,16 +2,16 @@
 tests/unit/test_narrative_scripting.py - Unit tests for SCP/Horror high-retention scripting.
 """
 import pytest
-from src.curators.horror import HorrorCurator, MokuHorrorCurator
+from src.curators.horror import HorrorCurator
 from src.curators.text_splitter import CinematicScriptCuratorAgent
 from src.narrative.engine import CosmicNarrativeEngine, segment_narration_into_scenes
 from src.narrative.schema import VideoFormat, NarrativeArchetype
 
 
-class TestMokuHorrorCurator:
+class TestHorrorCurator:
     @pytest.fixture
     def curator(self):
-        return MokuHorrorCurator()
+        return HorrorCurator()
 
     @pytest.mark.parametrize("topic", [
         "SCP-027",
@@ -50,7 +50,7 @@ class TestCinematicScriptCuratorAgent:
     def agent(self):
         return CinematicScriptCuratorAgent()
 
-    def test_curate_moku_scp_shorts(self, agent):
+    def test_curate_horror_scp_shorts(self, agent):
         raw_text = (
             "Imaginen un tierno oso de peluche que se pasea libre por la base haciéndose amigo de todos. "
             "Pero todo cambió cuando las cámaras descubrieron que estaba construyendo réplicas en secreto. "
@@ -61,12 +61,12 @@ class TestCinematicScriptCuratorAgent:
         res = agent.curate(
             raw_text=raw_text,
             title="SCP-1048 The Builder Bear",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         
         assert res["version"] == "2.0"
-        assert res["metadata"]["channel_lane"] == "moku-scp-shorts"
+        assert res["metadata"]["channel_lane"] == "horror-scp-shorts"
         assert res["metadata"]["target_format"] == "short"
         assert len(res["acts"]) == 4
         

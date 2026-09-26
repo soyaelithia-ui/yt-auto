@@ -158,18 +158,18 @@ class TestTier1ProtocolAndLifecycle:
 class TestTier1ToolSystemPreflight:
     """Tier 1: Tool system_preflight."""
 
-    def test_tier1_preflight_channel_moku(self):
-        """system_preflight runs cleanly for channel moku without external network calls."""
+    def test_tier1_preflight_channel_horror(self):
+        """system_preflight runs cleanly for channel horror without external network calls."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("system_preflight", {"channel": "moku"}))
+        result = asyncio.run(server.call_tool("system_preflight", {"channel": "horror"}))
         data = _parse_content_json(result)
         assert "channel" in data or "ok" in data
         assert "youtube" in data or "cookies" in data or "ok" in data
 
-    def test_tier1_preflight_channel_aelithia(self):
-        """system_preflight runs cleanly for channel aelithia."""
+    def test_tier1_preflight_channel_drama(self):
+        """system_preflight runs cleanly for channel drama."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("system_preflight", {"channel": "aelithia"}))
+        result = asyncio.run(server.call_tool("system_preflight", {"channel": "drama"}))
         data = _parse_content_json(result)
         assert isinstance(data, dict)
 
@@ -183,7 +183,7 @@ class TestTier1ToolSystemPreflight:
     def test_tier1_preflight_storage_and_disk_reporting(self):
         """system_preflight inspects local disk space and directory headroom."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("system_preflight", {"channel": "moku"}))
+        result = asyncio.run(server.call_tool("system_preflight", {"channel": "horror"}))
         data = _parse_content_json(result)
         # disk or storage info present in report
         text = _extract_content_text(result)
@@ -192,7 +192,7 @@ class TestTier1ToolSystemPreflight:
     def test_tier1_preflight_never_leaks_credential_file_paths(self):
         """system_preflight output never leaks sensitive token paths or cookies file paths."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("system_preflight", {"channel": "moku"}))
+        result = asyncio.run(server.call_tool("system_preflight", {"channel": "horror"}))
         raw_text = _extract_content_text(result)
         assert "cookies.json" not in raw_text or "available" in raw_text
         assert "client_secret" not in raw_text
@@ -210,29 +210,29 @@ class TestTier1ToolListLanes:
         data = _parse_content_json(result)
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         lane_ids = {l.get("id") if isinstance(l, dict) else str(l) for l in lanes}
-        assert "moku-scp-shorts" in lane_ids
-        assert "moku-horror-long" in lane_ids
+        assert "horror-scp-shorts" in lane_ids
+        assert "horror-horror-long" in lane_ids
         assert len(lane_ids) >= 6
 
-    def test_tier1_list_lanes_filter_moku(self):
-        """list_lanes with channel=moku filters to moku lanes only."""
+    def test_tier1_list_lanes_filter_horror(self):
+        """list_lanes with channel=horror filters to horror lanes only."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("list_lanes", {"channel": "moku"}))
+        result = asyncio.run(server.call_tool("list_lanes", {"channel": "horror"}))
         data = _parse_content_json(result)
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         for lane in lanes:
             if isinstance(lane, dict):
-                assert lane.get("channel") == "moku"
+                assert lane.get("channel") == "horror"
 
-    def test_tier1_list_lanes_filter_aelithia(self):
-        """list_lanes with channel=aelithia filters to aelithia lanes only."""
+    def test_tier1_list_lanes_filter_drama(self):
+        """list_lanes with channel=drama filters to drama lanes only."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("list_lanes", {"channel": "aelithia"}))
+        result = asyncio.run(server.call_tool("list_lanes", {"channel": "drama"}))
         data = _parse_content_json(result)
         lanes = data if isinstance(data, list) else data.get("lanes", [])
         for lane in lanes:
             if isinstance(lane, dict):
-                assert lane.get("channel") == "aelithia"
+                assert lane.get("channel") == "drama"
 
     def test_tier1_list_lanes_filter_scifi(self):
         """list_lanes with channel=scifi filters to scifi lanes only."""
@@ -260,43 +260,43 @@ class TestTier1ToolListLanes:
 class TestTier1ToolGetLaneInfo:
     """Tier 1: Tool get_lane_info."""
 
-    def test_tier1_get_lane_info_moku_scp_shorts(self):
-        """get_lane_info returns duration, words, and template for moku-scp-shorts."""
+    def test_tier1_get_lane_info_horror_scp_shorts(self):
+        """get_lane_info returns duration, words, and template for horror-scp-shorts."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
+        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "horror-scp-shorts"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "moku-scp-shorts"
-        assert data.get("channel") == "moku"
+        assert data.get("id") == "horror-scp-shorts"
+        assert data.get("channel") == "horror"
         assert data.get("orientation") == "vertical"
 
-    def test_tier1_get_lane_info_moku_horror_long(self):
+    def test_tier1_get_lane_info_horror_horror_long(self):
         """get_lane_info returns duration and spec for horizontal longform lane."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-horror-long"}))
+        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "horror-horror-long"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "moku-horror-long"
+        assert data.get("id") == "horror-horror-long"
         assert data.get("orientation") == "horizontal"
 
-    def test_tier1_get_lane_info_aelithia_drama_shorts(self):
-        """get_lane_info returns spec for aelithia drama lane."""
+    def test_tier1_get_lane_info_drama_drama_shorts(self):
+        """get_lane_info returns spec for drama lane."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "aelithia-drama-shorts"}))
+        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "drama-drama-shorts"}))
         data = _parse_content_json(result)
-        assert data.get("id") == "aelithia-drama-shorts"
+        assert data.get("id") == "drama-drama-shorts"
 
     def test_tier1_get_lane_info_thematic_aliases(self):
         """get_lane_info successfully resolves thematic lane aliases."""
         server = create_mcp_server()
         for alias, expected_id in [
-            ("horror-scp-shorts", "moku-scp-shorts"),
-            ("horror-long", "moku-horror-long"),
-            ("drama-shorts", "aelithia-drama-shorts"),
-            ("drama-aita-long", "aelithia-aita-long"),
+            ("horror-shorts", "horror-scp-shorts"),
+            ("horror-long", "horror-horror-long"),
+            ("drama-shorts", "drama-drama-shorts"),
+            ("drama-long", "drama-aita-long"),
         ]:
             result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": alias}))
             data = _parse_content_json(result)
             assert data.get("id") == expected_id, f"Failed for alias {alias}"
-        assert data.get("channel") == "aelithia"
+        assert data.get("channel") == "drama"
 
     def test_tier1_get_lane_info_scifi_chronicles_shorts(self):
         """get_lane_info returns spec for scifi chronicles lane."""
@@ -309,7 +309,7 @@ class TestTier1ToolGetLaneInfo:
     def test_tier1_get_lane_info_duration_bounds(self):
         """get_lane_info validates that duration bounds min <= target <= max."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
+        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "horror-scp-shorts"}))
         data = _parse_content_json(result)
         duration = data.get("duration", {})
         if duration:
@@ -347,10 +347,10 @@ class TestTier1ToolQueryLoopCatalog:
             if isinstance(item, dict) and "orientation" in item:
                 assert item["orientation"] == "horizontal"
 
-    def test_tier1_query_loop_catalog_filter_channel_moku(self):
-        """query_loop_catalog with channel=moku filters by moku categories."""
+    def test_tier1_query_loop_catalog_filter_channel_horror(self):
+        """query_loop_catalog with channel=horror filters by horror categories."""
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("query_loop_catalog", {"channel": "moku"}))
+        result = asyncio.run(server.call_tool("query_loop_catalog", {"channel": "horror"}))
         data = _parse_content_json(result)
         assert isinstance(data, (list, dict))
 
@@ -410,7 +410,7 @@ class TestTier1ToolRunPipelineDryRun:
         """run_pipeline_dry_run executes synthetic composition test on a short lane."""
         server = create_mcp_server()
         result = asyncio.run(
-            server.call_tool("run_pipeline_dry_run", {"lane_id": "moku-scp-shorts"})
+            server.call_tool("run_pipeline_dry_run", {"lane_id": "horror-scp-shorts"})
         )
         data = _parse_content_json(result)
         assert isinstance(data, dict)
@@ -422,7 +422,7 @@ class TestTier1ToolRunPipelineDryRun:
         result = asyncio.run(
             server.call_tool(
                 "run_pipeline_dry_run",
-                {"lane_id": "aelithia-drama-shorts", "topic": "Synthetic Test Topic"},
+                {"lane_id": "drama-drama-shorts", "topic": "Synthetic Test Topic"},
             )
         )
         data = _parse_content_json(result)
@@ -441,7 +441,7 @@ class TestTier1ToolRunPipelineDryRun:
         """run_pipeline_dry_run operates completely offline with zero quota consumption."""
         server = create_mcp_server()
         result = asyncio.run(
-            server.call_tool("run_pipeline_dry_run", {"lane_id": "moku-scp-shorts"})
+            server.call_tool("run_pipeline_dry_run", {"lane_id": "horror-scp-shorts"})
         )
         # Ensure offline guard was respected
         text = _extract_content_text(result)
@@ -451,7 +451,7 @@ class TestTier1ToolRunPipelineDryRun:
         """run_pipeline_dry_run returns structured timing and status results."""
         server = create_mcp_server()
         result = asyncio.run(
-            server.call_tool("run_pipeline_dry_run", {"lane_id": "moku-scp-shorts"})
+            server.call_tool("run_pipeline_dry_run", {"lane_id": "horror-scp-shorts"})
         )
         data = _parse_content_json(result)
         assert "lane_id" in data or "status" in data or "ok" in data
@@ -519,7 +519,7 @@ class TestTier1ToolManageQueue:
         """manage_queue with action=pause pauses specified channel."""
         server = create_mcp_server()
         result = asyncio.run(
-            server.call_tool("manage_queue", {"action": "pause", "channel": "moku", "reason": "test"})
+            server.call_tool("manage_queue", {"action": "pause", "channel": "horror", "reason": "test"})
         )
         data = _parse_content_json(result)
         assert isinstance(data, dict)
@@ -529,7 +529,7 @@ class TestTier1ToolManageQueue:
         """manage_queue with action=resume resumes specified channel."""
         server = create_mcp_server()
         result = asyncio.run(
-            server.call_tool("manage_queue", {"action": "resume", "channel": "moku"})
+            server.call_tool("manage_queue", {"action": "resume", "channel": "horror"})
         )
         data = _parse_content_json(result)
         assert isinstance(data, dict)
@@ -596,20 +596,20 @@ class TestTier1ToolVerifyIntegrity:
 class TestTier1ResourceChannelConfig:
     """Tier 1: Resource channels://{channel_name}/config."""
 
-    def test_tier1_resource_channel_config_moku(self):
-        """Reading channels://moku/config returns sanitized channel configuration."""
+    def test_tier1_resource_channel_config_horror(self):
+        """Reading channels://horror/config returns sanitized channel configuration."""
         server = create_mcp_server()
-        result = asyncio.run(server.read_resource("channels://moku/config"))
+        result = asyncio.run(server.read_resource("channels://horror/config"))
         data = _parse_content_json(result)
-        assert data.get("key") == "moku"
+        assert data.get("key") == "horror"
         assert "expected_youtube_channel_id" in data
 
-    def test_tier1_resource_channel_config_aelithia(self):
-        """Reading channels://aelithia/config returns aelithia channel profile."""
+    def test_tier1_resource_channel_config_drama(self):
+        """Reading channels://drama/config returns drama channel profile."""
         server = create_mcp_server()
-        result = asyncio.run(server.read_resource("channels://aelithia/config"))
+        result = asyncio.run(server.read_resource("channels://drama/config"))
         data = _parse_content_json(result)
-        assert data.get("key") == "aelithia"
+        assert data.get("key") == "drama"
 
     def test_tier1_resource_channel_config_scifi(self):
         """Reading channels://scifi/config returns scifi channel profile."""
@@ -621,7 +621,7 @@ class TestTier1ResourceChannelConfig:
     def test_tier1_resource_channel_config_sanitizes_secret_paths(self):
         """ChannelConfig.public_dict() strips cookies_path and youtube_token_path."""
         server = create_mcp_server()
-        result = asyncio.run(server.read_resource("channels://moku/config"))
+        result = asyncio.run(server.read_resource("channels://horror/config"))
         data = _parse_content_json(result)
         assert "cookies_path" not in data, "cookies_path must not be present in public dict"
         assert "youtube_token_path" not in data, "youtube_token_path must not be present in public dict"
@@ -629,7 +629,7 @@ class TestTier1ResourceChannelConfig:
     def test_tier1_resource_channel_config_availability_booleans(self):
         """ChannelConfig exposes boolean presence flags instead of paths."""
         server = create_mcp_server()
-        result = asyncio.run(server.read_resource("channels://moku/config"))
+        result = asyncio.run(server.read_resource("channels://horror/config"))
         data = _parse_content_json(result)
         assert "cookies_available" in data
         assert isinstance(data["cookies_available"], bool)
@@ -740,10 +740,10 @@ class TestTier1Prompts:
     def test_tier1_prompt_preflight_diagnostics_channel_arg(self):
         """preflight_diagnostics accepts channel argument."""
         server = create_mcp_server()
-        result = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "moku"}))
+        result = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "horror"}))
         assert len(result.messages) > 0
         text = str(result.messages[0].content)
-        assert "moku" in text.lower()
+        assert "horror" in text.lower()
 
     def test_tier1_prompt_channel_incident_analysis(self):
         """channel_incident_analysis accepts channel_name and returns triage instructions."""
@@ -751,12 +751,12 @@ class TestTier1Prompts:
         result = asyncio.run(
             server.get_prompt(
                 "channel_incident_analysis",
-                {"channel_name": "aelithia", "incident_description": "High failure count"},
+                {"channel_name": "drama", "incident_description": "High failure count"},
             )
         )
         assert len(result.messages) > 0
         text = str(result.messages[0].content)
-        assert "aelithia" in text.lower()
+        assert "drama" in text.lower()
 
     def test_tier1_prompt_video_qa_review(self):
         """video_qa_review prompt provides 10-stage pipeline QA gatekeeper checklist."""
@@ -764,7 +764,7 @@ class TestTier1Prompts:
         result = asyncio.run(
             server.get_prompt(
                 "video_qa_review",
-                {"story_id": "test_story_001", "channel_name": "moku"},
+                {"story_id": "test_story_001", "channel_name": "horror"},
             )
         )
         assert len(result.messages) > 0
@@ -775,7 +775,7 @@ class TestTier1Prompts:
         """All operational prompts generate messages with standard 'user' role."""
         server = create_mcp_server()
         for name in CANONICAL_PROMPT_NAMES:
-            args = {"channel_name": "moku", "channel": "moku", "story_id": "s1"}
+            args = {"channel_name": "horror", "channel": "horror", "story_id": "s1"}
             try:
                 res = asyncio.run(server.get_prompt(name, args))
                 assert len(res.messages) > 0
@@ -810,7 +810,7 @@ class TestTier1SanitizerAndConfigs:
     def test_tier1_sanitizer_recursive_structures(self):
         """Sanitizer recursively cleanses nested dicts, lists, and primitives."""
         payload = {
-            "channel": "moku",
+            "channel": "horror",
             "secrets": [
                 {"token": "ya29.secret1"},
                 "Bearer secret2",
@@ -879,8 +879,8 @@ class TestTier2BoundaryAndSecurity:
         """Shell metacharacters and command injection in lane_id fail closed without execution."""
         server = create_mcp_server()
         injection_payloads = [
-            "moku-scp-shorts; rm -rf /",
-            "moku-scp-shorts && whoami",
+            "horror-scp-shorts; rm -rf /",
+            "horror-scp-shorts && whoami",
             "$(id)",
             "`uname -a`",
             "../etc/passwd",
@@ -973,8 +973,8 @@ class TestTier3CrossFeatureCombinations:
     def test_tier3_p02_tool_system_preflight_matches_channel_config_resource(self):
         """Preflight reporting correlates with channel config availability booleans."""
         server = create_mcp_server()
-        preflight_res = asyncio.run(server.call_tool("system_preflight", {"channel": "moku"}))
-        config_res = asyncio.run(server.read_resource("channels://moku/config"))
+        preflight_res = asyncio.run(server.call_tool("system_preflight", {"channel": "horror"}))
+        config_res = asyncio.run(server.read_resource("channels://horror/config"))
 
         preflight_data = _parse_content_json(preflight_res)
         config_data = _parse_content_json(config_res)
@@ -985,7 +985,7 @@ class TestTier3CrossFeatureCombinations:
     def test_tier3_p03_prompt_preflight_diagnostics_mentions_system_preflight_tool(self):
         """preflight_diagnostics prompt text guides operator to invoke system_preflight."""
         server = create_mcp_server()
-        prompt_res = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "moku"}))
+        prompt_res = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "horror"}))
         text = str(prompt_res.messages[0].content)
         assert "preflight" in text.lower()
 
@@ -993,7 +993,7 @@ class TestTier3CrossFeatureCombinations:
         """channel_incident_analysis prompt guides operator to inspect status and queue."""
         server = create_mcp_server()
         prompt_res = asyncio.run(
-            server.get_prompt("channel_incident_analysis", {"channel_name": "moku"})
+            server.get_prompt("channel_incident_analysis", {"channel_name": "horror"})
         )
         text = str(prompt_res.messages[0].content).lower()
         assert "status" in text or "queue" in text or "incident" in text or "error" in text
@@ -1003,14 +1003,14 @@ class TestTier3CrossFeatureCombinations:
         server = create_mcp_server()
         # Pause
         pause_res = asyncio.run(
-            server.call_tool("manage_queue", {"action": "pause", "channel": "moku", "reason": "T3 test"})
+            server.call_tool("manage_queue", {"action": "pause", "channel": "horror", "reason": "T3 test"})
         )
         pause_data = _parse_content_json(pause_res)
         assert pause_data.get("paused") is True or pause_data.get("ok") is True
 
         # Resume
         resume_res = asyncio.run(
-            server.call_tool("manage_queue", {"action": "resume", "channel": "moku"})
+            server.call_tool("manage_queue", {"action": "resume", "channel": "horror"})
         )
         resume_data = _parse_content_json(resume_res)
         assert resume_data.get("paused") is False or resume_data.get("ok") is True
@@ -1051,8 +1051,8 @@ class TestTier4RealWorldScenarios:
         1. List capabilities to verify server availability.
         2. Read system://health to check storage and daemon status.
         3. Retrieve preflight_diagnostics prompt for execution guidelines.
-        4. Execute system_preflight for production channel 'moku'.
-        5. Read channels://moku/config to inspect public parameters.
+        4. Execute system_preflight for production channel 'horror'.
+        5. Read channels://horror/config to inspect public parameters.
         """
         server = create_mcp_server()
 
@@ -1066,18 +1066,18 @@ class TestTier4RealWorldScenarios:
         assert isinstance(health_data, dict)
 
         # Step 3: Prompt instructions
-        prompt_res = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "moku"}))
+        prompt_res = asyncio.run(server.get_prompt("preflight_diagnostics", {"channel": "horror"}))
         assert len(prompt_res.messages) > 0
 
         # Step 4: Tool execution
-        preflight_res = asyncio.run(server.call_tool("system_preflight", {"channel": "moku"}))
+        preflight_res = asyncio.run(server.call_tool("system_preflight", {"channel": "horror"}))
         preflight_data = _parse_content_json(preflight_res)
         assert isinstance(preflight_data, dict)
 
         # Step 5: Resource inspection
-        cfg_res = asyncio.run(server.read_resource("channels://moku/config"))
+        cfg_res = asyncio.run(server.read_resource("channels://horror/config"))
         cfg_data = _parse_content_json(cfg_res)
-        assert cfg_data["key"] == "moku"
+        assert cfg_data["key"] == "horror"
         assert "cookies_path" not in cfg_data
 
     def test_tier4_s02_pipeline_production_dry_run_workflow(self):
@@ -1085,7 +1085,7 @@ class TestTier4RealWorldScenarios:
 
         Workflow:
         1. List available production lanes.
-        2. Inspect chosen lane specs (moku-scp-shorts).
+        2. Inspect chosen lane specs (horror-scp-shorts).
         3. Query loop catalog for matching vertical loops.
         4. Execute run_pipeline_dry_run with zero external quota.
         5. Verify execution result and queue state.
@@ -1093,19 +1093,19 @@ class TestTier4RealWorldScenarios:
         server = create_mcp_server()
 
         # Step 1: List lanes
-        lanes_res = asyncio.run(server.call_tool("list_lanes", {"channel": "moku"}))
+        lanes_res = asyncio.run(server.call_tool("list_lanes", {"channel": "horror"}))
         lanes_data = _parse_content_json(lanes_res)
         lanes = lanes_data if isinstance(lanes_data, list) else lanes_data.get("lanes", [])
         assert len(lanes) > 0
 
         # Step 2: Get lane spec
-        spec_res = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
+        spec_res = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "horror-scp-shorts"}))
         spec_data = _parse_content_json(spec_res)
-        assert spec_data["id"] == "moku-scp-shorts"
+        assert spec_data["id"] == "horror-scp-shorts"
 
         # Step 3: Query catalog
         loops_res = asyncio.run(
-            server.call_tool("query_loop_catalog", {"channel": "moku", "orientation": "vertical", "limit": 5})
+            server.call_tool("query_loop_catalog", {"channel": "horror", "orientation": "vertical", "limit": 5})
         )
         assert loops_res is not None
 
@@ -1113,7 +1113,7 @@ class TestTier4RealWorldScenarios:
         dry_res = asyncio.run(
             server.call_tool(
                 "run_pipeline_dry_run",
-                {"lane_id": "moku-scp-shorts", "topic": "E2E Dry Run Verification"},
+                {"lane_id": "horror-scp-shorts", "topic": "E2E Dry Run Verification"},
             )
         )
         dry_data = _parse_content_json(dry_res)
@@ -1140,21 +1140,21 @@ class TestTier4RealWorldScenarios:
         prompt_res = asyncio.run(
             server.get_prompt(
                 "channel_incident_analysis",
-                {"channel_name": "aelithia", "incident_description": "Timeout rate elevated"},
+                {"channel_name": "drama", "incident_description": "Timeout rate elevated"},
             )
         )
         assert len(prompt_res.messages) > 0
 
         # Step 3: Pause
         pause_res = asyncio.run(
-            server.call_tool("manage_queue", {"action": "pause", "channel": "aelithia", "reason": "Incident triage"})
+            server.call_tool("manage_queue", {"action": "pause", "channel": "drama", "reason": "Incident triage"})
         )
         pause_data = _parse_content_json(pause_res)
         assert pause_data.get("paused") is True or pause_data.get("ok") is True
 
         # Step 4: Resume
         resume_res = asyncio.run(
-            server.call_tool("manage_queue", {"action": "resume", "channel": "aelithia"})
+            server.call_tool("manage_queue", {"action": "resume", "channel": "drama"})
         )
         resume_data = _parse_content_json(resume_res)
         assert resume_data.get("paused") is False or resume_data.get("ok") is True

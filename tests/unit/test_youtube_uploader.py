@@ -383,15 +383,15 @@ class TestTokenResolutionAndPreflight(unittest.TestCase):
                 path = resolve_channel_token_path("horror")
                 self.assertTrue(path.endswith("horror.json"))
 
-            # Test fallback to moku.json when horror.json is absent
+            # Test fallback to youtube_token.json when horror.json is absent
             horror_token.unlink()
-            moku_token = tokens_dir / "moku.json"
-            moku_token.write_text('{"token": "moku_fallback"}', encoding="utf-8")
+            legacy_token = base_dir / "secrets" / "youtube_token.json"
+            legacy_token.write_text('{"token": "legacy_fallback"}', encoding="utf-8")
 
             with patch("src.youtube.uploader.api.BASE_DIR", base_dir), \
                  patch("src.core.google_auth.BASE_DIR", base_dir):
                 fallback_path = resolve_channel_token_path("horror")
-                self.assertTrue(fallback_path.endswith("moku.json"))
+                self.assertTrue(fallback_path.endswith("youtube_token.json"))
 
     def test_preflight_youtube_api_success(self):
         from src.youtube.uploader.api import preflight_youtube_api

@@ -479,13 +479,10 @@ LANE_CURATION_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Legacy and convenience aliases
-LANE_CURATION_CONFIGS["moku-scp-shorts"] = LANE_CURATION_CONFIGS["horror-scp-shorts"]
-LANE_CURATION_CONFIGS["moku-horror-long"] = LANE_CURATION_CONFIGS["horror-horror-long"]
+# Convenience lane aliases
 LANE_CURATION_CONFIGS["horror-long"] = LANE_CURATION_CONFIGS["horror-horror-long"]
-LANE_CURATION_CONFIGS["aelithia-drama-shorts"] = LANE_CURATION_CONFIGS["drama-drama-shorts"]
 LANE_CURATION_CONFIGS["drama-shorts"] = LANE_CURATION_CONFIGS["drama-drama-shorts"]
-LANE_CURATION_CONFIGS["aelithia-aita-long"] = LANE_CURATION_CONFIGS["drama-aita-long"]
+LANE_CURATION_CONFIGS["drama-long"] = LANE_CURATION_CONFIGS["drama-aita-long"]
 
 
 def resolve_lane_config(channel_lane: str, target_format: str) -> Tuple[str, Dict[str, Any]]:
@@ -507,16 +504,16 @@ def resolve_lane_config(channel_lane: str, target_format: str) -> Tuple[str, Dic
             return "scifi-singularity-shorts", LANE_CURATION_CONFIGS["scifi-singularity-shorts"]
         return "scifi-singularity-long", LANE_CURATION_CONFIGS["scifi-singularity-long"]
 
-    # Drama / Aelithia matching
-    if any(k in lane_lower for k in ("aelithia", "aita", "drama", "confession")):
+    # Drama matching
+    if any(k in lane_lower for k in ("aita", "drama", "confession")):
         if fmt_lower in ("short", "shorts", "vertical") or "short" in lane_lower:
             return "drama-drama-shorts", LANE_CURATION_CONFIGS["drama-drama-shorts"]
         return "drama-aita-long", LANE_CURATION_CONFIGS["drama-aita-long"]
 
-    # Horror / Moku / SCP matching
+    # Horror / SCP matching
     if "scp" in lane_lower:
         return "horror-scp-shorts", LANE_CURATION_CONFIGS["horror-scp-shorts"]
-    if any(k in lane_lower for k in ("horror", "creepy", "cosmic", "moku")):
+    if any(k in lane_lower for k in ("horror", "creepy", "cosmic")):
         if fmt_lower in ("short", "shorts", "vertical") or "short" in lane_lower:
             return "horror-scp-shorts", LANE_CURATION_CONFIGS["horror-scp-shorts"]
         return "horror-horror-long", LANE_CURATION_CONFIGS["horror-horror-long"]

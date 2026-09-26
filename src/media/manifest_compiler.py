@@ -397,7 +397,7 @@ class SceneManifestCompiler:
         music_path: Optional[str] = None,
         music_volume: Optional[float] = None,
         lane_id: Optional[str] = None,
-        channel_name: str = "moku",
+        channel_name: str = "horror",
         resolution: Optional[List[int]] = None,
         fps: int = 30,
         actual_audio_duration: Optional[float] = None,
@@ -413,7 +413,7 @@ class SceneManifestCompiler:
         Builds a canonical scene_manifest.json payload.
         """
         meta = script.get("metadata", {})
-        lane = lane_id or meta.get("channel_lane", "moku-horror-long")
+        lane = lane_id or meta.get("channel_lane", "horror-horror-long")
         target_fmt = meta.get("target_format", "longform")
 
         resolved_layout, resolved_accent, resolved_primary = self._extract_channel_palette_and_hud(

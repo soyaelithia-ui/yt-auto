@@ -28,7 +28,7 @@ def _isolate_cache(monkeypatch):
 
 BASE_LANE = {
     "id": "test-lane",
-    "channel": "moku",
+    "channel": "horror",
     "story_type": "scp",
     "orientation": "vertical",
     "duration": {"min_sec": 60, "target_sec": 150, "max_sec": 180},
@@ -50,11 +50,11 @@ class TestParseLane:
     def test_minimal_lane_gets_sensible_defaults(self):
         lane = parse_lane(BASE_LANE)
         assert lane.id == "test-lane"
-        assert lane.channel.value == "moku"
+        assert lane.channel.value == "horror"
         assert lane.expected_resolution == (1080, 1920)
         assert lane.qa_profile == "short"
         assert lane.review_content_type == "short"
-        assert lane.visual_pipeline == "beats"
+        assert lane.visual_pipeline == "video_loop"
         assert lane.multistory_collection is False
         assert lane.enabled is True
 
@@ -116,18 +116,18 @@ class TestLoadLanes:
         path = _write(tmp_path, "{not json")
         result = load_lanes(path)
         assert [lane.id for lane in result] == [
-            "moku-scp-shorts",
-            "moku-horror-long",
-            "aelithia-aita-long",
+            "horror-scp-shorts",
+            "horror-horror-long",
+            "drama-aita-long",
         ]
         assert any("embebidos" in record.message for record in caplog.records)
 
     def test_fallback_lanes_have_bounded_word_limits(self):
         lanes = {lane.id: lane for lane in fallback_lanes()}
-        assert lanes["moku-horror-long"].words_max == 4800
-        assert lanes["moku-horror-long"].words_recondense_max == 4500
-        assert lanes["aelithia-aita-long"].words_max == 4800
-        assert lanes["aelithia-aita-long"].words_recondense_max == 4500
+        assert lanes["horror-horror-long"].words_max == 4800
+        assert lanes["horror-horror-long"].words_recondense_max == 4500
+        assert lanes["drama-aita-long"].words_max == 4800
+        assert lanes["drama-aita-long"].words_recondense_max == 4500
 
     def test_valid_document_roundtrip(self, tmp_path):
         path = _write(
@@ -138,7 +138,7 @@ class TestLoadLanes:
                     BASE_LANE,
                     {
                         "id": "second",
-                        "channel": "aelithia",
+                        "channel": "drama",
                         "orientation": "horizontal",
                         "duration": {"min_sec": 600},
                         "template": "aita",
@@ -169,7 +169,7 @@ class TestLoadLanes:
                     {**BASE_LANE, "id": "other-lane"},
                     {
                         "id": "extra",
-                        "channel": "aelithia",
+                        "channel": "drama",
                         "orientation": "horizontal",
                         "duration": {"min_sec": 600},
                         "template": "aita",
@@ -183,63 +183,63 @@ class TestLoadLanes:
 
 class TestResolution:
     def test_explicit_lane_wins(self):
-        lane = resolve_lane_for_run("moku", "moku-horror-long", path="no/such/file")
+        lane = resolve_lane_for_run("horror", "horror-horror-long", path="no/such/file")
         assert lane.orientation == "horizontal"
 
     def test_story_row_lane_used_when_no_explicit(self):
-        row = {"lane_id": "moku-horror-long"}
-        lane = resolve_lane_for_run("moku", None, story_row=row, path="no/such/file")
-        assert lane.id == "moku-horror-long"
+        row = {"lane_id": "horror-horror-long"}
+        lane = resolve_lane_for_run("horror", None, story_row=row, path="no/such/file")
+        assert lane.id == "horror-horror-long"
 
     def test_unknown_story_lane_warns_and_defaults(self, caplog):
         row = {"lane_id": "vanished-lane"}
-        lane = resolve_lane_for_run("moku", None, story_row=row, path="no/such/file")
-        assert lane.id == "moku-scp-shorts"
+        lane = resolve_lane_for_run("horror", None, story_row=row, path="no/such/file")
+        assert lane.id == "horror-scp-shorts"
         assert any("vanished-lane" in record.message for record in caplog.records)
 
     def test_cross_channel_lane_rejected(self):
         with pytest.raises(ValueError, match="no existe o no pertenece"):
-            resolve_lane_for_run("aelithia", "moku-scp-shorts", path="no/such/file")
+            resolve_lane_for_run("drama", "horror-scp-shorts", path="no/such/file")
 
     def test_default_is_first_enabled_of_channel(self):
-        lane = resolve_lane_for_run("aelithia", None, path="no/such/file")
-        assert lane.channel.value == "aelithia"
+        lane = resolve_lane_for_run("drama", None, path="no/such/file")
+        assert lane.channel.value == "drama"
 
     def test_get_lane_none_when_absent(self):
         assert get_lane("does-not-exist", path="no/such/file") is None
 
     def test_lanes_for_channel_filters(self):
-        moku = lanes_for_channel("moku", path="no/such/file")
-        assert all(lane.channel.value == "moku" for lane in moku)
+        horror = lanes_for_channel("horror", path="no/such/file")
+        assert all(lane.channel.value == "horror" for lane in horror)
 
     def test_thematic_lane_aliases_resolve_get_lane(self):
         assert get_lane("horror-scp-shorts") is not None
-        assert get_lane("horror-scp-shorts").id == "moku-scp-shorts"
+        assert get_lane("horror-scp-shorts").id == "horror-scp-shorts"
         assert get_lane("horror-long") is not None
-        assert get_lane("horror-long").id == "moku-horror-long"
+        assert get_lane("horror-long").id == "horror-horror-long"
         assert get_lane("drama-shorts") is not None
-        assert get_lane("drama-shorts").id == "aelithia-drama-shorts"
+        assert get_lane("drama-shorts").id == "drama-drama-shorts"
         assert get_lane("drama-aita-long") is not None
-        assert get_lane("drama-aita-long").id == "aelithia-aita-long"
+        assert get_lane("drama-aita-long").id == "drama-aita-long"
 
     def test_thematic_and_numbered_channel_aliases_resolve_for_run(self):
         lane_h = resolve_lane_for_run("horror", "horror-scp-shorts")
-        assert lane_h.id == "moku-scp-shorts"
+        assert lane_h.id == "horror-scp-shorts"
 
         lane_d = resolve_lane_for_run("drama", "drama-aita-long")
-        assert lane_d.id == "aelithia-aita-long"
+        assert lane_d.id == "drama-aita-long"
 
         lane_c1 = resolve_lane_for_run("canal1", "horror-long")
-        assert lane_c1.id == "moku-horror-long"
+        assert lane_c1.id == "horror-horror-long"
 
         lane_c2 = resolve_lane_for_run("canal2", "drama-shorts")
-        assert lane_c2.id == "aelithia-drama-shorts"
+        assert lane_c2.id == "drama-drama-shorts"
 
         lane_ch1 = resolve_lane_for_run("channel_1", "horror-scp-shorts")
-        assert lane_ch1.id == "moku-scp-shorts"
+        assert lane_ch1.id == "horror-scp-shorts"
 
         lane_ch2 = resolve_lane_for_run("channel_2", "drama-aita-long")
-        assert lane_ch2.id == "aelithia-aita-long"
+        assert lane_ch2.id == "drama-aita-long"
 
 
 class TestOverrides:

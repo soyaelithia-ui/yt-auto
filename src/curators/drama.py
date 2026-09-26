@@ -41,6 +41,3 @@ class DramaCurator(INarrativeCurator):
             "Frente a las constantes recriminaciones del círculo cercano,",
         ]
 
-
-# Backward-compatibility alias
-AelithiaDramaCurator = DramaCurator

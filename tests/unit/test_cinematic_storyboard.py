@@ -44,7 +44,7 @@ def test_longform_storyboard_scene_count_and_duration(longform_sample_text):
     payload = curator.curate(
         raw_text=longform_sample_text,
         title="El Misterio de Cabo Tormenta",
-        channel_lane="moku-horror-long",
+        channel_lane="horror-horror-long",
         target_format="longform",
     )
     
@@ -60,13 +60,13 @@ def test_longform_storyboard_scene_count_and_duration(longform_sample_text):
         assert text[-1] in (".", "!", "?", '"', "'"), f"Scene text does not end on terminal punctuation: {text[-20:]}"
 
 
-def test_art_director_assigns_canonical_wgsl_archetype(longform_sample_text):
-    """Verify ArtDirector assigns valid WGSL archetypes and uniform parameters directly."""
+def test_art_director_assigns_canonical_atmosphere(longform_sample_text):
+    """Verify ArtDirector assigns valid atmospheric directives directly."""
     curator = CinematicScriptCuratorAgent()
     script = curator.curate(
         raw_text=longform_sample_text,
         title="El Misterio de Cabo Tormenta",
-        channel_lane="moku-horror-long",
+        channel_lane="horror-horror-long",
         target_format="longform",
     )
     
@@ -75,10 +75,11 @@ def test_art_director_assigns_canonical_wgsl_archetype(longform_sample_text):
     
     assert "scenes" in visual_plan
     for sc_plan in visual_plan["scenes"]:
-        arch = sc_plan.get("archetype_id")
-        assert arch is not None, "ArtDirector must assign an explicit archetype_id"
-        assert arch in VALID_ARCHETYPES, f"archetype_id '{arch}' is not in native VALID_ARCHETYPES"
-        assert "uniform_params" in sc_plan, "ArtDirector must assign uniform_params"
+        assert "palette" in sc_plan, "ArtDirector must assign palette"
+        assert "lighting" in sc_plan, "ArtDirector must assign lighting"
+        assert "atmosphere" in sc_plan, "ArtDirector must assign atmosphere"
+        assert "camera_composition" in sc_plan, "ArtDirector must assign camera_composition"
+
 
 
 def test_scene_planner_preserves_storyboard_scenes(longform_sample_text, tmp_path):
@@ -87,7 +88,7 @@ def test_scene_planner_preserves_storyboard_scenes(longform_sample_text, tmp_pat
     script = curator.curate(
         raw_text=longform_sample_text,
         title="El Misterio de Cabo Tormenta",
-        channel_lane="moku-horror-long",
+        channel_lane="horror-horror-long",
         target_format="longform",
     )
     
@@ -102,8 +103,8 @@ def test_scene_planner_preserves_storyboard_scenes(longform_sample_text, tmp_pat
         narration_path=str(tmp_path / "audio.mp3"),
         music_path="",
         music_volume=0.04,
-        lane_id="moku-horror-long",
-        channel_name="moku",
+        lane_id="horror-horror-long",
+        channel_name="horror",
         resolution=[1920, 1080],
         fps=30,
         actual_audio_duration=600.0,

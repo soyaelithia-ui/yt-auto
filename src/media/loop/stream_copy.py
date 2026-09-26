@@ -1045,7 +1045,7 @@ class LoopStreamCopyMixin:
                     str(out_p),
                     duration_sec=p["duration_sec"],
                     min_duration=eff_min,
-                    channel=extra_kwargs.get("channel", "moku"),
+                    channel=extra_kwargs.get("channel", "horror"),
                     template=extra_kwargs.get("template"),
                     style=extra_kwargs.get("style"),
                     video_mode="short" if p["orientation"] in ("vertical", "short", "9:16", "portrait") else "longform",

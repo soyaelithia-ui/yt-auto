@@ -37,24 +37,17 @@ ALLOWED_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"reddit", "scp_wiki"})
 MIN_GAP_SECONDS = 60
 
 LANE_ALIASES: Final[dict[str, str]] = {
-    # Legacy horror -> horror-scp-shorts / horror-horror-long
-    "moku-scp-shorts": "horror-scp-shorts",
-    "moku-horror-long": "horror-horror-long",
-    "terror-scp-shorts": "horror-scp-shorts",
-    "scp-shorts": "horror-scp-shorts",
+    # Horror lanes
     "horror-shorts": "horror-scp-shorts",
     "horror-long": "horror-horror-long",
-    "terror-long": "horror-horror-long",
     "creepypasta-long": "horror-horror-long",
-    # Legacy drama -> drama-drama-shorts / drama-aita-long
-    "aelithia-drama-shorts": "drama-drama-shorts",
-    "aelithia-aita-long": "drama-aita-long",
+    # Drama lanes
     "drama-shorts": "drama-drama-shorts",
     "relatos-shorts": "drama-drama-shorts",
     "drama-long": "drama-aita-long",
     "aita-long": "drama-aita-long",
     "relatos-long": "drama-aita-long",
-    # Legacy aliases
+    # Scifi lanes
     "scifi-chronicles-shorts": "scifi-singularity-shorts",
 }
 
@@ -569,7 +562,7 @@ def resolve_voice_profile_for_lane(
         if not profile_name:
             if lane.story_type == "scp":
                 profile_name = "scp_documentary_es"
-            elif ch_key in ("aelithia", "drama") or lane.story_type == "reddit_aita":
+            elif ch_key == "drama" or lane.story_type == "reddit_aita":
                 profile_name = "aelithia_reddit"
             elif ch_key == "scifi" or lane.story_type == "scifi":
                 profile_name = "scifi_documentary_es"
@@ -586,7 +579,7 @@ def resolve_voice_profile_for_lane(
                 )
             if "scp" in lane.lower():
                 profile_name = "scp_documentary_es"
-            elif any(k in lane.lower() for k in ("aelithia", "drama", "aita")):
+            elif any(k in lane.lower() for k in ("drama", "aita")):
                 profile_name = "aelithia_reddit"
             elif "scifi" in lane.lower() or "singularity" in lane.lower():
                 profile_name = "scifi_documentary_es"
@@ -598,7 +591,7 @@ def resolve_voice_profile_for_lane(
         ch_key = getattr(ch, "value", str(ch))
 
     if not profile_name:
-        if ch_key in ("aelithia", "drama"):
+        if ch_key == "drama":
             profile_name = "aelithia_reddit"
         elif ch_key == "scifi":
             profile_name = "scifi_documentary_es"
@@ -617,11 +610,8 @@ def resolve_voice_profile_for_lane(
         res["profile_name"] = profile_name
         return res
 
-    if ch_key in ("aelithia", "drama"):
-        fallback_voice = (
-            os.environ.get("DRAMA_TTS_VOICE")
-            or os.environ.get("AELITHIA_TTS_VOICE", "es-MX-DaliaNeural")
-        )
+    if ch_key == "drama":
+        fallback_voice = os.environ.get("DRAMA_TTS_VOICE", "es-MX-DaliaNeural")
         return {
             "id": fallback_voice,
             "speed": "+6%",
@@ -630,10 +620,7 @@ def resolve_voice_profile_for_lane(
             "pauses": "conversational",
             "profile_name": profile_name,
         }
-    fallback_voice = (
-        os.environ.get("HORROR_TTS_VOICE")
-        or os.environ.get("MOKU_TTS_VOICE", "es-ES-AlvaroNeural")
-    )
+    fallback_voice = os.environ.get("HORROR_TTS_VOICE", "es-ES-AlvaroNeural")
     return {
         "id": fallback_voice,
         "speed": "+0%",

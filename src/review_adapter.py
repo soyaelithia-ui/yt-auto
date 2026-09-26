@@ -96,7 +96,7 @@ def _sync_queue_db(
 
         video_id = str(youtube_result.get("video_id") or youtube_result.get("id") or "").strip()
         url = str(youtube_result.get("url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")).strip()
-        channel = str(youtube_result.get("channel") or "moku")
+        channel = str(youtube_result.get("channel") or "horror")
         visibility = str(youtube_result.get("visibility") or "public")
         title = str(youtube_result.get("title") or "")
         description = str(youtube_result.get("description") or "")

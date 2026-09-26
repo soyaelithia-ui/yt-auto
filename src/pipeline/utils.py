@@ -115,7 +115,7 @@ def _dispatch_curate_script(*args, **kwargs):
     return _llm.curate_script(*args, **kwargs)
 
 
-def _enforce_editorial_compliance(clean_script: str, *, stage: str, channel: str = "moku") -> str:
+def _enforce_editorial_compliance(clean_script: str, *, stage: str, channel: str = "horror") -> str:
     """Editorial barrier v2: validate early, repair deterministically, then AI."""
     from src.sanitizer import check_forbidden_editorial_elements, repair_forbidden_editorial
 

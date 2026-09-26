@@ -39,7 +39,7 @@ class ResilientThumbnailEngine:
         return self._engine.generate(
             ThumbnailConfig(
                 title=title,
-                channel_id=kwargs.get("channel_id", "moku"),
+                channel_id=kwargs.get("channel_id", "horror"),
                 lane_id=kwargs.get("lane_id"),
                 output_path=Path(output_path).resolve(),
                 width=width,

@@ -66,4 +66,5 @@ def test_integrity_scripts_use_repo_local_pytest_not_host_roots():
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "/srv/projects/yt-auto/.venv/bin/pytest" not in text
         assert "/home/moku/projects/yt-auto/.venv/bin/pytest" not in text
-        assert ".venv/bin/pytest" in text
+    assert ".venv/bin/python3" in (REPO_ROOT / "scripts/verify_integrity.sh").read_text(encoding="utf-8")
+    assert ".venv/bin/pytest" in (REPO_ROOT / "scripts/test.sh").read_text(encoding="utf-8")

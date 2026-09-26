@@ -157,7 +157,7 @@ def _generate_procedural_title(
     existing_titles: set[str],
 ) -> tuple[str, str]:
     """Generate a unique, high-CTR title and theme based on empirical channel performance."""
-    is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
+    is_horror = any(k in channel_key.lower() for k in ("horror", "terror", "scp"))
 
     horror_templates = (
         ("El odómetro empezó a marcar números negativos en la Ruta {num}: el informe secreto del convoy", "el informe secreto de la Ruta {num}"),
@@ -262,7 +262,7 @@ async def _dynamic_procedural_fallback(
         "la impugnación del testamento alterado en secreto",
         "la protección de la herencia frente al despojo familiar",
     )
-    is_horror = any(k in channel_key.lower() for k in ("moku", "horror", "terror", "scp"))
+    is_horror = any(k in channel_key.lower() for k in ("horror", "terror", "scp"))
     default_themes = default_horror_themes if is_horror else default_drama_themes
     themes_to_use = tuple(default_themes)
 
@@ -484,7 +484,7 @@ def _get_lane_subreddits_and_categories(
         subreddits = tuple(
             CHANNEL_SUBREDDITS.get(
                 channel_key,
-                ["nosleep" if channel_key in ("moku", "terror") else "AmItheAsshole"],
+                ["nosleep" if channel_key in ("horror", "terror") else "AmItheAsshole"],
             )
         )
     categories = getattr(sources, "listing_categories", ()) if sources else ()
@@ -503,7 +503,7 @@ async def async_ensure_queue_depth(
     from src.core.repository import connect
 
     path = db_path or DEFAULT_DB_PATH
-    channel_obj = getattr(lane, "channel", "moku")
+    channel_obj = getattr(lane, "channel", "horror")
     channel_key = getattr(channel_obj, "value", str(channel_obj))
     lane_id = getattr(lane, "id", str(lane))
     sources = getattr(lane, "sources", None)

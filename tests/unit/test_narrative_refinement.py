@@ -5,10 +5,10 @@ anti-spanglish sanitization, title repetition suppression, and audio tail buffer
 
 import pytest
 from src.templates.narratives import (
-    build_moku_longform_narrative,
-    build_aelithia_longform_narrative,
-    build_moku_short_narrative,
-    build_aelithia_short_narrative,
+    build_horror_longform_narrative,
+    build_drama_longform_narrative,
+    build_horror_short_narrative,
+    build_drama_short_narrative,
     build_channel_narrative,
 )
 from src.sanitizer import (
@@ -18,9 +18,9 @@ from src.sanitizer import (
 )
 
 
-def test_moku_longform_first_person_no_headers():
+def test_horror_longform_first_person_no_headers():
     topic = "La Estación de Radio Olvidada"
-    script = build_moku_longform_narrative(topic, channel="moku")
+    script = build_horror_longform_narrative(topic, channel="horror")
     
     # Assert rich length and first-person perspective (calibrated for >=10 minutes)
     assert len(script.split()) >= 2800
@@ -32,9 +32,9 @@ def test_moku_longform_first_person_no_headers():
     assert script.count(topic) <= 2
 
 
-def test_aelithia_longform_multi_case_with_dialogue():
+def test_drama_longform_multi_case_with_dialogue():
     topic = "El Testamento de la Abuela"
-    script = build_aelithia_longform_narrative(topic, channel="aelithia")
+    script = build_drama_longform_narrative(topic, channel="drama")
     
     # Assert multi-case structure calibrated for >=10 minutes (>=2800 words)
     assert len(script.split()) >= 2800
@@ -50,9 +50,9 @@ def test_aelithia_longform_multi_case_with_dialogue():
     assert script.count(topic) <= 2
 
 
-def test_moku_short_scp_087_canonical_lore():
+def test_horror_short_scp_087_canonical_lore():
     topic = "SCP-087: El Pozo de las Escaleras"
-    script = build_moku_short_narrative(topic, channel="moku")
+    script = build_horror_short_narrative(topic, channel="horror")
     
     assert "escalera" in script.lower()
     assert "oscuridad" in script.lower()
@@ -61,9 +61,9 @@ def test_moku_short_scp_087_canonical_lore():
     assert "087" in script
 
 
-def test_aelithia_short_aita_structure():
+def test_drama_short_aita_structure():
     topic = "Vender la casa de mi infancia"
-    script = build_aelithia_short_narrative(topic, channel="aelithia")
+    script = build_drama_short_narrative(topic, channel="drama")
     
     assert "¿Soy yo el malo" in script or "¿Soy la mala" in script or "límites" in script
     assert "@Aelithia" not in script

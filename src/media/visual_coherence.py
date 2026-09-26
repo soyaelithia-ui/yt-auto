@@ -75,15 +75,15 @@ def timing_scales_to_audio(
 def build_coherent_color_grade(
     accent_hex: str = "#00FF88",
     primary_hex: str = "#030A14",
-    channel: str = "moku",
+    channel: str = "horror",
 ) -> str:
     """Generate subtle, filmic FFmpeg color harmony filter.
 
     Unifies disparate stock loops into a single cohesive visual world matching
     the channel brand identity without crushing blacks or blowing out highlights.
     """
-    ch = (channel or "moku").lower()
-    if "drama" in ch or "aelithia" in ch or "aita" in ch:
+    ch = (channel or "horror").lower()
+    if "drama" in ch or "aita" in ch:
         # Warm, cinematic, gentle hearth tones, lifelike skin tones
         return (
             "eq=contrast=1.05:saturation=0.96:brightness=0.01:gamma=0.98,"
@@ -96,7 +96,7 @@ def build_coherent_color_grade(
             "colorbalance=rs=-0.03:gs=0.01:bs=0.04:rh=-0.02:gh=0.02:bh=0.05"
         )
     else:
-        # Default Moku / Horror / SCP: moody dark ambient, subdued saturation, crisp shadow details
+        # Default Horror / SCP: moody dark ambient, subdued saturation, crisp shadow details
         return (
             "eq=contrast=1.06:saturation=0.88:brightness=0.00:gamma=0.97,"
             "colorbalance=rs=-0.02:gs=0.01:bs=0.02:rm=-0.01:gm=0.02:bm=0.01"

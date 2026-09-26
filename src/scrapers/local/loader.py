@@ -160,19 +160,19 @@ def _filter_stories_by_niche(
     limit: int,
 ) -> List[Dict[str, Any]]:
     sub_lower = (subreddit or "").lower()
-    is_horror = any(k in sub_lower for k in ("nosleep", "scp", "horror", "creepypasta", "scary", "terror", "moku"))
+    is_horror = any(k in sub_lower for k in ("nosleep", "scp", "horror", "creepypasta", "scary", "terror"))
     is_confession = any(
         k in sub_lower
-        for k in ("amitheasshole", "aita", "confession", "relationship", "tifu", "aelithia", "drama", "trueoffmychest", "offmychest")
+        for k in ("amitheasshole", "aita", "confession", "relationship", "tifu", "drama", "trueoffmychest", "offmychest")
     )
 
     def story_matches(story: Dict[str, Any]) -> bool:
         combined = f"{story.get('id', '')} {story.get('title', '')} {story.get('url', '')} {' '.join(story.get('tags', []))}".lower()
         if is_horror:
-            forbidden = ("aelithia", "aita", "amitheasshole", "confesion", "confesión", "heredado", "hermano", "hermana", "boda", "infidelidad", "desalojo", "pareja", "esposo", "esposa", "fideicomiso")
+            forbidden = ("aita", "amitheasshole", "confesion", "confesión", "heredado", "hermano", "hermana", "boda", "infidelidad", "desalojo", "pareja", "esposo", "esposa", "fideicomiso")
             return not any(k in combined for k in forbidden)
         if is_confession:
-            forbidden = ("moku", "terror", "horror", "scp", "anomalia", "monstruo", "tunel", "estacion", "creepy", "faro", "sanatorio")
+            forbidden = ("terror", "horror", "scp", "anomalia", "monstruo", "tunel", "estacion", "creepy", "faro", "sanatorio")
             return not any(k in combined for k in forbidden)
         return True
 

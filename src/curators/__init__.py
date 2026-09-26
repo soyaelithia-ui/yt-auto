@@ -9,15 +9,13 @@ from src.curators.base import (
     NarrativeDirector,
     get_narrative_director,
 )
-from src.curators.drama import AelithiaDramaCurator, DramaCurator
-from src.curators.horror import HorrorCurator, MokuHorrorCurator
+from src.curators.drama import DramaCurator
+from src.curators.horror import HorrorCurator
 
 __all__ = [
-    "AelithiaDramaCurator",
     "DramaCurator",
     "HorrorCurator",
     "INarrativeCurator",
-    "MokuHorrorCurator",
     "NarrativeDirector",
     "get_narrative_director",
 ]

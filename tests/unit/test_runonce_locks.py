@@ -56,6 +56,9 @@ def main_module(monkeypatch):
 
     def _stub(name: str, **attrs):
         mod = types.ModuleType(name)
+        pkg_dir = REPO_ROOT / name.replace(".", "/")
+        if pkg_dir.is_dir():
+            mod.__path__ = [str(pkg_dir)]
         for key, value in attrs.items():
             setattr(mod, key, value)
         stubs[name] = mod
@@ -78,7 +81,7 @@ def main_module(monkeypatch):
     _stub(
         "src.channel_manager",
         activate_channel=lambda name: {},
-        get_active_channels=lambda: ["moku", "aelithia"],
+        get_active_channels=lambda: ["horror", "drama"],
     )
     _stub(
         "src.cleaner",
@@ -87,7 +90,13 @@ def main_module(monkeypatch):
         clean_untracked_temp_files=lambda: 0,
     )
     _stub("src.cli", print_queue=lambda **k: None, print_status=lambda **k: None)
-    _stub("src.daemon", request_shutdown=lambda: None, run_pipeline_once=lambda **k: {})
+    _stub(
+        "src.daemon",
+        request_shutdown=lambda: None,
+        run_pipeline_once=lambda **k: {},
+        _run_24h_maintenance_sweep=lambda *a, **k: None,
+        start_daemon_lanes=lambda *a, **k: None,
+    )
     _stub("src.monitor", run_publication_check=lambda: {})
     fake_orchestrator_mod = _stub("src.orchestrator")
 
@@ -108,8 +117,10 @@ def main_module(monkeypatch):
 
     fake_orchestrator_mod.PipelineOrchestrator = _FakeOrchestrator
 
-    config_stub = _stub(
-        "src.config",
+    import src.config as real_config
+
+    config_attrs = {k: getattr(real_config, k) for k in dir(real_config) if not k.startswith("__")}
+    config_attrs.update(
         BASE_DIR=REPO_ROOT,
         DEFAULT_DB_PATH=str(REPO_ROOT / "data" / "test.db"),
         RUNTIME_PROFILE="test",
@@ -119,6 +130,7 @@ def main_module(monkeypatch):
         SETTINGS=types.SimpleNamespace(video_engine="loop", short_compositor="loop"),
         validate_runtime_config=lambda **k: None,
     )
+    config_stub = _stub("src.config", **config_attrs)
     # main reads RUNTIME_PROFILE at call time via module attribute access on import
     monkeypatch.setattr(config_stub, "RUNTIME_PROFILE", "test", raising=False)
 
@@ -167,26 +179,26 @@ def test_batch_mode_takes_no_coarse_all_lock(main_module):
     exc = _run(mod, ["--run-once", "--channel", "all", "--db-path", "/tmp/x.db"])
     assert exc is None
     assert "all" not in fake_lock.acquisitions, fake_lock.acquisitions
-    assert fake_lock.acquisitions.count("moku") >= 1
-    assert fake_lock.acquisitions.count("aelithia") >= 1
+    assert fake_lock.acquisitions.count("horror") >= 1
+    assert fake_lock.acquisitions.count("drama") >= 1
     ran = [c["channel"] for c in fake_orch.calls]
-    assert ran == ["moku", "aelithia"]
+    assert ran == ["horror", "drama"]
 
 
 def test_batch_mode_skips_locked_channel_and_runs_rest(main_module, caplog):
     mod, fake_lock, fake_orch = main_module
-    _FakeChannelLock.held_by_other.add("moku")
+    _FakeChannelLock.held_by_other.add("horror")
     with caplog.at_level(logging.WARNING, logger="main"):
         exc = _run(mod, ["--run-once", "--channel", "all", "--db-path", "/tmp/x.db"])
     assert exc is None  # at least one channel ran -> exit 0
     ran = [c["channel"] for c in fake_orch.calls]
-    assert ran == ["aelithia"]
-    assert any("moku" in r.message and "omitido" in r.message for r in caplog.records)
+    assert ran == ["drama"]
+    assert any("horror" in r.message and "omitido" in r.message for r in caplog.records)
 
 
 def test_batch_mode_all_locked_exits_nonzero(main_module, capsys):
     mod, fake_lock, _fake_orch = main_module
-    _FakeChannelLock.held_by_other.update({"moku", "aelithia"})
+    _FakeChannelLock.held_by_other.update({"horror", "drama"})
     exc = _run(mod, ["--run-once", "--channel", "all", "--db-path", "/tmp/x.db"])
     assert isinstance(exc, SystemExit) and exc.code == 1
     out = capsys.readouterr().out
@@ -208,8 +220,8 @@ def test_single_channel_keeps_legacy_lock(main_module, monkeypatch):
     monkeypatch.setattr(mod, "acquire_lock", fake_acquire)
     monkeypatch.setattr(mod, "release_lock", fake_release)
 
-    exc = _run(mod, ["--run-once", "--channel", "moku", "--db-path", "/tmp/x.db"])
+    exc = _run(mod, ["--run-once", "--channel", "horror", "--db-path", "/tmp/x.db"])
     assert exc is None
-    assert acquired == ["moku"]
-    assert released == ["moku"]
-    assert [c["channel"] for c in fake_orch.calls] == ["moku"]
+    assert acquired == ["horror"]
+    assert released == ["horror"]
+    assert [c["channel"] for c in fake_orch.calls] == ["horror"]

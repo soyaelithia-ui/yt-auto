@@ -17,9 +17,9 @@ def test_lane_background_audio_configuration():
     assert len(lanes) >= 3
     lane_map = {l.id: l for l in lanes}
 
-    assert "moku-scp-shorts" in lane_map
-    assert "moku-horror-long" in lane_map
-    assert "aelithia-aita-long" in lane_map
+    assert "horror-scp-shorts" in lane_map
+    assert "horror-horror-long" in lane_map
+    assert "drama-aita-long" in lane_map
 
     for lane in lanes:
         assert hasattr(lane, "background_audio")
@@ -65,7 +65,7 @@ def test_asset_manager_mode_off(tmp_path: Path):
 def test_scene_planner_defaults_to_super_low_volume():
     agent = ScenePlannerCompositorAgent()
     script = {
-        "metadata": {"title": "Test Story", "channel_lane": "moku-scp-shorts", "target_format": "short"},
+        "metadata": {"title": "Test Story", "channel_lane": "horror-scp-shorts", "target_format": "short"},
         "acts": [
             {
                 "act_number": 1,
@@ -93,8 +93,8 @@ def test_scene_planner_defaults_to_super_low_volume():
         visual_plan=visual_plan,
         story_id="story_test",
         narration_path="tests/fixtures/sample_voice.wav",
-        lane_id="moku-scp-shorts",
-        channel_name="moku",
+        lane_id="horror-scp-shorts",
+        channel_name="horror",
     )
     assert manifest["audio_tracks"]["music_volume"] == 0.04
     assert DEFAULT_BACKGROUND_AUDIO_VOLUME == 0.04

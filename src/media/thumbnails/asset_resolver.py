@@ -125,9 +125,12 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         root = Path(cls.REPO_ROOT).resolve()
 
         # 1. Clean visual-bank motion scenery first (never quarantine / overlays / GIFs).
-        chan_prefix = "moku" if ("moku" in norm_chan or "scp" in norm_arch or "horror" in norm_arch) else "aelithia"
-        if "aelithia" in norm_chan or "aita" in norm_arch or "drama" in norm_arch:
-            chan_prefix = "aelithia"
+        if any(k in norm_chan or k in norm_arch for k in ("drama", "aita")):
+            chan_prefix = "drama"
+        elif any(k in norm_chan or k in norm_arch for k in ("scifi", "singularidad")):
+            chan_prefix = "scifi"
+        else:
+            chan_prefix = "horror"
         scenery_dir = visual_bank_dir / chan_prefix / "scenery"
         motion = _list_scenery_candidates(scenery_dir, ("*.mp4", "*.webm"))
         stills = _list_scenery_candidates(scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
@@ -163,7 +166,7 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         target_keys: list[str] = []
         if any(k in norm_arch or k in norm_chan for k in ("scp", "found-footage", "anomaly")):
             target_keys.append("scp")
-        elif any(k in norm_arch or k in norm_chan for k in ("aita", "drama", "confession", "aelithia")):
+        elif any(k in norm_arch or k in norm_chan for k in ("aita", "drama", "confession")):
             target_keys.append("aita")
         elif any(k in norm_arch or k in norm_chan for k in ("horror", "vhs", "analog")):
             target_keys.append("horror")
@@ -237,12 +240,12 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
         chan_keys = []
         if any(k in norm_chan for k in ("scp", "found-footage")):
             chan_keys.append("scp")
-        elif any(k in norm_chan for k in ("aita", "drama", "aelithia")):
+        elif any(k in norm_chan for k in ("aita", "drama")):
             chan_keys.append("aita")
         elif any(k in norm_chan for k in ("horror", "vhs", "analog")):
             chan_keys.append("horror")
-        elif "moku" in norm_chan:
-            chan_keys.append("scp" if is_vertical else "horror")
+        elif any(k in norm_chan for k in ("scifi", "singularidad")):
+            chan_keys.append("scifi")
 
         for c_key in chan_keys:
             c_dir = templates_dir / c_key
@@ -253,7 +256,12 @@ class ThematicAssetResolver(metaclass=_ThematicAssetResolverMeta):
                         return candidates[0]
 
         # 3. Clean visual bank scenery only (never pre-baked title cards)
-        chan_prefix = "moku" if "moku" in norm_chan else ("aelithia" if "aelithia" in norm_chan else norm_chan)
+        if any(k in norm_chan for k in ("drama", "aita")):
+            chan_prefix = "drama"
+        elif any(k in norm_chan for k in ("scifi", "singularidad")):
+            chan_prefix = "scifi"
+        else:
+            chan_prefix = "horror"
         visual_scenery_dir = visual_bank_dir / chan_prefix / "scenery"
         candidates = _list_scenery_candidates(visual_scenery_dir, ("*.jpg", "*.jpeg", "*.png"))
         if candidates:

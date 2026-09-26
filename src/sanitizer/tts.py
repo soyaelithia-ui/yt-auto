@@ -227,7 +227,7 @@ def limpiar_texto_para_tts(text: str) -> str:
     cleaned = RE_SFX_INLINE.sub("", cleaned)
 
     # 6. Sanitize general script text
-    cleaned = sanitize_script_text(cleaned, channel="moku")
+    cleaned = sanitize_script_text(cleaned, channel="horror")
 
     # 7. Clean trailing residual single characters like dangling 'm'
     cleaned = re.sub(r"\s+[a-zA-Z]\s*$", "", cleaned)

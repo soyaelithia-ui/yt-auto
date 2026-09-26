@@ -210,7 +210,7 @@ def _resolve_dynamic_channel(key: str | CanonicalChannel) -> ChannelSettings:
     prefix = cid.upper()
     prefixes = [cid.upper()] + [a.upper() for a in profile.aliases]
     active_channel_env = os.environ.get("CHANNEL_KEY", "").strip().lower()
-    use_generic_env = (active_channel_env == cid or not active_channel_env)
+    use_generic_env = (active_channel_env == cid or (not active_channel_env and cid in ("horror", "moku")))
 
     def _get_cfg_env(suffix: str, generic_var: Optional[str] = None) -> Optional[str]:
         for pfx in prefixes:
@@ -329,9 +329,9 @@ def get_channel_token_path(channel: str | CanonicalChannel | None = None) -> Pat
 # Dynamic channel reference
 ACTIVE_CHANNEL = get_active_channel_settings()
 
-# Backward compatibility aliases for existing tests
-MOKU = _resolve_dynamic_channel("horror")
-AELITHIA = _resolve_dynamic_channel("drama")
+# Canonical channel references
+HORROR = _resolve_dynamic_channel("horror")
+DRAMA = _resolve_dynamic_channel("drama")
 
 # ---------------------------------------------------------------------------
 # Runtime profiles (WP1): production vs CLI sandbox isolation.
@@ -546,15 +546,15 @@ COOKIES_PATH = os.environ.get(
     "CHANNEL_COOKIES_PATH",
     os.environ.get("COOKIES_PATH", str(get_channel_cookies_path()))
 )
-COOKIES_AELITHIA_PATH = os.environ.get("AELITHIA_COOKIES_PATH", str(get_channel_cookies_path("aelithia")))
+COOKIES_DRAMA_PATH = os.environ.get("DRAMA_COOKIES_PATH", str(get_channel_cookies_path("drama")))
 YOUTUBE_TOKEN_PATH = os.environ.get(
     "CHANNEL_YOUTUBE_TOKEN_PATH",
     os.environ.get("YOUTUBE_TOKEN_PATH", str(get_channel_token_path()))
 )
-TOKEN_AELITHIA_PATH = os.environ.get("AELITHIA_YOUTUBE_TOKEN_PATH", str(get_channel_token_path("aelithia")))
+TOKEN_DRAMA_PATH = os.environ.get("DRAMA_YOUTUBE_TOKEN_PATH", str(get_channel_token_path("drama")))
 TOKEN_CHANNEL2_PATH = os.environ.get(
     "TOKEN_CHANNEL2_PATH",
-    os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH", TOKEN_AELITHIA_PATH),
+    os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH", TOKEN_DRAMA_PATH),
 )
 CHANNELS_CONFIG = {
     (channel.value if hasattr(channel, "value") else str(channel)): settings.public_dict()
@@ -623,7 +623,7 @@ def resolve_channel2_token_path() -> str:
     )
     if override:
         return str(Path(override).expanduser().resolve())
-    return str(TOKEN_AELITHIA_PATH)
+    return str(TOKEN_DRAMA_PATH)
 
 
 def resolve_google_credentials(sa_key_path: str | None = None) -> Any:

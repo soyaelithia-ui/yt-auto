@@ -302,7 +302,7 @@ def register_analytics_subcommands(subparsers: argparse._SubParsersAction, paren
         parents=[parent],
         help="Ejecutar barrido de 24 horas de métricas de YouTube y purga autónoma",
     )
-    sp.add_argument("--channel", type=str, default="all", help="Canal objetivo ('moku', 'aelithia', o 'all')")
+    sp.add_argument("--channel", type=str, default="all", help="Canal objetivo ('horror', 'drama', 'scifi', o 'all')")
     sp.add_argument("--live", action="store_true", help="Ejecutar mutaciones en vivo (por defecto: dry-run)")
     sp.add_argument("--force", action="store_true", help="Forzar ejecución ignorando el intervalo de 24h")
 
@@ -311,7 +311,7 @@ def register_analytics_subcommands(subparsers: argparse._SubParsersAction, paren
         parents=[parent],
         help="Evaluar y purgar videos con bajo rendimiento tras periodo de gracia",
     )
-    pp.add_argument("--channel", type=str, default="moku", help="Canal objetivo ('moku' o 'aelithia')")
+    pp.add_argument("--channel", type=str, default="horror", help="Canal objetivo ('horror', 'drama', o 'scifi')")
     pp.add_argument("--live", action="store_true", help="Ejecutar eliminación real en YouTube (por defecto: dry-run)")
     pp.add_argument("--min-score", type=float, default=25.0, help="Umbral mínimo de puntuación de éxito (por defecto: 25.0)")
     pp.add_argument("--grace-hours", type=float, default=24.0, help="Horas mínimas de antigüedad requeridas (por defecto: 24.0)")

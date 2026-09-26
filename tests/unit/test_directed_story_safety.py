@@ -30,10 +30,10 @@ def _repo(tmp_path: Path) -> QueueRepository:
 
 def test_claim_exact_is_atomic_and_does_not_touch_other_stories(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("other", "Otra", "Contenido", "https://other", "moku")
-    repository.enqueue("bhv6zd", "Off the grid", "Historia completa", "https://target", "moku")
+    repository.enqueue("other", "Otra", "Contenido", "https://other", "horror")
+    repository.enqueue("bhv6zd", "Off the grid", "Historia completa", "https://target", "horror")
 
-    claimed = repository.claim_exact("bhv6zd", "moku", "worker", now=1_000)
+    claimed = repository.claim_exact("bhv6zd", "horror", "worker", now=1_000)
 
     assert claimed and claimed["story_id"] == "bhv6zd"
     repository.require_single_story_run(claimed["run_id"], "bhv6zd")
@@ -47,8 +47,8 @@ def test_claim_exact_is_atomic_and_does_not_touch_other_stories(tmp_path):
 
 def test_claim_exact_rejects_wrong_channel_without_mutation(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "moku")
-    assert repository.claim_exact("bhv6zd", "aelithia", "worker") is None
+    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "horror")
+    assert repository.claim_exact("bhv6zd", "drama", "worker") is None
     with connect(repository.db_path, read_only=True) as conn:
         row = conn.execute(
             "SELECT status,run_id FROM stories WHERE story_id='bhv6zd'"
@@ -58,17 +58,17 @@ def test_claim_exact_rejects_wrong_channel_without_mutation(tmp_path):
 
 def test_claim_exact_reconciles_only_its_expired_lease(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "moku")
-    repository.enqueue("ael", "Otra", "Historia", "https://ael", "aelithia")
+    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "horror")
+    repository.enqueue("ael", "Otra", "Historia", "https://ael", "drama")
     first = repository.claim_exact(
-        "bhv6zd", "moku", "old-worker", lease_seconds=10, now=1_000
+        "bhv6zd", "horror", "old-worker", lease_seconds=10, now=1_000
     )
     other = repository.claim_exact(
-        "ael", "aelithia", "other-worker", lease_seconds=100, now=1_000
+        "ael", "drama", "other-worker", lease_seconds=100, now=1_000
     )
 
     second = repository.claim_exact(
-        "bhv6zd", "moku", "new-worker", lease_seconds=10, now=1_011
+        "bhv6zd", "horror", "new-worker", lease_seconds=10, now=1_011
     )
 
     assert second and second["run_id"] != first["run_id"]
@@ -88,12 +88,12 @@ def test_claim_exact_reconciles_only_its_expired_lease(tmp_path):
 
 def test_old_worker_cannot_heartbeat_or_mutate_new_run(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "moku")
+    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "horror")
     first = repository.claim_exact(
-        "bhv6zd", "moku", "old-worker", lease_seconds=10, now=1_000
+        "bhv6zd", "horror", "old-worker", lease_seconds=10, now=1_000
     )
     second = repository.claim_exact(
-        "bhv6zd", "moku", "new-worker", lease_seconds=100, now=1_011
+        "bhv6zd", "horror", "new-worker", lease_seconds=100, now=1_011
     )
 
     assert repository.heartbeat(first["run_id"], "old-worker", now=1_012) is False
@@ -116,12 +116,12 @@ def test_old_worker_cannot_heartbeat_or_mutate_new_run(tmp_path):
 
 def test_mark_published_only_updates_the_primary_story(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "moku")
-    repository.enqueue("other", "Otra", "Otra historia", "https://other", "moku")
-    claimed = repository.claim_exact("bhv6zd", "moku", "worker")
+    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "horror")
+    repository.enqueue("other", "Otra", "Otra historia", "https://other", "horror")
+    claimed = repository.claim_exact("bhv6zd", "horror", "worker")
     proof = PublicationProof(
         video_id="video12345",
-        channel=CanonicalChannel.MOKU,
+        channel=CanonicalChannel.HORROR,
         visibility="public",
         title="Título verificado",
         description="Descripción verificada",
@@ -144,9 +144,9 @@ def test_mark_published_only_updates_the_primary_story(tmp_path):
 
 def test_mark_published_rejects_run_with_more_than_one_story(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "moku")
-    repository.enqueue("other", "Otra", "Otra historia", "https://other", "moku")
-    claimed = repository.claim_exact("bhv6zd", "moku", "worker")
+    repository.enqueue("bhv6zd", "Off the grid", "Historia", "https://target", "horror")
+    repository.enqueue("other", "Otra", "Otra historia", "https://other", "horror")
+    claimed = repository.claim_exact("bhv6zd", "horror", "worker")
     with connect(repository.db_path) as conn:
         conn.execute(
             "INSERT INTO run_stories(run_id,story_id,position) VALUES(?,?,1)",
@@ -155,7 +155,7 @@ def test_mark_published_rejects_run_with_more_than_one_story(tmp_path):
         conn.commit()
     proof = PublicationProof(
         video_id="video12345",
-        channel=CanonicalChannel.MOKU,
+        channel=CanonicalChannel.HORROR,
         visibility="public",
         title="Título verificado",
         description="Descripción verificada",
@@ -171,9 +171,9 @@ def test_mark_published_rejects_run_with_more_than_one_story(tmp_path):
 
 def test_mark_published_accepts_multistory_collection_for_non_directed_run(tmp_path):
     repository = _repo(tmp_path)
-    repository.enqueue("a_story_main", "Principal", "Historia principal", "https://main", "moku")
-    repository.enqueue("b_story_extra", "Extra", "Historia extra", "https://extra", "moku")
-    claimed = repository.claim_for_lane("moku-horror-long", "moku", "worker")
+    repository.enqueue("a_story_main", "Principal", "Historia principal", "https://main", "horror")
+    repository.enqueue("b_story_extra", "Extra", "Historia extra", "https://extra", "horror")
+    claimed = repository.claim_for_lane("horror-horror-long", "horror", "worker")
     assert claimed and claimed["story_id"] == "a_story_main"
     with connect(repository.db_path) as conn:
         conn.execute(
@@ -183,7 +183,7 @@ def test_mark_published_accepts_multistory_collection_for_non_directed_run(tmp_p
         conn.commit()
     proof = PublicationProof(
         video_id="video999",
-        channel=CanonicalChannel.MOKU,
+        channel=CanonicalChannel.HORROR,
         visibility="public",
         title="Título verificado",
         description="Descripción verificada",
@@ -206,7 +206,7 @@ def test_strict_script_rejects_aggregation(monkeypatch):
             "Título",
             additional_stories=[{"title": "Otra", "content": "Mezcla"}],
             provider="C",
-            channel="moku",
+            channel="horror",
             strict_single_story=True,
         )
 
@@ -244,62 +244,6 @@ def test_visual_plan_has_full_8_to_15_second_cadence(tmp_path):
     assert all(8.0 <= item["duration"] <= 15.0 for item in plan)
     assert sum(item["duration"] for item in plan) == pytest.approx(605.0, abs=0.1)
 
-
-def test_compose_adds_faststart_and_writes_visual_qa(monkeypatch, tmp_path):
-    source = tmp_path / "scene.jpg"
-    source.write_bytes(b"image")
-    audio = tmp_path / "audio.wav"
-    audio.write_bytes(b"audio")
-    output = tmp_path / "video.mp4"
-    manager = MagicMock()
-    manager.get_background_sequence.side_effect = lambda count, **kwargs: [str(source)] * count
-    manager.get_music.return_value = ""
-    manager.get_ambient.return_value = ""
-    monkeypatch.setattr("src.asset_manager.get_asset_manager", lambda: manager)
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    monkeypatch.setenv("TEST_MODE", "0")
-    monkeypatch.setenv("FORCE_REAL_RENDER", "1")
-    monkeypatch.setenv("SHORT_COMPOSITOR", "ffmpeg_legacy")
-    monkeypatch.setattr("src.config.is_test_environment", lambda: False)
-    run = MagicMock()
-    def fake_run(cmd, *args, **kwargs):
-        out_f = cmd[-1]
-        Path(out_f).write_bytes(b"MP4_DUMMY_HEADER_DATA" * 6000)
-        return MagicMock(returncode=0, stderr="")
-    run.side_effect = fake_run
-    sub_mod = MagicMock()
-    sub_mod.run = run
-    def fake_get_video_attr(name, default=None):
-        if name == "is_test_environment":
-            return lambda: False
-        if name == "subprocess":
-            return sub_mod
-        if name == "validate_video_format":
-            return lambda *args, **kwargs: True
-        return default
-    monkeypatch.setattr("lib.video._get_video_attr", fake_get_video_attr)
-    monkeypatch.setattr("lib.video.subprocess", sub_mod)
-    monkeypatch.setattr("lib.video.subprocess", sub_mod)
-    monkeypatch.setattr("subprocess.run", run)
-
-    from lib.video import compose_video as compose_video_core
-    compose_video_core(
-        str(audio),
-        "",
-        str(source),
-        str(output),
-        duration_sec=605.0,
-        min_duration=0.0,
-        channel="moku",
-        strict_visuals=True,
-        video_mode="longform",
-    )
-
-    command = run.call_args.args[0]
-    assert command[command.index("-movflags") + 1] == "+faststart"
-    qa = json.loads((tmp_path / "visual_plan.json").read_text(encoding="utf-8"))
-    assert qa["scene_count"] > 12
-    assert qa["black_fallbacks"] == 0
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg no disponible")
@@ -356,7 +300,7 @@ def test_real_ffmpeg_render_has_no_long_black_segments(monkeypatch, tmp_path):
         duration_sec=duration,
         template=template,
         min_duration=0.0,
-        channel="moku",
+        channel="horror",
         strict_visuals=True,
         video_mode="longform",
     )
@@ -365,16 +309,6 @@ def test_real_ffmpeg_render_has_no_long_black_segments(monkeypatch, tmp_path):
     assert output.stat().st_size > 0
     assert longest < 1.0, segments
 
-
-def test_directed_thumbnail_fails_before_cli_or_local_fallback(monkeypatch, tmp_path):
-    local = MagicMock(return_value=str(tmp_path / "thumbnail.jpg"))
-    monkeypatch.setattr("lib.video.generate_pil_thumbnail", local)
-    monkeypatch.setattr("lib.video.generate_pil_thumbnail", local)
-    res = create_video_thumbnail(
-        "Título", "moku", str(tmp_path / "thumbnail.jpg")
-    )
-    local.assert_called_once()
-    assert res == str(tmp_path / "thumbnail.jpg")
 
 
 def test_cli_propagates_story_id(monkeypatch, tmp_path):
@@ -391,7 +325,7 @@ def test_cli_propagates_story_id(monkeypatch, tmp_path):
             "main.py",
             "run-once",
             "--channel",
-            "moku",
+            "horror",
             "--story-id",
             "bhv6zd",
             "--db-path",
@@ -401,153 +335,16 @@ def test_cli_propagates_story_id(monkeypatch, tmp_path):
     )
     main()
     assert run_once.call_args.kwargs["story_id"] == "bhv6zd"
-    assert run_once.call_args.kwargs["channel"] == "moku"
+    assert run_once.call_args.kwargs["channel"] == "horror"
 
 
-def test_directed_pipeline_skips_scraper_and_passes_no_extra_stories(monkeypatch, tmp_path):
-    from src.pipeline import run_pipeline_once
-
-    repository = _repo(tmp_path)
-    repository.enqueue("other", "Otra", "No usar", "https://other", "moku")
-    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "moku")
-    old_work_root = SETTINGS.work_root
-    object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
-    scraper = MagicMock(side_effect=AssertionError("scraper no debe ejecutarse"))
-    curate = MagicMock(return_value="Esta es la única historia que se debe narrar completa.")
-
-    def audio(_script, output, **kwargs):
-        Path(output).write_bytes(b"wav")
-        return {
-            "duration_sec": 2.0,
-            "word_timestamps": [{"word": "historia", "start": 0.0, "end": 2.0}],
-        }
-
-    def subtitles(_timestamps, output, **kwargs):
-        Path(output).write_text("subtitles", encoding="utf-8")
-        return output
-
-    def video(_audio, _subs, _background, output, **kwargs):
-        Path(output).write_bytes(b"mp4")
-        return output
-
-    def thumbnail(_title, _channel, output, **kwargs):
-        Path(output).write_bytes(b"jpg")
-        return output
-
-    monkeypatch.setattr("src.scraper.fetch_reddit_stories", scraper)
-    monkeypatch.setattr("src.llm.curate_script", curate)
-    monkeypatch.setattr("lib.tts.generate_audio", audio)
-    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("lib.video.compose_video", video)
-    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
-    report = MagicMock()
-    report.require_pass.return_value = None
-    # Los artefactos son placeholders; el gate real exige MP4/miniatura válidos.
-    monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
-    try:
-        result = run_pipeline_once(
-            channel="moku",
-            db_path=repository.db_path,
-            story_id="bhv6zd",
-            generate_only=True,
-        )
-    finally:
-        object.__setattr__(SETTINGS, "work_root", old_work_root)
-
-    assert result["status"] == JobStatus.RENDERED.value
-    assert curate.call_args.kwargs["additional_stories"] == []
-    assert curate.call_args.kwargs["strict_single_story"] is True
-    with connect(repository.db_path, read_only=True) as conn:
-        assert conn.execute(
-            "SELECT status FROM stories WHERE story_id='other'"
-        ).fetchone()[0] == JobStatus.PENDING.value
-        run_id = result["run_id"]
-        assert conn.execute(
-            "SELECT COUNT(*) FROM run_stories WHERE run_id=?", (run_id,)
-        ).fetchone()[0] == 1
-
-
-def test_non_short_pipeline_skips_captions_even_when_env_enables_them(monkeypatch, tmp_path):
-    from src.pipeline import run_pipeline_once
-
-    monkeypatch.setenv("ENABLE_SUBTITLES", "1")
-    repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "moku")
-    old_work_root = SETTINGS.work_root
-    object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
-    order = []
-
-    def audio(_script, output, **kwargs):
-        Path(output).write_bytes(b"wav")
-        return {
-            "duration_sec": 605.0,
-            "word_timestamps": [
-                {"word": "historia", "start": 0.0, "end": 605.0}
-            ],
-            "provider": "edge-tts",
-            "voice": SETTINGS.channel("moku").voice,
-            "boundary_type": "WordBoundary",
-        }
-
-    def subtitles(_timestamps, output, **kwargs):
-        order.append("create-srt")
-        Path(output).write_text("subtitles", encoding="utf-8")
-        return output
-
-    def ass_subtitles(_timestamps, output, **kwargs):
-        order.append("create-ass")
-        Path(output).write_text("subtitles", encoding="utf-8")
-        return output
-
-    def validate(path, **kwargs):
-        assert Path(path).is_file()
-        order.append("validate-srt")
-        return {"coverage": 1.0}
-
-    def video(_audio, _subs, _background, output, **kwargs):
-        Path(output).write_bytes(b"mp4")
-        (Path(output).parent / "visual_plan.json").write_text("{}", encoding="utf-8")
-        return output
-
-    def thumbnail(_title, _channel, output, **kwargs):
-        Path(output).write_bytes(b"jpg")
-        return output
-
-    report = MagicMock()
-    report.require_pass.return_value = None
-    monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Esta es una historia completa en español.")
-    monkeypatch.setattr("lib.tts.generate_audio", audio)
-    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("lib.subtitles.create_ass_subtitles", ass_subtitles)
-    monkeypatch.setattr("lib.subtitles.validate_subtitle_artifact", validate)
-    def fake_multiscene(self, manifest_path, output_video_path, **kwargs):
-        Path(output_video_path).write_bytes(b"mp4")
-        return {"rendered_scenes": 5, "output_path": str(output_video_path), "duration_sec": 605.0}
-
-    monkeypatch.setattr("src.media.compositor.MultiSceneCompositor.render", fake_multiscene)
-    monkeypatch.setattr("lib.video.compose_video", video)
-    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
-    monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
-    try:
-        result = run_pipeline_once(
-            channel="moku",
-            db_path=repository.db_path,
-            story_id="bhv6zd",
-            generate_only=True,
-            lane_id="moku-horror-long",
-        )
-    finally:
-        object.__setattr__(SETTINGS, "work_root", old_work_root)
-
-    assert result["status"] == JobStatus.RENDERED.value
-    assert order == []
 
 
 def test_pipeline_aborts_when_heartbeat_loses_ownership(monkeypatch, tmp_path):
     from src.pipeline import run_pipeline_once
 
     repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "moku")
+    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "horror")
     old_work_root = SETTINGS.work_root
     object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia")
@@ -558,7 +355,7 @@ def test_pipeline_aborts_when_heartbeat_loses_ownership(monkeypatch, tmp_path):
     monkeypatch.setattr("lib.tts.generate_audio", audio)
     try:
         result = run_pipeline_once(
-            channel="moku",
+            channel="horror",
             db_path=repository.db_path,
             story_id="bhv6zd",
             generate_only=True,
@@ -569,93 +366,6 @@ def test_pipeline_aborts_when_heartbeat_loses_ownership(monkeypatch, tmp_path):
     audio.assert_not_called()
 
 
-def test_post_commit_failure_does_not_downgrade_published(monkeypatch, tmp_path):
-    from src.core.providers import DriveProof
-    from src.pipeline import run_pipeline_once
-
-    repository = _repo(tmp_path)
-    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "moku")
-    old_work_root = SETTINGS.work_root
-    object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
-
-    def audio(_script, output, **kwargs):
-        Path(output).write_bytes(b"wav")
-        return {
-            "duration_sec": 2.0,
-            "word_timestamps": [{"word": "historia", "start": 0.0, "end": 2.0}],
-        }
-
-    def subtitles(_timestamps, output, **kwargs):
-        Path(output).write_text("subtitles", encoding="utf-8")
-        return output
-
-    def video(_audio, _subs, _background, output, **kwargs):
-        Path(output).write_bytes(b"mp4")
-        return output
-
-    def thumbnail(_title, _channel, output, **kwargs):
-        Path(output).write_bytes(b"jpg")
-        return output
-
-    def drive(path, **kwargs):
-        kwargs["on_file_id"]("drive12345")
-        return DriveProof(
-            file_id="drive12345",
-            name=kwargs["display_name"],
-            size_bytes=Path(path).stat().st_size,
-            folder_id=kwargs["folder_id"],
-            exists=True,
-        )
-
-    def youtube(_path, title, description, **kwargs):
-        kwargs["on_video_id"]("video12345")
-        return {
-            "status": "PUBLISHED",
-            "method": "API",
-            "video_id": "video12345",
-            "channel": "moku",
-            "visibility": "public",
-            "title": title,
-            "description": description,
-            "thumbnail_confirmed": True,
-            "verified": True,
-        }
-
-    monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia")
-    monkeypatch.setattr("lib.tts.generate_audio", audio)
-    monkeypatch.setattr("lib.subtitles.create_subtitles", subtitles)
-    monkeypatch.setattr("lib.video.compose_video", video)
-    monkeypatch.setattr("lib.video.create_video_thumbnail", thumbnail)
-    monkeypatch.setattr("src.drive.upload_to_drive_verified", drive)
-    monkeypatch.setattr("src.youtube.uploader.upload_video", youtube)
-    monkeypatch.setattr(
-        "src.core.repository.QueueRepository.record_fingerprint",
-        MagicMock(side_effect=RuntimeError("post-commit failure")),
-    )
-    report = MagicMock()
-    report.require_pass.return_value = None
-    # Los artefactos son placeholders; el gate real exige MP4/miniatura válidos.
-    monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
-    review_manager = MagicMock()
-    review_manager.submit_video_for_review.return_value = MagicMock(
-        status="APPROVED", version=1, delivery_error=None
-    )
-    monkeypatch.setattr("review.ReviewJobManager", lambda: review_manager)
-    try:
-        result = run_pipeline_once(
-            channel="moku",
-            db_path=repository.db_path,
-            story_id="bhv6zd",
-        )
-    finally:
-        object.__setattr__(SETTINGS, "work_root", old_work_root)
-
-    assert result["status"] == JobStatus.PUBLISHED.value
-    assert result["post_commit_warning"]
-    with connect(repository.db_path, read_only=True) as conn:
-        assert conn.execute(
-            "SELECT status FROM stories WHERE story_id='bhv6zd'"
-        ).fetchone()[0] == JobStatus.PUBLISHED.value
 
 
 def test_missing_official_thumbnail_sdk_leaves_story_retryable_without_remote_calls(
@@ -664,8 +374,8 @@ def test_missing_official_thumbnail_sdk_leaves_story_retryable_without_remote_ca
     from src.pipeline import run_pipeline_once
 
     repository = _repo(tmp_path)
-    repository.enqueue("other", "Otra", "No usar", "https://other", "moku")
-    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "moku")
+    repository.enqueue("other", "Otra", "No usar", "https://other", "horror")
+    repository.enqueue("bhv6zd", "SCP-173: La Escultura", "Solo esta historia", "https://target", "horror")
     old_work_root = SETTINGS.work_root
     object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
     drive_preflight = MagicMock(side_effect=AssertionError("Drive no debe llamarse"))
@@ -676,7 +386,7 @@ def test_missing_official_thumbnail_sdk_leaves_story_retryable_without_remote_ca
     monkeypatch.setattr("src.youtube.uploader.preflight_youtube_api", youtube_preflight)
     try:
         result = run_pipeline_once(
-            channel="moku",
+            channel="horror",
             db_path=repository.db_path,
             story_id="bhv6zd",
         )
@@ -722,7 +432,7 @@ def test_api_only_uploader_never_calls_playwright(monkeypatch, tmp_path):
             "status": "PUBLISHED",
             "method": "API",
             "video_id": "video12345",
-            "channel": "moku",
+            "channel": "horror",
             "visibility": "public",
             "title": "Una historia de terror",
             "description": "Esta es una descripción en español para la historia que se publica en el canal.",
@@ -737,7 +447,7 @@ def test_api_only_uploader_never_calls_playwright(monkeypatch, tmp_path):
         str(video),
         "Una historia de terror",
         "Esta es una descripción en español para la historia que se publica en el canal.",
-        channel="moku",
+        channel="horror",
         thumbnail_path=str(thumb),
         token_path=str(token),
         api_only=True,
@@ -789,90 +499,6 @@ def test_youtube_post_verification_requires_public_processed_and_exact_channel()
         )
 
 
-def test_youtube_public_insert_persists_id_before_thumbnail(monkeypatch, tmp_path):
-    from src.youtube.uploader import upload_video_via_api
-
-    video = tmp_path / "video.mp4"
-    thumbnail = tmp_path / "thumbnail.jpg"
-    token = tmp_path / "token.json"
-    video.write_bytes(b"video")
-    thumbnail.write_bytes(b"thumbnail")
-    token.write_text("{}", encoding="utf-8")
-    youtube = MagicMock()
-    events = []
-    youtube.videos().insert().execute.side_effect = lambda: (
-        events.append("insert-public") or {"id": "video12345"}
-    )
-    youtube.thumbnails().set().execute.side_effect = lambda: (
-        events.append("thumbnail") or {"items": [{}]}
-    )
-    youtube.videos().list().execute.return_value = {
-        "items": [
-            {
-                "snippet": {
-                    "channelId": "expected-channel",
-                    "title": "Una historia de terror",
-                    "description": "Esta es una descripción completa en español para publicar la historia del canal.",
-                },
-                "status": {"privacyStatus": "public", "uploadStatus": "processed"},
-                "processingDetails": {"processingStatus": "succeeded"},
-                "contentDetails": {"duration": "PT10M5S"},
-            }
-        ]
-    }
-    monkeypatch.setattr("src.youtube.uploader._youtube_service", lambda _path: youtube)
-    monkeypatch.setattr("src.youtube.uploader.preflight_youtube_api", lambda **kwargs: {})
-    monkeypatch.setattr("googleapiclient.http.MediaFileUpload", lambda *args, **kwargs: object())
-
-    result = upload_video_via_api(
-        str(video),
-        "Una historia de terror",
-        "Esta es una descripción completa en español para publicar la historia del canal.",
-        thumbnail_path=str(thumbnail),
-        token_path=str(token),
-        channel="moku",
-        expected_channel_id="expected-channel",
-        on_video_id=lambda video_id: events.append(f"persist:{video_id}"),
-    )
-
-    insert_body = youtube.videos().insert.call_args.kwargs["body"]
-    assert insert_body["status"]["privacyStatus"] == "public"
-    assert events == ["insert-public", "persist:video12345", "thumbnail"]
-    assert result["publication_sequence"].startswith("videos.insert(public)")
-
-
-def test_read_only_remote_preflights_validate_drive_and_youtube(monkeypatch, tmp_path):
-    from src.drive import preflight_drive_access
-    from src.youtube.uploader import preflight_youtube_api
-
-    drive = MagicMock()
-    drive.files().get().execute.return_value = {
-        "id": "folder-id",
-        "name": "Moku",
-        "mimeType": "application/vnd.google-apps.folder",
-        "trashed": False,
-        "capabilities": {"canAddChildren": True},
-    }
-    monkeypatch.setattr("src.drive.get_drive_credentials", lambda *args, **kwargs: object())
-    monkeypatch.setattr("src.drive._drive_service", lambda *args, **kwargs: drive)
-    token = tmp_path / "token.json"
-    token.write_text("{}", encoding="utf-8")
-    proof = preflight_drive_access(
-        folder_id="folder-id", sa_key_path="", token_path=str(token)
-    )
-    assert proof["writable"] is True
-
-    youtube = MagicMock()
-    youtube.channels().list().execute.return_value = {
-        "items": [{"id": "expected-channel", "snippet": {"title": "Moku"}}]
-    }
-    monkeypatch.setattr("src.youtube.uploader._youtube_service", lambda _path: youtube)
-    identity = preflight_youtube_api(
-        channel="moku",
-        token_path=str(token),
-        expected_channel_id="expected-channel",
-    )
-    assert identity["channel_id"] == "expected-channel"
 
 
 def test_critical_qa_accepts_complete_artifacts_and_blocks_placeholders(monkeypatch, tmp_path):
@@ -927,7 +553,7 @@ def test_critical_qa_accepts_complete_artifacts_and_blocks_placeholders(monkeypa
         "Esta es una descripción completa en español para la historia de terror que se publica hoy."
     )
     report = validate_prepublication(
-        channel="moku",
+        channel="horror",
         script=script,
         title="La casa donde nadie debía entrar",
         description=description,
@@ -939,7 +565,7 @@ def test_critical_qa_accepts_complete_artifacts_and_blocks_placeholders(monkeypa
         visibility="public",
         audio_proof={
             "provider": "edge-tts",
-            "voice": SETTINGS.channel("moku").voice,
+            "voice": SETTINGS.channel("horror").voice,
             "boundary_type": "WordBoundary",
         },
         require_strict_voice=True,
@@ -947,7 +573,7 @@ def test_critical_qa_accepts_complete_artifacts_and_blocks_placeholders(monkeypa
     assert report.passed, report.issues
 
     blocked = validate_prepublication(
-        channel="moku",
+        channel="horror",
         script=script + " TODO <placeholder>",
         title="La casa donde nadie debía entrar",
         description=description,

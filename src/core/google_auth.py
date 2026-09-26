@@ -14,8 +14,13 @@ from typing import Any, Dict, List, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import Resource, build
+import googleapiclient.discovery
 import google_auth_oauthlib.flow
+
+
+def build(*args: Any, **kwargs: Any) -> Any:
+    """Forward to googleapiclient.discovery.build dynamically."""
+    return googleapiclient.discovery.build(*args, **kwargs)
 
 from src.config import (
     BASE_DIR,
@@ -217,11 +222,11 @@ def resolve_channel_token_path(channel: str | CanonicalChannel) -> str:
         return str(Path(override).expanduser().resolve())
 
     # Legacy environment overrides for backwards compatibility
-    if key == CanonicalChannel.AELITHIA:
+    if key == CanonicalChannel.DRAMA:
         override = os.environ.get("TOKEN_CHANNEL2_PATH") or os.environ.get("YOUTUBE_TOKEN_CHANNEL2_PATH")
         if override:
             return str(Path(override).expanduser().resolve())
-    elif key == CanonicalChannel.MOKU:
+    elif key == CanonicalChannel.HORROR:
         override = os.environ.get("YOUTUBE_TOKEN_PATH")
         if override:
             return str(Path(override).expanduser().resolve())
@@ -245,7 +250,7 @@ def resolve_channel_token_path(channel: str | CanonicalChannel) -> str:
     if legacy_named.is_file():
         return str(legacy_named.resolve())
 
-    if key == CanonicalChannel.MOKU:
+    if key == CanonicalChannel.HORROR:
         legacy_moku = BASE_DIR / "secrets" / "youtube_token.json"
         if legacy_moku.is_file():
             return str(legacy_moku.resolve())
@@ -259,11 +264,11 @@ def resolve_channel_token_path(channel: str | CanonicalChannel) -> str:
 def build_youtube_service(
     token_path: Optional[str | Path] = None,
     channel: Optional[str | CanonicalChannel] = None,
-) -> Resource:
+) -> googleapiclient.discovery.Resource:
     """Build and return an official YouTube Data API v3 client Resource."""
     if token_path is None:
         if channel is None:
-            channel = CanonicalChannel.MOKU
+            channel = CanonicalChannel.HORROR
         token_path = resolve_channel_token_path(channel)
 
     credentials = load_authorized_user_credentials(
@@ -271,8 +276,7 @@ def build_youtube_service(
         scopes=YOUTUBE_SCOPES,
         auto_refresh=True,
     )
-    import googleapiclient.discovery
-    return googleapiclient.discovery.build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    return build("youtube", "v3", credentials=credentials, cache_discovery=False)
 
 
 def _gcloud_credentials() -> Credentials:
@@ -343,7 +347,7 @@ def build_drive_service(
     sa_key_path: Optional[str | Path] = None,
     token_path: Optional[str | Path] = None,
     use_gcloud: bool = False,
-) -> Resource:
+) -> googleapiclient.discovery.Resource:
     """Build and return an official Google Drive API v3 client Resource."""
     credentials = get_drive_credentials(
         sa_key_path=sa_key_path,

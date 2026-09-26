@@ -394,8 +394,8 @@ class TestAsyncRedditScraper(unittest.IsolatedAsyncioTestCase):
 
         with tempfile.NamedTemporaryFile(suffix=".db") as tmp:
             init_db(tmp.name)
-            short_lane = resolve_lane_for_run(CanonicalChannel.AELITHIA, "aelithia-drama-shorts")
-            long_lane = resolve_lane_for_run(CanonicalChannel.AELITHIA, "aelithia-aita-long")
+            short_lane = resolve_lane_for_run(CanonicalChannel.DRAMA, "drama-drama-shorts")
+            long_lane = resolve_lane_for_run(CanonicalChannel.DRAMA, "drama-aita-long")
 
             dummy_stories = [
                 {"id": "FILE-test_drama_long_001", "title": "¿Soy la mala por heredar la casa familiar?", "content": "Texto de drama largo para la familia con herencia " * 50, "url": "https://reddit.com/r/canonical/FILE-test_drama_long_001"},

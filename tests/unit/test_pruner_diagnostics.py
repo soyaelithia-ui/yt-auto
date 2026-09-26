@@ -79,6 +79,9 @@ def test_mark_and_purge_flow():
         mock_service = MagicMock()
         mock_delete = MagicMock()
         mock_service.videos.return_value.delete.return_value = mock_delete
+        mock_service.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"snippet": {"channelId": "UC8sStaR-cwz-x7MD4XKNUKA"}}]
+        }
 
         purge_res = purge_marked_videos(channel="horror", db_path=db_path, youtube_service=mock_service)
         assert purge_res["purged_count"] == 1

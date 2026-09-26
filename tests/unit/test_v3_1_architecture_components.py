@@ -81,7 +81,7 @@ def test_session_uploader_dry_run(tmp_path):
     dummy_video = tmp_path / "video.mp4"
     dummy_video.write_bytes(b"dummy video bytes 12345")
 
-    uploader = SessionUploader(channel="moku")
+    uploader = SessionUploader(channel="horror")
     with patch.object(uploader, "check_health") as mock_health:
         mock_health.return_value = SessionHealthResult(status=SessionStatus.HEALTHY, detail="OK")
         res = uploader.upload(
@@ -99,7 +99,7 @@ def test_session_uploader_fails_closed_when_invalid(tmp_path):
     dummy_video = tmp_path / "video.mp4"
     dummy_video.write_bytes(b"dummy video bytes 12345")
 
-    uploader = SessionUploader(channel="moku")
+    uploader = SessionUploader(channel="horror")
     with patch.object(uploader, "check_health") as mock_health:
         mock_health.return_value = SessionHealthResult(status=SessionStatus.INVALID, detail="Corrupted")
         with pytest.raises(SessionUploadError) as exc_info:
@@ -204,7 +204,7 @@ def test_lease_reaper_clears_dead_worker(tmp_path):
         )
         conn.execute(
             "INSERT INTO leases (job_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
-            "VALUES ('job_1', 'moku', ?, 'run_1', 100, 100, 1000)",
+            "VALUES ('job_1', 'horror', ?, 'run_1', 100, 100, 1000)",
             (f"worker:{dead_pid}",),
         )
         conn.commit()
@@ -223,8 +223,8 @@ def test_lease_reaper_clears_dead_worker(tmp_path):
 def test_is_local_hostname_parsing():
     cur_host = socket.gethostname()
     # Multi-segment owner
-    assert is_local_hostname(f"lane-moku-scp-shorts:{cur_host}:1234") is True
-    assert is_local_hostname(f"lane-moku-scp-shorts:foreign_host_999:1234") is False
+    assert is_local_hostname(f"lane-horror-scp-shorts:{cur_host}:1234") is True
+    assert is_local_hostname(f"lane-horror-scp-shorts:foreign_host_999:1234") is False
     assert is_local_hostname(f"worker:{cur_host}:5678") is True
     assert is_local_hostname(f"worker:foreign_box:5678") is False
     # Two-segment owner
@@ -257,7 +257,7 @@ def test_lease_reaper_clears_expired_ttl_leases(tmp_path):
         conn.execute("INSERT INTO runs (run_id, status) VALUES ('run_exp', 'RUNNING')")
         conn.execute(
             "INSERT INTO lane_leases (lane_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
-            "VALUES ('lane_1', 'moku', 'lane-lane_1:foreign_container:99', 'run_exp', ?, ?, ?)",
+            "VALUES ('lane_1', 'horror', 'lane-lane_1:foreign_container:99', 'run_exp', ?, ?, ?)",
             (now_ts - 200, now_ts - 200, now_ts - 10),
         )
         conn.commit()
@@ -293,7 +293,7 @@ def test_lease_reaper_clears_orphan_remote_leases(tmp_path):
         conn.execute("INSERT INTO runs (run_id, status) VALUES ('run_rem', 'PROCESSING')")
         conn.execute(
             "INSERT INTO lane_leases (lane_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
-            "VALUES ('lane-long', 'aelithia', 'lane-aelithia-aita-long:dead_container_4415:8', 'run_rem', ?, ?, ?)",
+            "VALUES ('lane-long', 'drama', 'lane-drama-aita-long:dead_container_4415:8', 'run_rem', ?, ?, ?)",
             (now_ts - 500, now_ts - 500, now_ts + 5000),
         )
         conn.commit()

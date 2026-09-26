@@ -8,9 +8,8 @@ DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) YoutubeAutomatio
 USER_AGENTS: List[str] = [DEFAULT_USER_AGENT]
 
 CHANNEL_SUBREDDITS: Dict[str, List[str]] = {
-    "terror": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
-    "moku": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
-    "aelithia": [
+    "horror": ["nosleep", "scarystories", "darktales", "creepypasta", "shortscarystories", "libraryofshadows"],
+    "drama": [
         "AmItheAsshole",
         "AITA",
         "TrueOffMyChest",

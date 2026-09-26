@@ -47,15 +47,15 @@ def _patch_channel_id(monkeypatch, value="UC_expected"):
 def test_delete_video_success_verifies_ownership(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch)
     with _patch_service(fake_service):
-        result = ctl.delete_video("abc123", channel="moku")
-    assert result == {"ok": True, "action": "deleted", "video_id": "abc123", "channel": "moku"}
+        result = ctl.delete_video("abc123", channel="horror")
+    assert result == {"ok": True, "action": "deleted", "video_id": "abc123", "channel": "horror"}
     fake_service.videos.return_value.delete.assert_called_once_with(id="abc123")
 
 
 def test_delete_rejects_foreign_channel(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch, value="UC_other")
     with _patch_service(fake_service):
-        result = ctl.delete_video("abc123", channel="moku")
+        result = ctl.delete_video("abc123", channel="horror")
     assert result["ok"] is False
     assert "no al canal" in result["error"]
     fake_service.videos.return_value.delete.assert_not_called()
@@ -65,7 +65,7 @@ def test_delete_rejects_unknown_video(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch)
     fake_service.videos.return_value.list.return_value.execute.return_value = {"items": []}
     with _patch_service(fake_service):
-        result = ctl.delete_video("ghost", channel="moku")
+        result = ctl.delete_video("ghost", channel="horror")
     assert result["ok"] is False
     assert "no encontrado" in result["error"].lower()
 
@@ -77,7 +77,7 @@ def test_delete_requires_video_id():
 def test_privacy_change_success(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch)
     with _patch_service(fake_service):
-        result = ctl.set_video_privacy("abc123", "private", channel="moku")
+        result = ctl.set_video_privacy("abc123", "private", channel="horror")
     assert result["ok"] is True
     assert result["previous"] == "public"
     assert result["privacyStatus"] == "private"
@@ -93,7 +93,7 @@ def test_privacy_noop_when_already_set(fake_service, monkeypatch):
         "status"
     ]["privacyStatus"] = "private"
     with _patch_service(fake_service):
-        result = ctl.set_video_privacy("abc123", "private", channel="moku")
+        result = ctl.set_video_privacy("abc123", "private", channel="horror")
     assert result["ok"] is True
     assert result["action"] == "noop"
     fake_service.videos.return_value.update.assert_not_called()
@@ -106,7 +106,7 @@ def test_privacy_rejects_invalid_value():
 def test_stats_snapshot(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch)
     with _patch_service(fake_service):
-        result = ctl.get_video_stats("abc123", channel="moku")
+        result = ctl.get_video_stats("abc123", channel="horror")
     assert result["ok"] is True
     assert result["views"] == 1234
     assert result["likes"] == 56
@@ -118,6 +118,6 @@ def test_stats_api_error_is_contained(fake_service, monkeypatch):
     _patch_channel_id(monkeypatch)
     fake_service.videos.return_value.list.return_value.execute.side_effect = RuntimeError("boom")
     with _patch_service(fake_service):
-        result = ctl.get_video_stats("abc123", channel="moku")
+        result = ctl.get_video_stats("abc123", channel="horror")
     assert result["ok"] is False
     assert "boom" in result["error"]

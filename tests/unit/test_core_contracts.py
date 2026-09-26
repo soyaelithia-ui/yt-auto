@@ -122,7 +122,7 @@ class TestStoryRecordContract:
         assert s.attempt_count == 0
 
     def test_mapping_protocol_compliance(self):
-        s = StoryRecord(story_id="s1", channel="moku", title="Title")
+        s = StoryRecord(story_id="s1", channel="horror", title="Title")
         assert ("to_dict" in s) is False
         assert ("get" in s) is False
         assert ("keys" in s) is False
@@ -182,6 +182,7 @@ class TestRenderSpecContract:
         lane_mock.duration_min_sec = 600
         lane_mock.fps = 60
         lane_mock.expected_resolution = (1920, 1080)
+        lane_mock.visual_pipeline = "director"
 
         ctx = MagicMock()
         ctx.audio = {"duration_sec": 45.2}
@@ -393,7 +394,7 @@ class TestContractsSubsystemIntegration:
         from src.mcp.server import create_mcp_server
 
         server = create_mcp_server()
-        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "moku-scp-shorts"}))
+        result = asyncio.run(server.call_tool("get_lane_info", {"lane_id": "horror-scp-shorts"}))
         import json
         text = result.content[0].text if hasattr(result, "content") else result[0].text
         payload = json.loads(text)

@@ -158,13 +158,13 @@ def detect_adaptive_theme(topic: str, script: str = "", niche: str = "") -> str:
 
     # 2. Channel & Niche intelligent fallback
     niche_lower = f"{niche} {topic_clean}".lower()
-    if any(k in niche_lower for k in ("aita", "drama", "confesion", "confesión", "relacion", "relación", "aelithia")):
+    if any(k in niche_lower for k in ("aita", "drama", "confesion", "confesión", "relacion", "relación")):
         return "cozy_hearth"
     if any(k in niche_lower for k in ("scifi", "espacio", "cosmos", "ciencia ficcion")):
         return "cosmic_singularity"
     if any(k in niche_lower for k in ("scp", "fundacion", "clasificado")):
         return "tactical_chamber"
-    if any(k in niche_lower for k in ("moku", "terror", "horror", "creepypasta", "nosleep")):
+    if any(k in niche_lower for k in ("terror", "horror", "creepypasta", "nosleep")):
         return "dark_forest"
 
     return "dark_forest"

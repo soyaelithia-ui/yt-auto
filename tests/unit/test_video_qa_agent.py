@@ -25,7 +25,7 @@ def _seed_run(tmp_path: Path, *, with_video: bool = True) -> tuple[str, Path]:
             """
             INSERT INTO runs(run_id, channel, story_id, mode, status, owner,
                              started_at, heartbeat_at)
-            VALUES (?, 'moku', NULL, 'publish', 'RETRYABLE_FAILED', 'tester',
+            VALUES (?, 'horror', NULL, 'publish', 'RETRYABLE_FAILED', 'tester',
                     '2026-08-22T00:00:00+00:00', '2026-08-22T00:00:00+00:00')
             """,
             (run_id,),

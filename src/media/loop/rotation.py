@@ -70,8 +70,6 @@ CATEGORY_ALIASES: dict[str, str] = {
     "facility": "horror",
     "containment": "horror",
     "scp": "horror",
-    "moku": "horror",
-    "moku_horror": "horror",
     "haunted_house": "horror",
     "analog_horror": "horror",
     "vhs": "horror",
@@ -87,10 +85,8 @@ CATEGORY_ALIASES: dict[str, str] = {
     "dark_woods": "dark_forest",
     "foggy_road": "dark_forest",
 
-    # Aelithia / Drama / Relationships / Reddit AITA
+    # Drama / Relationships / Reddit AITA
     "cozy_hearth": "drama",
-    "aelithia": "drama",
-    "aelithia_drama": "drama",
     "aita": "drama",
     "drama_aita": "drama",
     "reddit_aita": "drama",
@@ -353,10 +349,10 @@ class LoopRotationMixin:
             ]
             if drama_matches:
                 candidates = drama_matches
-        elif canon == CanonicalChannel.HORROR or (canon is None and any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss"))):
+        elif canon == CanonicalChannel.HORROR or (canon is None and any(k in norm_ctx for k in ("horror", "scp", "creepy", "dark", "cosmic", "abyss"))):
             horror_matches = [
                 p for p in mp4_files
-                if not any(k in p.name.lower() for k in ("drama", "aita", "aelithia", "romance", "family"))
+                if not any(k in p.name.lower() for k in ("drama", "aita", "romance", "family"))
                 and any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "ambient"))
             ]
             if horror_matches:
@@ -429,7 +425,7 @@ class LoopRotationMixin:
 
         norm_ctx = f"{category or ''} {channel or ''}".lower()
         if candidate_pool is None:
-            if any(k in norm_ctx for k in ("drama", "aita", "aelithia", "interior", "romance", "family", "confession")):
+            if any(k in norm_ctx for k in ("drama", "aita", "interior", "romance", "family", "confession")):
                 drama_candidates = [
                     p for p in candidates
                     if not any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "monsters"))
@@ -437,10 +433,10 @@ class LoopRotationMixin:
                 ]
                 if drama_candidates:
                     candidates = drama_candidates
-            elif any(k in norm_ctx for k in ("horror", "scp", "moku", "creepy", "dark", "cosmic", "abyss", "wilderness")):
+            elif any(k in norm_ctx for k in ("horror", "scp", "creepy", "dark", "cosmic", "abyss", "wilderness")):
                 horror_candidates = [
                     p for p in candidates
-                    if not any(k in p.name.lower() for k in ("drama", "aita", "aelithia", "romance", "family"))
+                    if not any(k in p.name.lower() for k in ("drama", "aita", "romance", "family"))
                     and any(k in p.name.lower() for k in ("horror", "scp", "dark", "cosmic", "abyss", "terror", "creepy", "ambient", "forest", "containment", "facility", "emergency", "wilderness"))
                 ]
                 if horror_candidates:

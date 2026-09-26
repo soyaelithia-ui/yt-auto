@@ -140,15 +140,17 @@ class TestStartDaemonLanes:
         _seed_story(db_path, "story-short")
 
         import threading
-        long_running = threading.Event()
+        short_started = threading.Event()
         timestamps: dict[str, float] = {}
 
         def fake_pipeline(**kwargs):
             lane_id = kwargs.get("lane_id")
             timestamps[f"{lane_id}_start"] = time.monotonic()
             if lane_id and "long" in lane_id:
-                long_running.wait(0.25)
+                short_started.wait(timeout=2.0)
+                threading.Event().wait(0.05)
             else:
+                short_started.set()
                 threading.Event().wait(0.02)
             timestamps[f"{lane_id}_end"] = time.monotonic()
             return {"status": "PUBLISHED", "lane": lane_id}
@@ -324,6 +326,7 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
     def fake_multiscene(*args, **kwargs):
         out_p = kwargs.get("output_video_path") or (args[2] if len(args) > 2 else args[1])
         out = Path(out_p)
+        out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"MP4")
         return {"rendered_scenes": 5, "output_path": str(out), "duration_sec": 605.0}
 
@@ -340,7 +343,7 @@ def test_directed_longform_passes_gate_when_audio_meets_minimum(db_path, monkeyp
     monkeypatch.setattr("lib.subtitles.create_subtitles", fake_subs)
     monkeypatch.setattr("lib.subtitles.create_ass_subtitles", fake_subs)
     monkeypatch.setattr("lib.video.create_video_thumbnail", fake_thumb)
-    monkeypatch.setattr("src.media.compositor.MultiSceneCompositor.render", fake_multiscene)
+    monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", fake_multiscene)
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: report)
 
     res = run_pipeline_once(

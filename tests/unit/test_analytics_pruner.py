@@ -29,7 +29,7 @@ def _create_sample_inventory(db_path: str):
         story_id="story-fresh",
         video_id="vid_fresh_6h",
         url="https://youtube.com/watch?v=vid_fresh_6h",
-        channel="moku",
+        channel="horror",
         title="Fresh Short",
         description="Fresh desc",
         verified_at=fresh_time_6h,
@@ -43,7 +43,7 @@ def _create_sample_inventory(db_path: str):
         story_id="story-poor-1",
         video_id="vid_poor_1",
         url="https://youtube.com/watch?v=vid_poor_1",
-        channel="moku",
+        channel="horror",
         title="Poor Short 1",
         description="Poor desc 1",
         verified_at=old_time_48h,
@@ -57,7 +57,7 @@ def _create_sample_inventory(db_path: str):
         story_id="story-poor-2",
         video_id="vid_poor_2",
         url="https://youtube.com/watch?v=vid_poor_2",
-        channel="moku",
+        channel="horror",
         title="Poor Short 2",
         description="Poor desc 2",
         verified_at=old_time_3d,
@@ -71,7 +71,7 @@ def _create_sample_inventory(db_path: str):
         story_id="story-poor-3",
         video_id="vid_poor_3",
         url="https://youtube.com/watch?v=vid_poor_3",
-        channel="moku",
+        channel="horror",
         title="Poor Short 3",
         description="Poor desc 3",
         verified_at=old_time_3d,
@@ -85,7 +85,7 @@ def _create_sample_inventory(db_path: str):
         story_id="story-good",
         video_id="vid_good",
         url="https://youtube.com/watch?v=vid_good",
-        channel="moku",
+        channel="horror",
         title="Good Short",
         description="Good desc",
         verified_at=old_time_3d,
@@ -99,7 +99,7 @@ def test_grace_period_protects_fresh_videos():
         _create_sample_inventory(db_path)
 
         candidates = evaluate_prune_candidates(
-            channel="moku",
+            channel="horror",
             db_path=db_path,
             min_score=25.0,
             grace_hours=24.0,
@@ -117,7 +117,7 @@ def test_daily_ceiling_limits_prune_to_max_2():
         _create_sample_inventory(db_path)
 
         candidates = evaluate_prune_candidates(
-            channel="moku",
+            channel="horror",
             db_path=db_path,
             min_score=25.0,
             grace_hours=24.0,
@@ -136,7 +136,7 @@ def test_kill_switch_halts_pruning():
 
         with patch.dict(os.environ, {"AUTO_PRUNE_ENABLED": "false"}):
             report = execute_autonomous_prune(
-                channel="moku",
+                channel="horror",
                 db_path=db_path,
                 dry_run=False,
             )
@@ -151,7 +151,7 @@ def test_dry_run_does_not_mutate_state():
 
         mock_youtube = MagicMock()
         report = execute_autonomous_prune(
-            channel="moku",
+            channel="horror",
             db_path=db_path,
             dry_run=True,
             youtube_service=mock_youtube,
@@ -175,10 +175,13 @@ def test_live_prune_deletes_and_updates_db():
         mock_delete = MagicMock()
         mock_delete.execute.return_value = ""
         mock_youtube.videos().delete.return_value = mock_delete
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"snippet": {"channelId": "UC8sStaR-cwz-x7MD4XKNUKA"}}]
+        }
 
         with patch.dict(os.environ, {"AUTO_PRUNE_ENABLED": "true"}):
             report = execute_autonomous_prune(
-                channel="moku",
+                channel="horror",
                 db_path=db_path,
                 dry_run=False,
                 youtube_service=mock_youtube,
@@ -207,7 +210,7 @@ def test_marked_purge_is_bounded_and_updates_db_after_ownership_check():
         mock_youtube.videos().delete.return_value = mock_delete
         with patch("src.youtube.control._verify_ownership") as verify:
             result = purge_marked_videos(
-                channel="moku",
+                channel="horror",
                 db_path=db_path,
                 max_delete=2,
                 youtube_service=mock_youtube,
@@ -230,7 +233,7 @@ def test_purged_stories_are_excluded_from_prune_candidates():
         _create_sample_inventory(db_path)
 
         # Before marking purged, we should find candidates
-        cands_before = evaluate_prune_candidates(channel="moku", db_path=db_path, max_candidates=10)
+        cands_before = evaluate_prune_candidates(channel="horror", db_path=db_path, max_candidates=10)
         candidate_story_ids_before = [c.story_id for c in cands_before]
         assert "story-poor-1" in candidate_story_ids_before
         assert "story-poor-2" in candidate_story_ids_before
@@ -241,7 +244,7 @@ def test_purged_stories_are_excluded_from_prune_candidates():
             conn.commit()
 
         # After marking purged, story-poor-2 must NOT be included in candidates
-        cands_after = evaluate_prune_candidates(channel="moku", db_path=db_path, max_candidates=10)
+        cands_after = evaluate_prune_candidates(channel="horror", db_path=db_path, max_candidates=10)
         candidate_story_ids_after = [c.story_id for c in cands_after]
         assert "story-poor-2" not in candidate_story_ids_after
         assert "story-poor-1" in candidate_story_ids_after

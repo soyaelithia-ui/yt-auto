@@ -22,7 +22,7 @@ class TestTTS(unittest.TestCase):
 
         with patch.dict(os.environ, {}, clear=True):
             info = generate_audio(
-                script, audio_path, target_duration_sec=605.0, channel="moku"
+                script, audio_path, target_duration_sec=605.0, channel="horror"
             )
 
         self.assertTrue(os.path.exists(info["audio_path"]))
@@ -43,7 +43,7 @@ class TestTTS(unittest.TestCase):
         script = "Word one two three."
         
         info = generate_audio(
-            script, audio_path, target_duration_sec=605.0, channel="moku"
+            script, audio_path, target_duration_sec=605.0, channel="horror"
         )
         stamps = info["word_timestamps"]
         
@@ -58,7 +58,7 @@ class TestTTS(unittest.TestCase):
         """Test handling of empty script text."""
         audio_path = os.path.join(self.temp_dir.name, "test_empty.wav")
         info = generate_audio(
-            "", audio_path, target_duration_sec=605.0, channel="moku"
+            "", audio_path, target_duration_sec=605.0, channel="horror"
         )
         
         self.assertTrue(os.path.exists(info["audio_path"]))
@@ -92,7 +92,7 @@ class TestTTS(unittest.TestCase):
                 with open(audio_path, "wb") as f:
                     f.write(b"RIFF")
                 
-                info = generate_audio(script, audio_path, target_duration_sec=605.0, channel="aelithia")
+                info = generate_audio(script, audio_path, target_duration_sec=605.0, channel="drama")
                 self.assertEqual(info["audio_path"], audio_path)
                 self.assertFalse(
                     mock_synthesizer.speak_ssml_async.called,
@@ -158,8 +158,8 @@ class TestTTS(unittest.TestCase):
         """Test voice, rate, and pitch resolution across the 3 calibrated production lanes."""
         from src.core.lanes import resolve_voice_for_lane, resolve_voice_profile_for_lane, get_lane
 
-        # 1. moku-scp-shorts
-        lane_scp = get_lane("moku-scp-shorts")
+        # 1. horror-scp-shorts
+        lane_scp = get_lane("horror-scp-shorts")
         self.assertIsNotNone(lane_scp)
         self.assertEqual(lane_scp.voice_rate, "+0%")
         prof_scp = resolve_voice_profile_for_lane(lane_scp)
@@ -169,8 +169,8 @@ class TestTTS(unittest.TestCase):
         voice_scp = resolve_voice_for_lane(lane_scp)
         self.assertIn(voice_scp, ("es-ES-AlvaroNeural", "es-ES-ElviraNeural", "es-MX-JorgeNeural"))
 
-        # 2. moku-horror-long
-        lane_horror = get_lane("moku-horror-long")
+        # 2. horror-horror-long
+        lane_horror = get_lane("horror-horror-long")
         self.assertIsNotNone(lane_horror)
         self.assertEqual(lane_horror.voice_rate, "+0%")
         prof_horror = resolve_voice_profile_for_lane(lane_horror)
@@ -180,8 +180,8 @@ class TestTTS(unittest.TestCase):
         voice_horror = resolve_voice_for_lane(lane_horror)
         self.assertIn(voice_horror, ("es-ES-AlvaroNeural", "es-MX-JorgeNeural"))
 
-        # 3. aelithia-aita-long
-        lane_aita = get_lane("aelithia-aita-long")
+        # 3. drama-aita-long
+        lane_aita = get_lane("drama-aita-long")
         self.assertIsNotNone(lane_aita)
         self.assertEqual(lane_aita.voice_rate, "+6%")
         prof_aita = resolve_voice_profile_for_lane(lane_aita)
@@ -196,23 +196,23 @@ class TestTTS(unittest.TestCase):
         from src.core.lanes import get_lane
 
         audio_path = os.path.join(self.temp_dir.name, "test_params.wav")
-        lane_horror = get_lane("moku-horror-long")
+        lane_horror = get_lane("horror-horror-long")
         info = generate_audio(
             "Texto de prueba para horror",
             audio_path,
             lane=lane_horror,
-            channel="moku",
+            channel="horror",
         )
         self.assertEqual(info["pitch"], "-2Hz")
         self.assertEqual(info["rate"], "+0%")
 
         audio_path_aita = os.path.join(self.temp_dir.name, "test_aita.wav")
-        lane_aita = get_lane("aelithia-aita-long")
+        lane_aita = get_lane("drama-aita-long")
         info_aita = generate_audio(
             "Texto de prueba para AITA",
             audio_path_aita,
             lane=lane_aita,
-            channel="aelithia",
+            channel="drama",
         )
         self.assertEqual(info_aita["pitch"], "+0Hz")
         self.assertEqual(info_aita["rate"], "+6%")

@@ -233,7 +233,7 @@ def _build_asset_loop_row(
         tags.add("60s")
 
     tokens = [t.lower() for t in re.split(r"[_\W]+", stem) if t]
-    ignored_tokens = {"mp4", "webm", "master", "60s", "moku", "aelithia", "scifi", "vertical", "horizontal", "short", "loop"}
+    ignored_tokens = {"mp4", "webm", "master", "60s", "horror", "drama", "scifi", "vertical", "horizontal", "short", "loop"}
     for t in tokens:
         if t not in ignored_tokens and len(t) > 1:
             tags.add(t)

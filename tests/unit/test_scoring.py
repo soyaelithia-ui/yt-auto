@@ -677,7 +677,7 @@ class TestHybridScoringSynthesis:
 
         verdict = filter_and_score_story(
             story=story_reddit,
-            lane="aelithia-aita-shorts",
+            lane="drama-drama-shorts",
         )
 
         assert verdict.passed is True
@@ -686,8 +686,8 @@ class TestHybridScoringSynthesis:
 
     def test_filter_and_score_story_with_lane_profile(self):
         lane_obj = LaneProfile(
-            id="moku-scp-shorts",
-            channel=CanonicalChannel.MOKU,
+            id="horror-scp-shorts",
+            channel=CanonicalChannel.HORROR,
             story_type="scp",
             orientation="vertical",
             duration_min_sec=60,

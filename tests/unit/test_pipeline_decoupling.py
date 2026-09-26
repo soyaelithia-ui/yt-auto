@@ -79,7 +79,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
             "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad sobre el misterio."
         )
-        mock_report = QualityReport(channel=CanonicalChannel.MOKU)
+        mock_report = QualityReport(channel=CanonicalChannel.HORROR)
         mock_validate.return_value = mock_report
 
         with patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=_fake_loop_render) as mock_loop_render, \
@@ -94,7 +94,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             }
 
             res = run_pipeline_once(
-                channel="moku",
+                channel="horror",
                 db_path=self.db_path,
                 generate_only=True,
             )
@@ -103,7 +103,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             mock_loop_render.assert_called_once()
             mock_validate.assert_called_once()
             call_kwargs = mock_validate.call_args[1]
-            self.assertIn(call_kwargs.get("video_engine"), ("loop", "beats"))
+            self.assertIn(call_kwargs.get("video_engine"), ("loop", "video_loop", "beats"))
             self.assertFalse(call_kwargs.get("require_subtitles"))
 
     @patch("src.pipeline.validate_prepublication")
@@ -116,7 +116,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
             "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad sobre el misterio."
         )
-        mock_report = QualityReport(channel=CanonicalChannel.MOKU)
+        mock_report = QualityReport(channel=CanonicalChannel.HORROR)
         mock_validate.return_value = mock_report
 
         with patch("lib.subtitles.create_ass_subtitles") as mock_ass, \
@@ -133,7 +133,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             }
 
             res = run_pipeline_once(
-                channel="moku",
+                channel="horror",
                 db_path=self.db_path,
                 generate_only=True,
                 enable_subtitles=False,
@@ -153,7 +153,7 @@ class TestPipelineLoopDecoupling(unittest.TestCase):
             "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
             "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad sobre el misterio."
         )
-        mock_report = QualityReport(channel=CanonicalChannel.MOKU)
+        mock_report = QualityReport(channel=CanonicalChannel.HORROR)
         mock_validate.return_value = mock_report
 
         with patch("lib.subtitles.create_ass_subtitles", side_effect=_fake_create_ass) as mock_ass, \
@@ -232,7 +232,7 @@ class TestPrepublicationLoopPlanCadence(unittest.TestCase):
         )
 
         report = validate_prepublication(
-            channel=CanonicalChannel.MOKU,
+            channel=CanonicalChannel.HORROR,
             script=(
                 "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
                 "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad."
@@ -283,7 +283,7 @@ class TestPrepublicationLoopPlanCadence(unittest.TestCase):
             encoding="utf-8",
         )
         report = validate_prepublication(
-            channel=CanonicalChannel.MOKU,
+            channel=CanonicalChannel.HORROR,
             script=(
                 "Esta es una historia en español porque la protagonista llegó a la casa y no sabía "
                 "qué hacer cuando todos estaban allí, pero decidió contar toda la verdad."

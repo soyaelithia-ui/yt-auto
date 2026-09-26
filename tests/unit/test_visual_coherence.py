@@ -42,20 +42,18 @@ class TestVisualCoherenceTimingAndColor:
         assert timing_scales_to_audio(raw, -5.0) == [3.0, 4.0]
 
     def test_build_coherent_color_grade_horror(self):
-        """Channel 'horror' or 'moku' generates eq=contrast=1.06:saturation=0.88 and cool shadow colorbalance=rs=-0.02:gs=0.01:bs=0.02."""
+        """Channel 'horror' or default generates eq=contrast=1.06:saturation=0.88 and cool shadow colorbalance=rs=-0.02:gs=0.01:bs=0.02."""
         grade_horror = build_coherent_color_grade(channel="horror")
-        grade_moku = build_coherent_color_grade(channel="moku")
-        for g in (grade_horror, grade_moku):
+        grade_default = build_coherent_color_grade()
+        for g in (grade_horror, grade_default):
             assert "eq=contrast=1.06:saturation=0.88" in g
             assert "colorbalance=rs=-0.02:gs=0.01:bs=0.02" in g
 
     def test_build_coherent_color_grade_drama(self):
-        """Channel 'drama' or 'aelithia' generates eq=contrast=1.05:saturation=0.96:brightness=0.01 and warm skin balance colorbalance=rs=0.02:gs=0.01:bs=-0.03."""
+        """Channel 'drama' generates eq=contrast=1.05:saturation=0.96:brightness=0.01 and warm skin balance colorbalance=rs=0.02:gs=0.01:bs=-0.03."""
         grade_drama = build_coherent_color_grade(channel="drama")
-        grade_aelithia = build_coherent_color_grade(channel="aelithia")
-        for g in (grade_drama, grade_aelithia):
-            assert "eq=contrast=1.05:saturation=0.96:brightness=0.01" in g
-            assert "colorbalance=rs=0.02:gs=0.01:bs=-0.03" in g
+        assert "eq=contrast=1.05:saturation=0.96:brightness=0.01" in grade_drama
+        assert "colorbalance=rs=0.02:gs=0.01:bs=-0.03" in grade_drama
 
     def test_build_coherent_color_grade_scifi(self):
         """Channel 'scifi' or 'singularidad' generates eq=contrast=1.08:saturation=0.92:brightness=-0.01 and cyan/blue lift bs=0.04:rh=-0.02:gh=0.02:bh=0.05."""
