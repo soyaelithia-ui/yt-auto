@@ -1,16 +1,15 @@
-# Specification: Local Asset Production
+# Local Asset Production Specification (Delta)
 
 ## Capability Overview
-The `local-asset-production` capability governs deterministic, local-first media generation across all YouTube production lanes. This specification ensures:
-1. Eradication of all remaining real-time graphics assets (`assets/svg_overlays`, `assets/overlays`), procedural WGSL shaders, shader seeds, and shader uniform parameters across schemas and narrative modules.
+The `local-asset-production` capability governs deterministic, local-first media generation across all YouTube production lanes. This delta completes the transition away from experimental hybrid rendering by:
+1. Eradicating all remaining real-time graphics assets (`assets/svg_overlays`, `assets/overlays`), procedural WGSL shaders, shader seeds, and shader uniform parameters across schemas and narrative modules.
 2. Refocusing creative agents (`AtmosphericDirectorAgent`, `SeoOptimizerAgent`) strictly onto narrative curation and catalog loop mapping, eliminating image diffusion prompts and typography design.
 3. Standardizing `LocalAIThumbnailBank` as the authoritative text-free, unbranded, watermark-free cover generator with zero typography rendering.
 4. Mandating local video loop composition via `LoopVideoEngine` and stream-copy (`-c:v copy`), guaranteeing compliance with the operational ceiling of $\le 2.0$ CPU Cores and $\le 2.0$ GiB RAM.
-5. Standardizing bounded agent execution and recovery in coordination with `agentic-harness`.
 
 ---
 
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: no runtime graphics
 (Previously: Banned imports or exposition of Ken Burns, hybrid frame generation, SVG/in-memory overlays, HUD drawtext/drawbox, or procedural video renderers without explicit filesystem eradication assertions or schema uniform purging.)
@@ -116,6 +115,8 @@ All thumbnail assets in the bank MUST adhere to a strict text-free contract:
 
 ---
 
+## ADDED Requirements
+
 ### Requirement: Refocused Creative Agents (Zero Diffusion Prompts and Zero Typography Design)
 All creative production agents MUST be strictly decoupled from graphic design, typography rendering, and image diffusion prompt generation.
 
@@ -145,23 +146,3 @@ All creative production agents MUST be strictly decoupled from graphic design, t
 - **When** the agent emits thumbnail metadata directives
 - **Then** the request MUST contain `text_free: True`
 - **And** MUST NOT contain headline layout coordinates, font names, or badge labels.
-
----
-
-### Requirement: bounded agent recovery
-Agent execution MUST record every failure decision and MUST not exceed configured attempt/correction budgets, governed comprehensively by `openspec/specs/agentic-harness/spec.md`.
-
-#### Scenario: transient failure
-- **Given** a transient provider error on attempt one
-- **When** the recovery policy has remaining attempts
-- **Then** it retries and records `action: retry`.
-
-#### Scenario: contract failure
-- **Given** a response validation failure and one correction budget
-- **When** the agent retries
-- **Then** it sends one correction prompt and records `action: correct`.
-
-#### Scenario: saturation
-- **Given** a quota/rate-limit error
-- **When** the agent handles it
-- **Then** it stops immediately, records `provider_saturation`, and trips the instance circuit breaker.

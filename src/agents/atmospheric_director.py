@@ -239,19 +239,6 @@ class AtmosphericDirectorAgent(ProgrammaticAgent):
                 dof = "medium_f4"
                 focal = 50
 
-            # Image prompts (Universal Adaptive Premium Art Direction)
-            pos_prompt = (
-                f"Masterpiece 8k cinematic atmospheric matte painting, {env_name}, {light_style}, "
-                f"striking high-contrast 2D/3D silhouette composition, volumetric fog, rim lighting, "
-                f"chiaroscuro shadows, minimalist elegance, color palette accents {theme_data['accent']} "
-                f"against deep dark void {theme_data['shadow']}, 35mm photograph, shot on Arri Alexa."
-            )
-            neg_prompt = (
-                "wireframe polygon, 3d geometric cage, rotating solids, flat 2d vector icon, "
-                "cheap clipart, distorted grotesque anatomy, cartoon, low resolution, white background, "
-                "cluttered mess, noisy grain, coarse dithering, deformed, ugly, watermark, neon clownish colors."
-            )
-
             sc_plan = {
                 "scene_id": sc_id,
                 "scene_index": sc_idx,
@@ -279,24 +266,6 @@ class AtmosphericDirectorAgent(ProgrammaticAgent):
                     "shot_type": shot_type,
                     "depth_of_field": dof,
                     "focal_length_mm": focal,
-                },
-                "image_prompts": {
-                    "positive_prompt": pos_prompt,
-                    "negative_prompt": neg_prompt,
-                },
-                "archetype_id": self._resolve_canonical_archetype(
-                    env_name=env_name,
-                    narration=sc.get("narration_text", ""),
-                    theme_lane=norm_lane,
-                    tension=tension,
-                ),
-                "uniform_params": {
-                    "tension": float(tension),
-                    "speed": round(0.85 + 0.15 * tension, 2),
-                    "distortion": round(0.5 + 0.15 * tension, 2),
-                    "glow_intensity": round(0.8 + 0.2 * tension, 2),
-                    "accent_color": theme_data["accent"],
-                    "kelvin": float(theme_data["kelvin"]),
                 },
             }
             scenes_plan.append(sc_plan)
@@ -328,38 +297,6 @@ class AtmosphericDirectorAgent(ProgrammaticAgent):
                 logger.warning("Visual plan schema validation warning: %s", exc)
 
         return visual_plan
-
-    @staticmethod
-    def _resolve_canonical_archetype(env_name: str, narration: str, theme_lane: str, tension: int) -> str:
-        """Determines canonical WGSL archetype from environmental context, narration, and theme."""
-        text = f"{env_name} {narration}".lower()
-        if any(k in text for k in ("faro", "costa", "mar ", "marino", "oceano", "océano", "fosa", "abismo", "olas", "playa", "isla")):
-            return "maritime_lighthouse"
-        if any(k in text for k in ("bunker", "búnker", "camara", "cámara", "pasillo", "laboratorio", "instalacion", "instalación", "subterraneo", "subterráneo", "oficina")):
-            return "tactical_chamber"
-        if any(k in text for k in ("bosque", "arbol", "árbol", "selva", "ramas", "paramo", "páramo", "niebla", "ceniza")):
-            return "dark_forest"
-        if any(k in text for k in ("nieve", "helad", "glaciar", "artico", "ártico", "blanco", "desolad", "frio", "frío")):
-            return "arctic_desolation"
-        if any(k in text for k in ("singularidad", "agujero negro", "vortice", "vórtice", "espacio", "cosmico", "cósmico", "gravedad", "galaxia", "universo", "rift")):
-            return "cosmic_singularity"
-        if any(k in text for k in ("mente", "cerebro", "sinapsis", "neuronal", "conciencia", "recuerdo", "memoria", "red")):
-            return "synaptic_network"
-        if any(k in text for k in ("hogar", "fuego", "chimenea", "sala", "casa", "familia", "acogedor", "calido", "cálido", "comedor", "cocina")):
-            return "cozy_hearth"
-        if any(k in text for k in ("arcade", "vector", "retro", "linea", "rejilla", "neon", "neón", "vuelo")):
-            return "arcade_vector_flight"
-        if any(k in text for k in ("parkour", "corredor", "ciudad", "azotea", "salto", "escape", "persecucion")):
-            return "parkour_runner"
-
-        # Lane defaults
-        if theme_lane == "scp_foundation":
-            return "tactical_chamber" if tension <= 3 else "synaptic_network"
-        elif theme_lane == "drama_aita":
-            return "cozy_hearth" if tension <= 3 else "dark_forest"
-        elif theme_lane == "cosmic_horror":
-            return "cosmic_singularity" if tension >= 4 else "dark_forest"
-        return "dark_forest"
 
 
 # Backward-compatibility alias

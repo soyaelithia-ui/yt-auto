@@ -347,17 +347,23 @@ def check_zero_procedural_math(repo_root: Path, paths: Optional[List[str]] = Non
         "src/media/native_procedural.py",
         "src/media/lavfi_palettes.py",
     }
-    legacy_dir_prefix = "src/media/_legacy"
+    forbidden_dirs = (
+        "src/media/_legacy",
+        "assets/svg_overlays",
+        "assets/overlays",
+    )
 
     if paths is not None:
         for p in paths:
-            if p == legacy_dir_prefix or p.startswith(legacy_dir_prefix + "/"):
-                violations.append(f"Found forbidden {legacy_dir_prefix} path: {p}")
+            for fd in forbidden_dirs:
+                if p == fd or p.startswith(fd + "/"):
+                    violations.append(f"Found forbidden directory path: {p}")
             if p in deleted_files:
                 violations.append(f"Found deleted procedural engine file: {p}")
     else:
-        if (repo_root / legacy_dir_prefix).exists():
-            violations.append(f"Found forbidden directory: {legacy_dir_prefix}")
+        for fd in forbidden_dirs:
+            if (repo_root / fd).exists():
+                violations.append(f"Found forbidden directory: {fd}")
         for df in deleted_files:
             if (repo_root / df).exists():
                 violations.append(f"Found deleted procedural engine file: {df}")

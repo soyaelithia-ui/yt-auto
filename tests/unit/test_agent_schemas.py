@@ -229,10 +229,6 @@ class TestArtDirectorSchema:
                         "depth_of_field": "deep_focus_f8",
                         "focal_length_mm": 24,
                     },
-                    "image_prompts": {
-                        "positive_prompt": "Cinematic 35mm photograph of isolated Victorian lighthouse on rocky cliff, churning dark ocean, dense cold volumetric fog, starry night sky, moody chiaroscuro lighting, 8k resolution, Rec.709 color grade.",
-                        "negative_prompt": "cartoon, anime, 3d render, blender, oversaturated, neon rainbow, blurry, low-res, deformed hands, grain noise dithering, watermark, text logo.",
-                    },
                 },
                 {
                     "scene_id": "scene_002",
@@ -261,10 +257,6 @@ class TestArtDirectorSchema:
                         "shot_type": "dutch_angle",
                         "depth_of_field": "shallow_f1.4",
                         "focal_length_mm": 50,
-                    },
-                    "image_prompts": {
-                        "positive_prompt": "Close-up interior of old brass lighthouse lantern room, rain dripping against glass, giant shadow silhouette looming outside, intense atmospheric chiaroscuro, cinematic film still.",
-                        "negative_prompt": "cartoon, anime, 3d render, blender, oversaturated, neon rainbow, blurry, low-res, deformed hands, grain noise dithering, watermark, text logo.",
                     },
                 },
             ],
@@ -382,7 +374,7 @@ class TestScenePlannerSchema:
                     "start_sec": 0.0,
                     "duration_sec": 60.0,
                     "tension_level": 2,
-                    "engine": "hybrid_cinematic",
+                    "engine": "director",
                     "engine_config": {
                         "asset_path": "data/worksets/run_001/scene_001_matte.png",
                         "depth_map": "data/worksets/run_001/scene_001_depth.png",
@@ -409,10 +401,9 @@ class TestScenePlannerSchema:
                     "start_sec": 60.0,
                     "duration_sec": 60.0,
                     "tension_level": 4,
-                    "engine": "procedural_webgl",
+                    "engine": "video_loop",
                     "engine_config": {
-                        "template_name": "cosmic_horror_three.html",
-                        "shader_seed": 42,
+                        "template_name": "cosmic_horror_loop.mp4",
                     },
                     "particle_overlay": {
                         "type": "dense_fog",
@@ -655,10 +646,6 @@ class TestCrossAgentContractCompatibility:
                         "depth_of_field": "shallow_f1.4",
                         "focal_length_mm": 35,
                     },
-                    "image_prompts": {
-                        "positive_prompt": f"Brutalist concrete staircase descending into pitch blackness, SCP foundation containment log, {s['environmental_mood']}, 35mm cinematic photograph, Rec.709.",
-                        "negative_prompt": "cartoon, anime, 3d render, blender, oversaturated, neon rainbow, blurry, low-res, deformed hands, grain noise dithering, watermark, text logo.",
-                    },
                 }
                 for act in script_payload["acts"]
                 for s in act["scenes"]
@@ -695,10 +682,10 @@ class TestCrossAgentContractCompatibility:
                     "start_sec": float((s["scene_index"] - 1) * 14.0),
                     "duration_sec": 14.0,
                     "tension_level": s["tension_level"],
-                    "engine": "procedural_css" if s["tension_level"] == 3 else "hybrid_cinematic",
+                    "engine": "video_loop" if s["tension_level"] == 3 else "director",
                     "engine_config": {
-                        "template_name": "scp_terminal_css.html" if s["tension_level"] == 3 else None,
-                        "asset_path": f"data/worksets/scp_087/{s['scene_id']}.png" if s["tension_level"] != 3 else None,
+                        "template_name": "scp_terminal_loop.mp4" if s["tension_level"] == 3 else None,
+                        "asset_path": f"data/worksets/scp_087/{s['scene_id']}.mp4" if s["tension_level"] != 3 else None,
                     },
                     "particle_overlay": {
                         "type": "crt_lines" if s["tension_level"] == 3 else "dust_motes",

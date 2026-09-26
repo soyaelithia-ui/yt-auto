@@ -149,11 +149,9 @@
           "engine": {
             "type": "string",
             "enum": [
-              "hybrid_cinematic",
-              "hybrid_cinematic_ai",
-              "procedural_webgl",
-              "procedural_canvas",
-              "procedural_css"
+              "director",
+              "video_loop",
+              "catalog_loop"
             ]
           },
           "engine_config": {
@@ -171,9 +169,6 @@
               "template_name": {
                 "type": ["string", "null"]
               },
-              "shader_seed": {
-                "type": ["integer", "null"]
-              },
               "camera_motion": {
                 "type": ["object", "null"],
                 "properties": {
@@ -186,7 +181,6 @@
               "volumetric_lighting": {
                 "type": ["object", "null"],
                 "properties": {
-                  "shader": { "type": "string" },
                   "intensity": { "type": "number" }
                 }
               },

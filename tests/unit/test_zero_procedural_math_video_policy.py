@@ -16,10 +16,18 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
+import json
+
 def test_zero_legacy_dirs_and_wgsl_files():
     """Verify src/media/_legacy is completely deleted and no *.wgsl files exist."""
     legacy_dir = REPO_ROOT / "src" / "media" / "_legacy"
     assert not legacy_dir.exists(), f"Found forbidden legacy directory: {legacy_dir}"
+
+    svg_overlays_dir = REPO_ROOT / "assets" / "svg_overlays"
+    assert not svg_overlays_dir.exists(), f"Found forbidden svg_overlays directory: {svg_overlays_dir}"
+
+    overlays_dir = REPO_ROOT / "assets" / "overlays"
+    assert not overlays_dir.exists(), f"Found forbidden overlays directory: {overlays_dir}"
 
     wgsl_files = list(REPO_ROOT.glob("**/*.wgsl"))
     assert len(wgsl_files) == 0, f"Found forbidden WGSL shader files: {wgsl_files}"
@@ -32,6 +40,28 @@ def test_zero_legacy_dirs_and_wgsl_files():
 
     lavfi_palettes_file = REPO_ROOT / "src" / "media" / "lavfi_palettes.py"
     assert not lavfi_palettes_file.exists(), f"Found forbidden lavfi_palettes.py: {lavfi_palettes_file}"
+
+
+def test_zero_shader_remnants_in_schemas():
+    """Verify schemas contain no shader remnants, uniform params, or diffusion prompts."""
+    art_schema_path = REPO_ROOT / "schemas" / "art_director.schema.json"
+    assert art_schema_path.exists()
+    art_schema = json.loads(art_schema_path.read_text(encoding="utf-8"))
+
+    art_scene_props = art_schema.get("properties", {}).get("scenes", {}).get("items", {}).get("properties", {})
+    assert "image_prompts" not in art_scene_props, "Found forbidden 'image_prompts' in art_director schema"
+    assert "archetype_id" not in art_scene_props, "Found forbidden 'archetype_id' in art_director schema"
+    assert "uniform_params" not in art_scene_props, "Found forbidden 'uniform_params' in art_director schema"
+
+    scene_schema_path = REPO_ROOT / "schemas" / "scene_planner.schema.json"
+    assert scene_schema_path.exists()
+    scene_schema = json.loads(scene_schema_path.read_text(encoding="utf-8"))
+
+    scene_props = scene_schema.get("properties", {}).get("scenes", {}).get("items", {}).get("properties", {})
+    engine_config_props = scene_props.get("engine_config", {}).get("properties", {})
+    assert "shader_seed" not in engine_config_props, "Found forbidden 'shader_seed' in scene_planner schema"
+    volumetric = engine_config_props.get("volumetric_lighting", {}).get("properties", {})
+    assert "shader" not in volumetric, "Found forbidden 'shader' under volumetric_lighting in scene_planner schema"
 
 
 def test_zero_wgpu_pygfx_imports_in_media_and_narrative():

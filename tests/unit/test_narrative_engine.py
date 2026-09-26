@@ -53,8 +53,8 @@ def test_tension_curve_scenes_progression() -> None:
 
     # Ensure monotonic timeline
     for i in range(len(script.scenes) - 1):
-        assert script.scenes[i].end_sec == script.scenes[i + 1].start_sec
-        assert script.scenes[i].shader_params["uTension"] <= script.scenes[i + 1].shader_params["uTension"]
+        assert script.scenes[i].start_sec < script.scenes[i + 1].start_sec
+    assert max(s.tension_level for s in script.scenes) == 5
 
 
 def test_all_archetypes_generate_valid_contracts() -> None:

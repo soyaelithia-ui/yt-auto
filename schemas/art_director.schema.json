@@ -3,6 +3,24 @@
   "title": "VisualPlan",
   "description": "Canonical output contract for Agent 2 (Art Director / Mood Visual)",
   "type": "object",
+  "anyOf": [
+    {
+      "required": [
+        "version",
+        "theme_lane",
+        "global_color_grade",
+        "scenes"
+      ]
+    },
+    {
+      "required": [
+        "loop_category",
+        "audio_theme",
+        "mood_summary",
+        "accent_hex"
+      ]
+    }
+  ],
   "properties": {
     "version": {
       "type": "string",
@@ -17,6 +35,38 @@
         "creepypasta",
         "scp_foundation",
         "drama_aita"
+      ]
+    },
+    "loop_category": {
+      "type": "string",
+      "enum": [
+        "cosmic_horror",
+        "dark_ambient",
+        "tactical_chamber",
+        "dramatic_interior"
+      ]
+    },
+    "audio_theme": {
+      "type": "string",
+      "enum": [
+        "drone_abyss",
+        "dark_ambient",
+        "tension_pulse"
+      ]
+    },
+    "mood_summary": {
+      "type": "string"
+    },
+    "accent_hex": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "pacing": {
+      "type": "string",
+      "enum": [
+        "slow_creeping",
+        "steady_dramatic",
+        "intense_urgent"
       ]
     },
     "global_color_grade": {
@@ -77,6 +127,38 @@
           "environment_name": {
             "type": "string",
             "minLength": 1
+          },
+          "loop_category": {
+            "type": "string",
+            "enum": [
+              "cosmic_horror",
+              "dark_ambient",
+              "tactical_chamber",
+              "dramatic_interior"
+            ]
+          },
+          "audio_theme": {
+            "type": "string",
+            "enum": [
+              "drone_abyss",
+              "dark_ambient",
+              "tension_pulse"
+            ]
+          },
+          "mood_summary": {
+            "type": "string"
+          },
+          "accent_hex": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "pacing": {
+            "type": "string",
+            "enum": [
+              "slow_creeping",
+              "steady_dramatic",
+              "intense_urgent"
+            ]
           },
           "palette": {
             "type": "object",
@@ -226,41 +308,6 @@
               "focal_length_mm"
             ],
             "additionalProperties": false
-          },
-          "image_prompts": {
-            "type": "object",
-            "properties": {
-              "positive_prompt": {
-                "type": "string",
-                "minLength": 10
-              },
-              "negative_prompt": {
-                "type": "string",
-                "minLength": 10
-              }
-            },
-            "required": [
-              "positive_prompt",
-              "negative_prompt"
-            ],
-            "additionalProperties": false
-          },
-          "archetype_id": {
-            "type": "string",
-            "enum": [
-              "arcade_vector_flight",
-              "arctic_desolation",
-              "cosmic_singularity",
-              "cozy_hearth",
-              "dark_forest",
-              "maritime_lighthouse",
-              "parkour_runner",
-              "synaptic_network",
-              "tactical_chamber"
-            ]
-          },
-          "uniform_params": {
-            "type": "object"
           }
         },
         "required": [
@@ -271,8 +318,7 @@
           "palette",
           "lighting",
           "atmosphere",
-          "camera_composition",
-          "image_prompts"
+          "camera_composition"
         ],
         "additionalProperties": false
       }
@@ -300,11 +346,5 @@
       "additionalProperties": true
     }
   },
-  "required": [
-    "version",
-    "theme_lane",
-    "global_color_grade",
-    "scenes"
-  ],
   "additionalProperties": false
 }
