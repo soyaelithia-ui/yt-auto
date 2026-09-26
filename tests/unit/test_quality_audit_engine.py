@@ -280,6 +280,45 @@ class TestQualityAuditEngineIntegration(unittest.TestCase):
         report_file = Path(self.temp_dir.name) / "quality_audit_report.json"
         self.assertTrue(report_file.exists())
 
+    @patch("lib.qa.engine.probe_media")
+    @patch("lib.qa.gates.has_faststart", return_value=True)
+    @patch("lib.qa.gates.run_ffmpeg")
+    @patch("src.visual_integrity.VisualIntegrityVerifier", side_effect=ImportError("No module named 'numpy'"))
+    def test_audit_media_when_luminance_dependency_missing(self, mock_verifier, mock_ffmpeg, mock_faststart, mock_probe):
+        v_stream = VideoStreamInfo(
+            codec_name="h264",
+            width=1080,
+            height=1920,
+            fps=30.0,
+            pix_fmt="yuv420p",
+            duration=25.0,
+        )
+        a_stream = AudioStreamInfo(
+            codec_name="aac",
+            sample_rate=48000,
+            channels=2,
+            duration=25.0,
+        )
+        mock_probe.return_value = MediaProbeResult(
+            format_name="mp4",
+            duration=25.0,
+            size_bytes=os.path.getsize(self.test_video),
+            video_streams=[v_stream],
+            audio_streams=[a_stream],
+            file_path=self.test_video,
+        )
+        mock_ffmpeg.return_value = FFmpegCommandResult(
+            returncode=0,
+            stdout="",
+            stderr="Integrated loudness:\n I: -14.0 LUFS\nTrue peak:\n Peak: -2.0 dBFS",
+            command=["ffmpeg"],
+            duration_sec=0.1,
+        )
+        rep = self.engine.audit_media(self.test_video, work_dir=self.temp_dir.name)
+        self.assertTrue(rep.passed)
+        self.assertIn("luminance_contrast", rep.gates)
+        self.assertEqual(rep.gates["luminance_contrast"].code, "OK_LUMINANCE_SKIPPED")
+
 
 if __name__ == "__main__":
     unittest.main()

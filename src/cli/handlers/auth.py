@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -83,10 +84,12 @@ def handle_auth(args: argparse.Namespace, parser: argparse.ArgumentParser | None
                 print(f"Error: {msg}", file=sys.stderr)
                 return 2
 
+        port = getattr(args, "port", 8585) or 8585
+        redirect_uri = os.environ.get("YT_OAUTH_REDIRECT_URI", f"http://localhost:{port}/")
         print(f"Exchanging authorization code for channel '{target_channel}' ({target_path})...")
         try:
             try:
-                exchange_code_fn(str(code_val).strip(), "http://localhost:8585/", token_path=target_path)
+                exchange_code_fn(str(code_val).strip(), redirect_uri, token_path=target_path)
             except Exception:
                 exchange_code_fn(str(code_val).strip(), "urn:ietf:wg:oauth:2.0:oob", token_path=target_path)
             print(f"YouTube OAuth Token successfully saved to {target_path}!")
@@ -150,9 +153,11 @@ def handle_auth(args: argparse.Namespace, parser: argparse.ArgumentParser | None
         return 1
 
     # Default action: url
+    port = getattr(args, "port", 8585) or 8585
+    redirect_uri = os.environ.get("YT_OAUTH_REDIRECT_URI", f"http://localhost:{port}/")
     print("=== Google OAuth YouTube API v3 Authorization ===")
     print("Open the following URL in your browser to grant YouTube Upload permissions:")
-    print("\n" + get_auth_url_fn("http://localhost:8585/") + "\n")
+    print("\n" + get_auth_url_fn(redirect_uri) + "\n")
     print("OOB Authorization URL:")
     print(get_auth_url_fn("urn:ietf:wg:oauth:2.0:oob") + "\n")
     return 0

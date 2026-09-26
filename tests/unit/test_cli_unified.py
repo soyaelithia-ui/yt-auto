@@ -444,3 +444,25 @@ class TestCLIEdgeCaseHandlers:
         err = capsys.readouterr().err
         assert "Canal desconocido o inválido" in err
 
+    def test_auth_url_honors_port_and_redirect_uri(self, monkeypatch, capsys):
+        """Verify auth url honors --port and YT_OAUTH_REDIRECT_URI env var."""
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "dummy_client_id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "dummy_client_secret")
+
+        # 1. Custom port
+        parser = build_parser()
+        args = parser.parse_args(["auth", "url", "--port", "9876"])
+        ret = dispatch_cli(args, parser=None)
+        assert ret == 0
+        out = capsys.readouterr().out
+        assert "localhost%3A9876" in out or "localhost:9876" in out
+
+        # 2. YT_OAUTH_REDIRECT_URI override
+        monkeypatch.setenv("YT_OAUTH_REDIRECT_URI", "https://redirect.custom.host/callback")
+        args2 = parser.parse_args(["auth", "url", "--port", "9876"])
+        ret2 = dispatch_cli(args2, parser=None)
+        assert ret2 == 0
+        out2 = capsys.readouterr().out
+        assert "https%3A%2F%2Fredirect.custom.host%2Fcallback" in out2 or "redirect.custom.host/callback" in out2
+
+

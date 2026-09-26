@@ -372,7 +372,8 @@ class TestVPSCleaner(unittest.TestCase):
         (tts_dir / "1234.wav").write_bytes(b"TTS_AUDIO")
         (tts_dir / "1234.json").write_text('{}')
 
-        with patch("src.cleaner.is_test_environment", return_value=True):
+        with patch("src.cleaner_modules.work_dirs.is_test_environment", return_value=True), \
+             patch("src.cleaner.is_test_environment", return_value=True):
             report = clean_all_work_roots(
                 work_roots=[cli_work],
                 dry_run=False,

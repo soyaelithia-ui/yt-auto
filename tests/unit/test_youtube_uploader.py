@@ -746,6 +746,39 @@ class TestUploaderFacadeAndFunctionBudgets(unittest.TestCase):
 
         self.assertEqual(violations, [], f"Functions exceeded line budget: {violations}")
 
+    def test_cleanup_playwright_resources_logging(self):
+        """Verify _cleanup_playwright_resources emits structured logs on error instead of swallowing silently."""
+        from src.youtube.uploader.session import _cleanup_playwright_resources
+        mock_page = MagicMock()
+        page_err = RuntimeError("Page close error")
+        mock_page.close.side_effect = page_err
+
+        mock_context = MagicMock()
+        mock_context.cookies.return_value = [{"name": "sid", "value": "123"}]
+        ctx_err = RuntimeError("Context close error")
+        mock_context.close.side_effect = ctx_err
+
+        mock_browser = MagicMock()
+        browser_err = RuntimeError("Browser close error")
+        mock_browser.close.side_effect = browser_err
+
+        disk_err = OSError("Disk write error")
+        with patch("src.youtube.uploader.session.logger") as mock_logger, \
+             patch("src.core.cookies.save_cookies_to_file", side_effect=disk_err):
+            with tempfile.NamedTemporaryFile(delete=False) as tf:
+                tf_path = tf.name
+            try:
+                _cleanup_playwright_resources(mock_page, mock_context, mock_browser, tf_path)
+                mock_logger.debug.assert_any_call("Failed closing playwright page during cleanup: %s", page_err)
+                mock_logger.warning.assert_called_with(
+                    "Failed saving rotated cookies during cleanup (%s): %s", tf_path, disk_err
+                )
+                mock_logger.debug.assert_any_call("Failed closing playwright context during cleanup: %s", ctx_err)
+                mock_logger.debug.assert_any_call("Failed closing playwright browser during cleanup: %s", browser_err)
+            finally:
+                if os.path.exists(tf_path):
+                    os.unlink(tf_path)
+
 
 if __name__ == "__main__":
     unittest.main()

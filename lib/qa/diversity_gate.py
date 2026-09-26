@@ -308,6 +308,7 @@ class LuminanceContrastGate(BaseGate):
                     status=GateStatus.PASS,
                     score=1.0,
                     passed=True,
+                    severity=Severity.INFO,
                     code="OK_LUMINANCE_COMPLIANT",
                     message=f"Luminance contrast verified ({total - failed_frames}/{total} frames compliant)",
                 )
@@ -321,6 +322,7 @@ class LuminanceContrastGate(BaseGate):
                     status=GateStatus.PASS,
                     score=1.0,
                     passed=True,
+                    severity=Severity.INFO,
                     code="OK_LUMINANCE_SKIPPED",
                     message=f"Luminance audit skipped: {exc}",
                 )

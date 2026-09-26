@@ -20,9 +20,11 @@ from src.log import get_logger
 
 logger = get_logger("loop_catalog.sync")
 
-_LEGACY_CHECKOUT_PREFIXES = (
-    "/home/moku/projects/yt-auto",
-    "/srv/projects/yt-auto",
+_LEGACY_CHECKOUT_PREFIXES = tuple(
+    p for p in (
+        os.environ.get("YT_AUTO_LEGACY_PREFIX", "").strip(),
+        "/srv/projects/yt-auto",
+    ) if p
 )
 
 

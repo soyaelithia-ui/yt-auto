@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SECRETS_DIR = PROJECT_ROOT / "secrets"
 VERIFIER_PATH = SECRETS_DIR / ".antigravity_pkce_verifier.json"
 TOKEN_PATH = SECRETS_DIR / "antigravity-oauth-token"
-DEPLOY_SECRETS = Path("/home/moku/Deploy/YouTubeChannels/secrets")
+DEPLOY_SECRETS = Path(os.environ.get("DEPLOY_SECRETS_DIR", str(Path.home() / "Deploy" / "YouTubeChannels" / "secrets")))
 
 REDIRECT_URI = "https://antigravity.google/oauth-callback"
 SCOPES = (

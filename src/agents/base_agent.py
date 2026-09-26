@@ -222,7 +222,6 @@ def _resolve_agy_bin() -> Path:
         PROJECT_ROOT / "agy",
         Path.home() / ".local" / "bin" / "agy",
         Path("/usr/local/bin/agy"),
-        Path("/home/moku/.local/bin/agy"),
     ]
     for cand in candidates:
         if cand.is_file():

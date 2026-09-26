@@ -678,10 +678,12 @@ def _validate_and_load_session_cookies(video_path: str, cookies_path: str, dry_r
 
 
 def _cleanup_playwright_resources(page: Any, context: Any, browser: Any, cookies_path: str) -> None:
-    """Safely close page, rotate cookies, close context and browser."""
+    """Safely close page, rotate cookies, close context and browser with structured logging."""
     if page:
-        try: page.close()
-        except Exception: pass
+        try:
+            page.close()
+        except Exception as exc:
+            logger.debug("Failed closing playwright page during cleanup: %s", exc)
     if context:
         try:
             if cookies_path and os.path.exists(cookies_path):
@@ -689,12 +691,17 @@ def _cleanup_playwright_resources(page: Any, context: Any, browser: Any, cookies
                 if rotated:
                     from src.core.cookies import save_cookies_to_file
                     save_cookies_to_file(rotated, cookies_path)
-        except Exception: pass
-        try: context.close()
-        except Exception: pass
+        except Exception as exc:
+            logger.warning("Failed saving rotated cookies during cleanup (%s): %s", cookies_path, exc)
+        try:
+            context.close()
+        except Exception as exc:
+            logger.debug("Failed closing playwright context during cleanup: %s", exc)
     if browser:
-        try: browser.close()
-        except Exception: pass
+        try:
+            browser.close()
+        except Exception as exc:
+            logger.debug("Failed closing playwright browser during cleanup: %s", exc)
 
 
 def _reap_lingering_playwright_pids(pids_before: set) -> None:

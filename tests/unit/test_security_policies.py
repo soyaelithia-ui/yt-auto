@@ -373,3 +373,23 @@ def test_no_default_apply_git_push_delete_helper():
             if "git push --delete" in text:
                 hits.append(str(path.relative_to(BASE_DIR)))
     assert hits == [], f"default apply must not contain git push --delete: {hits}"
+
+
+def test_no_hardcoded_developer_paths_in_src_or_scripts():
+    """Ensure developer home paths like /home/moku are never hardcoded in source or scripts."""
+    import re
+    needle = re.compile(r"/home/[a-zA-Z0-9_-]+/(?:\.local|Deploy|projects)")
+    violations = []
+    for check_dir in ("src", "scripts"):
+        root = BASE_DIR / check_dir
+        if not root.exists():
+            continue
+        for p in root.rglob("*.py"):
+            if not p.is_file():
+                continue
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+            m = needle.search(txt)
+            if m:
+                violations.append(f"{p.relative_to(BASE_DIR)}: {m.group(0)}")
+    assert not violations, f"Hardcoded developer paths found in production code: {violations}"
+
