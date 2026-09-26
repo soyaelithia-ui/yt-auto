@@ -23,11 +23,11 @@ class TestWatchdogResiliency:
 
     def test_is_longform_lease_detection(self) -> None:
         """Correctly classify longform vs shortform lanes and owners."""
-        assert is_longform_lease("moku-horror-long") is True
-        assert is_longform_lease("aelithia-aita-long") is True
-        assert is_longform_lease(owner="lane-moku-horror-long:worker:123") is True
-        assert is_longform_lease("moku-scp-shorts") is False
-        assert is_longform_lease("aelithia-drama-shorts") is False
+        assert is_longform_lease("horror-horror-long") is True
+        assert is_longform_lease("drama-aita-long") is True
+        assert is_longform_lease(owner="lane-horror-horror-long:worker:123") is True
+        assert is_longform_lease("horror-scp-shorts") is False
+        assert is_longform_lease("drama-drama-shorts") is False
         assert is_longform_lease() is False
 
     def test_get_heartbeat_timeout_seconds_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,18 +36,18 @@ class TestWatchdogResiliency:
         monkeypatch.delenv("HEARTBEAT_TIMEOUT_SHORT_SECONDS", raising=False)
         monkeypatch.delenv("HEARTBEAT_TIMEOUT_SECONDS", raising=False)
 
-        assert get_heartbeat_timeout_seconds("moku-horror-long") == 1800
-        assert get_heartbeat_timeout_seconds("aelithia-aita-long") == 1800
-        assert get_heartbeat_timeout_seconds("moku-scp-shorts") == 300
-        assert get_heartbeat_timeout_seconds("aelithia-drama-shorts") == 300
+        assert get_heartbeat_timeout_seconds("horror-horror-long") == 1800
+        assert get_heartbeat_timeout_seconds("drama-aita-long") == 1800
+        assert get_heartbeat_timeout_seconds("horror-scp-shorts") == 300
+        assert get_heartbeat_timeout_seconds("drama-drama-shorts") == 300
 
     def test_get_heartbeat_timeout_seconds_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Environment variables override default heartbeat expiration thresholds."""
         monkeypatch.setenv("HEARTBEAT_TIMEOUT_LONG_SECONDS", "2400")
         monkeypatch.setenv("HEARTBEAT_TIMEOUT_SHORT_SECONDS", "450")
 
-        assert get_heartbeat_timeout_seconds("moku-horror-long") == 2400
-        assert get_heartbeat_timeout_seconds("moku-scp-shorts") == 450
+        assert get_heartbeat_timeout_seconds("horror-horror-long") == 2400
+        assert get_heartbeat_timeout_seconds("horror-scp-shorts") == 450
 
     def test_longform_lease_not_reaped_at_400s_heartbeat(self, tmp_path: Path) -> None:
         """A longform lane lease with heartbeat age 400s (>300s) must NOT be reaped."""
@@ -75,9 +75,9 @@ class TestWatchdogResiliency:
             )
             conn.execute("INSERT INTO runs VALUES ('run_long', 'PROCESSING', NULL, NULL)")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('moku-horror-long', 'moku', ?, 'run_long', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('horror-horror-long', 'horror', ?, 'run_long', ?, ?, ?)",
                 (
-                    f"lane-moku-horror-long:{cur_host}:{os.getpid()}",
+                    f"lane-horror-horror-long:{cur_host}:{os.getpid()}",
                     now_ts - 500,
                     now_ts - 400,  # 400s old: exceeds 300s but well within 1800s
                     now_ts + 3600,
@@ -90,9 +90,9 @@ class TestWatchdogResiliency:
             )
             conn.execute("INSERT INTO runs VALUES ('run_short', 'PROCESSING', NULL, NULL)")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('moku-scp-shorts', 'moku', ?, 'run_short', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('horror-scp-shorts', 'horror', ?, 'run_short', ?, ?, ?)",
                 (
-                    f"lane-moku-scp-shorts:{cur_host}:{os.getpid()}",
+                    f"lane-horror-scp-shorts:{cur_host}:{os.getpid()}",
                     now_ts - 500,
                     now_ts - 400,  # 400s old: exceeds 300s for shorts -> must be reaped
                     now_ts + 3600,
@@ -113,8 +113,8 @@ class TestWatchdogResiliency:
                     "SELECT lane_id FROM lane_leases"
                 ).fetchall()
             ]
-            assert "moku-horror-long" in remaining_lanes
-            assert "moku-scp-shorts" not in remaining_lanes
+            assert "horror-horror-long" in remaining_lanes
+            assert "horror-scp-shorts" not in remaining_lanes
 
             short_run = conn.execute(
                 "SELECT status, error_code FROM runs WHERE run_id = 'run_short'"
@@ -151,9 +151,9 @@ class TestWatchdogResiliency:
                 "INSERT INTO runs VALUES ('run_long_stale', 'PROCESSING', NULL, NULL)"
             )
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('aelithia-aita-long', 'aelithia', ?, 'run_long_stale', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('drama-aita-long', 'drama', ?, 'run_long_stale', ?, ?, ?)",
                 (
-                    f"lane-aelithia-aita-long:{cur_host}:{os.getpid()}",
+                    f"lane-drama-aita-long:{cur_host}:{os.getpid()}",
                     now_ts - 2500,
                     now_ts - 1900,  # 1900s old > 1800s threshold
                     now_ts + 3600,
@@ -232,25 +232,25 @@ class TestWatchdogResiliency:
 
         lanes_by_id = {lane["id"]: lane for lane in data["lanes"] if lane.get("enabled")}
 
-        # Longform lanes: 1800s gap, 900s offset between moku and aelithia
-        moku_long = lanes_by_id["moku-horror-long"]
-        aelithia_long = lanes_by_id["aelithia-aita-long"]
+        # Longform lanes: 7200s gap, 3600s offset between horror and drama
+        horror_long = lanes_by_id["horror-horror-long"]
+        drama_long = lanes_by_id["drama-aita-long"]
 
-        assert moku_long["cadence"]["min_gap_seconds"] == 1800
-        assert moku_long["cadence"]["initial_offset_seconds"] == 0
+        assert horror_long["cadence"]["min_gap_seconds"] == 7200
+        assert horror_long["cadence"]["initial_offset_seconds"] == 0
 
-        assert aelithia_long["cadence"]["min_gap_seconds"] == 1800
-        assert aelithia_long["cadence"]["initial_offset_seconds"] == 900
+        assert drama_long["cadence"]["min_gap_seconds"] == 7200
+        assert drama_long["cadence"]["initial_offset_seconds"] == 3600
 
-        # Shorts lanes: 600s gap, 300s offset between moku and aelithia
-        moku_short = lanes_by_id["moku-scp-shorts"]
-        aelithia_short = lanes_by_id["aelithia-drama-shorts"]
+        # Shorts lanes: 900s gap, 450s offset between horror and drama
+        horror_short = lanes_by_id["horror-scp-shorts"]
+        drama_short = lanes_by_id["drama-drama-shorts"]
 
-        assert moku_short["cadence"]["min_gap_seconds"] == 600
-        assert moku_short["cadence"]["initial_offset_seconds"] == 0
+        assert horror_short["cadence"]["min_gap_seconds"] == 900
+        assert horror_short["cadence"]["initial_offset_seconds"] == 0
 
-        assert aelithia_short["cadence"]["min_gap_seconds"] == 600
-        assert aelithia_short["cadence"]["initial_offset_seconds"] == 300
+        assert drama_short["cadence"]["min_gap_seconds"] == 900
+        assert drama_short["cadence"]["initial_offset_seconds"] == 450
 
     def test_dead_worker_reaped_immediately_on_sigkill(self, tmp_path: Path) -> None:
         """When worker process crashes/SIGKILLed, LeaseReaper reaps lease immediately without waiting 1800s."""
@@ -281,9 +281,9 @@ class TestWatchdogResiliency:
             )
             # Longform lease with heartbeat age only 5s old!
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('moku-horror-long', 'moku', ?, 'run_dead_worker', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('horror-horror-long', 'horror', ?, 'run_dead_worker', ?, ?, ?)",
                 (
-                    f"lane-moku-horror-long:{cur_host}:{dead_pid}",
+                    f"lane-horror-horror-long:{cur_host}:{dead_pid}",
                     now_ts - 10,
                     now_ts - 5,  # 5s old: fresh heartbeat, but PID is dead
                     now_ts + 3600,
@@ -305,8 +305,8 @@ class TestWatchdogResiliency:
 
     def test_is_longform_lease_with_job_id(self) -> None:
         """Verify is_longform_lease detects longform from job_id even if lane_id and owner are generic."""
-        assert is_longform_lease(job_id="aelithia_drama_long_006") is True
-        assert is_longform_lease(job_id="moku_scp_short_001") is False
+        assert is_longform_lease(job_id="drama_long_006") is True
+        assert is_longform_lease(job_id="horror_short_001") is False
         assert is_longform_lease(owner="worker:localhost:123", job_id="story_longform") is True
 
     def test_multi_node_clock_skew_tolerance(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,8 +316,8 @@ class TestWatchdogResiliency:
         monkeypatch.setenv("MULTI_NODE", "1")
         monkeypatch.setenv("MULTI_NODE_CLOCK_SKEW_SECONDS", "45")
 
-        assert get_heartbeat_timeout_seconds("moku-horror-long") == 1800 + 45
-        assert get_heartbeat_timeout_seconds("moku-scp-shorts") == 300 + 45
+        assert get_heartbeat_timeout_seconds("horror-horror-long") == 1800 + 45
+        assert get_heartbeat_timeout_seconds("horror-scp-shorts") == 300 + 45
 
     def test_lease_table_uses_job_id_for_longform_detection(self, tmp_path: Path) -> None:
         """In leases table, longform job_id survives 400s stale heartbeat without lane_id in owner."""
@@ -337,14 +337,14 @@ class TestWatchdogResiliency:
             )
 
             conn.execute(
-                "INSERT INTO stories VALUES ('aelithia_drama_long_006', 'CLAIMED', 'run_directed_long', NULL, 'aelithia-aita-long')"
+                "INSERT INTO stories VALUES ('drama_long_006', 'CLAIMED', 'run_directed_long', NULL, 'drama-aita-long')"
             )
             conn.execute(
                 "INSERT INTO runs VALUES ('run_directed_long', 'PROCESSING', NULL, NULL)"
             )
             # Generic owner without 'long' in string
             conn.execute(
-                "INSERT INTO leases VALUES ('aelithia_drama_long_006', 'aelithia', ?, 'run_directed_long', ?, ?, ?)",
+                "INSERT INTO leases VALUES ('drama_long_006', 'drama', ?, 'run_directed_long', ?, ?, ?)",
                 (
                     f"{cur_host}:{os.getpid()}",
                     now_ts - 500,
@@ -411,10 +411,10 @@ class TestWatchdogResiliency:
                 "INSERT INTO stories VALUES ('reddit_post_xyz', 'CLAIMED', 'run_reddit_post', NULL, NULL)"
             )
             conn.execute(
-                "INSERT INTO runs VALUES ('run_reddit_post', 'PROCESSING', NULL, NULL, 'aelithia-aita-long')"
+                "INSERT INTO runs VALUES ('run_reddit_post', 'PROCESSING', NULL, NULL, 'drama-aita-long')"
             )
             conn.execute(
-                "INSERT INTO leases VALUES ('reddit_post_xyz', 'aelithia', ?, 'run_reddit_post', ?, ?, ?)",
+                "INSERT INTO leases VALUES ('reddit_post_xyz', 'drama', ?, 'run_reddit_post', ?, ?, ?)",
                 (
                     f"{cur_host}:{os.getpid()}",
                     now_ts - 500,
@@ -453,7 +453,7 @@ class TestWatchdogResiliency:
             conn.execute("INSERT INTO stories VALUES ('s1', 'CLAIMED', 'r1', NULL)")
             conn.execute("INSERT INTO runs VALUES ('r1', 'PROCESSING', NULL, NULL)")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('lane1', 'moku', ?, 'r1', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('lane1', 'horror', ?, 'r1', ?, ?, ?)",
                 (f"lane1:{cur_host}:999990", now_ts - 100, now_ts - 50, now_ts + 100),
             )
 
@@ -461,7 +461,7 @@ class TestWatchdogResiliency:
             conn.execute("INSERT INTO stories VALUES ('s2', 'CLAIMED', 'r2', NULL)")
             conn.execute("INSERT INTO runs VALUES ('r2', 'PROCESSING', NULL, NULL)")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('lane2', 'moku', ?, 'r2', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('lane2', 'horror', ?, 'r2', ?, ?, ?)",
                 (f"lane2:{cur_host}:999991", now_ts - 100, now_ts - 50, now_ts + 100),
             )
             conn.commit()
@@ -495,7 +495,7 @@ class TestWatchdogResiliency:
             conn.execute("INSERT INTO stories VALUES ('story_done', 'PUBLISHED', 'run_done', NULL)")
             conn.execute("INSERT INTO runs VALUES ('run_done', 'COMPLETED', NULL, NULL)")
             conn.execute(
-                "INSERT INTO leases VALUES ('story_done', 'moku', ?, 'run_done', ?, ?, ?)",
+                "INSERT INTO leases VALUES ('story_done', 'horror', ?, 'run_done', ?, ?, ?)",
                 (f"worker:{cur_host}:999999", now_ts - 500, now_ts - 400, now_ts - 10),  # expired TTL
             )
             conn.commit()
@@ -551,8 +551,8 @@ class TestWatchdogResiliency:
             story={"story_id": "s1"},
             story_id="s1",
             run_id="r1",
-            channel_name="moku",
-            channel_key="moku",
+            channel_name="horror",
+            channel_key="horror",
             lane=mock_lane,
             repository=MagicMock(),
             database=":memory:",
@@ -607,10 +607,10 @@ class TestWatchdogResiliency:
             conn.execute("CREATE TABLE lane_leases (job_id TEXT, lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
             conn.execute("CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
 
-            conn.execute("INSERT INTO stories VALUES ('s_remote', 'CLAIMED', 'run_remote', NULL, 'moku-horror-long')")
-            conn.execute("INSERT INTO runs VALUES ('run_remote', 'PROCESSING', NULL, NULL, 'moku-horror-long')")
+            conn.execute("INSERT INTO stories VALUES ('s_remote', 'CLAIMED', 'run_remote', NULL, 'horror-horror-long')")
+            conn.execute("INSERT INTO runs VALUES ('run_remote', 'PROCESSING', NULL, NULL, 'horror-horror-long')")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('s_remote', 'moku-horror-long', 'moku', 'lane-moku-horror-long:remote-host-99:1234', 'run_remote', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('s_remote', 'horror-horror-long', 'horror', 'lane-horror-horror-long:remote-host-99:1234', 'run_remote', ?, ?, ?)",
                 (now_ts - 20, now_ts - 5, now_ts + 1800),
             )
             conn.commit()
@@ -636,10 +636,10 @@ class TestWatchdogResiliency:
             conn.execute("CREATE TABLE lane_leases (job_id TEXT, lane_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
             conn.execute("CREATE TABLE leases (job_id TEXT PRIMARY KEY, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
 
-            conn.execute("INSERT INTO stories VALUES ('s_skew', 'CLAIMED', 'run_skew', NULL, 'moku-horror-long')")
-            conn.execute("INSERT INTO runs VALUES ('run_skew', 'PROCESSING', NULL, NULL, 'moku-horror-long')")
+            conn.execute("INSERT INTO stories VALUES ('s_skew', 'CLAIMED', 'run_skew', NULL, 'horror-horror-long')")
+            conn.execute("INSERT INTO runs VALUES ('run_skew', 'PROCESSING', NULL, NULL, 'horror-horror-long')")
             conn.execute(
-                "INSERT INTO lane_leases VALUES ('s_skew', 'moku-horror-long', 'moku', 'lane-moku-horror-long:remote-node-2:1234', 'run_skew', ?, ?, ?)",
+                "INSERT INTO lane_leases VALUES ('s_skew', 'horror-horror-long', 'horror', 'lane-horror-horror-long:remote-node-2:1234', 'run_skew', ?, ?, ?)",
                 (now_ts - 900, now_ts - 10, now_ts - 5),  # 5s in past on local clock, but < 60s skew tolerance
             )
             conn.commit()
@@ -662,7 +662,7 @@ class TestWatchdogResiliency:
             conn.execute("CREATE TABLE leases (job_id TEXT, channel TEXT, owner TEXT, run_id TEXT, acquired_at INTEGER, heartbeat_at INTEGER, expires_at INTEGER)")
 
             conn.execute("INSERT INTO runs VALUES ('run_null_job', 'PROCESSING', NULL, NULL)")
-            conn.execute(f"INSERT INTO leases VALUES (NULL, 'moku', 'worker:localhost:{dead_pid}', 'run_null_job', 100, 100, 100)")
+            conn.execute(f"INSERT INTO leases VALUES (NULL, 'horror', 'worker:localhost:{dead_pid}', 'run_null_job', 100, 100, 100)")
             conn.commit()
 
         reaper = LeaseReaper(db_path=db_file)
@@ -684,7 +684,7 @@ class TestWatchdogResiliency:
 
             conn.execute("INSERT INTO stories VALUES ('story_matched_by_run', 'CLAIMED', 'run_orphan_story', NULL)")
             conn.execute("INSERT INTO runs VALUES ('run_orphan_story', 'PROCESSING', NULL, NULL)")
-            conn.execute(f"INSERT INTO leases VALUES (NULL, 'moku', 'worker:localhost:{dead_pid}', 'run_orphan_story', 100, 100, 100)")
+            conn.execute(f"INSERT INTO leases VALUES (NULL, 'horror', 'worker:localhost:{dead_pid}', 'run_orphan_story', 100, 100, 100)")
             conn.commit()
 
         reaper = LeaseReaper(db_path=db_file)
@@ -716,8 +716,8 @@ class TestWatchdogResiliency:
             story={"story_id": "s2"},
             story_id="s2",
             run_id="r2",
-            channel_name="aelithia",
-            channel_key="aelithia",
+            channel_name="drama",
+            channel_key="drama",
             lane=mock_lane,
             repository=MagicMock(),
             database=":memory:",
@@ -756,8 +756,8 @@ class TestWatchdogResiliency:
             story={"story_id": "s_mock"},
             story_id="s_mock",
             run_id="r_mock",
-            channel_name="moku",
-            channel_key="moku",
+            channel_name="horror",
+            channel_key="horror",
             lane=mock_lane,
             repository=MagicMock(),
             database=":memory:",

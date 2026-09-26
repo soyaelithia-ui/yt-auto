@@ -19,8 +19,8 @@ logger = logging.getLogger("scraper_scp")
 async def async_scrape_and_enqueue_scp(
     limit: int = 10,
     db_path: Optional[str] = None,
-    lane_id: str = "moku-scp-shorts",
-    channel: str = "moku",
+    lane_id: str = "horror-scp-shorts",
+    channel: str = "horror",
     session: Optional[aiohttp.ClientSession] = None,
 ) -> int:
     """Scrape SCP articles and enqueue them with CC BY-SA 3.0 license attribution asynchronously."""
@@ -77,8 +77,8 @@ async def async_scrape_and_enqueue_scp(
 def scrape_and_enqueue_scp(
     limit: int = 10,
     db_path: Optional[str] = None,
-    lane_id: str = "moku-scp-shorts",
-    channel: str = "moku",
+    lane_id: str = "horror-scp-shorts",
+    channel: str = "horror",
 ) -> int:
     """Synchronous compatibility wrapper for async_scrape_and_enqueue_scp."""
     return _run_sync(

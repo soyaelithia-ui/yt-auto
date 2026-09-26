@@ -23,7 +23,7 @@ def stage_04_mood_theme(ctx: PipelineContext) -> None:
             ctx.loop_category
             or getattr(ctx.lane, "loop_category", None)
             or getattr(ctx.lane, "story_type", None)
-            or ("cosmic_horror" if ctx.channel_name == "moku" else "dark_ambient")
+            or ("cosmic_horror" if ctx.channel_name == "horror" else "dark_ambient")
         )
 
         bg_audio_cfg = getattr(ctx.lane, "background_audio", None)

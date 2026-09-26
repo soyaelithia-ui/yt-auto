@@ -290,7 +290,7 @@ class PipelineOrchestrator:
 
     def run_telegram_canary(
         self,
-        channel: str = "moku",
+        channel: str = "horror",
         story_id: Optional[str] = None,
     ) -> CanaryRunResult:
         """

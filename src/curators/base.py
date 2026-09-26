@@ -51,17 +51,15 @@ class NarrativeDirector:
             return self._curators[ch_str]
 
         # Canonical aliases mapping
-        if ch_str in ("terror", "horror", "scp", "moku"):
-            for candidate in (ch_str, "moku", "horror"):
-                if candidate in self._curators:
-                    return self._curators[candidate]
-        elif ch_str in ("drama", "soy_el_malo", "aelithia", "aita"):
-            for candidate in (ch_str, "aelithia", "drama"):
-                if candidate in self._curators:
-                    return self._curators[candidate]
+        if ch_str in ("terror", "horror"):
+            if "horror" in self._curators:
+                return self._curators["horror"]
+        elif ch_str in ("drama", "soy_el_malo", "aita"):
+            if "drama" in self._curators:
+                return self._curators["drama"]
 
-        # Fallback to horror, moku or first registered
-        return self._curators.get("horror") or self._curators.get("moku") or next(iter(self._curators.values()))
+        # Fallback to horror or first registered
+        return self._curators.get("horror") or next(iter(self._curators.values()))
 
     def build_short(self, channel: str | CanonicalChannel, topic: str, **kwargs: Any) -> str:
         curator = self.get_curator(channel)
@@ -86,9 +84,7 @@ def get_narrative_director() -> NarrativeDirector:
 
         director = NarrativeDirector()
         director.register(HorrorCurator(channel="horror"))
-        director.register(HorrorCurator(channel="moku"))
         director.register(DramaCurator(channel="drama"))
-        director.register(DramaCurator(channel="aelithia"))
         _DIRECTOR_INSTANCE = director
     return _DIRECTOR_INSTANCE
 

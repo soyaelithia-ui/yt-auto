@@ -49,7 +49,7 @@ class TestTelegramRejectionWindow(unittest.TestCase):
 
         job = ReviewJob(
             job_id="story-young",
-            channel="moku",
+            channel="horror",
             title="SCP Under 2h",
             original_video_path="/tmp/fake.mp4",
             status=ReviewStatus.PENDING_REVIEW.value,
@@ -69,7 +69,7 @@ class TestTelegramRejectionWindow(unittest.TestCase):
 
         job = ReviewJob(
             job_id="story-ripe",
-            channel="moku",
+            channel="horror",
             title="SCP Over 2h",
             original_video_path="/tmp/fake.mp4",
             status=ReviewStatus.PENDING_REVIEW.value,
@@ -89,7 +89,7 @@ class TestTelegramRejectionWindow(unittest.TestCase):
 
         job = ReviewJob(
             job_id="story-verdict-ripe",
-            channel="aelithia",
+            channel="drama",
             title="AITA Drama Over 2h",
             original_video_path="/tmp/fake.mp4",
             status=ReviewStatus.PENDING_REVIEW.value,
@@ -109,7 +109,7 @@ class TestTelegramRejectionWindow(unittest.TestCase):
 
         job = ReviewJob(
             job_id="story-veto",
-            channel="moku",
+            channel="horror",
             title="Vetoed Video",
             original_video_path="/tmp/fake.mp4",
             status=ReviewStatus.PENDING_REVIEW.value,
@@ -135,7 +135,7 @@ class TestTelegramRejectionWindow(unittest.TestCase):
 
         job = ReviewJob(
             job_id="story-race",
-            channel="aelithia",
+            channel="drama",
             title="Race Condition Video",
             original_video_path="/tmp/fake.mp4",
             status=ReviewStatus.APPROVED.value,

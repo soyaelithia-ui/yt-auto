@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from src.config import BASE_DIR, MOKU, AELITHIA, SETTINGS
+from src.config import BASE_DIR, HORROR, DRAMA, SETTINGS
 
 _AGENT_HOME_GITIGNORE = (
     ".codex/",
@@ -96,7 +96,7 @@ def _assert_no_live_format(rel_path: str, text: str) -> None:
 
 def test_public_dict_does_not_leak_credential_paths():
     """Verify that public_dict() never exposes absolute or relative paths to secrets."""
-    for channel in (MOKU, AELITHIA):
+    for channel in (HORROR, DRAMA):
         pdict = channel.public_dict()
         assert "cookies_path" not in pdict, f"cookies_path leaked in {channel.key}"
         assert "youtube_token_path" not in pdict, f"youtube_token_path leaked in {channel.key}"

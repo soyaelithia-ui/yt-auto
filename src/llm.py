@@ -118,7 +118,7 @@ def is_spanish_text(text: str) -> bool:
     return ratio >= 0.05 and match_count >= 2
 
 
-def _curate_with_regex(raw_text: str, title: str, channel: str = "moku", max_words: Optional[int] = None, min_words: int = 180) -> str:
+def _curate_with_regex(raw_text: str, title: str, channel: str = "horror", max_words: Optional[int] = None, min_words: int = 180) -> str:
     """Provider C: Pure regex text sanitizer fallback in 100% natural Spanish."""
     from src.branding import get_channel_branding
     from src.agents.translator import TranslatorAgent
@@ -207,7 +207,7 @@ def compile_stories_to_target_words(
     main_content: str,
     additional_stories: Optional[List[Dict[str, Any]]] = None,
     min_words: int = 300,
-    channel: str = "moku"
+    channel: str = "horror"
 ) -> Tuple[str, str]:
     """
     Join main story with all additional stories using organic narrative connectors
@@ -226,7 +226,7 @@ def compile_stories_to_target_words(
     if len(words) < min_words and additional_stories:
         extra_titles = []
         from src.branding import resolve_channel_key
-        is_drama = resolve_channel_key(channel) == "aelithia"
+        is_drama = resolve_channel_key(channel) == "drama"
         connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
 
         idx = 0
@@ -269,21 +269,21 @@ def _expand_narrative_to_target_words(
     main_content: str,
     min_words: int,
     max_words: Optional[int] = None,
-    channel: str = "moku",
+    channel: str = "horror",
 ) -> str:
     """Expand a short narrative to satisfy min_words editorial budget when AI chain is offline.
 
-    1. For SCP anomalies (channel=moku or SCP topic), queries canonical lore from
+    1. For SCP anomalies (channel=horror or SCP topic), queries canonical lore from
        src.core.scp_lore (containment_summary, key_facts, sensory_cues, narrative_hooks)
        to enrich the narrative with 100% verified canonical facts.
     2. For horror/drama stories, enriches with atmospheric narrative connectors.
     """
-    # For Spanish channels (moku), filter orphan English blocks first so we count real Spanish words
+    # For Spanish channels, filter orphan English blocks first so we count real Spanish words
     usable_content = main_content
-    if channel == "moku":
+    if channel in ("horror", "drama", "scifi"):
         try:
             from src.sanitizer import filter_orphan_english_blocks
-            filtered = filter_orphan_english_blocks(main_content, channel="moku")
+            filtered = filter_orphan_english_blocks(main_content, channel=channel)
             if len(filtered.split()) >= min_words:
                 return filtered
             usable_content = filtered
@@ -291,6 +291,8 @@ def _expand_narrative_to_target_words(
             pass
 
     words = usable_content.split()
+    if len(words) >= min_words:
+        return usable_content
 
     # 1. Canonical SCP lore enrichment
     try:
@@ -332,7 +334,7 @@ def _expand_narrative_to_target_words(
     # 2. General organic connectors
     try:
         from src.branding import resolve_channel_key
-        is_drama = resolve_channel_key(channel) == "aelithia"
+        is_drama = resolve_channel_key(channel) == "drama"
         connectors = ORGANIC_CONNECTORS_DRAMA if is_drama else ORGANIC_CONNECTORS_HORROR
         additions = []
         current_count = len(words)
@@ -392,10 +394,10 @@ def ensure_spanish_source(story_text: str, title: str, channel: Optional[str] = 
 
         if not is_spanish_neutral(translated_content) if len(translated_content.split()) >= 20 else not is_spanish_text(translated_content):
             try:
-                from src.templates.narratives import build_moku_short_narrative
+                from src.templates.narratives import build_horror_short_narrative
                 from src.core.scp_lore import is_scp_topic
                 if is_scp_topic(clean_t) or "scp" in clean_t.lower() or "scp" in str(title).lower():
-                    synth = build_moku_short_narrative(clean_t)
+                    synth = build_horror_short_narrative(clean_t)
                     if synth and is_spanish_neutral(synth):
                         translated_content = synth
                         logger.info("ensure_spanish_source synthesized canonical Spanish lore for %s", clean_t)
@@ -598,13 +600,13 @@ _ADAPTATION_OUTPUT_CONTRACT = (
 )
 
 _ADAPTATION_PERSONAS: Dict[str, str] = {
-    "moku": (
+    "horror": (
         "Eres un narrador documental de horror en primera persona, especializado "
         "en creepypastas y expedientes SCP. Tono sobrio, ominoso y verosímil: "
         "relatas hechos que presenciaste o reconstruiste desde archivos, y jamás "
         "rompes la ilusión documental."
     ),
-    "aelithia": (
+    "drama": (
         "Eres un narrador confesional dramático en primera persona. Relatas el "
         "conflicto personal con carga emocional cruda y mantienes el diálogo "
         "directo presente en la historia original (réplicas textuales entre "
@@ -624,7 +626,7 @@ _ADAPTATION_PERSONA_DEFAULT = (
 
 
 def _resolve_adaptation_channel(channel: Optional[str]) -> str:
-    """Normalize channel aliases (terror→moku, aita→aelithia) without failing."""
+    """Normalize channel to canonical ID without failing."""
     key = str(channel or "").strip().lower()
     if not key:
         return ""
@@ -654,7 +656,7 @@ def _adaptation_system_instruction(channel: str) -> str:
 def _build_adaptation_prompt(
     title: str,
     content: str,
-    channel: str = "moku",
+    channel: str = "horror",
     max_words: Optional[int] = None,
     min_words: Optional[int] = None,
 ) -> str:
@@ -686,7 +688,7 @@ def curate_script(
     additional_stories: Optional[List[Dict[str, Any]]] = None,
     min_words: int = 300,
     provider: Optional[str] = None,
-    channel: str = "moku",
+    channel: str = "horror",
     strict_single_story: bool = False,
     client: Optional[Any] = None,
     max_words: Optional[int] = None,
@@ -814,7 +816,7 @@ def curate_script(
 def _curate_with_agent(
     content: str,
     title: str,
-    channel: str = "moku",
+    channel: str = "horror",
     max_words: Optional[int] = None,
     min_words: Optional[int] = None,
 ) -> Optional[str]:
@@ -895,7 +897,7 @@ def curate_batch_json(
     title: Optional[str] = None,
     additional_stories: Optional[List[Dict[str, Any]]] = None,
     min_words: int = 300,
-    channel: str = "moku",
+    channel: str = "horror",
     client: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build a curated script and metadata dictionary using only local rules."""
@@ -931,7 +933,7 @@ def curate_batch_json(
     }
 
 
-def build_thumbnail_prompt(title: str, channel: str = "moku") -> str:
+def build_thumbnail_prompt(title: str, channel: str = "horror") -> str:
     """Return an empty cover-prompt descriptor.
 
     Kept as a back-compat no-op so external callers (and tests) that still

@@ -5,13 +5,13 @@
     {
       "id": "horror",
       "enabled": true,
-      "aliases": ["moku", "terror", "scp", "moku_horror", "moku_terror", "canal1", "canal_1", "canal-1", "canal 1", "channel1", "channel_1", "channel-1", "channel 1"],
+      "aliases": ["canal1", "canal_1", "canal-1", "canal 1", "channel1", "channel_1", "channel-1", "channel 1"],
       "config_file": "config/channels/horror.json"
     },
     {
       "id": "drama",
       "enabled": true,
-      "aliases": ["aelithia", "aita", "relatos_reddit", "aelithia_drama", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2", "channel2", "channel_2", "channel-2", "channel 2"],
+      "aliases": ["canal2", "canal_2", "canal-2", "canal 2", "channel2", "channel_2", "channel-2", "channel 2"],
       "config_file": "config/channels/drama.json"
     },
     {

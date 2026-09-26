@@ -367,7 +367,7 @@ def evaluate_video(
     thumbnail_path: Optional[str] = None,
     story_id: str = "",
     run_id: str = "",
-    channel: str = "moku",
+    channel: str = "horror",
     video_mode: str = "short",
     precomputed_visual: Optional[Dict[str, Any]] = None,
 ) -> CodeReviewVerdict:

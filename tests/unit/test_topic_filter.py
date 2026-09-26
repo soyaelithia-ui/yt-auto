@@ -19,8 +19,8 @@ from src.core.topics import (
 @pytest.fixture
 def scp_lane():
     return parse_lane({
-        "id": "moku-scp-shorts",
-        "channel": "moku",
+        "id": "horror-scp-shorts",
+        "channel": "horror",
         "story_type": "scp",
         "orientation": "vertical",
         "duration": {"min_sec": 60, "target_sec": 150, "max_sec": 180},
@@ -43,8 +43,8 @@ def scp_lane():
 @pytest.fixture
 def aita_lane():
     return parse_lane({
-        "id": "aelithia-aita-long",
-        "channel": "aelithia",
+        "id": "drama-aita-long",
+        "channel": "drama",
         "story_type": "reddit_aita",
         "orientation": "horizontal",
         "duration": {"min_sec": 600, "target_sec": 600, "max_sec": 1800},
@@ -66,8 +66,8 @@ def aita_lane():
 @pytest.fixture
 def horror_lane_off():
     return parse_lane({
-        "id": "moku-horror-long",
-        "channel": "moku",
+        "id": "horror-horror-long",
+        "channel": "horror",
         "story_type": "horror",
         "orientation": "horizontal",
         "duration": {"min_sec": 600, "target_sec": 600, "max_sec": 1800},

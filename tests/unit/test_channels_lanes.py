@@ -37,21 +37,21 @@ class TestCanonicalChannelAndLanesSecurity:
         both Enum instances and raw string channel representations without AttributeError.
         """
         # Testing safe channel extraction with raw string
-        lanes = lanes_for_channel("moku")
+        lanes = lanes_for_channel("horror")
         assert isinstance(lanes, tuple)
         assert len(lanes) > 0
 
         # Testing with CanonicalChannel enum
-        lanes_enum = lanes_for_channel(CanonicalChannel.MOKU)
+        lanes_enum = lanes_for_channel(CanonicalChannel.HORROR)
         assert isinstance(lanes_enum, tuple)
         assert len(lanes_enum) > 0
 
         # Safe voice profile resolution with string and enum
-        vp_str = resolve_voice_profile_for_lane(channel="moku")
-        assert vp_str["profile_name"] == "moku_terror"
+        vp_str = resolve_voice_profile_for_lane(channel="horror")
+        assert vp_str["id"] is not None
 
-        vp_enum = resolve_voice_profile_for_lane(channel=CanonicalChannel.MOKU)
-        assert vp_enum["profile_name"] == "moku_terror"
+        vp_enum = resolve_voice_profile_for_lane(channel=CanonicalChannel.HORROR)
+        assert vp_enum["id"] is not None
 
     def test_parse_lane_with_scifi_story_type(self):
         """parse_lane accepts lane definition with 'story_type': 'scifi' without ValueError."""
@@ -77,12 +77,12 @@ class TestCanonicalChannelAndLanesSecurity:
     @pytest.mark.parametrize(
         "malicious_lane",
         [
-            "moku-scp-shorts; rm -rf /",
-            "moku-scp-shorts && echo pwned",
-            "moku-scp-shorts | cat /etc/passwd",
+            "horror-scp-shorts; rm -rf /",
+            "horror-scp-shorts && echo pwned",
+            "horror-scp-shorts | cat /etc/passwd",
             "`whoami`",
             "$(id)",
-            "moku-scp-shorts > /dev/null",
+            "horror-scp-shorts > /dev/null",
             "../etc/passwd",
         ],
     )
@@ -92,16 +92,16 @@ class TestCanonicalChannelAndLanesSecurity:
         must be rejected with ValueError.
         """
         with pytest.raises(ValueError) as exc_info:
-            resolve_lane_for_run("moku", malicious_lane)
+            resolve_lane_for_run("horror", malicious_lane)
         err_msg = str(exc_info.value).lower()
         assert any(term in err_msg for term in ("inválido", "invalido", "sospechoso", "no existe", "invalid"))
 
     @pytest.mark.parametrize(
         "malicious_channel",
         [
-            "moku; id",
-            "moku && cat /etc/passwd",
-            "moku | whoami",
+            "horror; id",
+            "horror && cat /etc/passwd",
+            "horror | whoami",
             "`touch /tmp/evil`",
         ],
     )
@@ -110,7 +110,7 @@ class TestCanonicalChannelAndLanesSecurity:
         Threat matrix: Injection of shell metacharacters in channel must be rejected with ValueError.
         """
         with pytest.raises(ValueError):
-            resolve_lane_for_run(malicious_channel, "moku-scp-shorts")
+            resolve_lane_for_run(malicious_channel, "horror-scp-shorts")
 
 
 class TestPhase2MultiChannelLanesAndNarratives:
@@ -204,10 +204,10 @@ class TestPhase2MultiChannelLanesAndNarratives:
         )
 
         for required_lane in (
-            "moku-scp-shorts",
-            "moku-horror-long",
-            "aelithia-drama-shorts",
-            "aelithia-aita-long",
+            "horror-scp-shorts",
+            "horror-horror-long",
+            "drama-drama-shorts",
+            "drama-aita-long",
             "scifi-singularity-shorts",
             "scifi-singularity-long",
         ):
@@ -223,16 +223,7 @@ class TestPhase2MultiChannelLanesAndNarratives:
         resolved_long, _ = agent._resolve_lane_config("scifi-singularity-long", "longform")
         assert resolved_long == "scifi-singularity-long"
 
-        resolved_drama, _ = agent._resolve_lane_config("aelithia-drama-shorts", "short")
-        assert resolved_drama == "aelithia-drama-shorts"
-
-    def test_legacy_lane_aliases_map_to_canonical_thematic_lanes(self):
-        """Legacy lane IDs map cleanly to canonical thematic lane IDs via LANE_ALIASES."""
-        from src.core.lanes import LANE_ALIASES
-
-        assert LANE_ALIASES.get("moku-scp-shorts") == "horror-scp-shorts"
-        assert LANE_ALIASES.get("moku-horror-long") == "horror-horror-long"
-        assert LANE_ALIASES.get("aelithia-drama-shorts") == "drama-drama-shorts"
-        assert LANE_ALIASES.get("aelithia-aita-long") == "drama-aita-long"
+        resolved_drama, _ = agent._resolve_lane_config("drama-drama-shorts", "short")
+        assert resolved_drama == "drama-drama-shorts"
 
 

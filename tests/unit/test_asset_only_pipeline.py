@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
+import pytest
 from PIL import Image
 
 from src.core.lanes import ALLOWED_VISUAL_PIPELINES, load_lanes
 from src.media.interface import get_compositor
 from src.media.loop_engine import LoopVideoEngine
+from src.media.thumbnail_engine import ResilientThumbnailEngine
 from src.media.thumbnails.ai_bank import LocalAIThumbnailBank
 from src.media.thumbnails.engine import ThumbnailConfig, ThumbnailEngine
 
@@ -26,47 +27,119 @@ def test_legacy_compositor_alias_resolves_to_local_loop():
     assert isinstance(get_compositor("video_loop"), LoopVideoEngine)
 
 
-def test_local_ai_bank_rejects_declared_text_assets(tmp_path: Path):
+def test_local_ai_bank_rejects_missing_sidecar(tmp_path: Path):
     root = tmp_path / "bank"
-    root.mkdir()
-    clean = root / "horror" / "scene_001.png"
-    clean.parent.mkdir()
-    Image.new("RGB", (32, 32), (20, 30, 40)).save(clean)
-    (clean.with_suffix(clean.suffix + ".json")).write_text(
+    horror = root / "horror"
+    horror.mkdir(parents=True)
+    img_no_sidecar = horror / "atmospheric_abyss.png"
+    Image.new("RGB", (32, 32), (10, 20, 30)).save(img_no_sidecar)
+
+    bank = LocalAIThumbnailBank(root)
+    # A candidate without adjacent .json sidecar must be rejected
+    assert not bank.is_text_free(img_no_sidecar)
+    assert bank.candidates(channel_id="horror") == []
+
+
+def test_local_ai_bank_rejects_forbidden_token_filenames(tmp_path: Path):
+    root = tmp_path / "bank"
+    horror = root / "horror"
+    horror.mkdir(parents=True)
+
+    forbidden_tokens = [
+        "text", "title", "caption", "subtitle", "badge", "watermark", "logo", "overlay"
+    ]
+    bank = LocalAIThumbnailBank(root)
+
+    for token in forbidden_tokens:
+        img_path = horror / f"scenery_{token}_sample.png"
+        Image.new("RGB", (32, 32), (15, 25, 35)).save(img_path)
+        # Even if sidecar explicitly claims text_free: true
+        sidecar = img_path.with_suffix(img_path.suffix + ".json")
+        sidecar.write_text(json.dumps({"text_free": True}), encoding="utf-8")
+
+        assert not bank.is_text_free(img_path), f"Failed to reject forbidden token '{token}' in filename"
+
+    assert bank.candidates(channel_id="horror") == []
+
+
+def test_local_ai_bank_rejects_sidecar_with_text_free_false(tmp_path: Path):
+    root = tmp_path / "bank"
+    horror = root / "horror"
+    horror.mkdir(parents=True)
+    img = horror / "clean_specimen.png"
+    Image.new("RGB", (32, 32), (20, 30, 40)).save(img)
+    sidecar = img.with_suffix(img.suffix + ".json")
+    sidecar.write_text(json.dumps({"text_free": False}), encoding="utf-8")
+
+    bank = LocalAIThumbnailBank(root)
+    assert not bank.is_text_free(img)
+    assert bank.candidates(channel_id="horror") == []
+
+
+def test_local_ai_bank_path_traversal_prevention(tmp_path: Path):
+    root = tmp_path / "bank"
+    horror = root / "horror"
+    horror.mkdir(parents=True)
+    clean_img = horror / "clean_cover.png"
+    Image.new("RGB", (32, 32), (10, 10, 10)).save(clean_img)
+    clean_img.with_suffix(clean_img.suffix + ".json").write_text(
         json.dumps({"text_free": True}), encoding="utf-8"
     )
-    bad = root / "horror" / "scene_title.png"
-    Image.new("RGB", (32, 32), (20, 30, 40)).save(bad)
-    (bad.with_suffix(bad.suffix + ".json")).write_text(
-        json.dumps({"text_free": False}), encoding="utf-8"
-    )
 
-    candidates = LocalAIThumbnailBank(root).candidates(channel_id="horror")
-    assert candidates == [clean]
-
-
-def test_thumbnail_engine_exports_without_text_layout(tmp_path: Path):
-    root = tmp_path / "bank"
-    folder = root / "horror"
-    folder.mkdir(parents=True)
-    source = folder / "scene_001.png"
-    Image.new("RGB", (64, 64), (30, 40, 50)).save(source)
-    (source.with_suffix(source.suffix + ".json")).write_text(
+    # Outside file
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir(parents=True)
+    outside_img = outside_dir / "secret.png"
+    Image.new("RGB", (32, 32), (99, 99, 99)).save(outside_img)
+    outside_img.with_suffix(outside_img.suffix + ".json").write_text(
         json.dumps({"text_free": True}), encoding="utf-8"
     )
-    out = tmp_path / "thumbnail.jpg"
+
+    bank = LocalAIThumbnailBank(root)
+    traversal_candidates = bank.candidates(channel_id="../../outside", archetype="../outside")
+    for c in traversal_candidates:
+        assert c.resolve().is_relative_to(root.resolve()), f"Candidate escaped bank root: {c}"
+
+
+def test_thumbnail_engine_pure_text_free_rendering(tmp_path: Path):
+    root = tmp_path / "bank"
+    horror = root / "horror"
+    horror.mkdir(parents=True)
+    source = horror / "abyssal_rift.png"
+    Image.new("RGB", (64, 64), (10, 20, 30)).save(source)
+    source.with_suffix(source.suffix + ".json").write_text(
+        json.dumps({"text_free": True}), encoding="utf-8"
+    )
+
     engine = ThumbnailEngine(LocalAIThumbnailBank(root))
-    result = engine.generate(
-        ThumbnailConfig(
-            title="Ignored metadata title",
-            channel_id="horror",
-            archetype="horror",
-            output_path=out,
-            width=128,
-            height=72,
+
+    # Reject text_free=False
+    with pytest.raises(ValueError, match="text_free must remain true"):
+        engine.generate(
+            ThumbnailConfig(
+                title="Invalid text request",
+                channel_id="horror",
+                output_path=tmp_path / "invalid.jpg",
+                text_free=False,
+            )
         )
+
+    # ResilientThumbnailEngine delegates cleanly and strips deprecated text params
+    resilient = ResilientThumbnailEngine(custom_font_paths=["/fake/font.ttf"])
+    resilient._engine = engine
+    out = tmp_path / "resilient_thumb.jpg"
+    res_path = resilient.generate(
+        output_path=out,
+        title_main="TITULO PRINCIPAL",
+        title_sub="SUBTITULO",
+        highlight_box="CAJA DESTACADA",
+        badge_text="BADGE",
+        channel_id="horror",
+        archetype="horror",
+        width=128,
+        height=72,
     )
-    assert result == out.resolve()
-    assert engine.last_asset == source
-    with Image.open(result) as image:
-        assert image.size == (128, 72)
+    assert res_path == out.resolve()
+    assert out.is_file()
+    with Image.open(out) as im:
+        assert im.size == (128, 72)

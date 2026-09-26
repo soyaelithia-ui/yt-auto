@@ -67,7 +67,7 @@ class TestLLMScriptCuration(unittest.TestCase):
                 "Escuché un ruido en el ático que me heló la sangre en la noche. "
                 "Caminé lentamente hacia las escaleras sin saber qué criatura se ocultaba allí arriba. "
                 "El sonido se hacía cada vez más fuerte y amenazante en la oscuridad. "
-                "Suscríbete a Moku."
+                "Suscríbete a Horror."
             ),
             "title": "Attic Noise",
         }
@@ -170,7 +170,7 @@ class TestLLMScriptCuration(unittest.TestCase):
                 narrative,
                 title="SCP-096: no lo mires a la cara",
                 provider=None,
-                channel="moku",
+                channel="horror",
                 min_words=40,
             )
         self.assertIn("observador a través", script)
@@ -185,7 +185,7 @@ class TestLLMScriptCuration(unittest.TestCase):
             main_content=short_text,
             min_words=180,
             max_words=250,
-            channel="moku",
+            channel="horror",
         )
         self.assertGreaterEqual(len(expanded.split()), 180)
         self.assertTrue(expanded.startswith(short_text))
@@ -193,7 +193,7 @@ class TestLLMScriptCuration(unittest.TestCase):
     def test_expand_narrative_to_target_words_already_long(self):
         from src.llm import _expand_narrative_to_target_words
         text = " ".join(["palabra"] * 210)
-        res = _expand_narrative_to_target_words("SCP-096", text, 200, 250, "moku")
+        res = _expand_narrative_to_target_words("SCP-096", text, 200, 250, "horror")
         self.assertEqual(res, text)
 
 

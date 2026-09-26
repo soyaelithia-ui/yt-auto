@@ -69,8 +69,8 @@ def truncate_at_word_boundary(text: str, max_len: int, trailer: str = "...") -> 
 
 @dataclass
 class ChannelBranding:
-    channel_key: str              # Canonical key: e.g. "moku" or "aelithia"
-    display_name: str             # Public name: e.g. "Moku" or "Aelithia"
+    channel_key: str              # Canonical key: e.g. "horror", "drama", "scifi"
+    display_name: str             # Public name: e.g. "Horror Stories" or "Drama Diarios"
     handle: str                   # Channel handle: e.g. "@ChannelHandle"
     channel_url: str              # Full YouTube URL
     voice_name: str               # Edge-TTS / Azure Voice name
@@ -92,12 +92,12 @@ class ChannelBranding:
         and contains no hardcoded channel or brand leaks.
         """
         clean_t = (raw_title or "").strip()
-        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia", "relato de drama"):
+        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de misterio", "relato de drama"):
             clean_t = self.default_title_fallback
 
         clean_t = strip_brand_metadata_from_title(clean_t, self.display_name)
 
-        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de aelithia", "relato de drama"):
+        if not clean_t or clean_t.lower() in ("untitled", "title", "título", "historia de terror", "relato de misterio", "relato de drama"):
             clean_t = self.default_title_fallback
 
         if len(clean_t) > 100:
@@ -115,7 +115,7 @@ class ChannelBranding:
         clean_handle_tag = self.handle.lstrip("@").replace("-", "").replace("_", "")
         clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
 
-        if self.channel_key in ("aelithia", "drama"):
+        if self.channel_key == "drama":
             desc = (
                 f"💭 {title} | Historias Reales y Confesiones en {self.display_name}\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Historias fascinantes, dilemas morales y experiencias reales narradas en español.\n\n"
@@ -129,7 +129,7 @@ class ChannelBranding:
                 f"#{clean_name_tag} #HistoriasReales #DramasDeLaVidaReal #Confesiones #HistoriasEnEspañol"
                 + (f" #{clean_handle_tag}" if clean_handle_tag and clean_handle_tag.lower() != clean_name_tag.lower() else "")
             )
-        elif self.channel_key in ("moku", "horror"):
+        elif self.channel_key == "horror":
             desc = (
                 f"😱 {title} | Relato de Terror y Suspenso en Español\n\n"
                 f"Bienvenidos a {self.display_name} ({self.handle}). Una experiencia inmersiva para escuchar en la oscuridad.\n\n"
@@ -169,10 +169,10 @@ class ChannelBranding:
             short_title = clean_t
 
         clean_name_tag = self.display_name.replace(" ", "").replace("-", "").replace("_", "")
-        if self.channel_key in ("aelithia", "drama"):
-            hashtag_block = f"#Shorts #HistoriasReales #{clean_name_tag} #DilemasMorales"
+        if self.channel_key == "drama":
+            hashtag_block = f"#Shorts #HistoriasReales #{clean_name_tag} #Drama"
             full_title = f"{short_title} #Shorts"
-        elif self.channel_key in ("moku", "horror"):
+        elif self.channel_key == "horror":
             hashtag_block = f"#Shorts #Horror #HistoriasDeTerror #{clean_name_tag}"
             full_title = f"{short_title} #Shorts"
         else:
@@ -222,7 +222,7 @@ def get_channel_branding(channel: str) -> ChannelBranding:
 
     intro_hook = (
         "Todo comenzó cuando descubrí el secreto que mi propia familia intentaba ocultarme..."
-        if cid == "aelithia"
+        if cid == "drama"
         else "Una presencia inexplicable comienza a manifestarse..."
     )
 

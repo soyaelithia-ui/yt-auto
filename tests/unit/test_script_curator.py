@@ -2,9 +2,9 @@
 tests/unit/test_script_curator.py - Unit tests for CinematicScriptCuratorAgent (Agent 1).
 
 Covers all 3 thematic curation lanes:
-1. SCP Shorts (moku-scp-shorts) - 60-180s total, 8-15s per scene, 4 acts, clinical 0-3s hook.
-2. Horror Longform (moku-horror-long) - >=600s total, 45-90s per scene, 4 acts, 1-5 progressive tension curve, audio pacing cues.
-3. Reddit AITA Longform (aelithia-aita-long) - >=600s total, 45-90s per scene, 4 acts, moral dilemma hook, reflection question & update.
+1. SCP Shorts (horror-scp-shorts) - 60-180s total, 8-15s per scene, 4 acts, clinical 0-3s hook.
+2. Horror Longform (horror-horror-long) - >=600s total, 45-90s per scene, 4 acts, 1-5 progressive tension curve, audio pacing cues.
+3. Reddit AITA Longform (drama-aita-long) - >=600s total, 45-90s per scene, 4 acts, moral dilemma hook, reflection question & update.
 4. Schema validation with Draft-07 validator against schemas/script_curator.schema.json.
 5. Sentence-aware boundary slicing, abbreviation protection, and fallback engine.
 """
@@ -89,7 +89,7 @@ def sample_aita_text() -> str:
 
 
 # ============================================================================
-# 1. SCP SHORTS TESTS (moku-scp-shorts)
+# 1. SCP SHORTS TESTS (horror-scp-shorts)
 # ============================================================================
 
 class TestSCPShortsCuration:
@@ -99,20 +99,20 @@ class TestSCPShortsCuration:
         script = agent.curate(
             raw_text=sample_scp_text,
             title="SCP-173 La Escultura",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         Draft7Validator.check_schema(curator_schema)
         validate(instance=script, schema=curator_schema)
         assert script["version"] == "2.0"
-        assert script["metadata"]["channel_lane"] == "moku-scp-shorts"
+        assert script["metadata"]["channel_lane"] == "horror-scp-shorts"
         assert script["metadata"]["target_format"] == "short"
 
     def test_scp_shorts_timing_and_scene_duration_bounds(self, agent, sample_scp_text):
         script = agent.curate(
             raw_text=sample_scp_text,
             title="SCP-173 La Escultura",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         total_dur = script["metadata"]["estimated_duration_sec"]
@@ -133,7 +133,7 @@ class TestSCPShortsCuration:
         script = agent.curate(
             raw_text=sample_scp_text,
             title="SCP-173 La Escultura",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         assert len(script["acts"]) == 4
@@ -155,7 +155,7 @@ class TestSCPShortsCuration:
         script = agent.curate(
             raw_text=sample_scp_text,
             title="SCP-173 La Escultura",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         hook = script["metadata"]["hook_summary"]
@@ -167,7 +167,7 @@ class TestSCPShortsCuration:
 
 
 # ============================================================================
-# 2. HORROR LONGFORM TESTS (moku-horror-long)
+# 2. HORROR LONGFORM TESTS (horror-horror-long)
 # ============================================================================
 
 class TestHorrorLongformCuration:
@@ -177,19 +177,19 @@ class TestHorrorLongformCuration:
         script = agent.curate(
             raw_text=sample_horror_text,
             title="La Frecuencia Prohibida",
-            channel_lane="moku-horror-long",
+            channel_lane="horror-horror-long",
             target_format="longform",
         )
         validate(instance=script, schema=curator_schema)
         assert script["version"] == "2.0"
-        assert script["metadata"]["channel_lane"] == "moku-horror-long"
+        assert script["metadata"]["channel_lane"] == "horror-horror-long"
         assert script["metadata"]["target_format"] == "longform"
 
     def test_horror_longform_duration_and_scene_bounds(self, agent, sample_horror_text):
         script = agent.curate(
             raw_text=sample_horror_text,
             title="La Frecuencia Prohibida",
-            channel_lane="moku-horror-long",
+            channel_lane="horror-horror-long",
             target_format="longform",
         )
         total_dur = script["metadata"]["estimated_duration_sec"]
@@ -208,7 +208,7 @@ class TestHorrorLongformCuration:
         script = agent.curate(
             raw_text=sample_horror_text,
             title="La Frecuencia Prohibida",
-            channel_lane="moku-horror-long",
+            channel_lane="horror-horror-long",
             target_format="longform",
         )
         tension_curve = script["metadata"]["tension_curve"]
@@ -230,7 +230,7 @@ class TestHorrorLongformCuration:
         script = agent.curate(
             raw_text=sample_horror_text,
             title="La Frecuencia Prohibida",
-            channel_lane="moku-horror-long",
+            channel_lane="horror-horror-long",
             target_format="longform",
         )
         act4_scenes = script["acts"][3]["scenes"]
@@ -239,7 +239,7 @@ class TestHorrorLongformCuration:
 
 
 # ============================================================================
-# 3. REDDIT AITA LONGFORM TESTS (aelithia-aita-long)
+# 3. REDDIT AITA LONGFORM TESTS (drama-aita-long)
 # ============================================================================
 
 class TestRedditAITALongformCuration:
@@ -249,19 +249,19 @@ class TestRedditAITALongformCuration:
         script = agent.curate(
             raw_text=sample_aita_text,
             title="Conflicto de Herencia Familiar",
-            channel_lane="aelithia-aita-long",
+            channel_lane="drama-aita-long",
             target_format="longform",
         )
         validate(instance=script, schema=curator_schema)
         assert script["version"] == "2.0"
-        assert script["metadata"]["channel_lane"] == "aelithia-aita-long"
+        assert script["metadata"]["channel_lane"] == "drama-aita-long"
         assert script["metadata"]["target_format"] == "longform"
 
     def test_aita_longform_duration_and_scenes(self, agent, sample_aita_text):
         script = agent.curate(
             raw_text=sample_aita_text,
             title="Conflicto de Herencia Familiar",
-            channel_lane="aelithia-aita-long",
+            channel_lane="drama-aita-long",
             target_format="longform",
         )
         total_dur = script["metadata"]["estimated_duration_sec"]
@@ -280,7 +280,7 @@ class TestRedditAITALongformCuration:
         script = agent.curate(
             raw_text=sample_aita_text,
             title="Conflicto de Herencia Familiar",
-            channel_lane="aelithia-aita-long",
+            channel_lane="drama-aita-long",
             target_format="longform",
         )
         hook = script["metadata"]["hook_summary"]
@@ -345,9 +345,9 @@ class TestDeterministicFallback:
     @pytest.mark.parametrize(
         "lane_id,target_fmt,min_dur,max_dur",
         [
-            ("moku-scp-shorts", "short", 60.0, 180.0),
-            ("moku-horror-long", "longform", 600.0, 1800.0),
-            ("aelithia-aita-long", "longform", 600.0, 1800.0),
+            ("horror-scp-shorts", "short", 60.0, 180.0),
+            ("horror-horror-long", "longform", 600.0, 1800.0),
+            ("drama-aita-long", "longform", 600.0, 1800.0),
         ],
     )
     def test_empty_raw_text_produces_valid_script(
@@ -368,7 +368,7 @@ class TestDeterministicFallback:
         script = agent.curate(
             raw_text="",
             title="SCP-087",
-            channel_lane="moku-scp-shorts",
+            channel_lane="horror-scp-shorts",
             target_format="short",
         )
         validate(instance=script, schema=curator_schema)
@@ -411,21 +411,6 @@ class TestCanonicalThematicLanesAndDecomposition:
         )
         validate(instance=script, schema=curator_schema)
         assert len(script["acts"]) == 4
-
-    @pytest.mark.parametrize(
-        "legacy_lane,expected_key",
-        [
-            ("moku-scp-shorts", "horror-scp-shorts"),
-            ("moku-horror-long", "horror-horror-long"),
-            ("aelithia-drama-shorts", "drama-drama-shorts"),
-            ("aelithia-aita-long", "drama-aita-long"),
-        ],
-    )
-    def test_legacy_lane_aliases_resolve_cleanly(self, legacy_lane, expected_key):
-        from src.curators.curation_profiles import resolve_lane_config
-        resolved_key, cfg = resolve_lane_config(legacy_lane, "short" if "short" in legacy_lane else "longform")
-        assert resolved_key in (expected_key, legacy_lane)
-        assert cfg is not None
 
     def test_abbreviation_splitting_expanded(self):
         from src.curators.segmentation import split_into_sentences

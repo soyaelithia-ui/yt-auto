@@ -92,6 +92,7 @@ def offline_provider_guard(monkeypatch, request):
     monkeypatch.setenv("TEST_MODE", "1")
     monkeypatch.setenv("MOCK_DRIVE_UPLOAD", "1")
     monkeypatch.setenv("MOCK_YOUTUBE_UPLOAD", "1")
+    monkeypatch.setenv("USE_AGENT_HARNESS", "0")
     test_review_db = str(Path(request.config.rootdir) / ".pytest_cache" / f"test_review_{os.getpid()}.db")
     monkeypatch.setenv("VIDEO_REVIEW_DB_PATH", test_review_db)
     test_agents_dir = str(Path(request.config.rootdir) / ".pytest_cache" / f"test_agents_{os.getpid()}")

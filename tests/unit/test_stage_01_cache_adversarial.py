@@ -67,7 +67,7 @@ def test_db_path(tmp_path: Path) -> str:
 def mock_channel_settings() -> SimpleNamespace:
     return SimpleNamespace(
         source_feed="nosleep",
-        channel_name="moku",
+        channel_name="horror",
     )
 
 
@@ -140,11 +140,11 @@ class TestCacheExpirationAndInvalidation:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -169,11 +169,11 @@ class TestCacheExpirationAndInvalidation:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -303,11 +303,11 @@ class TestDatabaseCorruptionAndConcurrency:
             try:
                 claimed = _claim_or_enqueue_story(
                     repository=repo,
-                    channel_key=CanonicalChannel.MOKU,
-                    channel_name="moku",
+                    channel_key=CanonicalChannel.HORROR,
+                    channel_name="horror",
                     settings=mock_channel_settings,
                     database=test_db_path,
-                    lane_id="moku-scp-shorts",
+                    lane_id="horror-scp-shorts",
                     requested_story_id="",
                     story=None,
                     directed=False,
@@ -350,11 +350,11 @@ class TestDatabaseCorruptionAndConcurrency:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -474,11 +474,11 @@ class TestQueueLeaseInvariantIntegrity:
 
                 claimed = _claim_or_enqueue_story(
                     repository=repo,
-                    channel_key=CanonicalChannel.MOKU,
-                    channel_name="moku",
+                    channel_key=CanonicalChannel.HORROR,
+                    channel_name="horror",
                     settings=mock_channel_settings,
                     database=test_db_path,
-                    lane_id="moku-scp-shorts",
+                    lane_id="horror-scp-shorts",
                     requested_story_id="",
                     story=None,
                     directed=False,
@@ -512,7 +512,7 @@ class TestQueueLeaseInvariantIntegrity:
         """Verify that completed/published stories in DB are strictly skipped when cache returns them."""
         repo = QueueRepository(test_db_path)
         # Pre-enqueue story_001 and mark as PUBLISHED
-        repo.enqueue("story_001", "Completed Story", "Full Content", "https://url/1", CanonicalChannel.MOKU)
+        repo.enqueue("story_001", "Completed Story", "Full Content", "https://url/1", CanonicalChannel.HORROR)
         with connect(test_db_path) as conn:
             conn.execute("UPDATE stories SET status = ? WHERE story_id = 'story_001'", (JobStatus.PUBLISHED.value,))
             conn.commit()
@@ -532,11 +532,11 @@ class TestQueueLeaseInvariantIntegrity:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -553,27 +553,27 @@ class TestQueueLeaseInvariantIntegrity:
     ):
         """Verify that concurrent workers on different channels acquire distinct leases with proper ownership isolation."""
         repo = QueueRepository(test_db_path)
-        candidates_moku = [
-            {"id": "iso_moku_1", "title": "Story Moku", "content": "Content Moku", "url": "https://moku/1"},
+        candidates_horror = [
+            {"id": "iso_horror_1", "title": "Story Horror", "content": "Content Horror", "url": "https://horror/1"},
         ]
-        candidates_aelithia = [
-            {"id": "iso_ael_1", "title": "Story Aelithia", "content": "Content Aelithia", "url": "https://ael/1"},
+        candidates_drama = [
+            {"id": "iso_drama_1", "title": "Story Drama", "content": "Content Drama", "url": "https://drama/1"},
         ]
-        _set_cached_external_stories(test_db_path, "nosleep", 25, candidates_moku, ttl_seconds=300.0)
-        _set_cached_external_stories(test_db_path, "aita", 25, candidates_aelithia, ttl_seconds=300.0)
+        _set_cached_external_stories(test_db_path, "nosleep", 25, candidates_horror, ttl_seconds=300.0)
+        _set_cached_external_stories(test_db_path, "aita", 25, candidates_drama, ttl_seconds=300.0)
         mock_scoring = SimpleNamespace(passed=True, db_rank_score=90, hybrid_score=0.9, rejection_summary=None)
 
-        # Worker A claims on Moku
+        # Worker A claims on Horror
         with patch("src.pipeline.stages.stage_01_lease.is_test_environment", return_value=False), \
              patch("src.core.scoring.filter_and_score_story", return_value=mock_scoring):
 
             claimed_a = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -582,18 +582,18 @@ class TestQueueLeaseInvariantIntegrity:
                 lease_seconds=600,
             )
 
-        # Worker B claims on Aelithia
-        settings_aelithia = SimpleNamespace(source_feed="aita", channel_name="aelithia")
+        # Worker B claims on Drama
+        settings_drama = SimpleNamespace(source_feed="aita", channel_name="drama")
         with patch("src.pipeline.stages.stage_01_lease.is_test_environment", return_value=False), \
              patch("src.core.scoring.filter_and_score_story", return_value=mock_scoring):
 
             claimed_b = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.AELITHIA,
-                channel_name="aelithia",
-                settings=settings_aelithia,
+                channel_key=CanonicalChannel.DRAMA,
+                channel_name="drama",
+                settings=settings_drama,
                 database=test_db_path,
-                lane_id="aelithia-drama-shorts",
+                lane_id="drama-drama-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -604,8 +604,8 @@ class TestQueueLeaseInvariantIntegrity:
 
         # Claims must be distinct
         assert claimed_a is not None and claimed_b is not None
-        assert claimed_a.id == "iso_moku_1"
-        assert claimed_b.id == "iso_ael_1"
+        assert claimed_a.id == "iso_horror_1"
+        assert claimed_b.id == "iso_drama_1"
 
         # Verify lease table owners
         with connect(test_db_path, read_only=True) as conn:
@@ -638,11 +638,11 @@ class TestQueueLeaseInvariantIntegrity:
 
             claimed_a = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=test_db_path,
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -663,15 +663,15 @@ class TestQueueLeaseInvariantIntegrity:
              patch("src.core.scoring.filter_and_score_story", return_value=mock_scoring):
 
             claimed_ctx, err = stage_01_claim_lease(
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 db_path=test_db_path,
                 story_id=None,
                 story=None,
                 directed=False,
                 generate_only=False,
                 owner="live_worker_b",
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 profiler=profiler,
             )
 

@@ -38,27 +38,27 @@ def test_claim_discriminator_filters_by_channel_and_producer():
         with sqlite3.connect(db_path) as conn:
             conn.execute("""
                 INSERT INTO stories (story_id, title, content, url, status, channel)
-                VALUES ('scp_001', 'SCP 087 Short', 'Desc', 'http://scp087', 'PENDING', 'moku')
+                VALUES ('scp_001', 'SCP 087 Short', 'Desc', 'http://scp087', 'PENDING', 'horror')
             """)
             conn.execute("""
                 INSERT INTO stories (story_id, title, content, url, status, channel)
-                VALUES ('aita_001', 'AITA Story', 'Desc', 'http://aita1', 'PENDING', 'aelithia')
+                VALUES ('aita_001', 'AITA Story', 'Desc', 'http://aita1', 'PENDING', 'drama')
             """)
             conn.commit()
 
-        # Claim for moku (scp short flow)
-        claimed_moku = repo.claim(CanonicalChannel.MOKU, owner="yt-short-daemon", mode="moku+scp+short")
-        assert claimed_moku is not None
-        assert claimed_moku["story_id"] == "scp_001"
+        # Claim for horror (scp short flow)
+        claimed_horror = repo.claim(CanonicalChannel.HORROR, owner="yt-short-daemon", mode="horror+scp+short")
+        assert claimed_horror is not None
+        assert claimed_horror["story_id"] == "scp_001"
 
-        # Claim for aelithia (reddit_aita flow)
-        claimed_aelithia = repo.claim(CanonicalChannel.AELITHIA, owner="yt-auto-daemon", mode="aelithia+reddit_aita+longform")
-        assert claimed_aelithia is not None
-        assert claimed_aelithia["story_id"] == "aita_001"
+        # Claim for drama (reddit_aita flow)
+        claimed_drama = repo.claim(CanonicalChannel.DRAMA, owner="yt-auto-daemon", mode="drama+reddit_aita+longform")
+        assert claimed_drama is not None
+        assert claimed_drama["story_id"] == "aita_001"
 
-        # Moku cannot claim aelithia's story and vice-versa
-        assert repo.claim(CanonicalChannel.MOKU, owner="yt-short-daemon") is None
-        assert repo.claim(CanonicalChannel.AELITHIA, owner="yt-auto-daemon") is None
+        # Horror cannot claim drama's story and vice-versa
+        assert repo.claim(CanonicalChannel.HORROR, owner="yt-short-daemon") is None
+        assert repo.claim(CanonicalChannel.DRAMA, owner="yt-auto-daemon") is None
 
     finally:
         if os.path.exists(db_path):

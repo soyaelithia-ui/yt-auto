@@ -14,6 +14,8 @@ LEGACY_COOKIE_MARKERS = (
     "DECRYPTED_COOKIES_PATH",
     "cookies_moku",
     "COOKIES_MOKU_PATH",
+    "cookies_aelithia",
+    "COOKIES_AELITHIA_PATH",
 )
 
 
@@ -21,14 +23,14 @@ def _channel_auth(channel: str) -> dict:
     return json.loads((ROOT / "config" / "channels" / f"{channel}.json").read_text(encoding="utf-8"))["auth"]
 
 
-def test_moku_cookie_path_is_generic_cookies():
-    path = _channel_auth("moku")["cookies_path"]
+def test_horror_cookie_path_is_generic_cookies():
+    path = _channel_auth("horror")["cookies_path"]
     assert path == "secrets/cookies.json"
 
 
-def test_aelithia_cookie_path_is_branded():
-    path = _channel_auth("aelithia")["cookies_path"]
-    assert path == "secrets/cookies_aelithia.json"
+def test_drama_cookie_path_is_branded():
+    path = _channel_auth("drama")["cookies_path"]
+    assert path == "secrets/cookies_drama.json"
 
 
 def test_scifi_cookie_path_stays_channel_branded():
@@ -46,20 +48,21 @@ def test_config_exports_generic_cookie_constant():
     assert not hasattr(cfg, "COOKIES_MOKU_PATH")
     assert not hasattr(cfg, "DECRYPTED_COOKIES_PATH")
     assert not hasattr(cfg, "COOKIES_CHANNEL2_PATH")
+    assert not hasattr(cfg, "COOKIES_AELITHIA_PATH")
     assert Path(cfg.COOKIES_PATH).name == "cookies.json"
-    assert "cookies_aelithia" in str(cfg.COOKIES_AELITHIA_PATH)
+    assert "cookies_drama" in str(cfg.COOKIES_DRAMA_PATH)
 
 
 def test_env_example_and_compose_use_generic_cookie_filenames():
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     blob = example + "\n" + compose
-    for marker in ("decrypted_cookies", "cookies_channel2", "cookies_moku.json"):
+    for marker in ("decrypted_cookies", "cookies_channel2", "cookies_moku.json", "cookies_aelithia.json"):
         assert marker not in blob
     assert "cookies.json" in example
-    assert "cookies_aelithia.json" in example
+    assert "cookies_drama.json" in example
     assert "cookies.json" in compose
-    assert "cookies_aelithia.json" in compose
+    assert "cookies_drama.json" in compose
 
 
 def test_src_has_no_legacy_cookie_filenames():

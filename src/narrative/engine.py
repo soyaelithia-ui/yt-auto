@@ -283,19 +283,17 @@ class CosmicNarrativeEngine:
         archetype: NarrativeArchetype,
     ) -> List[SceneContract]:
         """Maps narrative acts into distinct catalog scenes with progressive tension parameters."""
-        shaders = preset.get("visual_sequence") or preset.get("shader_sequence", [])
-        num_scenes = len(shaders)
+        visuals = preset.get("visual_sequence", ["deep_space", "dark_forest", "deep_space"])
+        num_scenes = len(visuals)
         scene_dur = total_dur / float(num_scenes)
         tension_scores = score_5phase_tension_curve(num_scenes)
         palette = preset.get("palette", REC709_PALETTE_TABLES.get(archetype.value, REC709_PALETTE_TABLES["cosmic_horror"]))
 
         scenes: List[SceneContract] = []
-        for i, sh_id in enumerate(shaders):
+        for i, vis_id in enumerate(visuals):
             start = round(i * scene_dur, 2)
             end = round(total_dur if i == num_scenes - 1 else (i + 1) * scene_dur, 2)
-            tension = min(1.0, (i + 1) / float(num_scenes))
             t_int = tension_scores[i] if i < len(tension_scores) else 3
-            glitch = 0.02 + 0.08 * (i / float(max(1, num_scenes - 1)))
 
             if i == 0:
                 hud = preset.get("hud_baseline", "STATUS: MONITORING")
@@ -308,13 +306,7 @@ class CosmicNarrativeEngine:
                 SceneContract(
                     start_sec=start,
                     end_sec=end,
-                    shader_id=sh_id,
-                    shader_params={
-                        "uGlitchIntensity": round(glitch, 3),
-                        "uTension": round(tension, 2),
-                        "tensionLevel": t_int,
-                        "uColorTint": [0.05, 0.35, 0.15] if "RADAR" in sh_id else ([0.2, 0.1, 0.4] if "SINGULARITY" in sh_id else [0.08, 0.15, 0.12]),
-                    },
+                    visual_asset=vis_id,
                     hud_status=hud,
                     tension_level=t_int,
                     palette=palette,

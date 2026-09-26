@@ -57,8 +57,8 @@ def legacy_database(path: Path) -> None:
 
 
 def test_canonical_channels_are_strict_and_config_is_canonical():
-    assert canonical_channel("terror") is CanonicalChannel.MOKU
-    assert canonical_channel("soy_el_malo") is CanonicalChannel.AELITHIA
+    assert canonical_channel("horror") is CanonicalChannel.HORROR
+    assert canonical_channel("drama") is CanonicalChannel.DRAMA
     assert set(CHANNELS_CONFIG) == {"horror", "drama", "scifi"}
     with pytest.raises(ValueError):
         canonical_channel("")
@@ -117,11 +117,11 @@ def test_scheduler_alternates_without_catchup(tmp_path):
     scheduler = PersistentScheduler(str(db), interval_seconds=1_800)
     scheduler.initialize()
     first = scheduler.take_due_turn(now=10_000)
-    assert first and first.channel is CanonicalChannel.MOKU
+    assert first and first.channel is CanonicalChannel.HORROR
     assert first.next_due_at == 11_800
     assert scheduler.take_due_turn(now=10_001) is None
     second = scheduler.take_due_turn(now=50_000)
-    assert second and second.channel is CanonicalChannel.AELITHIA
+    assert second and second.channel is CanonicalChannel.DRAMA
     assert second.next_due_at == 51_800
 
 
@@ -129,12 +129,12 @@ def test_publication_requires_every_confirmed_field(tmp_path):
     db = tmp_path / "queue.db"
     repo = QueueRepository(db)
     repo.initialize()
-    repo.enqueue("one", "Uno", "Contenido", "https://one", "moku")
-    story = repo.claim("moku", "worker")
+    repo.enqueue("one", "Uno", "Contenido", "https://one", "horror")
+    story = repo.claim("horror", "worker")
     assert story
     proof = PublicationProof(
         video_id="abc123XYZ",
-        channel=CanonicalChannel.MOKU,
+        channel=CanonicalChannel.HORROR,
         visibility="public",
         title="Título",
         description="Descripción",

@@ -144,8 +144,8 @@ class TestSimHashDeduplication:
 
 class TestIdempotentLeases:
     def test_lane_lease_on_conflict_idempotency(self, repo):
-        repo.enqueue("s-lease-1", "Titulo Lease", "Contenido largo " * 20, "https://x/l1", "moku")
-        job1 = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-1", lease_seconds=600)
+        repo.enqueue("s-lease-1", "Titulo Lease", "Contenido largo " * 20, "https://x/l1", "horror")
+        job1 = repo.claim_for_lane("horror-scp-shorts", "horror", "worker-1", lease_seconds=600)
         assert job1 is not None
 
         # Expire or retry: inserting another lease for the same story does not violate PK
@@ -161,7 +161,7 @@ class TestIdempotentLeases:
                     heartbeat_at = excluded.heartbeat_at,
                     expires_at = excluded.expires_at
                 """,
-                ("s-lease-1", "moku-scp-shorts", "moku", "worker-renewed", "run-renewed", 1000, 1000, 2000),
+                ("s-lease-1", "horror-scp-shorts", "horror", "worker-renewed", "run-renewed", 1000, 1000, 2000),
             )
             conn.commit()
 
@@ -171,40 +171,40 @@ class TestIdempotentLeases:
 
     def test_queue_score_priority_ordering(self, repo, monkeypatch):
         """Verify claim() prioritizes higher score stories by default."""
-        repo.enqueue("low_score", "Low Score Story", "Low Content", "https://x/low", "moku", score=100)
-        repo.enqueue("high_score", "High Score Story", "High Content", "https://x/high", "moku", score=950)
-        repo.enqueue("mid_score", "Mid Score Story", "Mid Content", "https://x/mid", "moku", score=500)
+        repo.enqueue("low_score", "Low Score Story", "Low Content", "https://x/low", "horror", score=100)
+        repo.enqueue("high_score", "High Score Story", "High Content", "https://x/high", "horror", score=950)
+        repo.enqueue("mid_score", "Mid Score Story", "Mid Content", "https://x/mid", "horror", score=500)
 
         # Default: orders by score DESC
-        job = repo.claim("moku", "worker-score-test")
+        job = repo.claim("horror", "worker-score-test")
         assert job is not None
         assert job["story_id"] == "high_score"
 
         # FIFO mode when QUEUE_RANK_BY_SCORE="0"
         monkeypatch.setenv("QUEUE_RANK_BY_SCORE", "0")
         # Enqueue another low and high
-        repo.enqueue("fifo_1", "FIFO 1", "Content 1", "https://x/f1", "aelithia", score=10)
-        repo.enqueue("fifo_2", "FIFO 2", "Content 2", "https://x/f2", "aelithia", score=999)
-        job_fifo = repo.claim("aelithia", "worker-fifo-test")
+        repo.enqueue("fifo_1", "FIFO 1", "Content 1", "https://x/f1", "drama", score=10)
+        repo.enqueue("fifo_2", "FIFO 2", "Content 2", "https://x/f2", "drama", score=999)
+        job_fifo = repo.claim("drama", "worker-fifo-test")
         assert job_fifo is not None
         assert job_fifo["story_id"] == "fifo_1"
 
     def test_dual_tier_lease_fencing_and_recovery(self, repo):
         """Test fencing across channel leases and lane leases."""
-        repo.enqueue("story-ch", "Story Channel", "Content", "https://x/ch1", "moku")
-        repo.enqueue("story-lane", "Story Lane", "Content", "https://x/lane1", "moku", lane_id="moku-scp-shorts")
+        repo.enqueue("story-ch", "Story Channel", "Content", "https://x/ch1", "horror")
+        repo.enqueue("story-lane", "Story Lane", "Content", "https://x/lane1", "horror", lane_id="horror-scp-shorts")
 
-        claimed_ch = repo.claim("moku", "worker-ch", lease_seconds=10, now=100)
+        claimed_ch = repo.claim("horror", "worker-ch", lease_seconds=10, now=100)
         assert claimed_ch is not None
         run_ch = claimed_ch["run_id"]
 
-        claimed_lane = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-lane", lease_seconds=10, now=100)
+        claimed_lane = repo.claim_for_lane("horror-scp-shorts", "horror", "worker-lane", lease_seconds=10, now=100)
         # Note: channel lease active blocks lane lease claim for same channel in claim_for_lane
         # Release or let channel lease expire
         assert repo.recover_expired_leases(now=120) == 1
 
         # Now lane claim succeeds
-        claimed_lane2 = repo.claim_for_lane("moku-scp-shorts", "moku", "worker-lane", lease_seconds=10, now=125)
+        claimed_lane2 = repo.claim_for_lane("horror-scp-shorts", "horror", "worker-lane", lease_seconds=10, now=125)
         assert claimed_lane2 is not None
         run_lane = claimed_lane2["run_id"]
 
@@ -223,9 +223,9 @@ class TestLanesCLIAndVoiceProfiles:
         assert "editorial_profiles" in profiles
         assert "scp_documentary_es" in profiles["editorial_profiles"]
 
-        voice_scp = resolve_voice_for_lane("moku-scp-shorts")
-        voice_horror = resolve_voice_for_lane("moku-horror-long")
-        voice_aita = resolve_voice_for_lane("aelithia-aita-long")
+        voice_scp = resolve_voice_for_lane("horror-scp-shorts")
+        voice_horror = resolve_voice_for_lane("horror-horror-long")
+        voice_aita = resolve_voice_for_lane("drama-aita-long")
 
         assert voice_scp in ("es-ES-AlvaroNeural", "es-ES-ElviraNeural", "es-MX-JorgeNeural")
         assert voice_horror in ("es-ES-AlvaroNeural", "es-MX-JorgeNeural")
@@ -245,9 +245,9 @@ class TestLanesCLIAndVoiceProfiles:
         assert ret == 0
         output = buf.getvalue()
         assert "PRODUCTION LANES" in output
-        assert "moku-scp-shorts" in output
-        assert "moku-horror-long" in output
-        assert "aelithia-aita-long" in output
+        assert "horror-scp-shorts" in output
+        assert "horror-horror-long" in output
+        assert "drama-aita-long" in output
 
         # Test JSON output
         args_json = argparse.Namespace(db_path=db_path, json=True, channel="all")
@@ -259,7 +259,7 @@ class TestLanesCLIAndVoiceProfiles:
         from src.core.lanes import load_lanes
         assert data["count"] == len(load_lanes())
         lane_ids = [item["lane_id"] for item in data["lanes"]]
-        assert "moku-scp-shorts" in lane_ids
-        assert "moku-horror-long" in lane_ids
-        assert "aelithia-aita-long" in lane_ids
+        assert "horror-scp-shorts" in lane_ids
+        assert "horror-horror-long" in lane_ids
+        assert "drama-aita-long" in lane_ids
 

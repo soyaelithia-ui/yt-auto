@@ -20,29 +20,22 @@ class CanonicalChannel(str, Enum):
     def _missing_(cls, value: object):
         val = str(value).lower()
         if val in (
-            "moku", "terror", "canal1", "canal_1", "canal-1", "canal 1",
+            "canal1", "canal_1", "canal-1", "canal 1",
             "channel1", "channel_1", "channel-1", "channel 1",
         ):
             return cls.HORROR
         if val in (
-            "aelithia", "soy_el_malo", "canal2", "canal_2", "canal-2", "canal 2",
+            "canal2", "canal_2", "canal-2", "canal 2",
             "channel2", "channel_2", "channel-2", "channel 2",
         ):
             return cls.DRAMA
         return None
 
 
-# Backwards compatibility aliases
-CanonicalChannel.MOKU = CanonicalChannel.HORROR
-CanonicalChannel.AELITHIA = CanonicalChannel.DRAMA
-
-
 CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
     "horror": CanonicalChannel.HORROR,
     "drama": CanonicalChannel.DRAMA,
     "scifi": CanonicalChannel.SCIFI,
-    "moku": CanonicalChannel.HORROR,
-    "aelithia": CanonicalChannel.DRAMA,
     "canal1": CanonicalChannel.HORROR,
     "canal_1": CanonicalChannel.HORROR,
     "canal-1": CanonicalChannel.HORROR,
@@ -59,21 +52,6 @@ CHANNEL_ALIASES: Final[Mapping[str, CanonicalChannel]] = {
     "channel_2": CanonicalChannel.DRAMA,
     "channel-2": CanonicalChannel.DRAMA,
     "channel 2": CanonicalChannel.DRAMA,
-    "terror": CanonicalChannel.HORROR,
-    "moku_terror": CanonicalChannel.HORROR,
-    "moku-terror": CanonicalChannel.HORROR,
-    "moku_shorts": CanonicalChannel.HORROR,
-    "scp": CanonicalChannel.HORROR,
-    "scp_shorts": CanonicalChannel.HORROR,
-    "scp-shorts": CanonicalChannel.HORROR,
-    "mokuredit": CanonicalChannel.HORROR,
-    "aelithia-c1f": CanonicalChannel.DRAMA,
-    "soy_el_malo": CanonicalChannel.DRAMA,
-    "soy-el-malo": CanonicalChannel.DRAMA,
-    "yo_soy_el_malo": CanonicalChannel.DRAMA,
-    "aita": CanonicalChannel.DRAMA,
-    "aita_drama": CanonicalChannel.DRAMA,
-    "aita-drama": CanonicalChannel.DRAMA,
     "singularidad_scifi": CanonicalChannel.SCIFI,
     "singularidad-scifi": CanonicalChannel.SCIFI,
 }

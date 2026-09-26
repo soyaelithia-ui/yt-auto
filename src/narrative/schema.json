@@ -71,33 +71,15 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["start_sec", "end_sec", "shader_id", "hud_status"],
+        "required": ["start_sec", "end_sec", "hud_status"],
         "properties": {
           "start_sec": { "type": "number", "minimum": 0.0 },
           "end_sec": { "type": "number", "minimum": 0.0 },
-          "shader_id": {
-            "type": "string",
-            "enum": [
-              "RADAR_HYDROACOUSTIC",
-              "MONOLITHS_RAYMARCHING",
-              "GRAVITATIONAL_SINGULARITY"
-            ]
-          },
-          "shader_params": {
-            "type": "object",
-            "properties": {
-              "uGlitch": { "type": "number" },
-              "uGlitchIntensity": { "type": "number" },
-              "uTension": { "type": "number" },
-              "uColorTint": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3
-              }
-            }
-          },
-          "hud_status": { "type": "string" }
+          "visual_asset": { "type": "string" },
+          "tension_level": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "hud_status": { "type": "string" },
+          "palette": { "type": "object" },
+          "camera_transform": { "type": "object" }
         }
       }
     },

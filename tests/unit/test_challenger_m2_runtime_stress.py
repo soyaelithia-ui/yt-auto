@@ -141,7 +141,7 @@ def test_stage_01_claim_failure_returns_clean_exit(monkeypatch, tmp_path):
 
     # Directed claim on nonexistent story
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="nonexistent-story-123",
         directed=True,
@@ -151,13 +151,13 @@ def test_stage_01_claim_failure_returns_clean_exit(monkeypatch, tmp_path):
 
     # Empty story-id in directed mode
     with pytest.raises(ValueError, match="--story-id no puede estar vacío"):
-        run_pipeline_once(channel="moku", db_path=str(db_path), story_id="", directed=True)
+        run_pipeline_once(channel="horror", db_path=str(db_path), story_id="", directed=True)
 
 
 def test_stage_03_editorial_compliance_failure_releases_lease(monkeypatch, tmp_path):
     """Stage 3: Editorial barrier failure fails closed, marks RETRYABLE_FAILED, and releases lease."""
     repository, db_path, work_dir = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st3", "Misterio", "Contenido seguro", "https://url", "moku")
+    repository.enqueue("story-m2-st3", "Misterio", "Contenido seguro", "https://url", "horror")
 
     # Inject failure into editorial barrier
     def _exploding_editorial(*args, **kwargs):
@@ -166,7 +166,7 @@ def test_stage_03_editorial_compliance_failure_releases_lease(monkeypatch, tmp_p
     monkeypatch.setattr("src.pipeline._enforce_editorial_compliance", _exploding_editorial)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st3",
         directed=True,
@@ -196,7 +196,7 @@ def test_stage_03_editorial_compliance_failure_releases_lease(monkeypatch, tmp_p
 def test_stage_05_tts_capability_unavailable_fails_closed(monkeypatch, tmp_path):
     """Stage 5: CapabilityUnavailable in TTS marks RETRYABLE_FAILED and releases lease."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st5-cap", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st5-cap", "Misterio", "Contenido", "https://url", "horror")
 
     def _exploding_tts(*args, **kwargs):
         raise CapabilityUnavailable("TTS synthesis engine is unreachable")
@@ -204,7 +204,7 @@ def test_stage_05_tts_capability_unavailable_fails_closed(monkeypatch, tmp_path)
     monkeypatch.setattr("lib.tts.generate_audio", _exploding_tts)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st5-cap",
         directed=True,
@@ -228,7 +228,7 @@ def test_stage_05_tts_capability_unavailable_fails_closed(monkeypatch, tmp_path)
 def test_stage_05_tts_quota_error_routes_to_waiting_llm_quota(monkeypatch, tmp_path):
     """Stage 5: QuotaError before video render routes cleanly to WAITING_LLM_QUOTA and releases lease."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st5-quota", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st5-quota", "Misterio", "Contenido", "https://url", "horror")
 
     def _quota_tts(*args, **kwargs):
         raise QuotaError("ElevenLabs quota exceeded")
@@ -236,7 +236,7 @@ def test_stage_05_tts_quota_error_routes_to_waiting_llm_quota(monkeypatch, tmp_p
     monkeypatch.setattr("lib.tts.generate_audio", _quota_tts)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st5-quota",
         directed=True,
@@ -256,7 +256,7 @@ def test_stage_05_tts_quota_error_routes_to_waiting_llm_quota(monkeypatch, tmp_p
 def test_stage_06_duration_alignment_failure_fails_closed(monkeypatch, tmp_path):
     """Stage 6: Duration alignment failure when audio duration cannot be salvaged."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st6", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st6", "Misterio", "Contenido", "https://url", "horror")
 
     # Audio returns 250s which exceeds vertical max (180s) even after re-condensation
     def _long_audio(output):
@@ -272,7 +272,7 @@ def test_stage_06_duration_alignment_failure_fails_closed(monkeypatch, tmp_path)
     monkeypatch.setattr("lib.tts.generate_audio", lambda *args, **kwargs: _long_audio(args[1] if len(args) > 1 else kwargs.get("output")))
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st6",
         directed=True,
@@ -289,7 +289,7 @@ def test_stage_06_duration_alignment_failure_fails_closed(monkeypatch, tmp_path)
 def test_stage_09_video_rendering_missing_catalog_fails_closed(monkeypatch, tmp_path):
     """Stage 9: LoopVideoEngine CatalogAssetNotFoundError fails closed and releases lease."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st9", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st9", "Misterio", "Contenido", "https://url", "horror")
 
     def _exploding_render(*args, **kwargs):
         raise CatalogAssetNotFoundError("No physical loop asset found on disk")
@@ -297,7 +297,7 @@ def test_stage_09_video_rendering_missing_catalog_fails_closed(monkeypatch, tmp_
     monkeypatch.setattr("src.media.loop_engine.LoopVideoEngine.render", _exploding_render)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st9",
         directed=True,
@@ -314,14 +314,14 @@ def test_stage_09_video_rendering_missing_catalog_fails_closed(monkeypatch, tmp_
 def test_stage_10_qa_gating_failure_fails_closed(monkeypatch, tmp_path):
     """Stage 10: validate_prepublication gate failure fails closed without marking RENDERED."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st10", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st10", "Misterio", "Contenido", "https://url", "horror")
 
     bad_report = MagicMock()
     bad_report.require_pass.side_effect = ValueError("Prepublication QA check failed: black frames detected")
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: bad_report)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st10",
         directed=True,
@@ -341,13 +341,13 @@ def test_stage_10_qa_gating_failure_fails_closed(monkeypatch, tmp_path):
 def test_stage_11_missing_required_artifact_fails_closed(monkeypatch, tmp_path):
     """Stage 11: Missing mandatory artifact (e.g. thumbnail creation failed) fails closed."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st11", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st11", "Misterio", "Contenido", "https://url", "horror")
 
     # create_video_thumbnail is a no-op, so thumbnail.jpg is never created
     monkeypatch.setattr("lib.video.create_video_thumbnail", lambda *args, **kwargs: None)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st11",
         directed=True,
@@ -364,21 +364,21 @@ def test_stage_11_missing_required_artifact_fails_closed(monkeypatch, tmp_path):
 def test_stage_12_dedup_simhash_rejects_duplicate_script(monkeypatch, tmp_path):
     """Stage 12: Dedup gating rejects duplicate script fingerprint and fails closed."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-st12", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-st12", "Misterio", "Contenido", "https://url", "horror")
 
     # Record fingerprint as already published
     test_script = (
         "Esta es una historia de misterio y suspenso en español donde la protagonista "
         "investiga una casa abandonada y descubre secretos ocultos tras una puerta sellada."
     )
-    repository.enqueue("prev-story-999", "Titulo Previo", "Contenido Previo", "https://url-unique-prev-999", "moku")
-    repository.record_fingerprint("prev-run-999", "prev-story-999", "moku", "script", test_script)
+    repository.enqueue("prev-story-999", "Titulo Previo", "Contenido Previo", "https://url-unique-prev-999", "horror")
+    repository.record_fingerprint("prev-run-999", "prev-story-999", "horror", "script", test_script)
     with connect(str(db_path)) as conn:
         conn.execute("UPDATE runs SET status = 'PUBLISHED' WHERE run_id = 'prev-run-999'")
         conn.commit()
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-st12",
         directed=True,
@@ -399,7 +399,7 @@ def test_stage_12_dedup_simhash_rejects_duplicate_script(monkeypatch, tmp_path):
 def test_heartbeat_lease_lost_mid_pipeline_halts_without_corrupting_story(monkeypatch, tmp_path):
     """If lease is lost mid-pipeline, require_heartbeat raises LeaseOwnershipError -> status: LEASE_LOST."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-heartbeat", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-heartbeat", "Misterio", "Contenido", "https://url", "horror")
 
     # Intercept require_heartbeat to simulate lease stolen after stage 3
     original_require_heartbeat = None
@@ -418,7 +418,7 @@ def test_heartbeat_lease_lost_mid_pipeline_halts_without_corrupting_story(monkey
     monkeypatch.setattr(RunContext, "require_heartbeat", _hijacked_heartbeat)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-heartbeat",
         directed=True,
@@ -435,7 +435,7 @@ def test_heartbeat_lease_lost_mid_pipeline_halts_without_corrupting_story(monkey
 def test_generate_only_halts_cleanly_at_rendered_without_publishing(monkeypatch, tmp_path):
     """generate_only=True stops at RENDERED, finishes run, releases lease, and NEVER calls review or YouTube."""
     repository, db_path, work_dir = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-genonly", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-genonly", "Misterio", "Contenido", "https://url", "horror")
 
     mock_review = MagicMock()
     mock_upload = MagicMock()
@@ -443,7 +443,7 @@ def test_generate_only_halts_cleanly_at_rendered_without_publishing(monkeypatch,
     monkeypatch.setattr("src.youtube.uploader.upload_video", mock_upload)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-genonly",
         directed=True,
@@ -478,12 +478,12 @@ def test_generate_only_halts_cleanly_at_rendered_without_publishing(monkeypatch,
 def test_generate_only_lease_lost_on_finish_raises_lease_lost(monkeypatch, tmp_path):
     """generate_only=True raises LeaseOwnershipError if lease was lost before finish_run."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-genonly-lost", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-genonly-lost", "Misterio", "Contenido", "https://url", "horror")
 
     monkeypatch.setattr(QueueRepository, "finish_run", lambda *args, **kwargs: False)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-genonly-lost",
         directed=True,
@@ -531,7 +531,7 @@ def test_zero_browser_imports_across_pipeline_and_media():
 def test_runtime_pipeline_never_spawns_browser_processes(monkeypatch, tmp_path):
     """Runtime execution of pipeline monitors all subprocess invocations and confirms zero browsers."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-browser-audit", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-browser-audit", "Misterio", "Contenido", "https://url", "horror")
 
     spawned_commands = []
     real_popen = subprocess.Popen
@@ -559,7 +559,7 @@ def test_runtime_pipeline_never_spawns_browser_processes(monkeypatch, tmp_path):
     monkeypatch.setattr(subprocess, "run", audit_run)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-browser-audit",
         directed=True,
@@ -577,7 +577,7 @@ def test_runtime_pipeline_never_spawns_browser_processes(monkeypatch, tmp_path):
 def test_exception_handling_when_set_owned_status_fails_returns_lease_lost(monkeypatch, tmp_path):
     """When an exception occurs but lease was stolen concurrently, _handle_pipeline_exception returns LEASE_LOST."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-lost-on-exc", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-lost-on-exc", "Misterio", "Contenido", "https://url", "horror")
 
     # Explode in Stage 5
     monkeypatch.setattr("lib.tts.generate_audio", MagicMock(side_effect=RuntimeError("TTS engine failed")))
@@ -587,7 +587,7 @@ def test_exception_handling_when_set_owned_status_fails_returns_lease_lost(monke
     monkeypatch.setattr(RunContext, "set_owned_status", lambda *args, **kwargs: False)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-lost-on-exc",
         directed=True,
@@ -600,11 +600,11 @@ def test_exception_handling_when_set_owned_status_fails_returns_lease_lost(monke
 def test_invalid_video_engine_raises_value_error(monkeypatch, tmp_path):
     """Invalid video_engine argument raises ValueError fail-closed."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-invalid-eng", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-invalid-eng", "Misterio", "Contenido", "https://url", "horror")
 
     with pytest.raises(ValueError, match="is not supported"):
         run_pipeline_once(
-            channel="moku",
+            channel="horror",
             db_path=str(db_path),
             story_id="story-m2-invalid-eng",
             directed=True,
@@ -612,29 +612,26 @@ def test_invalid_video_engine_raises_value_error(monkeypatch, tmp_path):
         )
 
 
-def test_multiscene_mode_coerced_to_loop_unless_force_multiscene(monkeypatch, tmp_path):
-    """video_engine='multiscene' is automatically coerced to 'loop' unless FORCE_MULTISCENE=1."""
+def test_multiscene_mode_rejected_fail_closed(monkeypatch, tmp_path):
+    """Retired video_engine='multiscene' is rejected fail-closed with ValueError."""
     repository, db_path, _ = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-coerce-eng", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-coerce-eng", "Misterio", "Contenido", "https://url", "horror")
 
-    monkeypatch.delenv("FORCE_MULTISCENE", raising=False)
-
-    res = run_pipeline_once(
-        channel="moku",
-        db_path=str(db_path),
-        story_id="story-m2-coerce-eng",
-        directed=True,
-        video_engine="multiscene",
-        generate_only=True,
-    )
-
-    assert res["status"] == "RENDERED"
+    with pytest.raises(ValueError, match="video_engine='multiscene' is not supported"):
+        run_pipeline_once(
+            channel="horror",
+            db_path=str(db_path),
+            story_id="story-m2-coerce-eng",
+            directed=True,
+            video_engine="multiscene",
+            generate_only=True,
+        )
 
 
 def test_generate_only_with_subtitles_enabled(monkeypatch, tmp_path):
     """generate_only=True with enable_subtitles=True generates captions and halts cleanly at RENDERED."""
     repository, db_path, work_dir = _setup_isolated_pipeline_env(monkeypatch, tmp_path)
-    repository.enqueue("story-m2-subs-genonly", "Misterio", "Contenido", "https://url", "moku")
+    repository.enqueue("story-m2-subs-genonly", "Misterio", "Contenido", "https://url", "horror")
 
     def _mock_ass(words, output_path, **kwargs):
         p = Path(output_path)
@@ -652,7 +649,7 @@ def test_generate_only_with_subtitles_enabled(monkeypatch, tmp_path):
     monkeypatch.setattr("lib.subtitles.validate_subtitle_artifact", lambda *args, **kwargs: True)
 
     res = run_pipeline_once(
-        channel="moku",
+        channel="horror",
         db_path=str(db_path),
         story_id="story-m2-subs-genonly",
         directed=True,

@@ -137,7 +137,7 @@ class TestAdversarialParameterFuzzing:
         for bad_val in [12345, "not_a_bool", [True], {"publish": True}]:
             # Pydantic or tool execution should handle or convert safely
             try:
-                res = asyncio.run(self.server.call_tool("system_preflight", {"channel": "moku", "require_publish": bad_val}))
+                res = asyncio.run(self.server.call_tool("system_preflight", {"channel": "horror", "require_publish": bad_val}))
                 assert res is not None
             except Exception as e:
                 assert isinstance(e, (ToolError, TypeError, ValueError, Exception))
@@ -241,7 +241,7 @@ class TestAdversarialParameterFuzzing:
         res = asyncio.run(
             self.server.call_tool(
                 "run_pipeline_dry_run",
-                {"lane_id": "moku-scp-shorts", "topic": complex_topic, "mock_all": True},
+                {"lane_id": "horror-scp-shorts", "topic": complex_topic, "mock_all": True},
             )
         )
         data = _extract_json(res)
@@ -379,7 +379,7 @@ class TestAdversarialResourceTraversalAndSecrets:
 
     def test_channel_resource_never_leaks_secrets_or_cookie_paths(self):
         """Reading all valid channel configs returns 0 raw secrets and zero secret file paths."""
-        for ch in ["moku", "aelithia", "scifi"]:
+        for ch in ["horror", "drama", "scifi"]:
             res = asyncio.run(self.server.read_resource(f"channels://{ch}/config"))
             text = _extract_text(res)
             data = json.loads(text)
@@ -454,7 +454,7 @@ class TestAdversarialCommandInjection:
             res = asyncio.run(
                 self.server.call_tool(
                     "run_pipeline_dry_run",
-                    {"lane_id": "moku-scp-shorts", "topic": injection_topic, "mock_all": True},
+                    {"lane_id": "horror-scp-shorts", "topic": injection_topic, "mock_all": True},
                 )
             )
             assert res is not None

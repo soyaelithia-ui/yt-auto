@@ -228,7 +228,7 @@ class AssetManager:
 
     def _generate_procedural_scene_background(self, index: int, category: str = "horror") -> str:
         """Returns real local template/default background image path for scene index fallback."""
-        template_bg = os.path.join(self.root_dir, "templates", "scp_shorts", "background.jpg")
+        template_bg = os.path.join(self.root_dir, "templates", "horror_shorts", "background.jpg")
         if os.path.exists(template_bg):
             return template_bg
         if os.path.exists(DEFAULT_BACKGROUND):
@@ -276,14 +276,13 @@ class AssetManager:
         """Retrieve background music track for specified category/style."""
         cat_key = category.lower()
         style_key = style.lower()
-        is_drama = cat_key in ("aelithia", "drama", "aita", "soy_el_malo", "yo_soy_el_malo", "aelithia-c1f")
+        is_drama = cat_key in ("drama", "aita", "soy_el_malo", "yo_soy_el_malo")
 
         if is_drama:
             pool = (
                 self._index["music"].get(cat_key)
                 or self._index["music"].get(style_key)
                 or self._index["music"].get("drama")
-                or self._index["music"].get("aelithia")
                 or []
             )
         else:
@@ -303,14 +302,13 @@ class AssetManager:
         """Retrieve ambient background track for specified category/style."""
         cat_key = category.lower()
         style_key = style.lower()
-        is_drama = cat_key in ("aelithia", "drama", "aita", "soy_el_malo", "yo_soy_el_malo", "aelithia-c1f")
+        is_drama = cat_key in ("drama", "aita", "soy_el_malo", "yo_soy_el_malo")
 
         if is_drama:
             pool = (
                 self._index["ambient"].get(cat_key)
                 or self._index["ambient"].get(style_key)
                 or self._index["ambient"].get("drama")
-                or self._index["ambient"].get("aelithia")
                 or []
             )
             if pool:
@@ -319,7 +317,6 @@ class AssetManager:
                 self._index["music"].get(cat_key)
                 or self._index["music"].get(style_key)
                 or self._index["music"].get("drama")
-                or self._index["music"].get("aelithia")
                 or []
             )
         else:

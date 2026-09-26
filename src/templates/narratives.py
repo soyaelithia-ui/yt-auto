@@ -15,26 +15,27 @@ from src.core.scp_lore import lookup_scp
 from src.templates.loader import load_template_json, render_paragraphs
 
 # Load externalized structured templates
-_moku_tpl = load_template_json("narratives_horror.json")
-_MOKU_SITES: list[str] = _moku_tpl["sites"]
-_MOKU_MTF: list[str] = _moku_tpl["mtf"]
-_MOKU_PERSONNEL: list[str] = _moku_tpl["personnel"]
-_MOKU_SUBJECTS: list[str] = _moku_tpl["subjects"]
-_MOKU_TIMES: list[str] = _moku_tpl["times"]
-_MOKU_SCP_PROTOCOLS: list[str] = _moku_tpl["scp_protocols"]
-_MOKU_SCP_INCIDENTS: list[str] = _moku_tpl["scp_incidents"]
-_MOKU_SCP_OUTROS: list[str] = _moku_tpl["scp_outros"]
-_MOKU_HORROR_ARCHETYPES: list[dict[str, Any]] = _moku_tpl["horror_archetypes"]
+_horror_tpl = load_template_json("narratives_horror.json")
+_HORROR_SITES: list[str] = _horror_tpl["sites"]
+_HORROR_MTF: list[str] = _horror_tpl["mtf"]
+_HORROR_PERSONNEL: list[str] = _horror_tpl["personnel"]
+_HORROR_SUBJECTS: list[str] = _horror_tpl["subjects"]
+_HORROR_TIMES: list[str] = _horror_tpl["times"]
+_HORROR_SCP_PROTOCOLS: list[str] = _horror_tpl["scp_protocols"]
+_HORROR_SCP_INCIDENTS: list[str] = _horror_tpl["scp_incidents"]
+_HORROR_SCP_OUTROS: list[str] = _horror_tpl["scp_outros"]
+_HORROR_ARCHETYPES: list[dict[str, Any]] = _horror_tpl["horror_archetypes"]
 
-_aelithia_tpl = load_template_json("narratives_drama.json")
-_AELITHIA_NAMES: list[str] = _aelithia_tpl["names"]
-_AELITHIA_ROLES: list[str] = _aelithia_tpl["roles"]
-_AELITHIA_AMOUNTS: list[str] = _aelithia_tpl["amounts"]
-_AELITHIA_TIMEFRAMES: list[str] = _aelithia_tpl["timeframes"]
-_AELITHIA_ARCHETYPES: list[dict[str, Any]] = _aelithia_tpl["archetypes"]
+_drama_tpl = load_template_json("narratives_drama.json")
+_DRAMA_NAMES: list[str] = _drama_tpl["names"]
+_DRAMA_ROLES: list[str] = _drama_tpl["roles"]
+_DRAMA_AMOUNTS: list[str] = _drama_tpl["amounts"]
+_DRAMA_TIMEFRAMES: list[str] = _drama_tpl["timeframes"]
+_DRAMA_ARCHETYPES: list[dict[str, Any]] = _drama_tpl["archetypes"]
 
 
-def _build_single_moku_scp_candidate(
+
+def _build_single_horror_scp_candidate(
     clean_topic: str,
     digest: bytes,
     attempt: int,
@@ -46,10 +47,10 @@ def _build_single_moku_scp_candidate(
     scp_entry: Any,
     scp_match: Any,
 ) -> str:
-    inc_raw = _MOKU_SCP_INCIDENTS[(digest[5] + attempt) % len(_MOKU_SCP_INCIDENTS)]
+    inc_raw = _HORROR_SCP_INCIDENTS[(digest[5] + attempt) % len(_HORROR_SCP_INCIDENTS)]
     incident = inc_raw.format(site=site, mtf=mtf, personnel=personnel, subject=subject, time=time_str)
-    proto = _MOKU_SCP_PROTOCOLS[(digest[6] + attempt) % len(_MOKU_SCP_PROTOCOLS)]
-    outro = _MOKU_SCP_OUTROS[(digest[7] + attempt) % len(_MOKU_SCP_OUTROS)]
+    proto = _HORROR_SCP_PROTOCOLS[(digest[6] + attempt) % len(_HORROR_SCP_PROTOCOLS)]
+    outro = _HORROR_SCP_OUTROS[(digest[7] + attempt) % len(_HORROR_SCP_OUTROS)]
 
     if scp_entry:
         scp_id = scp_entry.get("scp_id", "")
@@ -83,14 +84,14 @@ def _build_single_moku_scp_candidate(
     return f"{hook}\n\n{core_lore} {proto}\n\n{incident}\n\n{outro}"
 
 
-def _build_single_moku_horror_candidate(
+def _build_single_horror_horror_candidate(
     clean_topic: str,
     digest: bytes,
     attempt: int,
     time_str: str,
 ) -> str:
-    arch_idx = (digest[5] + attempt) % len(_MOKU_HORROR_ARCHETYPES)
-    arch = _MOKU_HORROR_ARCHETYPES[arch_idx]
+    arch_idx = (digest[5] + attempt) % len(_HORROR_ARCHETYPES)
+    arch = _HORROR_ARCHETYPES[arch_idx]
     subs = {"topic": clean_topic, "time": time_str}
     hook = arch["hooks"][(digest[6] + attempt) % len(arch["hooks"])].format(**subs)
     ctx = arch["contexts"][(digest[7] + attempt) % len(arch["contexts"])].format(**subs)
@@ -101,15 +102,15 @@ def _build_single_moku_horror_candidate(
     return f"{hook}\n\n{ctx} {esc} {clm} {res}\n\n{outro}"
 
 
-def build_moku_short_narrative(
+def build_horror_short_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     seed_offset: int = 0,
     recent_texts: Sequence[str] = (),
     **kwargs: Any,
 ) -> str:
     """
-    Build a high-retention Short narrative for Moku (Horror/SCP).
+    Build a high-retention Short narrative for Horror/SCP.
     Calibrated strictly to 230-280 words for optimal 75-110s pacing at 160 WPM.
     """
     clean_topic = re.sub(r"[""'']", "", topic).strip()
@@ -118,7 +119,7 @@ def build_moku_short_narrative(
         try:
             from src.config import DEFAULT_DB_PATH
             from src.core.repository import QueueRepository
-            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("moku")
+            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("horror")
         except Exception:
             recent_texts = ()
 
@@ -133,14 +134,14 @@ def build_moku_short_narrative(
         comb_seed = f"{clean_topic}:{seed_offset + attempt}"
         digest = hashlib.sha256(comb_seed.encode("utf-8")).digest()
 
-        site = _MOKU_SITES[(digest[0] + attempt) % len(_MOKU_SITES)]
-        mtf = _MOKU_MTF[(digest[1] + attempt) % len(_MOKU_MTF)]
-        personnel = _MOKU_PERSONNEL[(digest[2] + attempt) % len(_MOKU_PERSONNEL)]
-        subject = _MOKU_SUBJECTS[(digest[3] + attempt) % len(_MOKU_SUBJECTS)]
-        time_str = _MOKU_TIMES[(digest[4] + attempt) % len(_MOKU_TIMES)]
+        site = _HORROR_SITES[(digest[0] + attempt) % len(_HORROR_SITES)]
+        mtf = _HORROR_MTF[(digest[1] + attempt) % len(_HORROR_MTF)]
+        personnel = _HORROR_PERSONNEL[(digest[2] + attempt) % len(_HORROR_PERSONNEL)]
+        subject = _HORROR_SUBJECTS[(digest[3] + attempt) % len(_HORROR_SUBJECTS)]
+        time_str = _HORROR_TIMES[(digest[4] + attempt) % len(_HORROR_TIMES)]
 
         if is_scp:
-            candidate = _build_single_moku_scp_candidate(
+            candidate = _build_single_horror_scp_candidate(
                 clean_topic=clean_topic,
                 digest=digest,
                 attempt=attempt,
@@ -153,7 +154,7 @@ def build_moku_short_narrative(
                 scp_match=scp_match,
             )
         else:
-            candidate = _build_single_moku_horror_candidate(
+            candidate = _build_single_horror_horror_candidate(
                 clean_topic=clean_topic,
                 digest=digest,
                 attempt=attempt,
@@ -175,15 +176,19 @@ def build_moku_short_narrative(
     return best_narrative or candidate
 
 
-def build_aelithia_short_narrative(
+build_moku_short_narrative = build_horror_short_narrative
+
+
+
+def build_drama_short_narrative(
     topic: str,
-    channel: str = "aelithia",
+    channel: str = "drama",
     seed_offset: int = 0,
     recent_texts: Sequence[str] = (),
     **kwargs: Any,
 ) -> str:
     """
-    Build a high-retention Short narrative for Aelithia (Drama / AITA / Moral Dilemmas).
+    Build a high-retention Short narrative for Drama / AITA / Moral Dilemmas.
     Calibrated strictly to 200-280 words for optimal 70-105s pacing at 160 WPM.
     """
     clean_topic = re.sub(r"[""'']", "", topic).strip()
@@ -195,13 +200,13 @@ def build_aelithia_short_narrative(
         comb_seed = f"{clean_topic}:{seed_offset + attempt}"
         digest = hashlib.sha256(comb_seed.encode("utf-8")).digest()
 
-        arch_idx = (digest[0] + attempt) % len(_AELITHIA_ARCHETYPES)
-        arch = _AELITHIA_ARCHETYPES[arch_idx]
+        arch_idx = (digest[0] + attempt) % len(_DRAMA_ARCHETYPES)
+        arch = _DRAMA_ARCHETYPES[arch_idx]
 
-        name = _AELITHIA_NAMES[(digest[1] + attempt) % len(_AELITHIA_NAMES)]
-        role = _AELITHIA_ROLES[(digest[2] + attempt) % len(_AELITHIA_ROLES)]
-        amount = _AELITHIA_AMOUNTS[(digest[3] + attempt) % len(_AELITHIA_AMOUNTS)]
-        timeframe = _AELITHIA_TIMEFRAMES[(digest[4] + attempt) % len(_AELITHIA_TIMEFRAMES)]
+        name = _DRAMA_NAMES[(digest[1] + attempt) % len(_DRAMA_NAMES)]
+        role = _DRAMA_ROLES[(digest[2] + attempt) % len(_DRAMA_ROLES)]
+        amount = _DRAMA_AMOUNTS[(digest[3] + attempt) % len(_DRAMA_AMOUNTS)]
+        timeframe = _DRAMA_TIMEFRAMES[(digest[4] + attempt) % len(_DRAMA_TIMEFRAMES)]
 
         hook_raw = arch["hooks"][(digest[5] + attempt) % len(arch["hooks"])]
         ctx_raw = arch["contexts"][(digest[6] + attempt) % len(arch["contexts"])]
@@ -242,20 +247,23 @@ def build_aelithia_short_narrative(
     return best_narrative or candidate
 
 
+build_aelithia_short_narrative = build_drama_short_narrative
+
+
 def build_scp3000_longform_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     target_duration_minutes: float = 12.0,
     **kwargs: Any,
 ) -> str:
     """Builds an in-depth documentary narrative for SCP-3000 (Anantashesha)."""
-    tpl = load_template_json("narratives_moku.json")
+    tpl = load_template_json("narratives_horror.json")
     return render_paragraphs(tpl["scp3000_paragraphs"], {"topic": topic})
 
 
-def build_moku_longform_narrative(
+def build_horror_longform_narrative(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     target_duration_minutes: float = 10.5,
     **kwargs: Any,
 ) -> str:
@@ -268,41 +276,54 @@ def build_moku_longform_narrative(
             target_duration_minutes=target_duration_minutes,
             **kwargs,
         )
-    from src.templates.longform_stories import get_moku_longform_story
-    return get_moku_longform_story(topic, **kwargs)
+    from src.templates.longform_stories import get_horror_longform_story
+    return get_horror_longform_story(topic, **kwargs)
 
 
-def _build_moku_radio_base(
+build_moku_longform_narrative = build_horror_longform_narrative
+
+
+def _build_horror_radio_base(
     topic: str,
-    channel: str = "moku",
+    channel: str = "horror",
     target_duration_minutes: float = 10.5,
     **kwargs: Any,
 ) -> str:
     """Mountain Radio Station Operator longform narrative base."""
-    tpl = load_template_json("narratives_moku.json")
+    tpl = load_template_json("narratives_horror.json")
     return render_paragraphs(tpl["radio_paragraphs"], {"topic": topic})
 
 
-def build_aelithia_longform_narrative(
+_build_moku_radio_base = _build_horror_radio_base
+
+
+def build_drama_longform_narrative(
     topic: str,
-    channel: str = "aelithia",
+    channel: str = "drama",
     target_duration_minutes: float = 10.5,
     **kwargs: Any,
 ) -> str:
-    """Build a multi-case longform drama narrative for Aelithia."""
-    from src.templates.longform_stories import get_aelithia_longform_story
-    return get_aelithia_longform_story(topic, **kwargs)
+    """Build a multi-case longform drama narrative for Drama."""
+    from src.templates.longform_stories import get_drama_longform_story
+    return get_drama_longform_story(topic, **kwargs)
 
 
-def _build_aelithia_family_debt_base(
+build_aelithia_longform_narrative = build_drama_longform_narrative
+
+
+def _build_drama_family_debt_base(
     topic: str,
-    channel: str = "aelithia",
+    channel: str = "drama",
     target_duration_minutes: float = 10.5,
     **kwargs: Any,
 ) -> str:
     """Birthday Loan & Secret Will multi-case longform narrative base."""
-    tpl = load_template_json("narratives_aelithia.json")
+    tpl = load_template_json("narratives_drama.json")
     return render_paragraphs(tpl["family_debt_paragraphs"], {"topic": topic})
+
+
+_build_aelithia_family_debt_base = _build_drama_family_debt_base
+
 
 
 def build_scifi_short_narrative(
@@ -342,16 +363,16 @@ def build_channel_narrative(
     canon_ch = resolve_channel_key(actual_channel)
     if canon_ch in ("aelithia", "drama"):
         if video_mode == "short":
-            return build_aelithia_short_narrative(topic, channel=actual_channel, **kwargs)
-        return build_aelithia_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
+            return build_drama_short_narrative(topic, channel=actual_channel, **kwargs)
+        return build_drama_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
     elif canon_ch in ("scifi", "singularidad"):
         if video_mode == "short":
             return build_scifi_short_narrative(topic, channel=actual_channel, **kwargs)
         return build_scifi_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
     else:
         if video_mode == "short":
-            return build_moku_short_narrative(topic, channel=actual_channel, **kwargs)
-        return build_moku_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
+            return build_horror_short_narrative(topic, channel=actual_channel, **kwargs)
+        return build_horror_longform_narrative(topic, channel=actual_channel, target_duration_minutes=actual_duration, **kwargs)
 
 
 def build_narrative(
@@ -389,13 +410,6 @@ def build_short_narrative(
     return build_channel_narrative(topic, channel=channel, video_mode="short", **kwargs)
 
 
-# Modular domain aliases
-build_horror_short_narrative = build_moku_short_narrative
-build_horror_longform_narrative = build_moku_longform_narrative
-build_drama_short_narrative = build_aelithia_short_narrative
-build_drama_longform_narrative = build_aelithia_longform_narrative
-
-
 def get_fallback_story(
     channel: str = "horror",
     *,
@@ -410,8 +424,8 @@ def get_fallback_story(
     if canon_ch in ("aelithia", "drama") or ch in ("aelithia", "drama", "aita"):
         default_topic = topic or "la herencia familiar y el límite del perdón"
         if is_short:
-            return build_aelithia_short_narrative(default_topic, channel="drama", **kwargs)
-        return build_aelithia_longform_narrative(default_topic, channel="drama", target_duration_minutes=10.5, **kwargs)
+            return build_drama_short_narrative(default_topic, channel="drama", **kwargs)
+        return build_drama_longform_narrative(default_topic, channel="drama", target_duration_minutes=10.5, **kwargs)
     elif canon_ch in ("scifi", "singularidad") or ch in ("scifi", "singularidad", "sci_fi"):
         default_topic = topic or "el horizonte de sucesos y la paradoja del tiempo"
         if is_short:
@@ -420,13 +434,7 @@ def get_fallback_story(
 
     default_topic = topic or "SCP-087 y la escalera del silencio"
     if is_short:
-        return build_moku_short_narrative(default_topic, channel="horror", **kwargs)
-    return build_moku_longform_narrative(default_topic, channel="horror", target_duration_minutes=10.5, **kwargs)
+        return build_horror_short_narrative(default_topic, channel="horror", **kwargs)
+    return build_horror_longform_narrative(default_topic, channel="horror", target_duration_minutes=10.5, **kwargs)
 
-
-# Thematic canonical aliases
-build_horror_short_narrative = build_moku_short_narrative
-build_drama_short_narrative = build_aelithia_short_narrative
-build_horror_longform_narrative = build_moku_longform_narrative
-build_drama_longform_narrative = build_aelithia_longform_narrative
 

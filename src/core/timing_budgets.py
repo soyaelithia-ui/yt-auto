@@ -1,4 +1,4 @@
-"""D2 wall-clock budgets for mock profile baseline (moku-scp-shorts).
+"""D2 wall-clock budgets for mock profile baseline (horror-scp-shorts).
 
 Baseline Live export 2026-09-06 tip 70b9223 (`/tmp/d2-baseline.json`):
   total wall 0.132s | peak RSS 87.16 MB | net ΔRSS +3.44 MB

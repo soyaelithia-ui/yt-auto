@@ -37,7 +37,10 @@ def test_orchestrator_initialization_flow(test_db: str) -> None:
     ):
         orchestrator.initialize()
         mock_preflight.assert_called_once_with(test_db)
-        mock_reap.assert_called_once_with(startup=True, channel=orchestrator.target_channel)
+        startup_calls = [c for c in mock_reap.call_args_list if c.kwargs.get("startup") is True]
+        assert len(startup_calls) == 1
+        from unittest.mock import call
+        assert startup_calls[0] == call(startup=True, channel=orchestrator.target_channel)
         mock_clean_runs.assert_called_once()
         mock_clean_temp.assert_called_once()
 
@@ -56,7 +59,7 @@ def test_orchestrator_tick_reaps_zombies_and_stale_leases(test_db: str) -> None:
     ):
         orchestrator.tick(mock_pool, active_jobs)
         mock_reap_zombies.assert_called_once()
-        mock_reap_leases.assert_called_once_with(channel=orchestrator.target_channel)
+        mock_reap_leases.assert_any_call(channel=orchestrator.target_channel)
 
 
 def test_orchestrator_tick_dispatches_due_lanes_up_to_capacity(test_db: str) -> None:

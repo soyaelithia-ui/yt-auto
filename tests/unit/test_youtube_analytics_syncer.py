@@ -267,7 +267,7 @@ def test_sync_video_metrics_with_mock_client(tmp_path):
     repo.initialize()
 
     story_id = "story_yt_001"
-    repo.enqueue(story_id=story_id, title="YT Story", content="Content", url="https://reddit.com/r/yt1", channel="moku")
+    repo.enqueue(story_id=story_id, title="YT Story", content="Content", url="https://reddit.com/r/yt1", channel="horror")
 
     syncer = YouTubeAnalyticsSyncer(repository=repo)
 
@@ -283,7 +283,7 @@ def test_sync_video_metrics_with_mock_client(tmp_path):
         ok = syncer.sync_video_metrics(
             video_id="test_vid_xyz",
             story_id=story_id,
-            channel="moku",
+            channel="horror",
             interval="24h",
         )
         assert ok is True
@@ -303,7 +303,7 @@ def test_chronological_snapshots_and_history_retrieval(tmp_path):
     repo.initialize()
 
     story_id = "story_yt_chrono"
-    repo.enqueue(story_id=story_id, title="Chrono Story", content="Content", url="https://reddit.com/r/chrono", channel="moku")
+    repo.enqueue(story_id=story_id, title="Chrono Story", content="Content", url="https://reddit.com/r/chrono", channel="horror")
 
     syncer = YouTubeAnalyticsSyncer(repository=repo)
 
@@ -313,13 +313,13 @@ def test_chronological_snapshots_and_history_retrieval(tmp_path):
     stats_7d = {"view_count": 12500, "like_count": 980, "comment_count": 120, "avg_view_duration_sec": 46.0, "retention_rate_pct": 78.0}
 
     with patch.object(syncer, "fetch_video_statistics", return_value=stats_1h):
-        assert syncer.sync_video_metrics("vid_c1", story_id, "moku", interval="1h", recorded_at="2026-08-20T10:00:00Z") is True
+        assert syncer.sync_video_metrics("vid_c1", story_id, "horror", interval="1h", recorded_at="2026-08-20T10:00:00Z") is True
 
     with patch.object(syncer, "fetch_video_statistics", return_value=stats_24h):
-        assert syncer.sync_video_metrics("vid_c1", story_id, "moku", interval="24h", recorded_at="2026-08-21T10:00:00Z") is True
+        assert syncer.sync_video_metrics("vid_c1", story_id, "horror", interval="24h", recorded_at="2026-08-21T10:00:00Z") is True
 
     with patch.object(syncer, "fetch_video_statistics", return_value=stats_7d):
-        assert syncer.sync_video_metrics("vid_c1", story_id, "moku", interval="7d", recorded_at="2026-08-27T10:00:00Z") is True
+        assert syncer.sync_video_metrics("vid_c1", story_id, "horror", interval="7d", recorded_at="2026-08-27T10:00:00Z") is True
 
     # Retrieve history via syncer method
     history_method = syncer.get_video_snapshot_history(story_id)
@@ -341,12 +341,12 @@ def test_top_level_sync_video_metrics_convenience_function(tmp_path):
     repo.initialize()
 
     story_id = "story_top_level"
-    repo.enqueue(story_id=story_id, title="Top Story", content="Content", url="https://reddit.com/r/top", channel="aelithia")
+    repo.enqueue(story_id=story_id, title="Top Story", content="Content", url="https://reddit.com/r/top", channel="drama")
 
     ok = sync_video_metrics(
         video_id="vid_top_level",
         story_id=story_id,
-        channel="aelithia",
+        channel="drama",
         interval="12h",
         repository=repo,
         dry_run=True,
@@ -355,7 +355,7 @@ def test_top_level_sync_video_metrics_convenience_function(tmp_path):
 
     history = get_video_snapshot_history(story_id, repository=repo)
     assert len(history) == 1
-    assert history[0]["channel"] == "aelithia"
+    assert history[0]["channel"] == "drama"
     assert history[0]["snapshot_interval"] == "12h"
     assert history[0]["view_count"] > 0
 
@@ -372,7 +372,7 @@ def test_sync_video_metrics_foreign_key_resilience(tmp_path):
     ok = syncer.sync_video_metrics(
         video_id="vid_orphan",
         story_id="non_existent_story_id",
-        channel="moku",
+        channel="horror",
         interval="24h",
     )
     assert ok is False

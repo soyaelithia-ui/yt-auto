@@ -162,7 +162,7 @@ def _trigger_youtube_upload_sync(video: Dict[str, Any]) -> Dict[str, Any]:
                 "original_video_path": video.get("original_video_path") or video.get("video_path", ""),
                 "title": video.get("title", ""),
                 "description": video.get("description", ""),
-                "channel": video.get("channel", "moku"),
+                "channel": video.get("channel", "horror"),
             }
         )
         logger.info("Auto-published via publication adapter for %s: %s", video_id, res)

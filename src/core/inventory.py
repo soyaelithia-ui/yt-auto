@@ -585,7 +585,7 @@ def sync_channel_publications_from_youtube(
 
 
 def sync_all_channel_publications(
-    channels: Sequence[str] = ("moku", "aelithia"),
+    channels: Sequence[str] = ("horror", "drama", "scifi"),
     db_path: str = DEFAULT_DB_PATH,
     max_items_per_channel: int = 100,
 ) -> dict[str, Any]:
@@ -633,7 +633,7 @@ def backup_inventory_to_drive(
     # 3. Upload to Google Drive with verification
     sa_key = str(SETTINGS.drive_key_path) if SETTINGS.drive_key_path.is_file() else ""
     token_path = None
-    for cand in ("moku", "aelithia", "drama", "horror", "youtube_token"):
+    for cand in ("horror", "drama", "scifi", "youtube_token"):
         cand_p = BASE_DIR / "secrets" / "tokens" / f"{cand}.json"
         if cand_p.is_file():
             token_path = str(cand_p)

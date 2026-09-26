@@ -10,42 +10,42 @@ from typing import Any, Callable, List, Optional, Sequence
 
 from src.templates.loader import load_template_json, render_paragraphs
 from src.templates.longform_stories_ext import (
-    build_aelithia_adoption_extortion,
-    build_aelithia_fake_fundraiser,
-    build_aelithia_property_usurpation,
-    build_aelithia_secret_inheritance,
-    build_moku_asylum,
-    build_moku_deepsea,
-    build_moku_observatory,
-    build_moku_saltmine,
+    build_drama_adoption_extortion,
+    build_drama_fake_fundraiser,
+    build_drama_property_usurpation,
+    build_drama_secret_inheritance,
+    build_horror_asylum,
+    build_horror_deepsea,
+    build_horror_observatory,
+    build_horror_saltmine,
 )
 
 
-def build_moku_mountain_radio(topic: str, **kwargs: Any) -> str:
+def build_horror_mountain_radio(topic: str, **kwargs: Any) -> str:
     """Story 0: Mountain Radio Station Operator."""
-    from src.templates.narratives import _build_moku_radio_base
-    return _build_moku_radio_base(topic, **kwargs)
+    from src.templates.narratives import _build_horror_radio_base
+    return _build_horror_radio_base(topic, **kwargs)
 
 
-def build_aelithia_family_debt(topic: str, **kwargs: Any) -> str:
+def build_drama_family_debt(topic: str, **kwargs: Any) -> str:
     """Story 0: Birthday Loan & Secret Will."""
-    from src.templates.narratives import _build_aelithia_family_debt_base
-    return _build_aelithia_family_debt_base(topic, **kwargs)
+    from src.templates.narratives import _build_drama_family_debt_base
+    return _build_drama_family_debt_base(topic, **kwargs)
 
 
-def build_moku_bunker(topic: str, **kwargs: Any) -> str:
+def build_horror_bunker(topic: str, **kwargs: Any) -> str:
     """Story 1: Subterranean Granite Geological Bunker."""
     tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["bunker"], {"topic": topic})
 
 
-def build_moku_lighthouse(topic: str, **kwargs: Any) -> str:
+def build_horror_lighthouse(topic: str, **kwargs: Any) -> str:
     """Story 2: Desolate Cape Fog Lighthouse Keeper."""
     tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["lighthouse"], {"topic": topic})
 
 
-def build_moku_rail(topic: str, **kwargs: Any) -> str:
+def build_horror_rail(topic: str, **kwargs: Any) -> str:
     """Story 3: Siberian Freight Railway Signalman."""
     tpl = load_template_json("longform_stories_horror.json")
     return render_paragraphs(tpl["rail"], {"topic": topic})
@@ -65,7 +65,7 @@ def get_wedding_story_v2(topic: str) -> str:
     return base + "\n\n" + extra
 
 
-def build_aelithia_wedding_house(topic: str, **kwargs: Any) -> str:
+def build_drama_wedding_house(topic: str, **kwargs: Any) -> str:
     """Story 1: Complete wedding and house drama narrative."""
     s = get_wedding_story_v2(topic)
     tpl = load_template_json("longform_stories_drama.json")
@@ -78,7 +78,7 @@ def get_business_story(topic: str) -> str:
     return render_paragraphs(tpl["business"], {"topic": topic})
 
 
-def build_aelithia_business_betrayal(topic: str, **kwargs: Any) -> str:
+def build_drama_business_betrayal(topic: str, **kwargs: Any) -> str:
     """Story 2: Complete business betrayal narrative."""
     return get_business_story(topic)
 
@@ -89,31 +89,31 @@ def get_eldercare_story(topic: str) -> str:
     return render_paragraphs(tpl["eldercare"], {"topic": topic})
 
 
-def build_aelithia_eldercare_will(topic: str, **kwargs: Any) -> str:
+def build_drama_eldercare_will(topic: str, **kwargs: Any) -> str:
     """Story 3: Complete eldercare and will dispute narrative."""
     return get_eldercare_story(topic)
 
 
-MOKU_STORIES: List[Callable[..., str]] = [
-    build_moku_mountain_radio,
-    build_moku_bunker,
-    build_moku_lighthouse,
-    build_moku_rail,
-    build_moku_deepsea,
-    build_moku_asylum,
-    build_moku_observatory,
-    build_moku_saltmine,
+HORROR_STORIES: List[Callable[..., str]] = [
+    build_horror_mountain_radio,
+    build_horror_bunker,
+    build_horror_lighthouse,
+    build_horror_rail,
+    build_horror_deepsea,
+    build_horror_asylum,
+    build_horror_observatory,
+    build_horror_saltmine,
 ]
 
-AELITHIA_STORIES: List[Callable[..., str]] = [
-    build_aelithia_family_debt,
-    build_aelithia_wedding_house,
-    build_aelithia_business_betrayal,
-    build_aelithia_eldercare_will,
-    build_aelithia_secret_inheritance,
-    build_aelithia_fake_fundraiser,
-    build_aelithia_property_usurpation,
-    build_aelithia_adoption_extortion,
+DRAMA_STORIES: List[Callable[..., str]] = [
+    build_drama_family_debt,
+    build_drama_wedding_house,
+    build_drama_business_betrayal,
+    build_drama_eldercare_will,
+    build_drama_secret_inheritance,
+    build_drama_fake_fundraiser,
+    build_drama_property_usurpation,
+    build_drama_adoption_extortion,
 ]
 
 
@@ -151,17 +151,17 @@ def _synthesize_hybrid_story(
     return None
 
 
-def get_moku_longform_story(topic: str, index: Optional[int] = None, **kwargs: Any) -> str:
-    """Returns a diverse longform story for Moku horror channel, strictly avoiding collision."""
+def get_horror_longform_story(topic: str, index: Optional[int] = None, **kwargs: Any) -> str:
+    """Returns a diverse longform story for Horror channel, strictly avoiding collision."""
     if index is not None:
-        return MOKU_STORIES[index % len(MOKU_STORIES)](topic, **kwargs)
+        return HORROR_STORIES[index % len(HORROR_STORIES)](topic, **kwargs)
 
     recent_texts = kwargs.get("recent_texts")
     if not recent_texts:
         try:
             from src.config import DEFAULT_DB_PATH
             from src.core.repository import QueueRepository
-            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("moku")
+            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("horror")
         except Exception:
             recent_texts = ()
 
@@ -170,19 +170,19 @@ def get_moku_longform_story(topic: str, index: Optional[int] = None, **kwargs: A
     else:
         seed = kwargs.get("seed")
         if seed is not None:
-            start_idx = int(seed) % len(MOKU_STORIES)
+            start_idx = int(seed) % len(HORROR_STORIES)
         else:
             h = int(hashlib.md5(topic.encode("utf-8")).hexdigest()[:8], 16)
-            start_idx = h % len(MOKU_STORIES)
+            start_idx = h % len(HORROR_STORIES)
 
     from src.core.quality import text_similarity
 
     best_story = ""
     min_sim = 1.0
 
-    for offset in range(len(MOKU_STORIES)):
-        cand_idx = (start_idx + offset) % len(MOKU_STORIES)
-        candidate = MOKU_STORIES[cand_idx](topic, **kwargs)
+    for offset in range(len(HORROR_STORIES)):
+        cand_idx = (start_idx + offset) % len(HORROR_STORIES)
+        candidate = HORROR_STORIES[cand_idx](topic, **kwargs)
         if not recent_texts:
             return candidate
         max_sim = max((text_similarity(candidate, prev) for prev in recent_texts), default=0.0)
@@ -194,24 +194,24 @@ def get_moku_longform_story(topic: str, index: Optional[int] = None, **kwargs: A
 
     if recent_texts and min_sim >= 0.70:
         clean_kwargs = {k: v for k, v in kwargs.items() if k != "recent_texts"}
-        hybrid = _synthesize_hybrid_story(MOKU_STORIES, start_idx, topic, recent_texts, **clean_kwargs)
+        hybrid = _synthesize_hybrid_story(HORROR_STORIES, start_idx, topic, recent_texts, **clean_kwargs)
         if hybrid:
             return hybrid
 
-    return best_story or MOKU_STORIES[start_idx](topic, **kwargs)
+    return best_story or HORROR_STORIES[start_idx](topic, **kwargs)
 
 
-def get_aelithia_longform_story(topic: str, index: Optional[int] = None, **kwargs: Any) -> str:
-    """Returns a diverse longform story for Aelithia drama channel, strictly avoiding collision."""
+def get_drama_longform_story(topic: str, index: Optional[int] = None, **kwargs: Any) -> str:
+    """Returns a diverse longform story for Drama channel, strictly avoiding collision."""
     if index is not None:
-        return AELITHIA_STORIES[index % len(AELITHIA_STORIES)](topic, **kwargs)
+        return DRAMA_STORIES[index % len(DRAMA_STORIES)](topic, **kwargs)
 
     recent_texts = kwargs.get("recent_texts")
     if not recent_texts:
         try:
             from src.config import DEFAULT_DB_PATH
             from src.core.repository import QueueRepository
-            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("aelithia")
+            recent_texts = QueueRepository(DEFAULT_DB_PATH).recent_published_texts("drama")
         except Exception:
             recent_texts = ()
 
@@ -220,19 +220,19 @@ def get_aelithia_longform_story(topic: str, index: Optional[int] = None, **kwarg
     else:
         seed = kwargs.get("seed")
         if seed is not None:
-            start_idx = int(seed) % len(AELITHIA_STORIES)
+            start_idx = int(seed) % len(DRAMA_STORIES)
         else:
             h = int(hashlib.md5(topic.encode("utf-8")).hexdigest()[:8], 16)
-            start_idx = h % len(AELITHIA_STORIES)
+            start_idx = h % len(DRAMA_STORIES)
 
     from src.core.quality import text_similarity
 
     best_story = ""
     min_sim = 1.0
 
-    for offset in range(len(AELITHIA_STORIES)):
-        cand_idx = (start_idx + offset) % len(AELITHIA_STORIES)
-        candidate = AELITHIA_STORIES[cand_idx](topic, **kwargs)
+    for offset in range(len(DRAMA_STORIES)):
+        cand_idx = (start_idx + offset) % len(DRAMA_STORIES)
+        candidate = DRAMA_STORIES[cand_idx](topic, **kwargs)
         if not recent_texts:
             return candidate
         max_sim = max((text_similarity(candidate, prev) for prev in recent_texts), default=0.0)
@@ -244,17 +244,18 @@ def get_aelithia_longform_story(topic: str, index: Optional[int] = None, **kwarg
 
     if recent_texts and min_sim >= 0.70:
         clean_kwargs = {k: v for k, v in kwargs.items() if k != "recent_texts"}
-        hybrid = _synthesize_hybrid_story(AELITHIA_STORIES, start_idx, topic, recent_texts, **clean_kwargs)
+        hybrid = _synthesize_hybrid_story(DRAMA_STORIES, start_idx, topic, recent_texts, **clean_kwargs)
         if hybrid:
             return hybrid
 
-    return best_story or AELITHIA_STORIES[start_idx](topic, **kwargs)
+    return best_story or DRAMA_STORIES[start_idx](topic, **kwargs)
 
 
-# Thematic canonical aliases
-HORROR_STORIES: List[Callable[..., str]] = MOKU_STORIES
-DRAMA_STORIES: List[Callable[..., str]] = AELITHIA_STORIES
-get_horror_longform_story = get_moku_longform_story
-get_drama_longform_story = get_aelithia_longform_story
-build_horror_longform_story = get_moku_longform_story
-build_drama_longform_story = get_aelithia_longform_story
+# Canonical functions and compatibility aliases
+build_horror_longform_story = get_horror_longform_story
+build_drama_longform_story = get_drama_longform_story
+MOKU_STORIES = HORROR_STORIES
+AELITHIA_STORIES = DRAMA_STORIES
+get_moku_longform_story = get_horror_longform_story
+get_aelithia_longform_story = get_drama_longform_story
+

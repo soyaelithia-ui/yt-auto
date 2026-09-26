@@ -210,10 +210,6 @@ class TestSchemaCompletenessAndDraft07:
                         "depth_of_field": "deep_focus_f8",
                         "focal_length_mm": 28,
                     },
-                    "image_prompts": {
-                        "positive_prompt": "Cinematic shot of misty dark pine forest at dusk",
-                        "negative_prompt": "cartoonish, bright neon, lowres grainy, cgi plastic",
-                    },
                 }
             ],
         }
@@ -260,7 +256,7 @@ class TestSchemaCompletenessAndDraft07:
                     "start_sec": 0.0,
                     "duration_sec": 60.0,
                     "tension_level": 2,
-                    "engine": "hybrid_cinematic_ai",
+                    "engine": "director",
                     "engine_config": {
                         "background_matte": "mattes/bg_01.png",
                         "depth_map": "mattes/depth_01.png",

@@ -13,7 +13,7 @@ from src.pipeline import run_pipeline_once
 def _render_fixture(monkeypatch, tmp_path):
     repository = QueueRepository(tmp_path / "queue.db")
     repository.initialize()
-    repository.enqueue("review-job", "SCP-173: La Escultura", "Contenido de prueba", "https://example.invalid", "moku")
+    repository.enqueue("review-job", "SCP-173: La Escultura", "Contenido de prueba", "https://example.invalid", "horror")
     object.__setattr__(SETTINGS, "work_root", tmp_path / "work")
     object.__setattr__(SETTINGS, "drive_folder_id", "test_drive_fld")
     monkeypatch.setattr("src.llm.curate_script", lambda *args, **kwargs: "Historia de prueba")
@@ -33,6 +33,7 @@ def _render_fixture(monkeypatch, tmp_path):
     manager = MagicMock()
     monkeypatch.setattr("src.asset_manager.get_asset_manager", lambda: _assets(tmp_path))
     monkeypatch.setattr("src.pipeline.validate_prepublication", lambda **kwargs: _report())
+    monkeypatch.setattr("src.agents.video_qa.enforce_multimodal_qa_gate", lambda *args, **kwargs: {"overall_pass": True})
     return repository, manager
 
 
@@ -90,7 +91,7 @@ def test_pending_review_never_calls_drive_or_youtube(monkeypatch, tmp_path):
     monkeypatch.setattr("src.youtube.uploader.upload_video", youtube)
 
     result = run_pipeline_once(
-        channel="moku", db_path=str(repository.db_path), story_id="review-job"
+        channel="horror", db_path=str(repository.db_path), story_id="review-job"
     )
 
     assert result["status"] == "PENDING_REVIEW", result
@@ -124,7 +125,7 @@ def test_auto_approve_delivers_to_telegram_and_publishes(monkeypatch, tmp_path):
             "video_id": vid,
             "url": f"https://www.youtube.com/watch?v={vid}",
             "method": "api",
-            "channel": "moku",
+            "channel": "horror",
             "visibility": "public",
             "thumbnail_confirmed": True,
             "verified": True,
@@ -136,7 +137,7 @@ def test_auto_approve_delivers_to_telegram_and_publishes(monkeypatch, tmp_path):
     monkeypatch.setattr("src.youtube.uploader.upload_video", upload_mock)
 
     result = run_pipeline_once(
-        channel="moku", db_path=str(repository.db_path), story_id="review-job"
+        channel="horror", db_path=str(repository.db_path), story_id="review-job"
     )
 
     # 1. Video MUST be delivered to Telegram
@@ -161,7 +162,7 @@ def test_generate_only_stops_at_rendered_without_remote_calls(monkeypatch, tmp_p
     monkeypatch.setattr("src.youtube.uploader.upload_video", youtube)
 
     result = run_pipeline_once(
-        channel="moku", db_path=str(repository.db_path),
+        channel="horror", db_path=str(repository.db_path),
         generate_only=True, story_id="review-job"
     )
 
@@ -215,14 +216,14 @@ def test_adapter_orders_drive_before_youtube_and_passes_claim(monkeypatch, tmp_p
     result = adapter.publish({
         "job_id": "job-1", "version": 2, "original_video_path": str(video),
         "thumbnail_path": str(thumbnail),
-        "channel": "moku", "title": "Titulo", "description": "Descripcion",
+        "channel": "horror", "title": "Titulo", "description": "Descripcion",
     })
 
     assert events == [
         "gate",
-        ("drive", "video-folder", "YTShort:moku:job-1"),
-        ("drive", "cover-folder", "YTShort:moku:job-1:cover"),
-        ("drive", "metadata-folder", "YTShort:moku:job-1:metadata"),
+        ("drive", "video-folder", "YTShort:horror:job-1"),
+        ("drive", "cover-folder", "YTShort:horror:job-1:cover"),
+        ("drive", "metadata-folder", "YTShort:horror:job-1:metadata"),
         ("youtube", "job-1", 2),
     ]
     assert result["youtube_result"]["video_id"] == "yt-id"

@@ -452,7 +452,7 @@ class QueueOperationsMixin:
         with connect(self.db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
-                channel = "aelithia" if (story_key and "aelithia" in story_key) else "moku"
+                channel = "drama" if (story_key and "drama" in story_key) else "horror"
                 now = _utc_now()
                 conn.execute(
                     """

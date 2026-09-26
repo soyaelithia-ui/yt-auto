@@ -58,8 +58,8 @@ def test_await_future_times_out_without_waiting_for_hang():
 def test_collect_futures_records_timeout_for_pending_lane():
     stop = threading.Event()
     pick = LanePick(
-        lane_id="moku-scp-shorts",
-        channel=CanonicalChannel.MOKU,
+        lane_id="horror-scp-shorts",
+        channel=CanonicalChannel.HORROR,
         fired_at=0,
         next_due_at=1,
     )
@@ -87,14 +87,14 @@ def test_collect_futures_records_timeout_for_pending_lane():
     assert elapsed < 1.5
     assert results[0]["status"] == "RETRYABLE_FAILED"
     assert results[0]["error_code"] == "timeout"
-    assert results[0]["lane"] == "moku-scp-shorts"
+    assert results[0]["lane"] == "horror-scp-shorts"
 
 
 def test_timeout_terminates_descendant_ffmpeg_outside_tests(monkeypatch):
     stop = threading.Event()
     pick = LanePick(
-        lane_id="moku-scp-shorts",
-        channel=CanonicalChannel.MOKU,
+        lane_id="horror-scp-shorts",
+        channel=CanonicalChannel.HORROR,
         fired_at=0,
         next_due_at=1,
     )

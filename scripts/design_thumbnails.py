@@ -92,8 +92,8 @@ def apply_cinematic_grade(img: Image.Image, vignette_strength: float = 0.4) -> I
     return Image.composite(black, img, vignette_mask)
 
 
-def design_scp_short_thumbnail(base_path: str, output_path: str) -> str:
-    """Design 9:16 vertical thumbnail for SCP-173 Short."""
+def design_horror_short_thumbnail(base_path: str, output_path: str) -> str:
+    """Design 9:16 vertical thumbnail for Horror/SCP Short."""
     base = Image.open(base_path).convert("RGB")
     w, h = 1080, 1920
     graded = apply_analog_horror_grade(
@@ -413,7 +413,7 @@ def main():
             raise FileNotFoundError(f"Required base artwork does not exist: {base}")
 
     print("Compositing SCP-173 thumbnail...")
-    design_scp_short_thumbnail(str(scp_base), str(scp_out))
+    design_horror_short_thumbnail(str(scp_base), str(scp_out))
     print(f"-> Saved: {scp_out}")
 
     print("Compositing AITA thumbnail...")

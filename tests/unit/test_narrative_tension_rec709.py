@@ -92,12 +92,9 @@ class Test5PhaseTensionCurve:
             duration_sec=35.0,
         )
         assert len(script.scenes) >= 3
-        tensions = [
-            getattr(s, "tension_level", s.shader_params.get("uTension", 0))
-            for s in script.scenes
-        ]
+        tensions = [s.tension_level for s in script.scenes]
         # In integer scale or mapped float
-        assert any(t == 5 or t == 1.0 for t in tensions)
+        assert any(t == 5 for t in tensions)
 
 
 # ============================================================================
@@ -242,7 +239,7 @@ class TestRec709PaletteAndSchemaValidation:
             start_sec=0.0,
             end_sec=11.5,
             tension_level=TensionLevel.CLIMAX if hasattr(TensionLevel, "CLIMAX") else 5,
-            shader_id="MONOLITHS_RAYMARCHING",
+            visual_asset="monoliths",
             palette=palette,
             camera_transform=transform,
         )

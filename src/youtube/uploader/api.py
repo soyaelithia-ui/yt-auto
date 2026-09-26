@@ -61,29 +61,9 @@ def _youtube_service(token_path: str):
 
 
 def resolve_channel_token_path(channel: str | CanonicalChannel = "horror") -> str:
-    """Resolve the token file path for target channel with fallback to legacy tokens."""
+    """Resolve the token file path for target channel."""
     from src.core.google_auth import resolve_channel_token_path as _resolve
-    resolved = _resolve(channel)
-    if os.path.isfile(resolved):
-        return resolved
-
-    # Fallback to legacy tokens if canonical token is absent on disk
-    key = canonical_channel(channel)
-    if key == CanonicalChannel.HORROR:
-        moku_candidate = BASE_DIR / "secrets" / "tokens" / "moku.json"
-        if moku_candidate.is_file():
-            return str(moku_candidate.resolve())
-        moku_legacy = BASE_DIR / "secrets" / "youtube_token.json"
-        if moku_legacy.is_file():
-            return str(moku_legacy.resolve())
-    elif key == CanonicalChannel.DRAMA:
-        ael_candidate = BASE_DIR / "secrets" / "tokens" / "aelithia.json"
-        if ael_candidate.is_file():
-            return str(ael_candidate.resolve())
-        ael_legacy = BASE_DIR / "secrets" / "youtube_token_aelithia.json"
-        if ael_legacy.is_file():
-            return str(ael_legacy.resolve())
-    return resolved
+    return _resolve(channel)
 
 
 def preflight_youtube_api(

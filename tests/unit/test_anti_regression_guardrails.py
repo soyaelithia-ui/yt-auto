@@ -15,6 +15,7 @@ Enforces strict architectural invariants from docs/PLAN_MAESTRO_PIPELINE_VISUAL.
 from __future__ import annotations
 
 import ast
+import json
 import os
 from pathlib import Path
 import pytest
@@ -120,10 +121,7 @@ class TestSubtitleAndTypographyGuardrails:
         from src.media import force_pillow_subtitles_enabled, write_ass_from_cues_or_words
         assert force_pillow_subtitles_enabled() is False
         assert callable(write_ass_from_cues_or_words)
-        # compositor must prefer libass helpers
-        comp_src = (MEDIA_DIR / "compositor.py").read_text(encoding="utf-8")
-        assert "force_pillow_subtitles_enabled" in comp_src
-        assert "write_ass_from_cues_or_words" in comp_src or "ass=" in comp_src
+        # loop engine must prefer libass helpers
         loop_src = (MEDIA_DIR / "loop_engine.py").read_text(encoding="utf-8")
         assert "force_pillow_subtitles_enabled" in loop_src
 
@@ -209,12 +207,10 @@ class TestCompositorAndProceduralGuardrails:
         assert len(found_wgsl) == 0, f"REG-07 VIOLATION: Found WGSL shaders on disk: {found_wgsl}"
 
     def test_reg08_inmemory_compositor_reuses_buffers(self) -> None:
-        """Assert InMemoryCompositor allocates contiguous memory buffers and does not leak."""
-        from src.media.inmemory_compositor import InMemoryCompositor
-        compositor = InMemoryCompositor(width=1080, height=1920)
-        assert hasattr(compositor, "_out_buffer")
-        assert compositor._out_buffer.shape == (1920, 1080, 4)
-        assert compositor._out_buffer.flags.c_contiguous is True
+        """Assert InMemoryCompositor is eradicated and no in-memory compositor exists on disk."""
+        assert not (MEDIA_DIR / "inmemory_compositor.py").exists(), (
+            "REG-08 VIOLATION: src/media/inmemory_compositor.py must not exist in asset-only architecture"
+        )
 
 
 # ==============================================================================
@@ -236,7 +232,7 @@ class TestContractSchemaGuardrails:
         assert ["procedural_config"] in forbidden_reqs
 
         allowed_engines = set(scene_schema["properties"]["engine_type"]["enum"])
-        assert allowed_engines == {"catalog_loop", "static_matte", "hybrid_cinematic_ai"}
+        assert allowed_engines == {"catalog_loop"}
 
 
 # ==============================================================================
@@ -864,6 +860,88 @@ from src import compositing
                 mod = node.module or ""
                 assert "playwright" not in mod.lower()
                 assert "chromium" not in mod.lower()
+
+    def test_reg15_zero_svg_and_legacy_overlays_on_disk(self) -> None:
+        """REG-15: assets/svg_overlays and assets/overlays must not exist on disk."""
+        assert not (REPO_ROOT / "assets" / "svg_overlays").exists()
+        assert not (REPO_ROOT / "assets" / "overlays").exists()
+
+    def test_reg16_schemas_contain_zero_shader_and_diffusion_remnants(self) -> None:
+        """REG-16: schemas contain zero image_prompts, archetype_id, uniform_params, or shader_seed."""
+        art_path = REPO_ROOT / "schemas" / "art_director.schema.json"
+        scene_path = REPO_ROOT / "schemas" / "scene_planner.schema.json"
+        assert art_path.exists()
+        assert scene_path.exists()
+
+        art_schema = json.loads(art_path.read_text(encoding="utf-8"))
+        scene_schema = json.loads(scene_path.read_text(encoding="utf-8"))
+
+        art_scene_props = art_schema.get("properties", {}).get("scenes", {}).get("items", {}).get("properties", {})
+        assert "image_prompts" not in art_scene_props
+        assert "archetype_id" not in art_scene_props
+        assert "uniform_params" not in art_scene_props
+
+        engine_cfg_props = (
+            scene_schema.get("properties", {})
+            .get("scenes", {})
+            .get("items", {})
+            .get("properties", {})
+            .get("engine_config", {})
+            .get("properties", {})
+        )
+        assert "shader_seed" not in engine_cfg_props
+        volumetric = engine_cfg_props.get("volumetric_lighting", {}).get("properties", {})
+        assert "shader" not in volumetric
+
+    def test_reg17_programmatic_agent_records_decision_trace_and_bounded_attempts(self, tmp_path: Path) -> None:
+        """REG-17: ProgrammaticAgent records decision_trace in task_result.json and enforces bounded attempt ceilings."""
+        from unittest.mock import patch
+        from src.agents.base_agent import ProgrammaticAgent, AgentRecoveryPolicy
+        from src.core.domain import AIProviderChainExhausted
+
+        result_path = tmp_path / "task_result.json"
+        policy = AgentRecoveryPolicy(max_attempts=3, max_corrections=2, retry_delay_seconds=0.0)
+
+        agent = ProgrammaticAgent(
+            system_instructions="Test agent instructions.",
+            role_name="test-agent",
+            instance_id="test_reg17_agent",
+            task_result_path=result_path,
+            recovery_policy=policy,
+        )
+
+        with patch.object(agent, "_chat_async", side_effect=RuntimeError("transient connection timeout")):
+            with pytest.raises(AIProviderChainExhausted):
+                agent.run("Execute test task")
+
+        assert result_path.is_file()
+        doc = json.loads(result_path.read_text(encoding="utf-8"))
+        failure_evidence = doc.get("failure_evidence", {})
+        assert "decision_trace" in failure_evidence
+        trace = failure_evidence["decision_trace"]
+        assert len(trace) >= 3
+        # Attempt ceilings respected
+        for record in trace:
+            assert "action" in record
+            assert "reason" in record
+            assert "attempt" in record
+        assert failure_evidence.get("policy", {}).get("max_attempts") == 3
+
+    def test_reg18_local_ai_thumbnail_bank_excludes_assets_without_sidecar(self, tmp_path: Path) -> None:
+        """REG-18: LocalAIThumbnailBank excludes assets without a valid text_free sidecar."""
+        from PIL import Image
+        from src.media.thumbnails.ai_bank import LocalAIThumbnailBank
+
+        root = tmp_path / "bank"
+        horror = root / "horror"
+        horror.mkdir(parents=True)
+
+        raw_img = horror / "isolated_landscape.png"
+        Image.new("RGB", (32, 32), (0, 0, 0)).save(raw_img)
+
+        bank = LocalAIThumbnailBank(root)
+        assert not bank.is_text_free(raw_img)
+        assert bank.candidates(channel_id="horror") == []
 
 
 

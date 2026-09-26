@@ -34,7 +34,7 @@ FORMULAIC_CRUTCHES = [
 
 def validate_narrative_coherence(
     script: str,
-    channel: str = "moku",
+    channel: str = "horror",
     duration_type: str = "short",
     max_words: Optional[int] = None,
     **kwargs: Any,

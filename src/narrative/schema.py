@@ -125,10 +125,9 @@ class AudioContract:
 class SceneContract:
     start_sec: float
     end_sec: float
-    shader_id: str  # "RADAR_HYDROACOUSTIC", "MONOLITHS_RAYMARCHING", "GRAVITATIONAL_SINGULARITY"
-    shader_params: Dict[str, Any] = field(default_factory=dict)
     hud_status: str = "STATUS: ONLINE"
     tension_level: int = 3
+    visual_asset: Optional[str] = None
     palette: Optional[Rec709Palette] = None
     camera_transform: Optional[CameraTransform] = None
 
@@ -146,24 +145,22 @@ class SceneContractV2:
     start_sec: float
     end_sec: float
     tension_level: Union[TensionLevel, int] = TensionLevel.ESCALATION
-    shader_id: str = "MONOLITHS_RAYMARCHING"
+    visual_asset: Optional[str] = None
     palette: Optional[Rec709Palette] = None
     camera_transform: Optional[CameraTransform] = None
     camera_drift: Dict[str, float] = field(default_factory=dict)
     hud_status: str = "STATUS: ONLINE"
-    shader_params: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "start_sec": float(self.start_sec),
             "end_sec": float(self.end_sec),
             "tension_level": int(self.tension_level),
-            "shader_id": self.shader_id,
+            "visual_asset": self.visual_asset,
             "palette": self.palette.to_dict() if self.palette else None,
             "camera_transform": self.camera_transform.to_dict() if self.camera_transform else None,
             "camera_drift": self.camera_drift,
             "hud_status": self.hud_status,
-            "shader_params": self.shader_params,
         }
 
     @classmethod
@@ -176,12 +173,11 @@ class SceneContractV2:
             start_sec=float(data.get("start_sec", 0.0)),
             end_sec=float(data.get("end_sec", 10.0)),
             tension_level=int(data.get("tension_level", 3)),
-            shader_id=data.get("shader_id", "MONOLITHS_RAYMARCHING"),
+            visual_asset=data.get("visual_asset"),
             palette=palette,
             camera_transform=cam_transform,
             camera_drift=data.get("camera_drift", {}),
             hud_status=data.get("hud_status", "STATUS: ONLINE"),
-            shader_params=data.get("shader_params", {}),
         )
 
 

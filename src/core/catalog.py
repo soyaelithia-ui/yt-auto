@@ -48,10 +48,8 @@ __all__ = [
 ]
 
 CHANNEL_THEMES: Dict[str, Tuple[str, ...]] = {
-    "horror": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
-    "moku": ("horror", "moku_horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
-    "drama": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
-    "aelithia": ("drama", "aelithia_drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
+    "horror": ("horror", "dark_ambient", "dark_forest", "cosmic_horror", "scp", "classified_terminal", "containment_chamber", "tactical_chamber"),
+    "drama": ("drama", "cozy_ambient", "nostalgia", "reddit_aita", "drama_aita", "cozy_hearth"),
     "scifi": ("scifi", "singularidad_scifi", "space_abyss", "cosmic_singularity", "synaptic_network", "deep_space"),
 }
 

@@ -276,7 +276,7 @@ def suppress_title_repetition(text: str, title: str, max_allowed: int = 2) -> st
     return "".join(result)
 
 
-def sanitize_script_text(text: str, channel: str = "moku") -> str:
+def sanitize_script_text(text: str, channel: str = "horror") -> str:
     """Complete Script Sanitizer Engine."""
     if not text or not isinstance(text, str):
         return ""

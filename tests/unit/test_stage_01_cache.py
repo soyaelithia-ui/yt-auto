@@ -47,7 +47,7 @@ def mock_channel_settings() -> SimpleNamespace:
     """Mock channel settings object providing source_feed."""
     return SimpleNamespace(
         source_feed="nosleep",
-        channel_name="moku",
+        channel_name="horror",
     )
 
 
@@ -244,11 +244,11 @@ class TestStage01CachePipelineIntegration:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=str(test_db),
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -305,11 +305,11 @@ class TestStage01CachePipelineIntegration:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=str(test_db),
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -360,11 +360,11 @@ class TestStage01CachePipelineIntegration:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=str(test_db),
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,
@@ -404,11 +404,11 @@ class TestStage01CachePipelineIntegration:
 
             claimed = _claim_or_enqueue_story(
                 repository=repo,
-                channel_key=CanonicalChannel.MOKU,
-                channel_name="moku",
+                channel_key=CanonicalChannel.HORROR,
+                channel_name="horror",
                 settings=mock_channel_settings,
                 database=str(test_db),
-                lane_id="moku-scp-shorts",
+                lane_id="horror-scp-shorts",
                 requested_story_id="",
                 story=None,
                 directed=False,

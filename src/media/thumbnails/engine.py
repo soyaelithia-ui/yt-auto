@@ -31,7 +31,7 @@ class ThumbnailConfig:
     """Compatibility input for a text-free local image selection."""
 
     title: str
-    channel_id: str = "moku"
+    channel_id: str = "horror"
     lane_id: Optional[str] = None
     hook_text: Optional[str] = None  # retained for callers; never rendered
     output_path: Optional[Union[str, Path]] = None
@@ -120,7 +120,7 @@ class ThumbnailEngine:
         try:
             profile = ChannelProfileRegistry.get_channel(channel)
         except KeyError:
-            profile = ChannelProfileRegistry.get_channel(channel.split("-")[0] if "-" in channel else "moku")
+            profile = ChannelProfileRegistry.get_channel(channel.split("-")[0] if "-" in channel else "horror")
 
         out_path = Path(config.output_path or "output/thumbnail.jpg").resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)

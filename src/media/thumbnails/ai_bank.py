@@ -40,8 +40,11 @@ class LocalAIThumbnailBank:
 
     @staticmethod
     def _name_is_clean(path: Path) -> bool:
-        tokens = set(path.stem.lower().replace("-", "_").split("_"))
-        return not tokens.intersection(_REJECTED_NAME_TOKENS)
+        stem = path.stem.lower().replace("-", "_")
+        tokens = set(stem.split("_"))
+        if tokens.intersection(_REJECTED_NAME_TOKENS):
+            return False
+        return not any(t in stem for t in _REJECTED_NAME_TOKENS)
 
     @staticmethod
     def _sidecar(path: Path) -> Optional[dict]:
@@ -60,7 +63,7 @@ class LocalAIThumbnailBank:
         if path.suffix.lower() not in _IMAGE_EXTENSIONS or not cls._name_is_clean(path):
             return False
         metadata = cls._sidecar(path)
-        if metadata is not None and metadata.get("text_free") is not True:
+        if metadata is None or metadata.get("text_free") is not True:
             return False
         try:
             with Image.open(path) as image:
@@ -71,21 +74,30 @@ class LocalAIThumbnailBank:
 
     def candidates(self, *, channel_id: str = "", archetype: str = "") -> list[Path]:
         """Return text-free AI assets from the most specific local folders first."""
-        if not self.root.is_dir():
+        resolved_root = self.root.resolve()
+        if not resolved_root.is_dir():
             return []
         keys = [str(channel_id).strip().lower(), str(archetype).strip().lower()]
         folders: list[Path] = []
         for key in keys:
             if key:
-                folders.append(self.root / key)
-        folders.append(self.root)
+                target_folder = (self.root / key).resolve()
+                if target_folder.is_relative_to(resolved_root) and target_folder.is_dir():
+                    folders.append(target_folder)
+        folders.append(resolved_root)
         found: list[Path] = []
         for folder in folders:
             if not folder.is_dir():
                 continue
             for path in sorted(folder.rglob("*")):
-                if path.is_file() and path not in found and self.is_text_free(path):
-                    found.append(path)
+                resolved_path = path.resolve()
+                if (
+                    resolved_path.is_file()
+                    and resolved_path.is_relative_to(resolved_root)
+                    and resolved_path not in found
+                    and self.is_text_free(resolved_path)
+                ):
+                    found.append(resolved_path)
         return found
 
     def resolve(

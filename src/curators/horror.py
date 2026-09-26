@@ -41,6 +41,3 @@ class HorrorCurator(INarrativeCurator):
             "Sin previo aviso ni señal de alerta en los sensores térmicos,",
         ]
 
-
-# Backward-compatibility alias
-MokuHorrorCurator = HorrorCurator

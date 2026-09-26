@@ -24,12 +24,14 @@ import shutil
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 from dotenv import load_dotenv
+
+from src.core.domain import AIProviderChainExhausted
 
 load_dotenv()
 
@@ -351,14 +353,28 @@ class RecoveryDecision:
     reason: str
     attempt: int
     correction_count: int
+    adjustments: dict[str, Any] = field(default_factory=dict)
+    rationale: str = ""
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def as_trace_record(self, error: str) -> dict[str, Any]:
+        return {
+            "attempt": self.attempt,
+            "action": self.action,
+            "reason": self.reason,
+            "error": error,
+            "adjustments": self.adjustments,
+            "rationale": self.rationale,
+            "timestamp": self.timestamp,
+        }
 
 
 @dataclass(frozen=True)
 class AgentRecoveryPolicy:
     """Small, explicit recovery budget shared by SDK and CLI execution."""
 
-    max_attempts: int = 2
-    max_corrections: int = 1
+    max_attempts: int = 3
+    max_corrections: int = 2
     retry_delay_seconds: float = 1.0
 
     @classmethod
@@ -374,20 +390,74 @@ class AgentRecoveryPolicy:
         except (TypeError, ValueError):
             delay = 1.0
         return cls(
-            max_attempts=_bounded_int("AGY_MAX_ATTEMPTS", 2, 1, 4),
-            max_corrections=_bounded_int("AGY_MAX_SELF_CORRECTIONS", 1, 0, 2),
+            max_attempts=_bounded_int("AGY_MAX_ATTEMPTS", 3, 1, 4),
+            max_corrections=_bounded_int("AGY_MAX_SELF_CORRECTIONS", 2, 0, 2),
             retry_delay_seconds=delay,
         )
 
-    def decide(self, error: str, *, attempt: int, correction_count: int) -> RecoveryDecision:
+    def decide(
+        self,
+        error: str,
+        *,
+        attempt: int,
+        correction_count: int,
+        failure_history: Optional[list[dict[str, Any]]] = None,
+    ) -> RecoveryDecision:
         detail = str(error or "unknown failure")
         if is_saturation_text(detail):
-            return RecoveryDecision("stop", "provider_saturation", attempt, correction_count)
-        if detail.startswith("validation:") and correction_count < self.max_corrections:
-            return RecoveryDecision("correct", "structured_output_validation", attempt, correction_count)
-        if attempt < self.max_attempts:
-            return RecoveryDecision("retry", "transient_execution_failure", attempt, correction_count)
-        return RecoveryDecision("stop", "recovery_budget_exhausted", attempt, correction_count)
+            return RecoveryDecision(
+                action="stop",
+                reason="provider_saturation",
+                attempt=attempt,
+                correction_count=correction_count,
+                rationale="Provider quota exhausted or rate limit encountered (429/RESOURCE_EXHAUSTED). Immediate circuit trip.",
+            )
+
+        if attempt >= self.max_attempts:
+            return RecoveryDecision(
+                action="stop",
+                reason="recovery_budget_exhausted",
+                attempt=attempt,
+                correction_count=correction_count,
+                rationale=f"Max attempt budget reached ({attempt}/{self.max_attempts}). Fail-closed.",
+            )
+
+        if detail.startswith("validation:"):
+            if correction_count >= self.max_corrections:
+                return RecoveryDecision(
+                    action="stop",
+                    reason="recovery_budget_exhausted",
+                    attempt=attempt,
+                    correction_count=correction_count,
+                    rationale=f"Max correction budget reached ({correction_count}/{self.max_corrections}). Fail-closed.",
+                )
+            has_prior_correction = failure_history and any(
+                item.get("action") == "correct" for item in failure_history
+            )
+            if has_prior_correction:
+                return RecoveryDecision(
+                    action="adjust",
+                    reason="semantic_drift_adjustment",
+                    attempt=attempt,
+                    correction_count=correction_count,
+                    adjustments={"temperature": 0.1, "reasoning_effort": "medium", "compact_context": True},
+                    rationale="Repeated contract violation detected. Adjusting temperature to 0.1, stepping down reasoning effort, and compacting context.",
+                )
+            return RecoveryDecision(
+                action="correct",
+                reason="structured_output_validation",
+                attempt=attempt,
+                correction_count=correction_count,
+                rationale="Schema/contract validation failed. Synthesizing targeted correction feedback prompt.",
+            )
+
+        return RecoveryDecision(
+            action="retry",
+            reason="transient_execution_failure",
+            attempt=attempt,
+            correction_count=correction_count,
+            rationale=f"Transient transport or communication failure on attempt {attempt}. Retrying prompt with backoff.",
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -402,7 +472,7 @@ def is_saturation_text(text: str) -> bool:
     if not text:
         return False
     lowered = text.lower()
-    return any(p in lowered for p in SATURATION_PATTERNS)
+    return any(p.lower() in lowered for p in SATURATION_PATTERNS)
 
 
 class CircuitBreaker:
@@ -655,6 +725,10 @@ class ProgrammaticAgent:
         self.recovery_policy = recovery_policy or AgentRecoveryPolicy.from_environment()
         self._use_sdk = use_sdk or (os.environ.get("USE_ANTIGRAVITY_SDK", "").lower() in ("1", "true", "yes"))
         self.circuit_breaker = CircuitBreaker.get(instance_id=self.instance_id)
+        self.current_hyperparameters: dict[str, Any] = {
+            "temperature": 0.7,
+            "reasoning_effort": self.reasoning_effort,
+        }
 
     def _can_use_sdk(self) -> bool:
         """SDK Agent path can execute via google.antigravity if configured."""
@@ -773,11 +847,22 @@ class ProgrammaticAgent:
         usage: Optional[dict[str, Any]] = None
         structured_output: Optional[Any] = None
         duration_seconds: Optional[float] = None
+        decision_trace: list[dict[str, Any]] = []
+        attempts_log: list[dict[str, Any]] = []
         failure_evidence: dict[str, Any] = {
             "policy": self.recovery_policy.as_dict(),
-            "attempts": [],
+            "decision_trace": decision_trace,
+            "attempts": attempts_log,
             "recovered": False,
         }
+
+        self.current_hyperparameters = {
+            "temperature": 0.7,
+            "reasoning_effort": self.reasoning_effort,
+        }
+
+        should_fail_closed = False
+        fail_closed_error = ""
 
         if self.circuit_breaker.is_open():
             error = (
@@ -785,6 +870,17 @@ class ProgrammaticAgent:
                 f"(cooldown {self.circuit_breaker.retry_after()}s). Skipping call."
             )
             status = "saturated"
+            decision = RecoveryDecision(
+                action="stop",
+                reason="provider_saturation",
+                attempt=1,
+                correction_count=0,
+                rationale="Circuit breaker currently open for this instance.",
+            )
+            decision_trace.append(decision.as_trace_record(error))
+            attempts_log.append(
+                {"attempt": 1, "error": error, "action": "stop", "reason": "provider_saturation"}
+            )
         else:
             current_task = task
             attempt = 1
@@ -810,23 +906,35 @@ class ProgrammaticAgent:
                     duration_seconds = data.get("duration_seconds")
                     structured_output = data.get("structured_output")
                     self.circuit_breaker.record_success()
-                    failure_evidence["recovered"] = bool(failure_evidence["attempts"])
+                    failure_evidence["recovered"] = bool(decision_trace)
                     break
                 except AgentSaturationError as exc:
                     detail = str(exc)
                     self.circuit_breaker.record_failure(detail)
                     error = detail
                     status = "saturated"
-                    failure_evidence["attempts"].append(
+                    decision = RecoveryDecision(
+                        action="stop",
+                        reason="provider_saturation",
+                        attempt=attempt,
+                        correction_count=correction_count,
+                        rationale="Provider quota exhausted or rate limit encountered (429/RESOURCE_EXHAUSTED). Immediate circuit trip.",
+                    )
+                    decision_trace.append(decision.as_trace_record(detail))
+                    attempts_log.append(
                         {"attempt": attempt, "error": detail, "action": "stop", "reason": "provider_saturation"}
                     )
                     break
                 except Exception as exc:
                     detail = str(exc)
                     decision = self.recovery_policy.decide(
-                        detail, attempt=attempt, correction_count=correction_count
+                        detail,
+                        attempt=attempt,
+                        correction_count=correction_count,
+                        failure_history=decision_trace,
                     )
-                    failure_evidence["attempts"].append(
+                    decision_trace.append(decision.as_trace_record(detail))
+                    attempts_log.append(
                         {
                             "attempt": attempt,
                             "error": detail,
@@ -836,10 +944,21 @@ class ProgrammaticAgent:
                         }
                     )
                     self.circuit_breaker.record_failure(detail)
-                    if decision.action == "retry":
-                        await asyncio.sleep(self.recovery_policy.retry_delay_seconds)
+
+                    if decision.action == "adjust":
+                        for k, v in decision.adjustments.items():
+                            self.current_hyperparameters[k] = v
+                        if decision.adjustments.get("compact_context"):
+                            current_task = f"{task}\n\n[Context compacted for strict schema compliance]"
                         attempt += 1
                         continue
+
+                    if decision.action == "retry":
+                        if self.recovery_policy.retry_delay_seconds > 0:
+                            await asyncio.sleep(self.recovery_policy.retry_delay_seconds)
+                        attempt += 1
+                        continue
+
                     if decision.action == "correct":
                         current_task = (
                             f"{task}\n\nCorrection required: the previous response failed the declared "
@@ -848,8 +967,12 @@ class ProgrammaticAgent:
                         correction_count += 1
                         attempt += 1
                         continue
+
                     error = detail
-                    status = "saturated" if is_saturation_text(detail) else "error"
+                    status = "saturated" if decision.reason == "provider_saturation" else "error"
+                    if decision.reason == "recovery_budget_exhausted":
+                        should_fail_closed = True
+                        fail_closed_error = detail
                     break
 
         doc = self._build_result(
@@ -862,6 +985,8 @@ class ProgrammaticAgent:
         self.task_result_path.write_text(
             json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        if should_fail_closed:
+            raise AIProviderChainExhausted(f"Agent recovery budget exhausted: {fail_closed_error}")
         return self.task_result_path
 
     def run(self, task: str = DEFAULT_TASK, task_result_path: Optional[Union[Path, str]] = None) -> Path:
@@ -962,6 +1087,7 @@ class ProgrammaticAgent:
             },
             "failure_evidence": failure_evidence or {},
             "cost": cost_info,
+            "status": status,
             "result": status,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }

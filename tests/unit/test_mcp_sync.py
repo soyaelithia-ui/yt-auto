@@ -163,6 +163,6 @@ class TestDriftVerificationEngine:
 
 class TestIntegrityScriptIntegration:
     def test_verify_integrity_script_contains_check_9(self):
-        script_text = (REPO_ROOT / "scripts" / "verify_integrity.sh").read_text(encoding="utf-8")
-        assert "scripts/verify_mcp_sync.py" in script_text
-        assert "Check #9" in script_text or "9. Verify MCP Server" in script_text
+        guardrails_text = (REPO_ROOT / "src" / "verification" / "guardrails.py").read_text(encoding="utf-8")
+        assert "verify_mcp_sync" in guardrails_text
+        assert "check_mcp_sync" in guardrails_text

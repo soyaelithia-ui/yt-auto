@@ -39,11 +39,9 @@ MAIN_SPECS = {
     "legacy-eradication-guardrails": OPENSPEC / "specs" / "legacy-eradication-guardrails" / "spec.md",
 }
 HOT_PATH = [
-    REPO_ROOT / "src" / "media" / "compositor.py",
+    REPO_ROOT / "src" / "media" / "loop_engine.py",
     REPO_ROOT / "src" / "media" / "loop_worker.py",
-    REPO_ROOT / "src" / "media" / "hybrid_engine.py",
-    REPO_ROOT / "src" / "media" / "proc_engine.py",
-    REPO_ROOT / "src" / "media" / "multi_act_renderer.py",
+    REPO_ROOT / "src" / "media" / "manifest_compiler.py",
     REPO_ROOT / "src" / "pipeline.py",
 ]
 FORBIDDEN_PRODUCTION_STACK = ("wgpu-py", "resvg-py")
@@ -285,12 +283,11 @@ def test_compositor_default_still_does_not_load_wgpu(monkeypatch):
             or key.startswith("src.media._legacy.native_procedural.")
         ):
             del sys.modules[key]
-        if key in ("src.media.compositor", "src.media.proc_engine"):
+        if key in ("src.media.proc_engine",):
             del sys.modules[key]
 
-    from src.media.compositor import MultiSceneCompositor
     from src.media.loop_engine import LoopVideoEngine
 
-    compositor = MultiSceneCompositor()
-    assert isinstance(compositor.loop_engine, LoopVideoEngine)
+    engine = LoopVideoEngine()
+    assert engine is not None
     assert "wgpu" not in sys.modules

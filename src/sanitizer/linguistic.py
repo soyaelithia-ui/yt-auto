@@ -65,14 +65,14 @@ def sanitize_html_entities(text: str) -> str:
     return cleaned
 
 
-def filter_orphan_english_blocks(text: str, channel: str = "moku") -> str:
-    """Ensures single language guarantee (Spanish for 'moku' channel).
+def filter_orphan_english_blocks(text: str, channel: str = "horror") -> str:
+    """Ensures single language guarantee (Spanish for canonical channels).
 
     Detects and removes orphaned English paragraphs, English section titles, or raw English body blocks.
     """
     from src.config import is_test_environment
 
-    if not text or channel.lower() not in ("moku", "spanish") or is_test_environment():
+    if not text or channel.lower() not in ("horror", "drama", "scifi", "spanish") or is_test_environment():
         return text
 
     english_headers = [
@@ -118,14 +118,14 @@ class TextSanitizer:
     """Canonical single-entrypoint text sanitizer for TTS narration and script cleanup."""
 
     @classmethod
-    def sanitize_for_tts(cls, text: str, channel: str = "moku") -> str:
+    def sanitize_for_tts(cls, text: str, channel: str = "horror") -> str:
         """Authoritative pre-TTS text sanitizer."""
         from src.sanitizer.tts import limpiar_texto_para_tts
 
         return limpiar_texto_para_tts(text)
 
     @classmethod
-    def sanitize_script(cls, text: str, channel: str = "moku", mode: str = "short") -> str:
+    def sanitize_script(cls, text: str, channel: str = "horror", mode: str = "short") -> str:
         """Sanitizes script text removing prompt leaks and formatting."""
         from src.sanitizer.security import strip_llm_prompt_leaks
 
@@ -148,7 +148,7 @@ def sanitize_text(text: str) -> str:
     """Compatibility facade delegating to sanitize_script_text."""
     from src.sanitizer.editorial import sanitize_script_text
 
-    return sanitize_script_text(text, channel="moku")
+    return sanitize_script_text(text, channel="horror")
 
 
 __all__ = [

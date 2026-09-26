@@ -142,12 +142,12 @@ def _calculate_semantic_subscores(
 
     # Tone & Channel Alignment (1.0 - 10.0)
     lane_lower = channel_lane.lower()
-    if any(k in lane_lower for k in ("moku", "horror", "scp", "terror")):
+    if any(k in lane_lower for k in ("horror", "scp", "terror")):
         horror_matches = sum(1 for pat in _HORROR_PATTERNS if re.search(pat, normalized))
         a_score = 5.5 + min(4.5, 0.55 * horror_matches)
         if horror_matches >= 2:
             detected_hooks.append("horror_atmospheric_alignment")
-    elif any(k in lane_lower for k in ("aelithia", "aita", "drama", "moral", "relaciones")):
+    elif any(k in lane_lower for k in ("aita", "drama", "moral", "relaciones")):
         drama_matches = sum(1 for pat in _DRAMA_PATTERNS if re.search(pat, normalized))
         a_score = 5.5 + min(4.5, 0.55 * drama_matches)
         if drama_matches >= 2:

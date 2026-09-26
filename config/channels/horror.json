@@ -1,7 +1,7 @@
 {
   "id": "horror",
   "enabled": true,
-  "aliases": ["moku", "terror", "scp", "horror", "canal1", "canal_1", "canal-1", "canal 1", "channel1", "channel_1", "channel-1", "channel 1"],
+  "aliases": ["terror", "horror", "canal1", "canal_1", "canal-1", "canal 1", "channel1", "channel_1", "channel-1", "channel 1"],
   "editorial": {
     "public_name": "Expedientes de Terror",
     "handle": "@expedientesdeterror",

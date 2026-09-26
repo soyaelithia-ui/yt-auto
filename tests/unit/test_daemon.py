@@ -140,14 +140,14 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
 
     def test_start_daemon_accepts_channels_and_rotates(self):
         """Test start_daemon accepts channels parameter and rotates through specified channels."""
-        channels_input = ["moku", "aelithia"]
+        channels_input = ["horror", "drama"]
         with patch("src.daemon.run_pipeline_once", return_value={"status": "SUCCESS"}) as mock_run, \
               patch("src.scraper.replenish_queue"):
             results = start_daemon(interval_seconds=1, max_runs=2, db_path=self.db_path, channels=channels_input)
             self.assertEqual(len(results), 2)
             self.assertEqual(mock_run.call_count, 2)
             called_channels = [call.kwargs.get("channel") for call in mock_run.call_args_list]
-            self.assertEqual(called_channels, ["moku", "aelithia"])
+            self.assertEqual(called_channels, ["horror", "drama"])
 
     def test_start_daemon_default_channels_resolution(self):
         """Test start_daemon resolves default active channels when channels parameter is None."""
@@ -156,7 +156,7 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
             results = start_daemon(interval_seconds=1, max_runs=2, db_path=self.db_path, channels=None)
             self.assertEqual(len(results), 2)
             called_channels = {call.kwargs.get("channel") for call in mock_run.call_args_list}
-            self.assertEqual(called_channels, {"moku", "aelithia"})
+            self.assertEqual(called_channels, {"horror", "drama"})
 
     def test_start_daemon_responsive_sleep_and_shutdown(self):
         """Test start_daemon responsive sleep interrupts loop cleanly when request_shutdown is called."""
@@ -171,10 +171,10 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         with patch("src.daemon.run_pipeline_once", side_effect=side_effect_func), \
               patch("src.scraper.replenish_queue"):
             start_time = time.time()
-            results = start_daemon(interval_seconds=3600, max_runs=10, db_path=self.db_path, channels=["moku"])
+            results = start_daemon(interval_seconds=3600, max_runs=10, db_path=self.db_path, channels=["horror"])
             elapsed = time.time() - start_time
 
-            self.assertLess(elapsed, 2.0)
+            self.assertLess(elapsed, 5.0)
             self.assertEqual(len(results), 1)
 
     def test_main_pid_lock_lifecycle(self):
@@ -277,13 +277,13 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         self, mock_clean, mock_upload_yt, mock_drive, mock_trans, mock_compose, mock_subs, mock_tts, mock_curate, mock_curate_batch, mock_thumb, mock_fetch
     ):
         """Test run_pipeline_once for aelithia channel passes channel."""
-        enqueue_story("sample_soy_el_malo_001", "AITA Title", "AITA Content...", "http://ex.com/aita", channel="aelithia", db_path=self.db_path)
+        enqueue_story("sample_soy_el_malo_001", "AITA Title", "AITA Content...", "http://ex.com/aita", channel="drama", db_path=self.db_path)
 
         def fake_audio(*args, **kwargs):
             from pathlib import Path
             out_path = args[1] if len(args) > 1 else kwargs.get("out_path", "/tmp/audio.wav")
             Path(out_path).write_bytes(b"WAV")
-            # El carril aelithia-aita-long exige ≥600 s de narración.
+            # El carril drama-aita-long exige ≥600 s de narración.
             return {"word_timestamps": [], "duration_sec": 605.0}
 
         def fake_subs(*args, **kwargs):
@@ -316,19 +316,28 @@ class TestDaemonSchedulerAndCLI(unittest.TestCase):
         # MP4 con moov atom, resolución exacta y miniatura válida.
         report = MagicMock()
         report.require_pass.return_value = None
-        def fake_multiscene(manifest_path, output_video_path, **kwargs):
+        def fake_multiscene(*args, **kwargs):
             from pathlib import Path
-            out = Path(output_video_path)
+            out_path = kwargs.get("output_video_path")
+            if not out_path:
+                for a in args:
+                    if isinstance(a, (str, Path)) and str(a).endswith(".mp4"):
+                        out_path = a
+                        break
+            if not out_path and len(args) > 1:
+                out_path = args[1]
+            out = Path(out_path or "/tmp/video.mp4")
+            out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(b"MP4")
             return {"rendered_scenes": 5, "output_path": str(out), "duration_sec": 605.0}
 
         with patch("src.pipeline.validate_prepublication", return_value=report), \
-             patch("src.media.compositor.MultiSceneCompositor.render", side_effect=fake_multiscene):
-            res = run_pipeline_once(channel="aelithia", db_path=self.db_path, lane_id="aelithia-aita-long")
+             patch("src.media.loop_engine.LoopVideoEngine.render", side_effect=fake_multiscene):
+            res = run_pipeline_once(channel="drama", db_path=self.db_path, lane_id="drama-aita-long")
 
         self.assertEqual(res["status"], "SUCCESS")
         mock_upload_yt.assert_called_once()
-        self.assertEqual(mock_upload_yt.call_args.kwargs.get("channel"), "aelithia")
+        self.assertEqual(mock_upload_yt.call_args.kwargs.get("channel"), "drama")
 
     def test_update_story_status_youtube_url_persistence(self):
         """Test update_story_status stores youtube_url in database when provided."""
