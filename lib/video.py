@@ -462,9 +462,10 @@ def compose_video(
         stream_copy=True,
     )
     try:
+        sources = [str(loop_path)] if loop_path else ([str(background_video_path)] if background_video_path else None)
         plan = build_visual_scene_plan(
             duration_sec,
-            [background_video_path] if background_video_path else None,
+            sources,
         )
         out_dir = Path(output_video_path).parent
         vplan = {
@@ -474,8 +475,8 @@ def compose_video(
             "scenes": plan,
         }
         (out_dir / "visual_plan.json").write_text(json.dumps(vplan, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Could not write visual_plan.json in compose_video: %s", exc)
     return str(res)
 
 
@@ -500,37 +501,9 @@ def prepare_scene_plan_and_manifest(
 
 
 # ---------------------------------------------------------------------------
-# Back-compat aliases
-# ---------------------------------------------------------------------------
-
-def _compose_video_effect(
-    audio_path, subtitle_file, background_path, output_video,
-    duration_sec, min_duration, channel, template, strict_visuals,
-    scene_prompts, shot_durations, video_mode, scene_images, bg_music_path, bg_ambient_path,
-):
-    return compose_video(
-        audio_path=audio_path, subtitle_path=subtitle_file,
-        background_video_path=background_path, output_video_path=output_video,
-        duration_sec=duration_sec, min_duration=min_duration, channel=channel,
-        template=template, strict_visuals=strict_visuals, scene_prompts=scene_prompts,
-        shot_durations=shot_durations, video_mode=video_mode, scene_images=scene_images,
-        bgm_path=bg_music_path, bg_ambient_path=bg_ambient_path,
-    )
-
-
-compose_media = _compose_video_effect
-create_motion_fragment = _compose_video_effect
-_compositor_compose_video = _compose_video_effect
-
-
-# ---------------------------------------------------------------------------
 # Container helpers
 # ---------------------------------------------------------------------------
 
 def has_faststart(path: str) -> bool:
     """True when the moov atom precedes mdat (or file too small to decide)."""
     return ffmpeg_has_faststart(path)
-
-
-def daemon_video_test() -> bool:
-    return True

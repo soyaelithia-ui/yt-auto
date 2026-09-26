@@ -88,7 +88,7 @@ El stack visual de producción es **100% basado en recursos audiovisuales locale
 
 ## 🤖 Arnés Antigravity Multi-Agente (6 Agentes Especializados)
 
-Pipeline de agentes desacoplados bajo contratos JSON Schema y CLI local `agy`: prefiere `gpt-6-luna` / `gpt-5.6-luna`, valida con `agy models` y usa `gpt-oss-120b-medium` como fallback gratuito validado:
+Pipeline de agentes desacoplados bajo contratos JSON Schema y CLI local `agy` con modelo canónico oficial `gemini-3.8-flash-high`:
 - **Producción narrativa**: Script Curator y Scene Planner seleccionan actos y recursos locales; ya no generan escenas, HUDs ni gráficos.
 - **Control de calidad y SEO**: Forensic QA y SEO Optimizer producen metadata; SEO solo emite una solicitud `local_ai` con `text_free=true` para el banco de portadas.
 - **Recuperación acotada**: cada agente registra decisiones, reintentos, correcciones contractuales y evidencia estructurada sin bucles ilimitados.
@@ -108,7 +108,7 @@ Pipeline de agentes desacoplados bajo contratos JSON Schema y CLI local `agy`: p
 
 1. **Revisión & Despacho**: Veredicto determinista (`CodeReviewVerdict`), compuertas QA y Telegram local (`:8081`, hasta 2 GB zero-copy).
 2. **Auto-Publicación**: Ventana configurable vía `AUTO_PUBLISH_TIMEOUT_HOURS` (default 24h); barrido con `main.py queue sweep`.
-3. **Política AI-First**: Agentes bajo arnés Antigravity con preferencias GPT Luna y validación local; renderizado de producción FFmpeg stream-copy y persistencia determinista local. Cero navegadores y cero identificadores de modelo inválidos.
+3. **Política AI-First**: Agentes bajo arnés Antigravity con modelo canónico oficial `gemini-3.8-flash-high` y validación local; renderizado de producción FFmpeg stream-copy y persistencia determinista local. Cero navegadores y cero identificadores de modelo inválidos.
 
 ---
 

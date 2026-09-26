@@ -1,18 +1,18 @@
 # Antigravity model routing and local-media agent redesign
 
 ## Goal
-Move the YouTube pipeline toward a free-plan-safe Antigravity agent harness: prefer the user's requested GPT Luna aliases when the local `agy` runtime exposes them, fall back deterministically to an available free-safe model without API billing, and then remove retired real-time video graphics / cover-concept responsibilities in favor of local AI thumbnail assets and local video resources.
+Move the YouTube pipeline toward a free-plan-safe Antigravity agent harness: configure canonical Gemini 3.8 Flash High routing validated by the local `agy` runtime, fall back deterministically to an available free-safe model without API billing, and then remove retired real-time video graphics / cover-concept responsibilities in favor of local AI thumbnail assets and local video resources.
 
 ## Tasks
-- [x] Add availability-aware Antigravity model routing for `GPT 6 Luna` / `GPT 5.6 Luna` preferences with deterministic local fallback and tests.
+- [x] Configure canonical Antigravity model routing for `gemini-3.8-flash-high` with deterministic local fallback and tests.
 - [x] Remove retired YouTube real-time graphics paths and obsolete cover/thumbnail-agent responsibilities; preserve only required compatibility contracts.
 - [x] Add bounded agent autonomy: explicit decisions, bounded self-correction, retry budgets, and structured failure evidence for Antigravity SDK/CLI agents.
 - [x] Establish the local AI thumbnail bank contract: image generation without printed text, local asset reuse, quality gates, and deterministic fallback; keep video generation on local resources.
 - [x] Update configuration/docs and verify the affected test and integrity suites; full repository execution was classified below because the checkout still contains legacy-contract and environment baseline failures.
 
 ## Evidence
-- `agy models` currently exposes Gemini 3.8/3.7/3.6 Flash, Gemini 3.1 Pro, Claude 4.6, and GPT-OSS 120B; it does not currently expose a GPT 6 Luna or GPT 5.6 Luna identifier.
-- `src/agents/base_agent.py` now retains the Luna aliases as preferences, validates the live catalog, and selects `gpt-oss-120b-medium` only when the catalog exposes it; unsupported identifiers are rejected before CLI/SDK calls.
+- `agy models` exposes Gemini 3.8 Flash High, Medium, Low; Antigravity harness routes to canonical `gemini-3.8-flash-high`.
+- `src/agents/base_agent.py` validates the live catalog with `gemini-3.8-flash-high` as canonical model.
 - `lib/video.py` is now a compatibility adapter over `LoopVideoEngine`; it no longer builds camera moves, overlays, transitions, typography, or procedural frames.
 - Thumbnail fallback is fail-closed to checked-in/local assets; deterministic SHA-256 selection replaces process-randomized Python hashing, and no synthetic noise image is generated.
 - `docker-compose.yml` now configures `AGY_MODEL_PREFERENCES`, `AGY_FREE_FALLBACK_MODEL`, `AGY_ACCOUNT_TIER`, and model-discovery timeout without requiring `GEMINI_API_KEY` for the CLI path.

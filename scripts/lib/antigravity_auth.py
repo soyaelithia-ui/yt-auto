@@ -36,8 +36,10 @@ def _extract_embedded_credential(marker_start: bytes, marker_end: bytes | None =
     Official sessions should be managed natively via `agy` CLI in `~/.gemini/antigravity-cli/`.
     """
     candidates = [
-        Path(os.environ.get("AGY_BIN", "/usr/local/bin/agy")),
+        Path(os.environ.get("AGY_BIN", str(Path.home() / ".local" / "bin" / "agy"))),
+        PROJECT_ROOT / "build" / "agy",
         Path("/usr/local/bin/agy"),
+        Path.home() / ".local" / "bin" / "agy",
     ]
     custom_bin = os.environ.get("AGY_BIN_PATH")
     if custom_bin:
