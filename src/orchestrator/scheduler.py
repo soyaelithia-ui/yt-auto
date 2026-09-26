@@ -371,11 +371,26 @@ class LaneDaemonOrchestrator:
 
                 terminated_pids = terminate_lane_processes(pick.lane_id)
                 if not terminated_pids:
-                    from src.core.process_watch import terminate_hung_ffmpeg
+                    if not active_jobs:
+                        from src.core.process_watch import terminate_hung_ffmpeg
 
-                    terminate_hung_ffmpeg(
-                        max_age_seconds=timeout, parent_pid=os.getpid(), grace_seconds=1.0
-                    )
+                        terminate_hung_ffmpeg(
+                            max_age_seconds=timeout, parent_pid=os.getpid(), grace_seconds=1.0
+                        )
+                    else:
+                        from src.core.lifecycle import get_lane_pids
+                        from src.core.process_watch import terminate_hung_ffmpeg
+
+                        sibling_pids: set[int] = set()
+                        for p, _ in active_jobs.values():
+                            sibling_pids.update(get_lane_pids(p.lane_id))
+
+                        terminate_hung_ffmpeg(
+                            max_age_seconds=timeout,
+                            parent_pid=os.getpid(),
+                            grace_seconds=1.0,
+                            exclude_pids=sibling_pids,
+                        )
             except Exception:
                 logger.debug("watchdog hung process terminate failed", exc_info=True)
 
@@ -531,9 +546,10 @@ class LaneDaemonOrchestrator:
         results: list[TurnResult] = []
         active_jobs: dict[Any, tuple[LanePick, float]] = {}
 
-        with ThreadPoolExecutor(
+        pool = ThreadPoolExecutor(
             max_workers=self.max_parallel, thread_name_prefix="lane"
-        ) as pool:
+        )
+        try:
             while not self.is_shutdown_requested():
                 results.extend(self.tick(pool, active_jobs))
                 self._ticks += 1
@@ -572,11 +588,27 @@ class LaneDaemonOrchestrator:
                 # Cancel any residual uncompleted jobs
                 for fut, (pick, _) in list(active_jobs.items()):
                     fut.cancel()
+                    try:
+                        from src.core.lifecycle import terminate_lane_processes
+
+                        terminate_lane_processes(pick.lane_id)
+                    except Exception:
+                        logger.debug("shutdown lane process terminate failed", exc_info=True)
+
                     ch_val = (
                         pick.channel.value
                         if hasattr(pick.channel, "value")
                         else str(pick.channel)
                     )
+                    try:
+                        with connect(self.config.db_path) as conn:
+                            conn.execute(
+                                "DELETE FROM lane_leases WHERE lane_id = ?",
+                                (pick.lane_id,),
+                            )
+                            conn.commit()
+                    except Exception:
+                        pass
                     results.append(
                         {
                             "status": "RETRYABLE_FAILED",
@@ -587,5 +619,7 @@ class LaneDaemonOrchestrator:
                         }
                     )
                 active_jobs.clear()
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
         return results

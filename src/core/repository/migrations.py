@@ -405,6 +405,39 @@ MIGRATION_008 = (
     "CREATE INDEX IF NOT EXISTS idx_publications_views ON publications(channel, view_count)",
 )
 
+MIGRATION_009 = (
+    """
+    CREATE TABLE IF NOT EXISTS video_analytics_snapshots_v9 (
+        snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id TEXT NOT NULL,
+        story_id TEXT NOT NULL,
+        channel TEXT NOT NULL CHECK(channel IN ('horror', 'drama', 'scifi', 'moku', 'aelithia')),
+        view_count INTEGER NOT NULL DEFAULT 0,
+        like_count INTEGER NOT NULL DEFAULT 0,
+        comment_count INTEGER NOT NULL DEFAULT 0,
+        avg_view_duration_sec REAL,
+        retention_rate_pct REAL,
+        snapshot_interval TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        FOREIGN KEY(story_id) REFERENCES stories(story_id)
+    )
+    """,
+    """
+    INSERT OR IGNORE INTO video_analytics_snapshots_v9 (
+        snapshot_id, video_id, story_id, channel, view_count, like_count, comment_count,
+        avg_view_duration_sec, retention_rate_pct, snapshot_interval, recorded_at
+    ) SELECT
+        snapshot_id, video_id, story_id, channel, view_count, like_count, comment_count,
+        avg_view_duration_sec, retention_rate_pct, snapshot_interval, recorded_at
+    FROM video_analytics_snapshots
+    """,
+    "DROP TABLE video_analytics_snapshots",
+    "ALTER TABLE video_analytics_snapshots_v9 RENAME TO video_analytics_snapshots",
+    """
+    CREATE INDEX IF NOT EXISTS idx_analytics_story_interval ON video_analytics_snapshots(story_id, snapshot_interval)
+    """,
+)
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -573,6 +606,21 @@ def _apply_migration_008(conn: sqlite3.Connection) -> None:
             if "already exists" in msg:
                 continue
             raise
+
+
+def _apply_migration_009(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='video_analytics_snapshots'"
+    ).fetchone()
+    if row and "horror" in str(row[0]).lower():
+        return
+
+    conn.execute(MIGRATION_009[0])
+    if row:
+        conn.execute(MIGRATION_009[1])
+        conn.execute(MIGRATION_009[2])
+    conn.execute(MIGRATION_009[3])
+    conn.execute(MIGRATION_009[4])
 
 
 def _count_channels(conn: sqlite3.Connection, names: Sequence[str]) -> dict[str, int]:
@@ -746,6 +794,23 @@ def _apply_v8_comment_lifecycle_and_metrics(conn: sqlite3.Connection, applied: l
         applied.append(8)
 
 
+def _apply_v9_canonical_channels_analytics(conn: sqlite3.Connection, applied: list[int]) -> None:
+    m9_checksum = _migration_checksum("canonical_channels_analytics", MIGRATION_009)
+    existing_m9 = conn.execute(
+        "SELECT checksum FROM schema_migrations WHERE version = 9"
+    ).fetchone()
+    if existing_m9 and existing_m9["checksum"] != m9_checksum:
+        raise RuntimeError("Checksum de migración 9 no coincide")
+    if not existing_m9:
+        _apply_migration_009(conn)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum, applied_at) "
+            "VALUES (9, 'canonical_channels_analytics', ?, ?)",
+            (m9_checksum, _utc_now()),
+        )
+        applied.append(9)
+
+
 def _ensure_performance_indexes(conn: sqlite3.Connection) -> None:
     indexes = (
         "CREATE INDEX IF NOT EXISTS idx_stories_queue_claim ON stories(channel, status, next_attempt_at, score)",
@@ -777,6 +842,7 @@ def migrate_database(
             _apply_v6_publications_inventory(conn, applied)
             _apply_v7_performance_scoring(conn, applied)
             _apply_v8_comment_lifecycle_and_metrics(conn, applied)
+            _apply_v9_canonical_channels_analytics(conn, applied)
             _ensure_performance_indexes(conn)
 
             from src.core.channel_profile import ChannelProfileRegistry

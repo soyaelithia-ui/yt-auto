@@ -137,11 +137,13 @@ def hung_ffmpeg_processes(
     *,
     proc_root: Path | str = _DEFAULT_PROC_ROOT,
     parent_pid: int | None = None,
+    exclude_pids: Iterable[int] = (),
 ) -> list[ProcSnapshot]:
+    excluded = set(exclude_pids)
     return [
         snap
         for snap in list_ffmpeg_processes(proc_root=proc_root, parent_pid=parent_pid)
-        if snap.is_hung(max_age_seconds)
+        if snap.pid not in excluded and snap.is_hung(max_age_seconds)
     ]
 
 
@@ -171,11 +173,15 @@ def terminate_hung_ffmpeg(
     proc_root: Path | str = _DEFAULT_PROC_ROOT,
     parent_pid: int | None = None,
     grace_seconds: float = 2.0,
+    exclude_pids: Iterable[int] = (),
 ) -> dict[str, Any]:
     """SIGTERM then SIGKILL our hung FFmpeg descendants. Never touches unrelated PIDs."""
     owner = os.getpid() if parent_pid is None else int(parent_pid)
     targets = hung_ffmpeg_processes(
-        max_age_seconds, proc_root=proc_root, parent_pid=owner
+        max_age_seconds,
+        proc_root=proc_root,
+        parent_pid=owner,
+        exclude_pids=exclude_pids,
     )
     signaled: list[int] = []
     killed: list[int] = []
@@ -188,7 +194,10 @@ def terminate_hung_ffmpeg(
     if signaled and grace_seconds > 0:
         time.sleep(grace_seconds)
     still = {snap.pid for snap in hung_ffmpeg_processes(
-        max_age_seconds, proc_root=proc_root, parent_pid=owner
+        max_age_seconds,
+        proc_root=proc_root,
+        parent_pid=owner,
+        exclude_pids=exclude_pids,
     )}
     for pid in signaled:
         if pid not in still:

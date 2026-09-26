@@ -197,6 +197,108 @@ def _commit_video_metadata(
         raise InnerTubeUploadError(f"Failed parsing InnerTube create_video response: {json_err}") from json_err
 
 
+def _upload_thumbnail_via_innertube(
+    video_id: str,
+    thumbnail_path: Path,
+    auth_headers: dict[str, str],
+    channel_id: Optional[str] = None,
+    timeout: float = 30.0,
+) -> bool:
+    """Upload custom thumbnail to YouTube Studio via Scotty and link via metadata_update."""
+    if not thumbnail_path.is_file() or thumbnail_path.stat().st_size == 0:
+        return False
+    filesize = thumbnail_path.stat().st_size
+    content_type = "image/jpeg" if thumbnail_path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+    init_headers = dict(auth_headers)
+    init_headers.update({
+        "x-goog-upload-command": "start",
+        "x-goog-upload-protocol": "resumable",
+        "x-goog-upload-header-content-length": str(filesize),
+        "x-goog-upload-header-content-type": content_type,
+        "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+    })
+    try:
+        resp = requests.post(UPLOAD_STUDIO_URL, headers=init_headers, timeout=timeout)
+        if resp.status_code not in (200, 201):
+            logger.warning("InnerTube thumbnail initiation failed (HTTP %s): %s", resp.status_code, resp.text[:200])
+            return False
+        upload_url = resp.headers.get("x-goog-upload-url") or resp.headers.get("Location")
+        if not upload_url:
+            return False
+
+        upload_headers = dict(auth_headers)
+        upload_headers.update({
+            "x-goog-upload-command": "upload, finalize",
+            "x-goog-upload-offset": "0",
+            "Content-Length": str(filesize),
+            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+        })
+        with open(thumbnail_path, "rb") as f:
+            resp_upload = requests.post(upload_url, data=f, headers=upload_headers, timeout=timeout)
+        if resp_upload.status_code not in (200, 201):
+            logger.warning("InnerTube thumbnail stream failed (HTTP %s): %s", resp_upload.status_code, resp_upload.text[:200])
+            return False
+
+        data = resp_upload.json()
+        scotty_id = data.get("scottyResourceId") or data.get("scotty_id") or resp_upload.headers.get("x-goog-upload-token")
+        if not scotty_id:
+            return False
+
+        context_payload = {
+            "client": {
+                "clientName": 62,
+                "clientVersion": "1.20240101.01.00",
+                "hl": "es",
+                "gl": "ES",
+            }
+        }
+        if channel_id and str(channel_id).strip():
+            context_payload["user"] = {"delegatedSessionId": str(channel_id).strip()}
+
+        meta_payload = {
+            "context": context_payload,
+            "videoId": video_id,
+            "encryptedBlobId": str(scotty_id),
+        }
+        headers = dict(auth_headers)
+        headers["Content-Type"] = "application/json"
+        meta_resp = requests.post(INNERTUBE_METADATA_URL, json=meta_payload, headers=headers, timeout=timeout)
+        if meta_resp.status_code == 200:
+            logger.info("InnerTube custom thumbnail successfully linked for video %s", video_id)
+            return True
+        logger.warning("InnerTube metadata_update thumbnail link failed (HTTP %s): %s", meta_resp.status_code, meta_resp.text[:200])
+        return False
+    except Exception as exc:
+        logger.warning("InnerTube thumbnail upload exception: %s", exc)
+        return False
+
+
+def _handle_thumbnail_upload(
+    video_id: str,
+    thumbnail_path: Optional[Union[str, Path]],
+    auth_headers: dict[str, str],
+    channel_id: Optional[str],
+    timeout: float,
+) -> bool:
+    """Helper to attach thumbnail via InnerTube if file exists."""
+    if not thumbnail_path:
+        return False
+    t_path = Path(thumbnail_path)
+    if not t_path.is_file():
+        return False
+    try:
+        return _upload_thumbnail_via_innertube(
+            video_id=video_id,
+            thumbnail_path=t_path,
+            auth_headers=auth_headers,
+            channel_id=channel_id,
+            timeout=timeout,
+        )
+    except Exception as thumb_err:
+        logger.warning("Failed uploading thumbnail via InnerTube: %s", thumb_err)
+        return False
+
+
 def upload_video_via_innertube(
     video_path: Union[str, Path],
     title: str,
@@ -232,6 +334,7 @@ def upload_video_via_innertube(
             "url": f"https://www.youtube.com/watch?v=sim_tube_{int(time.time())}",
             "title": title,
             "channel_id": channel_id,
+            "thumbnail_confirmed": bool(thumbnail_path),
             "verified": True,
         }
 
@@ -245,6 +348,7 @@ def upload_video_via_innertube(
             "url": "https://www.youtube.com/watch?v=mock_innertube_vid123",
             "title": title,
             "channel_id": channel_id,
+            "thumbnail_confirmed": bool(thumbnail_path),
             "verified": True,
         }
 
@@ -269,7 +373,15 @@ def upload_video_via_innertube(
         timeout=min(timeout, 60.0),
     )
 
-    logger.info("InnerTube publication succeeded: video_id=%s", video_id)
+    thumb_confirmed = _handle_thumbnail_upload(
+        video_id=video_id,
+        thumbnail_path=thumbnail_path,
+        auth_headers=auth_headers,
+        channel_id=channel_id,
+        timeout=min(timeout, 60.0),
+    )
+
+    logger.info("InnerTube publication succeeded: video_id=%s, thumbnail_confirmed=%s", video_id, thumb_confirmed)
     return {
         "status": "PUBLISHED",
         "method": "INNERTUBE",
@@ -277,5 +389,6 @@ def upload_video_via_innertube(
         "url": f"https://www.youtube.com/watch?v={video_id}",
         "title": title,
         "channel_id": channel_id,
+        "thumbnail_confirmed": thumb_confirmed,
         "verified": True,
     }

@@ -54,6 +54,10 @@ def resolve_loop_file_path(path: str | Path, repo_root: Path | None = None) -> P
             alt = root / text[len(prefix):].lstrip("/")
             if alt.is_file():
                 return alt
+    if "/projects/yt-auto/" in text:
+        alt = root / text.split("/projects/yt-auto/", 1)[1].lstrip("/")
+        if alt.is_file():
+            return alt
     if not p.is_absolute():
         alt = root / p
         if alt.is_file():

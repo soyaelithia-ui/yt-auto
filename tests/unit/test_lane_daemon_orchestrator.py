@@ -399,4 +399,99 @@ def test_orchestrator_telegram_poller_lifecycle_supervision(test_db: str) -> Non
         mock_start_poller.assert_called_once()
 
 
+def test_orchestrator_watchdog_excludes_sibling_lane_pids_on_fallback(test_db: str) -> None:
+    """Verify watchdog excludes active sibling lane PIDs when fallback terminates hung FFmpeg (Issue #29)."""
+    from src.core.lifecycle import register_process, set_current_lane, unregister_process
+
+    config = LaneDaemonConfig(db_path=test_db)
+    orchestrator = LaneDaemonOrchestrator(config)
+
+    # Register mock PID under sibling lane 'horror-long'
+    set_current_lane("horror-long")
+    sibling_pid = 77711
+    register_process(sibling_pid)
+    set_current_lane(None)
+
+    fut_timed_out = MagicMock()
+    fut_sibling = MagicMock()
+    pick_timed_out = LanePick("drama-shorts", CanonicalChannel.DRAMA, 1000, 1300)
+    pick_sibling = LanePick("horror-long", CanonicalChannel.HORROR, 1000, 1300)
+
+    active_jobs = {
+        fut_timed_out: (pick_timed_out, time.monotonic() - 10.0),  # expired
+        fut_sibling: (pick_sibling, time.monotonic() - 1.0),      # healthy sibling
+    }
+
+    try:
+        with (
+            patch.dict(os.environ, {"DAEMON_TURN_TIMEOUT_SECONDS": "5.0"}),
+            patch("src.core.process_watch.terminate_hung_ffmpeg") as mock_term_hung,
+        ):
+            results = orchestrator._watchdog_check(active_jobs)
+            assert len(results) == 1
+            assert results[0]["lane"] == "drama-shorts"
+            assert fut_timed_out.cancel.called
+            # Verify terminate_hung_ffmpeg was called with exclude_pids containing sibling_pid
+            mock_term_hung.assert_called_once()
+            called_exclude = mock_term_hung.call_args.kwargs.get("exclude_pids")
+            assert called_exclude is not None
+            assert sibling_pid in set(called_exclude)
+    finally:
+        unregister_process(sibling_pid)
+
+
+def test_orchestrator_graceful_shutdown_cleans_leases_and_terminates_processes(test_db: str) -> None:
+    """Verify shutdown cancels remaining active jobs, cleans lane_leases, and terminates processes (Issue #25)."""
+    from src.core.repository.migrations import connect
+
+    config = LaneDaemonConfig(db_path=test_db, max_ticks=1)
+    orchestrator = LaneDaemonOrchestrator(config)
+    orchestrator.initialize()
+
+    # Pre-insert a lease for lane 'test-lane'
+    with connect(test_db) as conn:
+        conn.execute("PRAGMA foreign_keys = OFF;")
+        conn.execute(
+            "INSERT OR REPLACE INTO lane_leases(job_id, lane_id, channel, owner, run_id, acquired_at, heartbeat_at, expires_at) "
+            "VALUES ('job-1', 'test-lane', 'horror', 'owner-1', 'run-1', 100, 100, 99999)"
+        )
+        conn.commit()
+
+    # Create an unfinished worker future
+    fut = concurrent.futures.Future()
+    pick = LanePick("test-lane", CanonicalChannel.HORROR, 1000, 1300)
+
+    # Trigger shutdown request
+    orchestrator.request_shutdown()
+
+    with (
+        patch.dict(os.environ, {"DAEMON_TURN_TIMEOUT_SECONDS": "0.05", "DAEMON_WATCHDOG_TICK_SECONDS": "0.05"}),
+        patch.object(orchestrator, "tick", return_value=[]),
+        patch("src.core.lifecycle.terminate_lane_processes") as mock_term_proc,
+    ):
+        # Directly test residual active_jobs cleanup by invoking run_loop with active_jobs populated
+        def fake_tick(pool, active_jobs):
+            active_jobs[fut] = (pick, time.monotonic())
+            return []
+
+        orchestrator.tick = fake_tick
+        orchestrator._shutdown_event.clear()
+
+        def fake_shutdown_check():
+            if orchestrator._ticks > 0:
+                return True
+            return False
+
+        with patch.object(orchestrator, "is_shutdown_requested", side_effect=fake_shutdown_check):
+            results = orchestrator.run_loop()
+
+        assert any(r.get("error_code") == "shutdown_cancelled" for r in results)
+        mock_term_proc.assert_called_with("test-lane")
+
+        # Verify lease is removed from database
+        with connect(test_db) as conn:
+            row = conn.execute("SELECT * FROM lane_leases WHERE lane_id = 'test-lane'").fetchone()
+            assert row is None
+
+
 

@@ -151,6 +151,7 @@ class TestYouTubeUploader(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             upload_video_via_api(non_existent, "Title", "Desc", ["tag"])
 
+    @patch.dict(os.environ, {"PREFER_SESSION_UPLOAD": "0", "ALLOW_API_UPLOADS": "1"})
     @patch("src.youtube.uploader.upload_video_via_api")
     def test_hybrid_uploader_api_success(self, mock_api):
         """Test hybrid upload_video using Strategy A when API token is available."""
@@ -159,6 +160,7 @@ class TestYouTubeUploader(unittest.TestCase):
         self.assertEqual(res["status"], "SUCCESS")
         self.assertEqual(res["method"], "API")
 
+    @patch.dict(os.environ, {"PREFER_SESSION_UPLOAD": "0", "ALLOW_API_UPLOADS": "1"})
     @patch("src.youtube.uploader.upload_video_via_api", side_effect=RuntimeError("API failed"))
     @patch("src.youtube.uploader.upload_video_via_playwright")
     def test_hybrid_uploader_fallback_to_strategy_b(self, mock_pw, mock_api):
@@ -173,6 +175,7 @@ class TestYouTubeUploader(unittest.TestCase):
         self.assertEqual(res["status"], "SUCCESS")
         self.assertEqual(res["method"], "PLAYWRIGHT")
 
+    @patch.dict(os.environ, {"PREFER_SESSION_UPLOAD": "0", "ALLOW_API_UPLOADS": "1"})
     def test_hybrid_uploader_default_tags(self):
         """Test default tags assignment in upload_video when tags is None."""
         with patch("src.youtube.uploader.upload_video_via_api") as mock_api:
@@ -192,6 +195,16 @@ class TestYouTubeUploader(unittest.TestCase):
                 expected_channel_id=get_channel_settings("horror").expected_youtube_channel_id,
                 on_video_id=None,
             )
+
+    @patch("src.youtube.uploader.upload_video_via_api")
+    @patch("src.youtube.uploader.session.upload_video_via_playwright")
+    @patch("src.youtube.innertube_uploader.upload_video_via_innertube")
+    def test_zero_api_policy_enforcement(self, mock_it, mock_pw, mock_api):
+        """Test that by default (ALLOW_API_UPLOADS=0, PREFER_SESSION_UPLOAD=1), API upload is never called."""
+        mock_it.return_value = {"status": "PUBLISHED", "method": "INNERTUBE", "video_id": "it_123"}
+        res = upload_video(self.dummy_video, "Title", "Desc")
+        mock_api.assert_not_called()
+        self.assertEqual(res["method"], "INNERTUBE")
 
     def test_playwright_upload_success(self):
         """Test upload_video_via_playwright with valid cookies and video file."""
@@ -463,6 +476,30 @@ class TestPlaywright6StagesLifecycle(unittest.TestCase):
         finally:
             if os.path.exists(cookie_path):
                 os.remove(cookie_path)
+
+    def test_stage1_browser_profile_directory_isolation(self):
+        """Verify browser profile dir isolates channels and worker IDs to prevent SingletonLock collisions (Issue #26)."""
+        from src.youtube.uploader.session import _init_playwright_context
+        mock_p = MagicMock()
+        mock_context = MagicMock()
+        mock_context.pages = []
+        mock_p.chromium.launch_persistent_context.return_value = mock_context
+
+        with tempfile.TemporaryDirectory() as tmp_base:
+            with patch.dict(os.environ, {"PLAYWRIGHT_USER_DATA_DIR": tmp_base}):
+                _init_playwright_context(mock_p, cookies_path="", channel="drama", headless=True)
+                call_args = mock_p.chromium.launch_persistent_context.call_args.kwargs
+                used_dir = call_args["user_data_dir"]
+                assert tmp_base in used_dir
+                assert "drama" in used_dir
+                assert f"worker_{os.getpid()}_" in used_dir
+
+        # Explicit user_data_dir is respected directly
+        mock_p.reset_mock()
+        with tempfile.TemporaryDirectory() as explicit_dir:
+            _init_playwright_context(mock_p, cookies_path="", channel="horror", headless=True, user_data_dir=explicit_dir)
+            call_args = mock_p.chromium.launch_persistent_context.call_args.kwargs
+            assert call_args["user_data_dir"] == explicit_dir
 
     def test_stage2_navigate_and_check_auth(self):
         from src.youtube.uploader.session import _navigate_and_check_auth

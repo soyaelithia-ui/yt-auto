@@ -13,6 +13,7 @@ import random
 import re
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -268,20 +269,23 @@ def _init_playwright_context(
     headless: bool = True,
     user_data_dir: Optional[str] = None,
 ) -> tuple[Any, Any, Any]:
-    """Stage 1: Launch Chromium persistent context and add normalized session cookies."""
-    if not user_data_dir:
-        channel_name = channel or "default"
-        if cookies_path:
-            cp_str = str(cookies_path).lower()
-            if "drama" in cp_str or "aelithia" in cp_str:
-                channel_name = "drama"
-            elif "horror" in cp_str or "moku" in cp_str or "cookies.json" in cp_str:
-                channel_name = "horror"
-        browser_profile_dir = os.environ.get(
-            "PLAYWRIGHT_USER_DATA_DIR", str(BASE_DIR / "data" / "browser_profiles" / channel_name)
-        )
-    else:
+    channel_name = channel or "default"
+    if cookies_path:
+        cp_str = str(cookies_path).lower()
+        if "drama" in cp_str or "aelithia" in cp_str:
+            channel_name = "drama"
+        elif "horror" in cp_str or "moku" in cp_str or "cookies.json" in cp_str:
+            channel_name = "horror"
+
+    is_custom_user_dir = bool(user_data_dir)
+    if user_data_dir:
         browser_profile_dir = user_data_dir
+    else:
+        env_dir = os.environ.get("PLAYWRIGHT_USER_DATA_DIR")
+        base_dir = Path(env_dir) if env_dir else (BASE_DIR / "data" / "browser_profiles")
+        worker_id = f"worker_{os.getpid()}_{threading.get_ident()}"
+        browser_profile_dir = str(base_dir / channel_name / worker_id)
+
     os.makedirs(browser_profile_dir, exist_ok=True)
 
     modern_ua = (
@@ -317,6 +321,11 @@ def _init_playwright_context(
                 logger.debug("Persistent context cookie seeding: %s", cookie_err)
 
     page = context.pages[0] if context.pages else context.new_page()
+    if not is_custom_user_dir:
+        try:
+            setattr(context, "_ephemeral_profile_dir", browser_profile_dir)
+        except Exception:
+            pass
     return None, context, page
 
 
@@ -702,6 +711,15 @@ def _cleanup_playwright_resources(page: Any, context: Any, browser: Any, cookies
             browser.close()
         except Exception as exc:
             logger.debug("Failed closing playwright browser during cleanup: %s", exc)
+
+    ephemeral_profile = getattr(context, "_ephemeral_profile_dir", None)
+    if ephemeral_profile and os.path.isdir(ephemeral_profile):
+        try:
+            import shutil
+
+            shutil.rmtree(ephemeral_profile, ignore_errors=True)
+        except Exception as exc:
+            logger.debug("Failed cleaning ephemeral profile dir %s: %s", ephemeral_profile, exc)
 
 
 def _reap_lingering_playwright_pids(pids_before: set) -> None:

@@ -468,6 +468,12 @@ def run_ffprobe(
             cwd=str(cwd) if cwd else None,
             start_new_session=True,
         )
+        try:
+            from src.core.lifecycle import register_process
+
+            register_process(proc)
+        except Exception:
+            pass
         stdout, stderr = proc.communicate(timeout=timeout)
         duration_sec = time.monotonic() - start_time
         res = FFmpegCommandResult(
@@ -514,6 +520,14 @@ def run_ffprobe(
             stderr="ffprobe binary not found",
             command=cmd_str_list,
         ) from e
+    finally:
+        if proc is not None:
+            try:
+                from src.core.lifecycle import unregister_process
+
+                unregister_process(proc)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------

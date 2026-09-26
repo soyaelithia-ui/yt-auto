@@ -232,6 +232,64 @@ def _perform_api_upload_flow(
     return None, api_quota_error, api_auth_error
 
 
+def _attempt_innertube_upload(
+    *,
+    video_path: str,
+    title: str,
+    effective_description: str,
+    effective_tags: List[str],
+    thumbnail_path: Optional[str],
+    effective_cookies: str,
+    channel_key: str,
+    settings: Any,
+    dry_run: bool,
+) -> Optional[Dict[str, Any]]:
+    """Try InnerTube direct HTTP session upload with fallback thumbnail attachment."""
+    from src.core.cookies import parse_cookies_file
+    from src.youtube.innertube_uploader import upload_video_via_innertube
+
+    loaded_cookies = parse_cookies_file(effective_cookies)
+    logger.info("Attempting primary session upload via InnerTube HTTP for %s...", channel_key)
+    tube_result = upload_video_via_innertube(
+        video_path=video_path,
+        title=title,
+        description=effective_description,
+        cookies=loaded_cookies,
+        tags=effective_tags,
+        thumbnail_path=thumbnail_path,
+        channel_id=settings.expected_youtube_channel_id,
+        dry_run=dry_run,
+    )
+    if dry_run:
+        return {"status": "DRY_RUN", "method": "INNERTUBE"}
+    if thumbnail_path and os.path.isfile(thumbnail_path) and not tube_result.get("thumbnail_confirmed"):
+        try:
+            from src.youtube.uploader.api import verify_existing_video_via_api
+
+            token_p = getattr(settings, "youtube_token_path", None)
+            if token_p and os.path.isfile(str(token_p)):
+                verify_existing_video_via_api(
+                    video_id=tube_result["video_id"],
+                    title=title,
+                    description=effective_description,
+                    thumbnail_path=thumbnail_path,
+                    token_path=str(token_p),
+                    expected_channel_id=str(settings.expected_youtube_channel_id or ""),
+                    channel=channel_key,
+                )
+                tube_result["thumbnail_confirmed"] = True
+        except Exception as t_err:
+            logger.warning("InnerTube fallback API thumbnail link skipped: %s", t_err)
+
+    return _normalize_upload_result(
+        tube_result,
+        method="INNERTUBE",
+        channel=channel_key,
+        title=title,
+        description=effective_description,
+    )
+
+
 def _perform_playwright_fallback_flow(
     *,
     video_path: str,
@@ -250,29 +308,16 @@ def _perform_playwright_fallback_flow(
     playwright_error: Exception | None = None
     if os.path.isfile(effective_cookies):
         try:
-            from src.core.cookies import parse_cookies_file
-            from src.youtube.innertube_uploader import upload_video_via_innertube
-
-            loaded_cookies = parse_cookies_file(effective_cookies)
-            logger.info("Attempting primary session upload via InnerTube HTTP for %s...", channel_key)
-            tube_result = upload_video_via_innertube(
+            return _attempt_innertube_upload(
                 video_path=video_path,
                 title=title,
-                description=effective_description,
-                cookies=loaded_cookies,
-                tags=effective_tags,
+                effective_description=effective_description,
+                effective_tags=effective_tags,
                 thumbnail_path=thumbnail_path,
-                channel_id=settings.expected_youtube_channel_id,
+                effective_cookies=effective_cookies,
+                channel_key=channel_key,
+                settings=settings,
                 dry_run=dry_run,
-            )
-            if dry_run:
-                return {"status": "DRY_RUN", "method": "INNERTUBE"}
-            return _normalize_upload_result(
-                tube_result,
-                method="INNERTUBE",
-                channel=channel_key,
-                title=title,
-                description=effective_description,
             )
         except Exception as tube_err:
             logger.warning("InnerTube session upload failed (%s); falling back to Playwright...", tube_err)
@@ -326,6 +371,26 @@ def _perform_playwright_fallback_flow(
     raise RuntimeError("No hay cookies ni token del canal seleccionado")
 
 
+def _prepare_upload_inputs(
+    video_path: str,
+    thumbnail_path: Optional[str],
+    job_id: Optional[str],
+    version: int,
+) -> tuple[Optional[str], str, int, Any]:
+    """Validate video existence, resolve default thumbnail, and acquire publication claim gate."""
+    if not video_path or not os.path.isfile(video_path):
+        raise FileNotFoundError("Video local inexistente")
+    resolved_thumb = thumbnail_path
+    if not resolved_thumb or not os.path.isfile(resolved_thumb):
+        cand = Path(video_path).parent / "thumbnail.jpg"
+        if cand.is_file():
+            resolved_thumb = str(cand)
+    if not is_test_environment() and (not str(job_id or "").strip() or version <= 0):
+        raise RuntimeError("Publication gate requires job_id and a positive version before YouTube upload")
+    claimed_job_id, claimed_version, gate = _claim_publication_gate(video_path, job_id, version)
+    return resolved_thumb, claimed_job_id, claimed_version, gate
+
+
 def _try_preferred_session_upload(
     *,
     video_path: str,
@@ -339,7 +404,7 @@ def _try_preferred_session_upload(
     dry_run: bool,
 ) -> Optional[Dict[str, Any]]:
     """Try cookie-backed upload when explicitly enabled; return None for API fallback."""
-    prefer_session = os.environ.get("PREFER_SESSION_UPLOAD", "0").strip().lower() in {"1", "true", "yes", "on"}
+    prefer_session = os.environ.get("PREFER_SESSION_UPLOAD", "1").strip().lower() in {"1", "true", "yes", "on"}
     if not prefer_session or not os.path.isfile(effective_cookies):
         return None
     logger.info("Session-cookie upload preferred for channel %s", channel_key)
@@ -383,16 +448,10 @@ def upload_video(
 ) -> Dict[str, Any]:
     """Master publication entrypoint orchestrating preflight -> claim gate -> upload -> finalize."""
     channel = channel or "horror"
-    if not video_path or not os.path.isfile(video_path):
-        raise FileNotFoundError("Video local inexistente")
-    if not thumbnail_path or not os.path.isfile(thumbnail_path):
-        cand = Path(video_path).parent / "thumbnail.jpg"
-        if cand.is_file():
-            thumbnail_path = str(cand)
-    if not is_test_environment() and (not str(job_id or "").strip() or version <= 0):
-        raise RuntimeError("Publication gate requires job_id and a positive version before YouTube upload")
-
-    claimed_job_id, claimed_version, gate = _claim_publication_gate(video_path, job_id, version)
+    effective_thumb, claimed_job_id, claimed_version, gate = _prepare_upload_inputs(
+        video_path, thumbnail_path, job_id, version
+    )
+    thumbnail_path = effective_thumb
 
     def _finalize(normalized: Dict[str, Any]) -> Dict[str, Any]:
         _consume_publication_claim(gate, claimed_job_id, claimed_version, normalized)
@@ -449,14 +508,18 @@ def upload_video(
             result, method="API", channel=channel_key, title=title, description=effective_description
         ))
 
-    api_result, quota_err, auth_err = _perform_api_upload_flow(
-        video_path=video_path, title=title, effective_description=effective_description,
-        effective_tags=effective_tags, thumbnail_path=thumbnail_path, effective_token=effective_token,
-        channel_key=channel_key, expected_channel_id=settings.expected_youtube_channel_id,
-        on_video_id=on_video_id, api_only=api_only, effective_cookies=effective_cookies,
-    )
-    if api_result is not None:
-        return _finalize(api_result)
+    allow_api = os.environ.get("ALLOW_API_UPLOADS", "0").strip().lower() in {"1", "true", "yes", "on"}
+    quota_err: Optional[Exception] = None
+    auth_err: Optional[Exception] = None
+    if allow_api:
+        api_result, quota_err, auth_err = _perform_api_upload_flow(
+            video_path=video_path, title=title, effective_description=effective_description,
+            effective_tags=effective_tags, thumbnail_path=thumbnail_path, effective_token=effective_token,
+            channel_key=channel_key, expected_channel_id=settings.expected_youtube_channel_id,
+            on_video_id=on_video_id, api_only=api_only, effective_cookies=effective_cookies,
+        )
+        if api_result is not None:
+            return _finalize(api_result)
 
     pw_result = _perform_playwright_fallback_flow(
         video_path=video_path, title=title, effective_description=effective_description,

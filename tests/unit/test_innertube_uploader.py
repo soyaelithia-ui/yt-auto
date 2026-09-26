@@ -11,6 +11,7 @@ from src.youtube.innertube_uploader import (
     _commit_video_metadata,
     _initiate_upload_session,
     _stream_video_chunks,
+    _upload_thumbnail_via_innertube,
     upload_video_via_innertube,
 )
 
@@ -147,3 +148,80 @@ def test_upload_video_via_innertube_dry_run(tmp_path):
     )
     assert res["status"] == "DRY_RUN"
     assert res["method"] == "INNERTUBE"
+
+
+def test_upload_thumbnail_via_innertube_success(tmp_path):
+    dummy_thumb = tmp_path / "thumb.jpg"
+    dummy_thumb.write_bytes(b"\xff\xd8\xff\xe0" + b"fake jpeg bytes")
+
+    mock_resp_init = MagicMock()
+    mock_resp_init.status_code = 200
+    mock_resp_init.headers = {"x-goog-upload-url": "https://upload.youtube.com/thumb_upload"}
+
+    mock_resp_upload = MagicMock()
+    mock_resp_upload.status_code = 200
+    mock_resp_upload.json.return_value = {"scottyResourceId": "scotty_thumb_123"}
+
+    mock_resp_meta = MagicMock()
+    mock_resp_meta.status_code = 200
+
+    with patch("requests.post", side_effect=[mock_resp_init, mock_resp_upload, mock_resp_meta]):
+        ok = _upload_thumbnail_via_innertube(
+            video_id="vid_123",
+            thumbnail_path=dummy_thumb,
+            auth_headers={"Authorization": "SAPISIDHASH test"},
+            channel_id="UC_TEST",
+        )
+        assert ok is True
+
+
+def test_upload_thumbnail_via_innertube_missing_file(tmp_path):
+    non_existent = tmp_path / "non_existent.jpg"
+    ok = _upload_thumbnail_via_innertube(
+        video_id="vid_123",
+        thumbnail_path=non_existent,
+        auth_headers={"Authorization": "SAPISIDHASH test"},
+    )
+    assert ok is False
+
+
+def test_upload_thumbnail_via_innertube_failure_graceful(tmp_path):
+    dummy_thumb = tmp_path / "thumb.jpg"
+    dummy_thumb.write_bytes(b"data")
+
+    with patch("requests.post", side_effect=Exception("Network error")):
+        ok = _upload_thumbnail_via_innertube(
+            video_id="vid_123",
+            thumbnail_path=dummy_thumb,
+            auth_headers={"Authorization": "SAPISIDHASH test"},
+        )
+        assert ok is False
+
+
+def test_upload_video_via_innertube_attaches_thumbnail(tmp_path):
+    dummy_video = tmp_path / "video.mp4"
+    dummy_video.write_bytes(b"fake video data")
+    dummy_thumb = tmp_path / "thumb.jpg"
+    dummy_thumb.write_bytes(b"fake thumb data")
+
+    cookies = [{"name": "SAPISID", "value": "sapisid456"}]
+
+    with patch.dict("os.environ", {"TEST_MODE": "0", "MOCK_YOUTUBE_UPLOAD": "0"}), \
+         patch("src.youtube.innertube_uploader._initiate_upload_session", return_value="https://upload.youtube.com/resumable"), \
+         patch("src.youtube.innertube_uploader._stream_video_chunks", return_value="scotty_777"), \
+         patch("src.youtube.innertube_uploader._commit_video_metadata", return_value="final_vid_abc"), \
+         patch("src.youtube.innertube_uploader._upload_thumbnail_via_innertube", return_value=True) as mock_thumb:
+
+        res = upload_video_via_innertube(
+            video_path=dummy_video,
+            title="My Title",
+            description="My Desc",
+            cookies=cookies,
+            thumbnail_path=dummy_thumb,
+            channel_id="UC_TEST",
+        )
+
+        assert res["status"] == "PUBLISHED"
+        assert res["thumbnail_confirmed"] is True
+        mock_thumb.assert_called_once()
+
