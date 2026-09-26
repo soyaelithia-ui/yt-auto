@@ -157,13 +157,15 @@ def detect_opening_hook_strength(
     # Negative penalties in opening 100 characters
     for pat in _NEGATIVE_GREETING_PATTERNS:
         if re.search(pat, normalized_opening):
-            negative_penalties.append(f"conversational_greeting: {pat.replace(r'\b', '')}")
+            clean_pat = pat.replace("\\b", "")
+            negative_penalties.append(f"conversational_greeting: {clean_pat}")
             negative_penalty += 0.40
             break
 
     for pat in _NEGATIVE_PREAMBLE_PATTERNS:
         if re.search(pat, normalized_opening):
-            negative_penalties.append(f"exposition_or_meta_preamble: {pat.replace(r'\b', '')}")
+            clean_pat = pat.replace("\\b", "")
+            negative_penalties.append(f"exposition_or_meta_preamble: {clean_pat}")
             negative_penalty += 0.35
             break
 
@@ -189,13 +191,15 @@ def detect_opening_hook_strength(
 
     for pat in _POSITIVE_IN_MEDIAS_RES:
         if re.search(pat, normalized_opening):
-            positive_markers.append(f"in_medias_res_opening: {pat.replace(r'\b', '')}")
+            clean_pat = pat.replace("\\b", "")
+            positive_markers.append(f"in_medias_res_opening: {clean_pat}")
             positive_bonus += 0.25
             break
 
     for pat in _POSITIVE_STAKES_PATTERNS:
         if re.search(pat, normalized_combined):
-            positive_markers.append(f"stakes_or_time_constraint: {pat.replace(r'\b', '')}")
+            clean_pat = pat.replace("\\b", "")
+            positive_markers.append(f"stakes_or_time_constraint: {clean_pat}")
             positive_bonus += 0.20
             break
 

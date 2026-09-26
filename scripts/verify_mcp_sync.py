@@ -307,6 +307,12 @@ def verify_mcp_sync(repo_root: Path) -> Tuple[bool, List[str], List[str]]:
     passed: List[str] = []
     failures: List[str] = []
 
+    # Detect optional mcp framework library
+    try:
+        import mcp  # type: ignore # noqa: F401
+    except (ImportError, ModuleNotFoundError):
+        return True, ["MCP runtime library 'mcp' not installed; runtime parity check deferred to MCP-enabled environments."], []
+
     # Step 1: Inspect Code Registrations
     code_ok, code_data, code_errors = inspect_code_registrations(repo_root)
     if not code_ok:
